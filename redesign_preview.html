@@ -460,8 +460,8 @@
               </div>
               <div class="rounded-full border border-white/[0.15] bg-white/[0.08] px-4 py-2 text-base font-semibold text-white/[0.76]">18 matches</div>
             </div>
-            ${searchPosterGroup("Movies", ["Night Harbor", "Midnight Signal", "Northern Lights", "After Night"], ["4K · Thriller", "2025 · Crime", "HDR · Drama", "Resume 32m"], ["All VOD", "Cinema Hub", "Xtream Home", "Kids Pack"])}
-            ${searchPosterGroup("Series", ["Night Shift", "Metro Nights", "Dark Meridian", "Orbit Crew"], ["S2 E4", "3 seasons", "New episode", "Kids · S3"], ["All series", "Drama Pack", "Xtream Home", "Kids Pack"])}
+            ${searchPosterGroup("Movies", ["Night Harbor", "Midnight Signal", "Northern Lights", "After Night"], ["All VOD", "Cinema Hub", "Xtream Home", "Kids Pack"])}
+            ${searchPosterGroup("Series", ["Night Shift", "Metro Nights", "Dark Meridian", "Orbit Crew"], ["All series", "Drama Pack", "Xtream Home", "Kids Pack"])}
             ${searchGuideGroup(["All guide", "Xtream Home", "Sports Plus", "Kids Pack"])}
           </div>
         `;
@@ -473,7 +473,7 @@
         `).join("");
       }
 
-      function searchPosterGroup(title, names, meta, providers) {
+      function searchPosterGroup(title, names, providers) {
         return `
           <section class="frosted-strong rounded-3xl p-5">
             <div class="mb-4 flex items-center justify-between gap-4">
@@ -485,7 +485,6 @@
                 <div class="${index === 0 ? "ring-2 ring-cyan-200" : ""} rounded-3xl border border-white/[0.10] bg-white/[0.06] p-3">
                   <div class="art grid aspect-[2/3] place-items-center rounded-2xl text-3xl font-black">${name.slice(0, 2).toUpperCase()}</div>
                   <div class="mt-3 truncate text-lg font-bold">${name}</div>
-                  <div class="mt-1 truncate text-sm text-white/[0.56]">${meta[index]}</div>
                 </div>
               `).join("")}
             </div>
