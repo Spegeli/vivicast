@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ViviCast IPTV Redesign Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --safe-x: clamp(46px, 4.8vw, 92px);
+        --safe-y: clamp(26px, 4.6vh, 54px);
+        --focus: #8ff3ff;
+        --surface: rgba(9, 14, 23, 0.62);
+        --surface-2: rgba(15, 23, 36, 0.74);
+        --line: rgba(255, 255, 255, 0.13);
+        --a: rgba(42, 190, 255, 0.48);
+        --b: rgba(255, 78, 123, 0.34);
+        --progress: 58%;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: #05070c;
+        color: #f8fbff;
+        font-family: Inter, Roboto, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      .ambient {
+        position: fixed;
+        inset: 0;
+        background:
+          radial-gradient(circle at 76% 18%, var(--a), transparent 34%),
+          radial-gradient(circle at 18% 82%, var(--b), transparent 30%),
+          linear-gradient(118deg, #05070c 0%, #0a111d 46%, #111827 100%);
+        transition: background 420ms ease;
+      }
+
+      .ambient::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(90deg, rgba(5, 7, 12, 0.95) 0%, rgba(5, 7, 12, 0.68) 40%, rgba(5, 7, 12, 0.28) 100%),
+          linear-gradient(180deg, rgba(5, 7, 12, 0.08) 0%, rgba(5, 7, 12, 0.75) 100%);
+        backdrop-filter: saturate(128%) blur(2px);
+      }
+
+      .shell {
+        position: relative;
+        height: 100vh;
+        padding: var(--safe-y) var(--safe-x);
+      }
+
+      .frosted {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 24px 80px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(24px) saturate(128%);
+      }
+
+      .frosted-strong {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        backdrop-filter: blur(18px) saturate(122%);
+      }
+
+      .nav-item,
+      .content-row,
+      .chip,
+      .action {
+        transition: transform 170ms ease, background 170ms ease, border-color 170ms ease, box-shadow 170ms ease;
+      }
+
+      .nav-item.active,
+      .chip.active {
+        background: rgba(238, 253, 255, 0.14);
+        color: #ffffff;
+        border-color: rgba(143, 243, 255, 0.44);
+      }
+
+      .content-row.focused {
+        transform: scale(1.035);
+        background: rgba(238, 253, 255, 0.15);
+        border-color: rgba(143, 243, 255, 0.95);
+        box-shadow:
+          0 0 0 3px rgba(143, 243, 255, 0.26),
+          0 0 34px rgba(85, 215, 255, 0.32),
+          0 18px 46px rgba(0, 0, 0, 0.42);
+        z-index: 4;
+      }
+
+      .art {
+        background:
+          linear-gradient(150deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.03)),
+          linear-gradient(135deg, var(--a), var(--b));
+      }
+
+      .progress {
+        background: linear-gradient(90deg, #8ff3ff var(--progress), rgba(255, 255, 255, 0.20) var(--progress));
+      }
+
+      .toggle-on {
+        background: #8ff3ff;
+      }
+
+      .toggle-off {
+        background: rgba(255, 255, 255, 0.20);
+      }
+
+      .result-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(143, 243, 255, 0.45) rgba(255, 255, 255, 0.08);
+      }
+
+      .result-scroll::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .result-scroll::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+      }
+
+      .result-scroll::-webkit-scrollbar-thumb {
+        background: rgba(143, 243, 255, 0.45);
+        border-radius: 999px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ambient"></div>
+
+    <main class="shell">
+      <section class="grid h-full grid-cols-[220px_minmax(420px,31vw)_1fr] gap-6">
+        <aside class="frosted flex flex-col justify-between rounded-[30px] p-4">
+          <div>
+            <div class="mb-7 flex items-center gap-4 px-3">
+              <div class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-cyan-200 text-2xl font-black text-slate-950">V</div>
+              <div>
+                <div class="whitespace-nowrap text-2xl font-bold leading-none">ViviCast</div>
+                <div class="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/[0.46]">IPTV</div>
+              </div>
+            </div>
+            <nav id="nav" class="space-y-2"></nav>
+          </div>
+          <div class="rounded-3xl border border-white/[0.10] bg-white/[0.06] p-4">
+            <div class="text-sm font-semibold text-white/[0.50]">Profile</div>
+            <div class="mt-1 whitespace-nowrap text-xl font-bold">Living Room</div>
+          </div>
+        </aside>
+
+        <section class="frosted rounded-[30px] p-5">
+          <header class="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p id="eyebrow" class="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-100/[0.70]">Live TV</p>
+              <h1 id="title" class="mt-1 text-4xl font-semibold leading-tight">Channels</h1>
+            </div>
+            <div id="counter" class="rounded-full border border-white/[0.15] bg-white/[0.08] px-4 py-2 text-sm font-medium text-white/[0.76]">642</div>
+          </header>
+
+          <div id="providerBlock">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Provider</p>
+            <div id="providers" class="mb-4 flex flex-wrap gap-2"></div>
+          </div>
+
+          <div id="categoryBlock">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Categories</p>
+            <div id="categories" class="mb-4 flex flex-wrap gap-2"></div>
+          </div>
+
+          <div id="quickStats" class="mb-4 grid grid-cols-3 gap-2"></div>
+          <div id="contentList" class="space-y-3"></div>
+        </section>
+
+        <section class="relative overflow-hidden rounded-[30px]">
+          <div class="art absolute inset-0 opacity-30 blur-3xl"></div>
+          <div class="relative flex h-full min-h-0 flex-col justify-between p-8">
+            <div id="topBar" class="flex items-start justify-between gap-5">
+              <div id="topBadges" class="flex flex-wrap gap-2"></div>
+              <div id="clock" class="frosted rounded-full px-4 py-2 text-base font-semibold text-white/[0.82]">20:15</div>
+            </div>
+
+            <section id="heroSection">
+              <div class="mb-5 flex items-center gap-5">
+                <div id="heroArt" class="art grid h-28 w-24 place-items-center rounded-[26px] border border-white/[0.16] text-3xl font-black shadow-2xl">NX</div>
+                <div class="min-w-0">
+                  <p id="heroMeta" class="text-xl font-medium text-cyan-100/[0.90]">Live TV · News</p>
+                  <h2 id="heroTitle" class="mt-1 max-w-4xl truncate text-6xl font-semibold leading-none">Nightline Europe</h2>
+                  <p id="heroSub" class="mt-3 text-2xl font-medium text-white/[0.66]">20:00 - 21:00 · Next: World Briefing</p>
+                </div>
+              </div>
+
+              <p id="heroDescription" class="max-w-4xl text-2xl leading-snug text-white/[0.74]">
+                Live analysis, headlines and a compact market outlook with studio guests from Berlin and London.
+              </p>
+
+              <div class="mt-7 max-w-4xl">
+                <div class="mb-3 flex justify-between text-lg text-white/[0.72]">
+                  <span id="progressLeft">20:00</span>
+                  <span id="progressRight">21:00</span>
+                </div>
+                <div class="progress h-2 rounded-full"></div>
+              </div>
+
+              <div id="actions" class="mt-7 flex flex-wrap gap-4"></div>
+            </section>
+
+            <section id="detailArea" class="grid grid-cols-[1fr_360px] gap-5"></section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const nav = [
+        ["search", "⌕", "Search"],
+        ["live", "▶", "Live TV"],
+        ["movies", "▣", "Movies"],
+        ["series", "▤", "Series"],
+        ["settings", "⚙", "Settings"]
+      ];
+
+      const data = {
+        search: {
+          eyebrow: "Search",
+          title: "Search",
+          counter: "18",
+          providers: ["All sources", "Favorites", "Recent"],
+          categories: ["Movies", "Series", "TV Guide"],
+          stats: [["Query", "night"], ["Results", "18"], ["Groups", "3"]],
+          focusedIndex: 0,
+          items: [
+            row("⌕", "Search field", "night", "Keyboard", "Search results", "All matching content appears grouped on the right: movies first, then series, then TV guide programme matches from EPG titles and descriptions.", "Query: night", "18 results", 0, "rgba(94, 234, 212, 0.36)", "rgba(129, 140, 248, 0.32)", ["All results", "Movies", "Series", "TV Guide"], ["Result Groups", "Movies", "Series", "TV Guide", "18"])
+          ],
+          layout: "search"
+        },
+        live: {
+          eyebrow: "Live TV",
+          title: "Channels",
+          counter: "642",
+          providers: ["All providers", "Xtream Home", "Sports Plus", "Kids Pack"],
+          categories: ["All", "Favorites", "Recent", "News", "Sports", "Movies", "Kids", "Documentary", "Music", "Catch-up"],
+          stats: [["Live", "612"], ["EPG", "94%"], ["Catch-up", "38"]],
+          focusedIndex: 1,
+          items: [
+            row("01", "NordX News", "Nightline Europe", "News", "Nightline Europe", "Live analysis, headlines and a compact market outlook with studio guests from Berlin and London.", "20:00 - 21:00", "Next: World Briefing", 62, "rgba(42, 190, 255, 0.48)", "rgba(255, 78, 123, 0.35)", ["LIVE", "4K", "Dolby", "CC"], ["Audio", "English 5.1", "Subtitles", "DE / EN", "Quality", "2160p"]),
+            row("12", "Prime Arena", "Friday Match Live", "Sports", "Friday Match Live", "Pre-game show, tactical board and live kickoff coverage from a packed stadium.", "20:10 - 22:30", "Next: Post Match", 28, "rgba(46, 255, 174, 0.44)", "rgba(255, 203, 74, 0.32)", ["LIVE", "HD", "Low latency"], ["League", "Champions", "Audio", "Stadium 5.1", "Quality", "1080p"]),
+            row("24", "Atlas Premiere", "The Glass Harbor", "Movies", "The Glass Harbor", "A cinematic thriller in sharp contrast, currently running as a linear movie channel.", "19:45 - 21:35", "Next: Director's Cut", 70, "rgba(126, 87, 255, 0.46)", "rgba(0, 209, 255, 0.28)", ["LIVE", "4K", "HDR"], ["Rating", "16+", "Audio", "Dolby", "Catch-up", "Available"]),
+            row("31", "Kids Two", "Orbit Crew", "Family", "Orbit Crew", "Bright animated adventure with short chapters, simple story beats and high readability.", "20:00 - 20:30", "Next: Mini Makers", 44, "rgba(255, 137, 61, 0.42)", "rgba(112, 226, 112, 0.34)", ["LIVE", "Kids", "CC"], ["Age", "6+", "Audio", "Stereo", "Lock", "Off"]),
+            row("44", "Doc Central", "Deep City", "Docs", "Deep City", "A calm documentary block about architecture, transit systems and underground spaces.", "20:00 - 21:05", "Next: Polar Routes", 53, "rgba(98, 181, 255, 0.38)", "rgba(173, 255, 214, 0.25)", ["LIVE", "HD", "Replay"], ["Topic", "Cities", "Audio", "EN", "Catch-up", "7 days"])
+          ],
+          layout: "live"
+        },
+        movies: {
+          eyebrow: "Movies",
+          title: "VOD Library",
+          counter: "4,280",
+          providers: ["All VOD", "Xtream Home", "Cinema Hub", "Kids Pack"],
+          categories: ["Continue", "New", "Action", "Thriller", "Sci-Fi", "Comedy", "Family", "Documentary", "4K", "Unwatched"],
+          stats: [["Movies", "4.2k"], ["4K", "318"], ["Resume", "12"]],
+          focusedIndex: 0,
+          items: [
+            row("MV", "The Glass Harbor", "2026 · Thriller · 2h 05m", "4K", "The Glass Harbor", "A poster-forward movie surface with provider, genre, progress and codec badges visible before playback.", "Resume at 48 min", "Similar: Cold Meridian", 38, "rgba(126, 87, 255, 0.50)", "rgba(0, 209, 255, 0.34)", ["Movie", "4K", "HDR", "Dolby"], ["Runtime", "2h 05m", "Progress", "48 min", "Provider", "Cinema Hub"]),
+            row("NO", "Northern Orbit", "2025 · Sci-Fi · 1h 52m", "HDR", "Northern Orbit", "Large artwork color, compact metadata and clear resume/play state make the VOD area feel like a streaming app.", "Not started", "Cast: Lena Hart", 0, "rgba(59, 130, 246, 0.48)", "rgba(168, 85, 247, 0.28)", ["Movie", "HDR10", "5.1"], ["Runtime", "1h 52m", "Audio", "5.1", "Provider", "Xtream Home"]),
+            row("WK", "Weekend Kitchen", "2024 · Family · 1h 36m", "HD", "Weekend Kitchen", "Family content keeps a warmer palette while preserving contrast-safe dark scrims and clear TV focus.", "Not started", "Similar: City Picnic", 0, "rgba(251, 146, 60, 0.46)", "rgba(45, 212, 191, 0.28)", ["Movie", "HD", "Kids"], ["Runtime", "1h 36m", "Rating", "0+", "Provider", "Kids Pack"]),
+            row("DN", "Deep North", "2023 · Documentary · 1h 18m", "HD", "Deep North", "Documentary movies use calm editorial metadata cards instead of dense descriptions.", "12 min watched", "Similar: Polar Routes", 15, "rgba(147, 197, 253, 0.38)", "rgba(110, 231, 183, 0.22)", ["Movie", "Doc", "HD"], ["Runtime", "1h 18m", "Progress", "12 min", "Provider", "Doc Central"])
+          ],
+          layout: "movies"
+        },
+        series: {
+          eyebrow: "Series",
+          title: "Shows",
+          counter: "760",
+          providers: ["All series", "Xtream Home", "Drama Pack", "Kids Pack"],
+          categories: ["Continue", "New Episodes", "Drama", "Crime", "Sci-Fi", "Kids", "Comedy", "Documentary", "Ended"],
+          stats: [["Series", "760"], ["Episodes", "18k"], ["Resume", "9"]],
+          focusedIndex: 1,
+          items: [
+            row("S1", "Harbor Lines", "S2 · E4 · 42 min", "Drama", "Harbor Lines", "Series view shows season progress, selected episode and next-up context without leaving the master-detail shell.", "S2 E4 · 18 min left", "Next: E5 Black Tide", 57, "rgba(56, 189, 248, 0.45)", "rgba(244, 114, 182, 0.30)", ["Series", "2 seasons", "HD"], ["Season", "2 of 3", "Episode", "4", "Provider", "Drama Pack"]),
+            row("S2", "Metro Signal", "S1 · E8 · Finale", "Thriller", "Metro Signal", "Episode lists and season switching become visible in the detail area, so the user can imagine the final show flow.", "S1 E8 · Finale", "Next: Season extras", 81, "rgba(99, 102, 241, 0.46)", "rgba(14, 165, 233, 0.30)", ["Series", "Finale", "Dolby"], ["Season", "1", "Episodes", "8", "Audio", "Dolby"]),
+            row("S3", "Orbit Crew", "S3 · E2 · Kids", "Family", "Orbit Crew", "Kids series stay bright but still use the same TV-safe focus and contrast language.", "S3 E2 · 9 min left", "Next: E3 Moon Map", 64, "rgba(250, 204, 21, 0.40)", "rgba(74, 222, 128, 0.28)", ["Series", "Kids", "CC"], ["Season", "3", "Rating", "6+", "Subtitles", "DE"]),
+            row("S4", "Design Cities", "S1 · E5 · 51 min", "Docs", "Design Cities", "Docu-series get editorial episode cards and simple season stats.", "Not started", "Next: E6 Transit Lines", 0, "rgba(125, 211, 252, 0.34)", "rgba(196, 181, 253, 0.24)", ["Series", "Doc", "HD"], ["Season", "1", "Episodes", "6", "Provider", "Doc Central"])
+          ],
+          layout: "series"
+        },
+        settings: {
+          eyebrow: "Settings",
+          title: "Control Center",
+          counter: "7",
+          providers: ["Device", "Sources", "Playback"],
+          categories: ["General", "Providers", "EPG", "Appearance", "Playback", "Remote", "About"],
+          stats: [["Providers", "3"], ["EPG", "2"], ["Health", "Good"]],
+          focusedIndex: 1,
+          items: [
+            row("G", "General", "Startup, language and privacy", "Core", "General", "A TV settings screen should be grouped, scan-friendly and show current values directly in each row.", "Start: Live TV", "Language: System", 100, "rgba(45, 212, 191, 0.34)", "rgba(59, 130, 246, 0.30)", ["Settings", "Core"], ["Startup", "Live TV", "Privacy", "Local", "Telemetry", "Off"]),
+            row("P", "Providers", "M3U, Xtream, groups and sync", "Sources", "Providers", "Source management needs visible sync health, content scope, group visibility and safe refresh actions.", "3 providers configured", "Last sync: 18 min ago", 78, "rgba(59, 130, 246, 0.42)", "rgba(168, 85, 247, 0.26)", ["Settings", "Sources"], ["Sources", "3", "Health", "Good", "VOD", "Enabled"]),
+            row("E", "EPG", "XMLTV sources and assignments", "Guide", "EPG settings show source status, assignment priority, offsets and update policy without burying the user in forms.", "2 XMLTV sources", "Next update: 02:00", 42, "rgba(34, 211, 238, 0.36)", "rgba(132, 204, 22, 0.22)", ["Settings", "Guide"], ["Sources", "2", "Policy", "Nightly", "Offset", "+0m"]),
+            row("A", "Appearance", "Theme, density and logos", "UI", "Appearance becomes a compact visual control panel with toggles and live preview chips.", "Theme: Cinematic dark", "Density: Comfortable", 66, "rgba(244, 114, 182, 0.34)", "rgba(251, 191, 36, 0.24)", ["Settings", "UI"], ["Theme", "Dark", "Density", "Comfort", "Motion", "Subtle"]),
+            row("R", "Remote Control", "Keys, zapping and back behavior", "Input", "Remote settings expose D-pad behavior and binary choices as visible toggles.", "Zap: Up/Down", "Back: overlay first", 50, "rgba(129, 140, 248, 0.38)", "rgba(45, 212, 191, 0.22)", ["Settings", "Remote"], ["Zapping", "On", "Long OK", "Info", "Back", "Overlay"])
+          ],
+          layout: "settings"
+        }
+      };
+
+      function row(number, name, subtitle, category, title, description, time, next, progress, a, b, badges, cards) {
+        return { number, name, subtitle, category, title, description, time, next, progress, a, b, badges, cards };
+      }
+
+      let activeView = "live";
+      const navEl = document.querySelector("#nav");
+      const listEl = document.querySelector("#contentList");
+
+      function current() {
+        return data[activeView];
+      }
+
+      function chip(text, active = false) {
+        return `<span class="chip ${active ? "active" : ""} rounded-full border border-white/[0.12] bg-white/[0.07] px-3 py-2 text-sm font-semibold text-white/[0.72]">${text}</span>`;
+      }
+
+      function statCard(label, value) {
+        return `<div class="rounded-2xl border border-white/[0.10] bg-white/[0.06] p-3"><div class="text-xs font-semibold uppercase tracking-[0.16em] text-white/[0.38]">${label}</div><div class="mt-1 text-xl font-bold">${value}</div></div>`;
+      }
+
+      function renderNav() {
+        navEl.innerHTML = nav
+          .map(([id, icon, label]) => `
+            <button data-destination="${id}" class="nav-item ${id === activeView ? "active" : ""} flex w-full items-center gap-4 rounded-3xl border border-transparent px-4 py-4 text-left text-white/[0.72]">
+              <span class="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/[0.08] text-2xl">${icon}</span>
+              <span class="whitespace-nowrap text-xl font-semibold">${label}</span>
+            </button>
+          `)
+          .join("");
+
+        document.querySelectorAll("[data-destination]").forEach((button) => {
+          button.addEventListener("click", () => {
+            activeView = button.dataset.destination;
+            render();
+          });
+        });
+      }
+
+      function renderMaster() {
+        const view = current();
+        document.querySelector("#eyebrow").textContent = view.eyebrow;
+        document.querySelector("#title").textContent = view.title;
+        document.querySelector("#eyebrow").style.display = activeView === "search" ? "none" : "";
+        document.querySelector("#counter").textContent = view.counter;
+        document.querySelector("#counter").style.display = activeView === "search" ? "none" : "";
+        document.querySelector("#providerBlock").style.display = activeView === "search" ? "none" : "";
+        document.querySelector("#categoryBlock").style.display = activeView === "search" ? "none" : "";
+        document.querySelector("#quickStats").style.display = activeView === "search" ? "none" : "";
+        document.querySelector("#providers").innerHTML = view.providers.map((value, index) => chip(value, index === 0)).join("");
+        document.querySelector("#categories").innerHTML = view.categories.map((value, index) => chip(value, index === 1 || (activeView === "settings" && index === view.focusedIndex))).join("");
+        document.querySelector("#quickStats").innerHTML = view.stats.map(([label, value]) => statCard(label, value)).join("");
+        if (activeView === "search") {
+          listEl.innerHTML = `
+            <div class="content-row focused rounded-[30px] border border-cyan-200/[0.80] bg-white/[0.10] p-5">
+              <div class="mb-3 text-xs font-semibold uppercase tracking-[0.20em] text-cyan-100/[0.72]">Search field</div>
+              <div class="flex items-center gap-4">
+                <span class="grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.12] text-2xl">⌕</span>
+                <div>
+                  <div class="text-4xl font-semibold leading-tight">night</div>
+                  <div class="mt-2 text-lg text-white/[0.56]">Searches Movies, Series and TV Guide programmes</div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-6">
+              <div class="mb-3 flex items-center justify-between">
+                <p class="text-xs font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Search history</p>
+                <span class="text-sm font-semibold text-cyan-100/[0.62]">Clear</span>
+              </div>
+              <div class="space-y-2">
+                ${[
+                  "night",
+                  "champions",
+                  "harbor",
+                  "kids",
+                  "dolby",
+                  "crime",
+                  "news",
+                  "4k movies",
+                  "episode 5",
+                  "football",
+                  "documentary",
+                  "german audio"
+                ].slice(0, 12).map((term, index) => `
+                  <button class="flex w-full items-center justify-between rounded-2xl border border-white/[0.10] bg-white/[0.055] px-4 py-3 text-left">
+                    <span class="truncate text-lg font-semibold">${term}</span>
+                    <span class="text-sm text-white/[0.42]">${index < 3 ? "recent" : "history"}</span>
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+          `;
+          return;
+        }
+        listEl.innerHTML = view.items.map((entry, index) => {
+          const focused = index === view.focusedIndex;
+          return `
+            <button data-index="${index}" class="content-row ${focused ? "focused" : ""} flex w-full items-center gap-4 rounded-3xl border border-white/[0.10] bg-white/[0.055] p-4 text-left">
+              <span class="grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.12] text-xl font-black">${entry.number}</span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-2xl font-semibold">${entry.name}</span>
+                <span class="mt-1 block truncate text-lg text-white/[0.58]">${entry.subtitle}</span>
+              </span>
+              <span class="rounded-full border border-white/[0.12] px-3 py-1 text-sm font-medium text-white/[0.62]">${entry.category}</span>
+            </button>
+          `;
+        }).join("");
+
+        document.querySelectorAll("[data-index]").forEach((rowEl) => {
+          rowEl.addEventListener("click", () => {
+            view.focusedIndex = Number(rowEl.dataset.index);
+            render();
+          });
+        });
+      }
+
+      function renderHero() {
+        const view = current();
+        const entry = view.items[view.focusedIndex];
+        document.documentElement.style.setProperty("--a", entry.a);
+        document.documentElement.style.setProperty("--b", entry.b);
+        document.documentElement.style.setProperty("--progress", `${entry.progress}%`);
+        if (activeView === "search") {
+          renderSearchResults(entry);
+          return;
+        }
+        document.querySelector("#topBar").style.display = "";
+        document.querySelector("#heroSection").style.display = "";
+        document.querySelector("#detailArea").className = "grid grid-cols-[1fr_360px] gap-5";
+        document.querySelector("#topBadges").innerHTML = entry.badges.map((value) => chip(value, false)).join("");
+        document.querySelector("#heroArt").textContent = entry.name.slice(0, 2).toUpperCase();
+        document.querySelector("#heroMeta").textContent = `${view.eyebrow} · ${entry.category}`;
+        document.querySelector("#heroTitle").textContent = entry.title;
+        document.querySelector("#heroSub").textContent = `${entry.time} · ${entry.next}`;
+        document.querySelector("#heroDescription").textContent = entry.description;
+        document.querySelector("#progressLeft").textContent = entry.time.split(" - ")[0] || entry.time;
+        document.querySelector("#progressRight").textContent = entry.time.split(" - ")[1] || entry.next;
+        document.querySelector("#actions").innerHTML = actionsFor(activeView).map((value, index) => `
+          <button class="action ${index === 0 ? "primary" : "bg-white/[0.10] text-white"} rounded-2xl border border-white/[0.15] px-7 py-4 text-xl font-bold shadow-2xl">${value}</button>
+        `).join("");
+        document.querySelector("#detailArea").innerHTML = detailFor(view, entry);
+      }
+
+      function renderSearchResults(entry) {
+        document.querySelector("#topBar").style.display = "none";
+        document.querySelector("#heroSection").style.display = "none";
+        document.querySelector("#detailArea").className = "result-scroll min-h-0 flex-1 overflow-y-auto pr-3";
+        document.querySelector("#detailArea").innerHTML = `
+          <div class="space-y-5 pb-2">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-100/[0.70]">All results</p>
+                <h2 class="mt-1 text-4xl font-semibold">night</h2>
+              </div>
+              <div class="rounded-full border border-white/[0.15] bg-white/[0.08] px-4 py-2 text-base font-semibold text-white/[0.76]">18 matches</div>
+            </div>
+            ${searchPosterGroup("Movies", ["Night Harbor", "Midnight Signal", "Northern Lights", "After Night"], ["4K · Thriller", "2025 · Crime", "HDR · Drama", "Resume 32m"], ["All VOD", "Cinema Hub", "Xtream Home", "Kids Pack"])}
+            ${searchPosterGroup("Series", ["Night Shift", "Metro Nights", "Dark Meridian", "Orbit Crew"], ["S2 E4", "3 seasons", "New episode", "Kids · S3"], ["All series", "Drama Pack", "Xtream Home", "Kids Pack"])}
+            ${searchGuideGroup(["All guide", "Xtream Home", "Sports Plus", "Kids Pack"])}
+          </div>
+        `;
+      }
+
+      function providerBadges(providers) {
+        return providers.map((provider, index) => `
+          <span class="${index === 0 ? "border-cyan-200/[0.70] bg-cyan-200/[0.12] text-white" : "border-white/[0.12] bg-white/[0.07] text-white/[0.68]"} rounded-full border px-3 py-1 text-sm font-semibold">${provider}</span>
+        `).join("");
+      }
+
+      function searchPosterGroup(title, names, meta, providers) {
+        return `
+          <section class="frosted-strong rounded-3xl p-5">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold">${title}</h3>
+              <div class="flex flex-wrap justify-end gap-2">${providerBadges(providers)}</div>
+            </div>
+            <div class="grid grid-cols-4 gap-4">
+              ${names.map((name, index) => `
+                <div class="${index === 0 ? "ring-2 ring-cyan-200" : ""} rounded-3xl border border-white/[0.10] bg-white/[0.06] p-3">
+                  <div class="art grid aspect-[2/3] place-items-center rounded-2xl text-3xl font-black">${name.slice(0, 2).toUpperCase()}</div>
+                  <div class="mt-3 truncate text-lg font-bold">${name}</div>
+                  <div class="mt-1 truncate text-sm text-white/[0.56]">${meta[index]}</div>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+        `;
+      }
+
+      function searchListGroup(title, names, meta, providers) {
+        return `
+          <section class="frosted-strong rounded-3xl p-5">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold">${title}</h3>
+              <div class="flex flex-wrap justify-end gap-2">${providerBadges(providers)}</div>
+            </div>
+            ${names.map((name, index) => `
+              <div class="${index === 0 ? "border-cyan-200/[0.72] bg-cyan-200/[0.10]" : "border-white/[0.10] bg-white/[0.05]"} mb-3 rounded-2xl border p-3">
+                <div class="truncate text-lg font-bold">${name}</div>
+                <div class="mt-1 truncate text-sm text-white/[0.56]">${meta[index]}</div>
+              </div>
+            `).join("")}
+          </section>
+        `;
+      }
+
+      function searchGuideGroup(providers) {
+        const programmes = [
+          ["NX", "Nightline Europe", "NordX News", "Today 20:00 - 21:00"],
+          ["AP", "The Glass Harbor", "Atlas Premiere", "Today 19:45 - 21:35"],
+          ["ST", "Late Night Mix", "Studio Live", "Today 22:00 - 23:30"],
+          ["DC", "Northern Report", "Doc Central", "Tomorrow 18:30 - 19:15"],
+          ["SP", "Night Race Qualifying", "Sports Plus", "June 26, 2026 21:00 - 22:15"]
+        ];
+        return `
+          <section class="frosted-strong rounded-3xl p-5">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 class="text-2xl font-bold">TV Guide</h3>
+              <div class="flex flex-wrap justify-end gap-2">${providerBadges(providers)}</div>
+            </div>
+            ${programmes.map(([logo, title, channel, time], index) => `
+              <div class="${index === 0 ? "border-cyan-200/[0.72] bg-cyan-200/[0.10]" : "border-white/[0.10] bg-white/[0.05]"} mb-3 flex items-center gap-4 rounded-2xl border p-3">
+                <span class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/[0.12] text-lg font-black">${logo}</span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-lg font-bold">${title}</span>
+                  <span class="mt-1 block truncate text-sm text-white/[0.56]">${channel}</span>
+                </span>
+                <span class="shrink-0 rounded-full border border-white/[0.12] bg-white/[0.07] px-3 py-2 text-sm font-semibold text-white/[0.72]">${time}</span>
+              </div>
+            `).join("")}
+          </section>
+        `;
+      }
+
+      function actionsFor(view) {
+        if (view === "live") return ["Watch", "Guide", "Favorite", "Audio"];
+        if (view === "movies") return ["Resume", "Trailer", "Favorite", "More"];
+        if (view === "series") return ["Resume", "Episodes", "Season", "Favorite"];
+        if (view === "settings") return ["Open", "Refresh", "Add source", "Reset"];
+        return ["Search", "Voice", "Filters"];
+      }
+
+      function detailFor(view, entry) {
+        const cards = [0, 2, 4].map((index) => statCard(entry.cards[index], entry.cards[index + 1])).join("");
+        if (view.layout === "live") {
+          return `
+            <div class="grid grid-cols-3 gap-3">${cards}</div>
+            <div class="frosted-strong rounded-3xl p-5">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Mini EPG</div>
+              ${["Now · " + entry.title, entry.next, "Later: Late Edition"].map((value, index) => `
+                <div class="${index === 0 ? "border-cyan-200/[0.80] bg-cyan-200/[0.10]" : "border-white/[0.10] bg-white/[0.05]"} mb-2 rounded-2xl border p-3">
+                  <div class="text-lg font-bold">${value}</div>
+                  <div class="mt-1 text-sm text-white/[0.54]">${index === 0 ? entry.time : "21:00 - 22:00"}</div>
+                </div>
+              `).join("")}
+            </div>
+          `;
+        }
+        if (view.layout === "movies") {
+          return `
+            <div class="grid grid-cols-3 gap-3">${cards}</div>
+            <div class="frosted-strong rounded-3xl p-5">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Rows preview</div>
+              <div class="grid grid-cols-3 gap-3">
+                ${["4K", "New", "Resume", "Action", "Family", "Docs"].map((value, index) => `<div class="art rounded-2xl p-4 text-lg font-black ${index === 0 ? "ring-2 ring-cyan-200" : ""}">${value}</div>`).join("")}
+              </div>
+            </div>
+          `;
+        }
+        if (view.layout === "series") {
+          return `
+            <div class="grid grid-cols-3 gap-3">${cards}</div>
+            <div class="frosted-strong rounded-3xl p-5">
+              <div class="mb-3 flex gap-2">${["S1", "S2", "S3"].map((value, index) => chip(value, index === 1)).join("")}</div>
+              ${["E4 · Current episode", "E5 · Next episode", "E6 · Available"].map((value, index) => `
+                <div class="${index === 0 ? "border-cyan-200/[0.80] bg-cyan-200/[0.10]" : "border-white/[0.10] bg-white/[0.05]"} mb-2 rounded-2xl border p-3">
+                  <div class="text-lg font-bold">${value}</div>
+                  <div class="mt-1 text-sm text-white/[0.54]">42 min · HD · Resume-aware</div>
+                </div>
+              `).join("")}
+            </div>
+          `;
+        }
+        if (view.layout === "settings") {
+          return `
+            <div class="grid grid-cols-3 gap-3">${cards}</div>
+            <div class="frosted-strong rounded-3xl p-5">
+              <div class="mb-3 text-sm font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Controls</div>
+              ${[
+                ["Visible in main nav", true],
+                ["Auto refresh", true],
+                ["Use compact overlay", false]
+              ].map(([label, enabled]) => `
+                <div class="mb-3 flex items-center justify-between rounded-2xl border border-white/[0.10] bg-white/[0.05] p-3">
+                  <span class="text-lg font-semibold">${label}</span>
+                  <span class="${enabled ? "toggle-on" : "toggle-off"} flex h-8 w-14 items-center rounded-full p-1">
+                    <span class="h-6 w-6 rounded-full bg-slate-950 ${enabled ? "ml-6" : ""}"></span>
+                  </span>
+                </div>
+              `).join("")}
+            </div>
+          `;
+        }
+        return `
+          <div class="grid grid-cols-3 gap-3">${cards}</div>
+          <div class="frosted-strong rounded-3xl p-5">
+            <div class="mb-3 text-sm font-semibold uppercase tracking-[0.20em] text-white/[0.42]">Visual result groups</div>
+            ${["Live channels", "Movies", "Series episodes"].map((value) => `<div class="mb-2 rounded-2xl border border-white/[0.10] bg-white/[0.05] p-3 text-lg font-bold">${value}</div>`).join("")}
+          </div>
+        `;
+      }
+
+      function render() {
+        renderNav();
+        renderMaster();
+        renderHero();
+      }
+
+      window.addEventListener("keydown", (event) => {
+        const view = current();
+        if (event.key === "ArrowDown") view.focusedIndex = Math.min(view.items.length - 1, view.focusedIndex + 1);
+        if (event.key === "ArrowUp") view.focusedIndex = Math.max(0, view.focusedIndex - 1);
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          const order = nav.map(([id]) => id);
+          const next = order.indexOf(activeView) + (event.key === "ArrowRight" ? 1 : -1);
+          activeView = order[Math.max(0, Math.min(order.length - 1, next))];
+        }
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
