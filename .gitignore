@@ -1,7 +1,10 @@
 # Gradle
 .gradle/
+.kotlin/
+.tmp/
 build/
 **/build/
+*/build/
 
 # Android Studio / IntelliJ
 .idea/
@@ -10,11 +13,24 @@ build/
 # Local config
 local.properties
 
+# Generated and local artifacts
+captures/
+screenshots/
+debug-artifacts/
+archive/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+emulator-*.png
+new-android-tv-home.png
+vivicast-tv-*.png
+vivicast-nav-*.png
+vivicast-m3u-*.png
+vivicast-xtream-*.png
+vivicast-*.png
+vivicast-*.sqlite
+
 # OS
 .DS_Store
 Thumbs.db
-
-# Generated
-captures/
-.externalNativeBuild/
-.cxx/

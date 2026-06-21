@@ -1,6 +1,6 @@
 # Windows Android Setup for ViviCast
 
-This guide prepares the Windows PC for ViviCast Android TV development before feature work starts.
+This guide documents the Windows PC setup and daily workflow for ViviCast Android TV development.
 
 ## 1. Install Required Apps
 
@@ -39,6 +39,7 @@ Detected locally:
 
 - Android SDK path exists: `C:\Users\Andreas\AppData\Local\Android\Sdk`.
 - Android Studio bundled JDK exists: `C:\Program Files\Android\Android Studio\jbr`.
+- User `JAVA_HOME` is set to `C:\Program Files\Android\Android Studio\jbr`.
 - SDK platforms exist: `android-36`, `android-36.1`.
 - TV system images exist for Android TV and Google TV.
 - Android SDK Command-line Tools are installed at `C:\Users\Andreas\AppData\Local\Android\Sdk\cmdline-tools\latest`.
@@ -49,33 +50,28 @@ In Android Studio settings:
 
 - Set Gradle JDK to the bundled Android Studio JDK.
 - Keep Gradle auto-sync enabled.
-- Use Logcat filters for `ViviCastPlayer`, `ViviCastImport`, `ViviCastEpg`, and `ViviCastDb`.
-- Use Database Inspector for Room database inspection once the app can run.
+- Add Logcat filters once the new app package and logging tags exist.
+- Use Database Inspector once the new app has a database.
 
-## 3. Daily UI Development Workflow
+## 3. Daily Android Development Workflow
 
-Use Android Studio and the emulator as complementary tools:
+Use Android Studio and the emulator as complementary tools once a new app module exists:
 
 1. Open the project with `scripts\open-android-studio.ps1` and let Gradle sync finish.
-2. Iterate on previewable screen/section composables in Compose Preview. Use representative normal, empty, loading, error, long-text, and dense-data states.
-3. Use Interactive Preview or Live Edit for quick visual changes when Android Studio supports the current edit.
-4. Run a compile checkpoint after structural UI or behavior changes. Small spacing, color, and copy edits do not require an APK reinstall each time.
-5. Start `ViviCast_AndroidTV_API36` through `scripts\start-tv-emulator.ps1` and validate D-pad focus, OK/Back, scrolling, dialogs, navigation, persistence, playback, and real repository data.
-6. Batch any fixes and repeat the emulator check once the UI block is coherent.
+2. Iterate on previewable Compose UI where the new app structure supports it.
+3. Run compile checkpoints after structural UI or behavior changes.
+4. Start `ViviCast_AndroidTV_API36` through `scripts\start-tv-emulator.ps1` for TV interaction validation.
+5. Batch any fixes and repeat emulator checks once the active UI block is coherent.
 
 Compose Preview is a visual development surface, not a substitute for emulator testing. TV focus and remote behavior must be verified on the emulator. Codex can operate Android Studio and the emulator; user interaction is only needed for unavoidable Windows/Android Studio permission, license, login, or blocking setup dialogs.
 
-Useful build checkpoints:
+Useful root checkpoint while no app module exists:
 
 ```powershell
-.\gradlew.bat :app-tv:compileDebugKotlin
-.\gradlew.bat :app-tv:installDebug
+.\gradlew.bat tasks
 ```
 
-Current project behavior note:
-
-- Debug builds may still auto-import the local demo provider when no providers exist.
-- That is development-only behavior and should not be treated as the final first-run user experience.
+After the new Android TV module is scaffolded, add its compile/install commands here.
 
 ## 3a. Project-Local Android Skills
 
@@ -94,12 +90,19 @@ After Android Studio installs the SDK, run:
 Then close and reopen PowerShell and verify:
 
 ```powershell
+java -version
 adb version
 git --version
 scrcpy --version
 ```
 
 If `scrcpy` is not installed yet, its version check can fail. That is fine until physical-device mirroring is needed.
+
+Expected Java setup:
+
+- `JAVA_HOME` should point to `C:\Program Files\Android\Android Studio\jbr`.
+- `java -version` should report the Android Studio bundled OpenJDK.
+- If an already-open terminal still cannot find Java, close it and open a new PowerShell window so the updated user environment is loaded.
 
 If `adb` is still not found in a new shell, rerun `.\scripts\configure-android-env.ps1` or use the direct fallback path temporarily:
 
@@ -137,8 +140,7 @@ Current physical TV connection:
 - Device: `Xiaomi Mi Smart TV 4S`
 - Model: `MiTV-MSSp3`
 - OS: Android 9
-- ADB state: `device`
-- ViviCast TV debug APK installs and launches successfully.
+- ADB state: `device` when connected.
 
 On newer Android TV versions, Wireless debugging may require a pairing code:
 
@@ -175,6 +177,18 @@ Additional Android Virtual Devices can be created in Android Studio:
 
 Run the TV emulator first and verify D-pad navigation. Mobile and tablet testing should stay secondary until the Android TV MVP is usable.
 
+Basic emulator control check:
+
+```powershell
+adb devices
+adb -s emulator-5554 shell getprop sys.boot_completed
+adb -s emulator-5554 shell input keyevent KEYCODE_HOME
+adb -s emulator-5554 shell input keyevent KEYCODE_DPAD_RIGHT
+adb -s emulator-5554 exec-out uiautomator dump /dev/tty
+```
+
+Use UI tree bounds to choose tap coordinates instead of guessing from screenshots.
+
 ## 7. Smartphone and Tablet Safety
 
 Use the tablet as the preferred mobile physical test device.
@@ -199,6 +213,5 @@ Before feature development:
 - Android Studio detects the SDK.
 - Gradle JDK uses the bundled Android Studio JDK.
 - Android TV emulator starts: `ViviCast_AndroidTV_API36`.
-- ViviCast TV debug APK installs and launches on `ViviCast_AndroidTV_API36`.
 - Physical Android TV appears in `adb devices`: `192.168.178.40:5555`.
-- A debug APK can be installed on the emulator and Android TV.
+- Once a new app module exists, a debug APK can be installed on the emulator. Install on the physical Android TV only when explicitly requested.
