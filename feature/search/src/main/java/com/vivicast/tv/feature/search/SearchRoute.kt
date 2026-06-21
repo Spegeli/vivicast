@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -24,10 +23,11 @@ import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
-import com.vivicast.tv.core.designsystem.SectionTitle
+import com.vivicast.tv.core.designsystem.VivicastContentRow
 import com.vivicast.tv.core.designsystem.VivicastSearchResultCard
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
+import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.R as MediaR
 
@@ -37,7 +37,7 @@ fun SearchRoute() {
     val hasResults = query.equals("dune", ignoreCase = true)
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
                 FocusPanel(modifier = Modifier.weight(1f).height(96.dp), onClick = { query = "dune" }, contentPadding = 18.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -74,18 +74,15 @@ fun SearchRoute() {
 
 @Composable
 private fun SearchGroup(title: String, rows: List<SearchItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle(title)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-            items(rows) { item ->
-                VivicastSearchResultCard(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    rating = item.rating,
-                    posterLike = item.posterLike,
-                    imageResId = item.imageResId,
-                )
-            }
+    VivicastContentRow(title = title, horizontalGap = VivicastSpacing.Space4) {
+        items(rows) { item ->
+            VivicastSearchResultCard(
+                title = item.title,
+                subtitle = item.subtitle,
+                rating = item.rating,
+                posterLike = item.posterLike,
+                imageResId = item.imageResId,
+            )
         }
     }
 }

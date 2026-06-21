@@ -8,7 +8,7 @@ Use `docs/roadmap.md` as the detailed implementation roadmap. Use the active `do
 
 ## Current Phase
 
-Phase 03 - Provider Security and Configuration
+Phase 04 - Ingest, Refresh, and EPG
 
 ## Current Status
 
@@ -26,11 +26,17 @@ Done:
   - manual app container persistence wiring
   - local ID and secret-storage ADR
   - schema/security unit tests
+- Phase 03 provider security and configuration is implemented:
+  - Android Keystore-backed secure value storage
+  - Room-backed provider repository with credentials stored outside Room
+  - local Settings provider create/edit/disable/delete flow for M3U and Xtream configuration
+  - provider lifecycle and deletion side-effect instrumentation tests
+  - Android TV emulator smoke test for D-Pad Settings/provider flow
 
 Still important:
 
 - Existing UI uses demo data.
-- Keystore implementation, provider configuration flows, parser implementations, provider clients, WorkManager jobs, and Media3 playback are not complete yet.
+- Parser implementations, provider clients, WorkManager refresh jobs, real EPG import, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -60,8 +66,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Start Phase 03: Provider Security and Configuration.
-2. Keep the existing demo UI compiling while adding secure provider configuration.
+1. Start Phase 04: Ingest, Refresh, and EPG.
+2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
 

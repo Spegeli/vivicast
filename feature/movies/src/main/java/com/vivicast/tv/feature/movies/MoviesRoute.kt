@@ -12,13 +12,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.HeroPanel
 import com.vivicast.tv.core.designsystem.PosterCard
-import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
+import com.vivicast.tv.core.designsystem.VivicastContentRow
 import com.vivicast.tv.core.designsystem.VivicastScreen
+import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.data.media.AssetState
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoVodItem
@@ -30,9 +30,9 @@ fun MoviesRoute(onOpenPlayer: () -> Unit = {}) {
     val categories = listOf("Fortsetzen", "Sci-Fi", "Favoriten", "Gesehen", "Ohne Poster")
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxSize()) {
             MovieHero(selectedMovie, onOpenPlayer)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
                 items(categories) { category ->
                     ActionPill(
                         label = category,
@@ -41,8 +41,7 @@ fun MoviesRoute(onOpenPlayer: () -> Unit = {}) {
                     )
                 }
             }
-            SectionTitle("Filme")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
+            VivicastContentRow(title = "Filme", horizontalGap = VivicastSpacing.Space5) {
                 items(DemoCatalog.movies) { movie ->
                     PosterCard(
                         title = movie.title,

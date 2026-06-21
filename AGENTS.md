@@ -76,6 +76,8 @@ At the start of every new session in this repository:
 
 - Before Android implementation, migration, testing, profiling, build-tooling, Compose, navigation, or optimization work, check whether an installed Android skill matches the task.
 - When a skill matches, read its complete `SKILL.md` before changing code and follow its workflow together with these project instructions.
+- Before UI/frontend work, especially Settings changes, check the relevant files under `external-docs/design/wireframes/` and the layout/navigation guidance in `external-docs/prd/PRD-v1/`.
+- Keep UI structure, focus paths, D-Pad navigation, Back behavior, and states aligned with those wireframes and PRD notes unless the active phase explicitly documents a narrower placeholder.
 - Use Android Studio Compose Preview for visual iteration when Compose UI exists.
 - Use the Android TV emulator for D-pad focus, key routing, Back behavior, dialogs, navigation, playback, persistence, database, and integration checks.
 - Run compile checkpoints after structural or behavior changes.

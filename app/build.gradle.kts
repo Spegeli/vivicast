@@ -31,6 +31,8 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:security"))
+    implementation(project(":data:provider"))
     implementation(project(":feature:live-tv"))
     implementation(project(":feature:movies"))
     implementation(project(":feature:series"))

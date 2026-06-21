@@ -210,7 +210,16 @@ object DemoCatalog {
         epg = listOf("Dune Special, heute 22:15 auf Movie Channel"),
     )
 
-    val settingsSections = listOf("Allgemein", "Wiedergabelisten", "EPG", "Optik", "Wiedergabe", "Status")
+    val settingsSections = listOf(
+        "Allgemein",
+        "Wiedergabelisten",
+        "EPG",
+        "Optik",
+        "Wiedergabe",
+        "Kindersicherung",
+        "Backup",
+        "Über die App",
+    )
 
     val settings = listOf(
         DemoSetting("Hintergrundfarbe", "Dunkel", "Ruhiger Premium-TV-Hintergrund."),

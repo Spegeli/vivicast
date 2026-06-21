@@ -32,8 +32,6 @@ import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
-import com.vivicast.tv.core.designsystem.MiniLogo
-import com.vivicast.tv.core.designsystem.ProgressLine
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastChannelCard
@@ -96,6 +94,7 @@ fun LiveTvRoute(onOpenPlayer: () -> Unit = {}) {
                 channel = selectedChannel,
                 previewStarted = previewStarted,
                 providerErrorVisible = mode == LiveColumnMode.Category,
+                onStartPreview = { previewStarted = true },
                 onOpenPlayer = onOpenPlayer,
                 onShowCategoryMode = { mode = LiveColumnMode.Category },
                 modifier = Modifier.weight(0.42f),
@@ -227,40 +226,46 @@ private fun PreviewColumn(
     channel: DemoChannel,
     previewStarted: Boolean,
     providerErrorVisible: Boolean,
+    onStartPreview: () -> Unit,
     onOpenPlayer: () -> Unit,
     onShowCategoryMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 20.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle("Vorschau")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF16263A), Color(0xFF0B1320)),
-                        ),
-                    )
-                    .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(20.dp)),
-                contentAlignment = Alignment.Center,
+            FocusPanel(
+                onClick = onStartPreview,
+                contentPadding = 0.dp,
+                modifier = Modifier.fillMaxWidth().height(144.dp),
             ) {
-                BasicText(
-                    text = if (previewStarted) "Vorschau läuft" else "OK startet Vorschau",
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF16263A), Color(0xFF0B1320)),
+                            ),
+                        )
+                        .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(20.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BasicText(
+                        text = if (previewStarted) "Vorschau läuft" else "OK startet Vorschau",
+                        style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ActionPill("Ansehen", onClick = onOpenPlayer)
+                ActionPill("Kategorien", onClick = onShowCategoryMode)
             }
             InfoPanel(
                 title = channel.name,
                 body = channel.description.ifBlank { "Keine Beschreibung vorhanden." },
                 badge = if (previewStarted) "Live" else "Details",
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ActionPill("Ansehen", onClick = onOpenPlayer)
-                ActionPill("Kategorien", onClick = onShowCategoryMode)
-            }
             if (!channel.hasEpg) {
                 InfoPanel("Keine EPG-Daten", "Für diesen Sender sind keine Programminformationen vorhanden.", badge = "Ohne EPG")
             }

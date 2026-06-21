@@ -1,39 +1,41 @@
 package com.vivicast.tv.core.designsystem
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -46,14 +48,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
+import androidx.tv.material3.Surface as TvSurface
+import androidx.tv.material3.Text
 
 @Composable
 fun VivicastScreen(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    VivicastScreenBackground(modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp), content = content)
+    VivicastScreenBackground(
+        modifier = modifier.padding(horizontal = VivicastSpacing.Space2, vertical = VivicastSpacing.Space1),
+        content = content,
+    )
 }
 
 @Composable
@@ -65,7 +74,11 @@ fun VivicastScreenBackground(
         modifier = modifier
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFF02040A), Color(0xFF070A0F), Color(0xFF0A1726)),
+                    listOf(
+                        Color(0xFF02040A),
+                        VivicastColors.Background,
+                        Color(0xFF081525),
+                    ),
                 ),
             ),
     ) {
@@ -73,19 +86,8 @@ fun VivicastScreenBackground(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0x33256D95), Color.Transparent),
-                        radius = 1100f,
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0x22150F0A), Color.Transparent),
-                        radius = 900f,
+                    Brush.verticalGradient(
+                        listOf(Color(0x00111827), Color(0x55101C30), Color(0x00111827)),
                     ),
                 ),
         )
@@ -95,26 +97,105 @@ fun VivicastScreenBackground(
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    BasicText(
+    Text(
         text = text,
         modifier = modifier,
-        style = TextStyle(
-            color = VivicastColors.TextPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
-        ),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        style = VivicastTypography.TitleLarge,
     )
 }
 
 @Composable
-fun BodyText(text: String, modifier: Modifier = Modifier, color: Color = VivicastColors.TextSecondary) {
-    BasicText(
+fun BodyText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = VivicastColors.TextSecondary,
+    maxLines: Int = 3,
+) {
+    Text(
         text = text,
         modifier = modifier,
-        maxLines = 3,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
-        style = TextStyle(color = color, fontSize = 17.sp),
+        style = VivicastTypography.BodySmall.copy(color = color),
     )
+}
+
+@Composable
+fun VivicastFocusSurface(
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+    onFocused: (() -> Unit)? = null,
+    onFocusChanged: (Boolean) -> Unit = {},
+    contentPadding: Dp = VivicastSpacing.CardPadding,
+    shape: RoundedCornerShape = VivicastShapes.CardRadius,
+    focusScale: Float = VivicastFocusDefaults.ScaleMedium,
+    content: @Composable (focused: Boolean) -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val border = Border(
+        border = BorderStroke(VivicastBorders.Hairline, if (selected) VivicastColors.AccentSoft else Color(0xFF26384F)),
+        shape = shape,
+    )
+    val focusedBorder = Border(
+        border = BorderStroke(VivicastFocusDefaults.RingWidth, VivicastColors.FocusRing),
+        inset = VivicastFocusDefaults.RingGap,
+        shape = shape,
+    )
+    val glow = Glow(
+        elevation = VivicastFocusDefaults.GlowElevation,
+        elevationColor = VivicastColors.FocusGlow,
+    )
+
+    TvSurface(
+        onClick = onClick ?: {},
+        modifier = modifier.onFocusChanged {
+            val nowFocused = it.isFocused || it.hasFocus
+            focused = nowFocused
+            onFocusChanged(nowFocused)
+            if (nowFocused) onFocused?.invoke()
+        },
+        enabled = enabled,
+        shape = ClickableSurfaceDefaults.shape(shape = shape, focusedShape = shape, pressedShape = shape),
+        border = ClickableSurfaceDefaults.border(
+            border = border,
+            focusedBorder = focusedBorder,
+            pressedBorder = focusedBorder,
+        ),
+        glow = ClickableSurfaceDefaults.glow(
+            focusedGlow = glow,
+            pressedGlow = glow,
+        ),
+        scale = ClickableSurfaceDefaults.scale(
+            scale = 1f,
+            focusedScale = focusScale,
+            pressedScale = focusScale,
+            disabledScale = 1f,
+            focusedDisabledScale = 1f,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(focusSurfaceBrush(focused = focused, selected = selected, enabled = enabled))
+                .border(
+                    width = if (focused) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                    color = when {
+                        focused -> VivicastColors.FocusRing
+                        selected -> VivicastColors.AccentSoft
+                        else -> Color(0x332A405A)
+                    },
+                    shape = shape,
+                )
+                .padding(contentPadding),
+        ) {
+            content(focused)
+        }
+    }
 }
 
 @Composable
@@ -123,43 +204,19 @@ fun FocusPanel(
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
-    contentPadding: Dp = 16.dp,
+    onFocusChanged: (Boolean) -> Unit = {},
+    contentPadding: Dp = VivicastSpacing.CardPadding,
     content: @Composable (focused: Boolean) -> Unit,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-    val borderColor = when {
-        focused -> VivicastColors.Focus
-        selected -> VivicastColors.AccentSoft
-        else -> Color(0xFF243044)
-    }
-    val background = when {
-        focused -> Brush.verticalGradient(listOf(Color(0xFF21486E), Color(0xFF0D273F), Color(0xFF081523)))
-        selected -> Brush.verticalGradient(listOf(Color(0xFF143555), Color(0xFF0D2339), Color(0xFF081522)))
-        else -> Brush.verticalGradient(listOf(Color(0xFF152238), Color(0xFF0B1423), Color(0xFF08111D)))
-    }
-    Box(
-        modifier = modifier
-            .onFocusChanged { if (it.isFocused) onFocused?.invoke() }
-            .clip(VivicastShapes.FocusRadius)
-            .graphicsLayer {
-                scaleX = if (focused) 1.045f else 1f
-                scaleY = if (focused) 1.045f else 1f
-            }
-            .shadow(if (focused) 26.dp else 6.dp, VivicastShapes.FocusRadius, clip = false)
-            .background(background)
-            .border(if (focused) 3.dp else 1.dp, borderColor, VivicastShapes.FocusRadius)
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-                } else {
-                    Modifier.focusable(interactionSource = interactionSource)
-                },
-            )
-            .padding(contentPadding),
-    ) {
-        content(focused)
-    }
+    VivicastFocusSurface(
+        modifier = modifier,
+        selected = selected,
+        onClick = onClick,
+        onFocused = onFocused,
+        onFocusChanged = onFocusChanged,
+        contentPadding = contentPadding,
+        content = content,
+    )
 }
 
 @Composable
@@ -168,7 +225,7 @@ fun VivicastFocusedCard(
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
-    contentPadding: Dp = 16.dp,
+    contentPadding: Dp = VivicastSpacing.CardPadding,
     content: @Composable (focused: Boolean) -> Unit,
 ) {
     FocusPanel(
@@ -188,36 +245,61 @@ fun ActionPill(
     selected: Boolean = false,
     onClick: () -> Unit = {},
 ) {
-    FocusPanel(modifier = modifier, selected = selected, onClick = onClick, contentPadding = 12.dp) { focused ->
-        BasicText(
-            text = label,
-            style = TextStyle(
-                color = if (focused || selected) Color.White else VivicastColors.TextSecondary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            ),
-        )
+    VivicastFocusSurface(
+        modifier = modifier.widthIn(min = 96.dp).height(VivicastCardSizes.ActionPillHeight),
+        selected = selected,
+        onClick = onClick,
+        contentPadding = VivicastSpacing.Space3,
+        shape = VivicastShapes.PillRadius,
+        focusScale = VivicastFocusDefaults.ScaleSmall,
+    ) { focused ->
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VivicastSpacing.Space3),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelMedium.copy(
+                    color = if (focused || selected) Color.White else VivicastColors.TextSecondary,
+                ),
+            )
+        }
     }
 }
 
 @Composable
-fun StatusBadge(label: String, modifier: Modifier = Modifier, tone: Color = Color(0xFF1D4F63)) {
+fun StatusBadge(
+    label: String,
+    modifier: Modifier = Modifier,
+    tone: Color = Color(0xFF1D4F63),
+) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(tone)
-            .border(1.dp, Color(0x6638BDF8), RoundedCornerShape(999.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .clip(VivicastShapes.PillRadius)
+            .background(tone.copy(alpha = 0.86f))
+            .border(VivicastBorders.Hairline, Color(0x5538BDF8), VivicastShapes.PillRadius)
+            .padding(horizontal = VivicastSpacing.Space3, vertical = VivicastSpacing.Space1),
+        contentAlignment = Alignment.Center,
     ) {
-        BasicText(
+        Text(
             text = label,
-            style = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelSmall.copy(color = Color.White),
         )
     }
 }
 
 @Composable
-fun VivicastStatusBadge(label: String, modifier: Modifier = Modifier, tone: Color = Color(0xFF1D4F63)) {
+fun VivicastStatusBadge(
+    label: String,
+    modifier: Modifier = Modifier,
+    tone: Color = Color(0xFF1D4F63),
+) {
     StatusBadge(label = label, modifier = modifier, tone = tone)
 }
 
@@ -229,19 +311,31 @@ fun VivicastStreamInfoBadge(label: String, modifier: Modifier = Modifier) {
 @Composable
 fun GlassPanel(
     modifier: Modifier = Modifier,
-    contentPadding: Dp = 24.dp,
+    contentPadding: Dp = VivicastSpacing.PanelPadding,
+    content: @Composable () -> Unit,
+) {
+    VivicastGlassPanel(modifier = modifier, contentPadding = contentPadding, content = content)
+}
+
+@Composable
+fun VivicastGlassPanel(
+    modifier: Modifier = Modifier,
+    contentPadding: Dp = VivicastSpacing.PanelPadding,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
             .clip(VivicastShapes.PanelRadius)
-            .shadow(12.dp, VivicastShapes.PanelRadius, clip = false)
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xF0132135), Color(0xE90C1727), Color(0xE008101C)),
+                    listOf(
+                        Color(0xF0152438),
+                        Color(0xEA0B1626),
+                        Color(0xDC07101C),
+                    ),
                 ),
             )
-            .border(1.dp, Color(0xFF2A405A), VivicastShapes.PanelRadius)
+            .border(VivicastBorders.PanelWidth, Color(0xAA263D56), VivicastShapes.PanelRadius)
             .padding(contentPadding),
     ) {
         content()
@@ -249,28 +343,41 @@ fun GlassPanel(
 }
 
 @Composable
-fun VivicastGlassPanel(
-    modifier: Modifier = Modifier,
-    contentPadding: Dp = 24.dp,
-    content: @Composable () -> Unit,
-) {
-    GlassPanel(modifier = modifier, contentPadding = contentPadding, content = content)
-}
-
-@Composable
 fun VivicastContentCard(
     modifier: Modifier = Modifier,
-    contentPadding: Dp = 18.dp,
+    contentPadding: Dp = VivicastSpacing.CardPadding,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xEB132034), Color(0xDD0A1423))))
-            .border(1.dp, Color(0xFF273B52), RoundedCornerShape(18.dp))
+            .clip(VivicastShapes.CardRadius)
+            .background(Brush.verticalGradient(listOf(Color(0xEF132034), Color(0xE20A1423))))
+            .border(VivicastBorders.Hairline, Color(0xFF273B52), VivicastShapes.CardRadius)
             .padding(contentPadding),
     ) {
         content()
+    }
+}
+
+@Composable
+fun VivicastContentRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(horizontal = VivicastSpacing.Space1),
+    horizontalGap: Dp = VivicastSpacing.RowGap,
+    content: LazyListScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+    ) {
+        SectionTitle(title)
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = contentPadding,
+            horizontalArrangement = Arrangement.spacedBy(horizontalGap),
+            content = content,
+        )
     }
 }
 
@@ -283,63 +390,14 @@ fun HeroPanel(
     backdropResId: Int? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
-    VivicastGlassPanel(modifier = modifier, contentPadding = 14.dp) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(164.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Color(0xFF101B2B), Color(0xFF19324B), Color(0xFF392719), Color(0xFF110B09)),
-                    ),
-                )
-                .border(1.dp, Color(0x334FC3F7), RoundedCornerShape(20.dp)),
-        ) {
-            if (backdropResId != null) {
-                Image(
-                    painter = painterResource(backdropResId),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(RoundedCornerShape(20.dp)),
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xF20A1422), Color(0xCC0D1B2C), Color(0x662A170C)),
-                            ),
-                        ),
-                )
-            }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-                modifier = Modifier
-                    .widthIn(max = 820.dp)
-                    .padding(18.dp),
-            ) {
-                BasicText(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold),
-                )
-                if (meta != null) {
-                    BodyText(meta, color = VivicastColors.TextSecondary)
-                }
-                BasicText(
-                    text = body,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextSecondary, fontSize = 17.sp),
-                )
-                if (action != null) action()
-            }
-        }
-    }
+    VivicastHeroPanel(
+        title = title,
+        body = body,
+        modifier = modifier,
+        meta = meta,
+        backdropResId = backdropResId,
+        action = action,
+    )
 }
 
 @Composable
@@ -351,7 +409,71 @@ fun VivicastHeroPanel(
     backdropResId: Int? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
-    HeroPanel(title = title, body = body, modifier = modifier, meta = meta, backdropResId = backdropResId, action = action)
+    VivicastGlassPanel(modifier = modifier, contentPadding = VivicastSpacing.Space2) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(VivicastCardSizes.HeroHeight)
+                .clip(VivicastShapes.PanelRadius)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFF101B2B), Color(0xFF173552), Color(0xFF2A241C), Color(0xFF100C0A)),
+                    ),
+                )
+                .border(VivicastBorders.Hairline, Color(0x554FC3F7), VivicastShapes.PanelRadius),
+        ) {
+            if (backdropResId != null) {
+                Image(
+                    painter = painterResource(backdropResId),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xF5070A12), Color(0xD20B1626), Color(0x772A170C), Color(0xF0070A12)),
+                            ),
+                        ),
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Brush.verticalGradient(listOf(Color(0x33000000), Color(0xC9000000)))),
+                )
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .widthIn(max = 920.dp)
+                    .padding(horizontal = VivicastSpacing.Space6, vertical = VivicastSpacing.Space4),
+            ) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = VivicastTypography.DisplayMedium,
+                )
+                if (meta != null) {
+                    BodyText(meta, color = VivicastColors.TextSecondary, maxLines = 1)
+                }
+                Text(
+                    text = body,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = VivicastTypography.BodyMedium,
+                )
+                if (action != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                        action()
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -367,100 +489,18 @@ fun PosterCard(
     imageResId: Int? = null,
     onClick: () -> Unit = {},
 ) {
-    Column(modifier = modifier.width(154.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FocusPanel(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(170.dp),
-            onClick = onClick,
-            contentPadding = 8.dp,
-        ) { focused ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(88.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            if (hasPoster) {
-                                Brush.verticalGradient(
-                                    listOf(Color(0xFF3B526F), Color(0xFF23384F), Color(0xFF111A2A)),
-                                )
-                            } else {
-                                Brush.verticalGradient(
-                                    listOf(Color(0xFF212B3B), Color(0xFF111827), Color(0xFF0A101B)),
-                                )
-                            },
-                        )
-                        .border(1.dp, Color(0x444FC3F7), RoundedCornerShape(14.dp)),
-                ) {
-                    if (imageResId != null) {
-                        Image(
-                            painter = painterResource(imageResId),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(14.dp)),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(Color.Transparent, Color(0x77050910)),
-                                    ),
-                                ),
-                        )
-                    }
-                    StatusBadge(rating, modifier = Modifier.padding(8.dp), tone = Color(0xD011445C))
-                    if (favorite || seen) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp)
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(if (favorite) Color(0xFF8A640A) else Color(0xFF1D5A3E))
-                                .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(999.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            BasicText(
-                                text = if (favorite) "F" else "G",
-                                style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                            )
-                        }
-                    }
-                    if (imageResId == null) {
-                        BasicText(
-                            text = if (hasPoster) initialsFor(title) else "Kein Poster",
-                            modifier = Modifier.align(Alignment.Center).padding(horizontal = 10.dp),
-                            style = TextStyle(
-                                color = if (focused) Color.White else VivicastColors.TextSecondary,
-                                fontSize = if (hasPoster) 24.sp else 16.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                        )
-                    }
-                    if (progressPercent > 0) {
-                        ProgressLine(
-                            progressPercent,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(10.dp),
-                        )
-                    }
-                }
-                BasicText(
-                    text = title,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-                )
-                BodyText(meta, color = VivicastColors.TextTertiary)
-            }
-        }
-    }
+    VivicastPosterCard(
+        title = title,
+        rating = rating,
+        meta = meta,
+        hasPoster = hasPoster,
+        progressPercent = progressPercent,
+        favorite = favorite,
+        seen = seen,
+        modifier = modifier,
+        imageResId = imageResId,
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -476,18 +516,106 @@ fun VivicastPosterCard(
     imageResId: Int? = null,
     onClick: () -> Unit = {},
 ) {
-    PosterCard(
-        title = title,
-        rating = rating,
-        meta = meta,
-        hasPoster = hasPoster,
-        progressPercent = progressPercent,
-        favorite = favorite,
-        seen = seen,
-        modifier = modifier,
-        imageResId = imageResId,
-        onClick = onClick,
-    )
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.width(VivicastCardSizes.PosterWidth),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+    ) {
+        VivicastFocusSurface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(VivicastCardSizes.PosterImageHeight),
+            onClick = onClick,
+            onFocusChanged = { focused = it },
+            contentPadding = VivicastSpacing.Space0,
+            shape = VivicastShapes.PosterRadius,
+            focusScale = VivicastFocusDefaults.ScaleMedium,
+        ) { isFocused ->
+            PosterArtwork(
+                title = title,
+                rating = rating,
+                hasPoster = hasPoster,
+                favorite = favorite,
+                seen = seen,
+                imageResId = imageResId,
+                focused = isFocused,
+                progressPercent = progressPercent,
+            )
+        }
+        Text(
+            text = title,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelMedium.copy(
+                color = if (focused) VivicastColors.TextPrimary else VivicastColors.TextSecondary,
+            ),
+        )
+        BodyText(meta, maxLines = 1)
+    }
+}
+
+@Composable
+private fun PosterArtwork(
+    title: String,
+    rating: String,
+    hasPoster: Boolean,
+    favorite: Boolean,
+    seen: Boolean,
+    imageResId: Int?,
+    focused: Boolean,
+    progressPercent: Int,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                if (hasPoster) {
+                    Brush.verticalGradient(listOf(Color(0xFF405973), Color(0xFF203148), Color(0xFF0D1420)))
+                } else {
+                    Brush.verticalGradient(listOf(Color(0xFF212B3B), Color(0xFF111827), Color(0xFF0A101B)))
+                },
+            ),
+    ) {
+        if (imageResId != null) {
+            Image(
+                painter = painterResource(imageResId),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xA8050910)))),
+            )
+        } else {
+            Text(
+                text = if (hasPoster) initialsFor(title) else "Kein Poster",
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = VivicastSpacing.Space4),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.TitleSmall.copy(
+                    color = if (focused) Color.White else VivicastColors.TextSecondary,
+                ),
+            )
+        }
+        StatusBadge(rating, modifier = Modifier.align(Alignment.TopStart).padding(VivicastSpacing.Space2), tone = Color(0xD011445C))
+        if (favorite || seen) {
+            StatusBadge(
+                label = if (favorite) "F" else "G",
+                modifier = Modifier.align(Alignment.TopEnd).padding(VivicastSpacing.Space2),
+                tone = if (favorite) Color(0xFF8A640A) else Color(0xFF1D5A3E),
+            )
+        }
+        if (progressPercent > 0) {
+            ProgressLine(
+                progressPercent,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(VivicastSpacing.Space3),
+            )
+        }
+    }
 }
 
 @Composable
@@ -496,14 +624,14 @@ fun ProgressLine(progressPercent: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .height(6.dp)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(VivicastShapes.PillRadius)
             .background(Color(0xFF2A3548)),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth((progressPercent.coerceIn(0, 100) / 100f))
+                .fillMaxWidth(progressPercent.coerceIn(0, 100) / 100f)
                 .height(6.dp)
-                .background(VivicastColors.Accent),
+                .background(VivicastColors.Progress),
         )
     }
 }
@@ -515,19 +643,38 @@ fun InfoPanel(
     modifier: Modifier = Modifier,
     badge: String? = null,
 ) {
+    VivicastDetailsPanel(title = title, body = body, modifier = modifier, badge = badge)
+}
+
+@Composable
+fun VivicastDetailsPanel(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    badge: String? = null,
+) {
     Column(
         modifier = modifier
-            .clip(VivicastShapes.FocusRadius)
+            .clip(VivicastShapes.CardRadius)
             .background(Brush.verticalGradient(listOf(Color(0xE6162335), Color(0xD90B1320))))
-            .border(1.dp, Color(0xFF263C55), VivicastShapes.FocusRadius)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .border(VivicastBorders.Hairline, Color(0xFF263C55), VivicastShapes.CardRadius)
+            .padding(VivicastSpacing.Space5),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            SectionTitle(title)
-            if (badge != null) StatusBadge(badge)
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.TitleSmall,
+            )
+            if (badge != null) {
+                Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
+                StatusBadge(badge)
+            }
         }
-        BodyText(body)
+        BodyText(body, maxLines = 3)
     }
 }
 
@@ -541,60 +688,78 @@ fun VivicastSearchResultCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
-    FocusPanel(
-        modifier = modifier.width(if (posterLike) 190.dp else 300.dp).height(if (posterLike) 170.dp else 92.dp),
+    VivicastFocusSurface(
+        modifier = modifier
+            .width(if (posterLike) VivicastCardSizes.SearchPosterWidth else VivicastCardSizes.SearchWideWidth)
+            .height(if (posterLike) VivicastCardSizes.SearchPosterHeight else VivicastCardSizes.SearchWideHeight),
         onClick = onClick,
-        contentPadding = 12.dp,
+        contentPadding = VivicastSpacing.Space3,
     ) { focused ->
         if (posterLike) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(86.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Brush.verticalGradient(listOf(Color(0xFF304860), Color(0xFF101A2B))))
-                        .border(1.dp, Color(0x334FC3F7), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (imageResId != null) {
-                        Image(
-                            painter = painterResource(imageResId),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.matchParentSize(),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99070A12)))),
-                        )
-                    } else {
-                        BasicText(
-                            text = initialsFor(title),
-                            style = TextStyle(color = if (focused) Color.White else VivicastColors.TextSecondary, fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                        )
-                    }
-                    if (rating != null) StatusBadge("Rating $rating", modifier = Modifier.align(Alignment.TopStart).padding(6.dp))
-                }
-                BasicText(
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                SearchPosterThumb(title = title, rating = rating, imageResId = imageResId, focused = focused)
+                Text(
                     text = title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    style = VivicastTypography.LabelMedium,
                 )
-                BodyText(subtitle)
+                BodyText(subtitle, maxLines = 1)
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                BasicText(
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                Text(
                     text = title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                    style = VivicastTypography.LabelLarge,
                 )
-                if (rating != null) StatusBadge("Rating $rating") else BodyText(subtitle)
+                if (rating != null) {
+                    StatusBadge("Rating $rating")
+                } else {
+                    BodyText(subtitle, maxLines = 1)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchPosterThumb(
+    title: String,
+    rating: String?,
+    imageResId: Int?,
+    focused: Boolean,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(88.dp)
+            .clip(VivicastShapes.RadiusMediumShape)
+            .background(Brush.verticalGradient(listOf(Color(0xFF304860), Color(0xFF101A2B))))
+            .border(VivicastBorders.Hairline, Color(0x334FC3F7), VivicastShapes.RadiusMediumShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (imageResId != null) {
+            Image(
+                painter = painterResource(imageResId),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99070A12)))),
+            )
+        } else {
+            Text(
+                text = initialsFor(title),
+                style = VivicastTypography.TitleSmall.copy(color = if (focused) Color.White else VivicastColors.TextSecondary),
+            )
+        }
+        if (rating != null) {
+            StatusBadge("Rating $rating", modifier = Modifier.align(Alignment.TopStart).padding(VivicastSpacing.Space1))
         }
     }
 }
@@ -607,24 +772,74 @@ fun VivicastSettingsRow(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
-    FocusPanel(onClick = onClick, modifier = modifier.fillMaxWidth().height(84.dp), contentPadding = 16.dp) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                BasicText(
+    VivicastFocusSurface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
+        contentPadding = VivicastSpacing.Space4,
+    ) { focused ->
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                Text(
                     text = title,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                    style = VivicastTypography.LabelLarge,
                 )
-                BodyText(help)
+                BodyText(help, maxLines = 1)
             }
-            BasicText(
+            Spacer(modifier = Modifier.width(VivicastSpacing.Space5))
+            Text(
                 text = value,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                style = VivicastTypography.LabelMedium.copy(
+                    color = if (focused) VivicastColors.FocusRing else VivicastColors.TextPrimary,
+                ),
             )
         }
+    }
+}
+
+@Composable
+fun VivicastTopNavigation(
+    brand: String,
+    items: List<String>,
+    selectedIndex: Int,
+    modifier: Modifier = Modifier,
+    onSelected: (Int) -> Unit,
+    onFocused: (Int) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space5),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(VivicastShapes.RadiusMediumShape)
+                    .background(Brush.verticalGradient(listOf(VivicastColors.Accent, Color(0xFF2563EB))))
+                    .border(VivicastBorders.Hairline, Color(0x6638BDF8), VivicastShapes.RadiusMediumShape),
+            )
+            Text(text = brand, style = VivicastTypography.TitleLarge)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+            items.forEachIndexed { index, label ->
+                VivicastTopNavItem(
+                    label = label,
+                    selected = index == selectedIndex,
+                    minWidth = if (label.length > 8) 150.dp else VivicastCardSizes.TopTabMinWidth,
+                    onSelected = { onSelected(index) },
+                    onFocused = { onFocused(index) },
+                )
+            }
+        }
+        Spacer(Modifier.weight(1f))
     }
 }
 
@@ -633,26 +848,29 @@ fun VivicastTopNavItem(
     label: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
-    minWidth: Dp = 96.dp,
+    minWidth: Dp = VivicastCardSizes.TopTabMinWidth,
     onSelected: () -> Unit,
     onFocused: () -> Unit,
 ) {
-    FocusPanel(
-        modifier = modifier.width(minWidth).height(52.dp),
+    VivicastFocusSurface(
+        modifier = modifier.width(minWidth).height(VivicastCardSizes.TopTabsHeight),
         selected = selected,
         onClick = onSelected,
         onFocused = onFocused,
-        contentPadding = 0.dp,
+        contentPadding = VivicastSpacing.Space0,
+        shape = VivicastShapes.PillRadius,
+        focusScale = VivicastFocusDefaults.ScaleSmall,
     ) {
-        Box(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-            BasicText(
+        Box(
+            modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space4),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
                 text = label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = TextStyle(
+                style = VivicastTypography.LabelMedium.copy(
                     color = if (selected) Color.White else VivicastColors.TextSecondary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
                 ),
             )
         }
@@ -674,25 +892,90 @@ fun VivicastChannelCard(
     onFocused: () -> Unit,
     onClick: () -> Unit,
 ) {
-    FocusPanel(selected = selected, onFocused = onFocused, onClick = onClick, modifier = modifier.fillMaxWidth().height(126.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+    VivicastFocusSurface(
+        selected = selected,
+        onFocused = onFocused,
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().height(VivicastCardSizes.ChannelItemHeight),
+        contentPadding = VivicastSpacing.Space4,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             MiniLogo(logoText, logoMissing, imageResId = logoResId)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-                BasicText(
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.weight(1f)) {
+                Text(
                     text = channelName,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.SemiBold),
+                    style = VivicastTypography.LabelLarge,
                 )
-                BodyText(program)
+                BodyText(program, maxLines = 1)
                 ProgressLine(progressPercent)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
                     StatusBadge("Live", tone = Color(0xFF6D1D1D))
                     if (favorite) StatusBadge("Favorit", tone = Color(0xFF72520C))
                     if (catchUp) StatusBadge("Catch-Up", tone = Color(0xFF4D3A78))
                 }
             }
         }
+    }
+}
+
+@Composable
+fun VivicastPlayerOverlay(
+    title: String,
+    subtitle: String,
+    statusLabel: String,
+    badges: List<String>,
+    progress: Int,
+    seekable: Boolean,
+    focusedTimeline: Boolean,
+    timelineFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+    onTimelineFocusChanged: (Boolean) -> Unit,
+    onTogglePlay: () -> Unit,
+    onSeekLeft: () -> Unit,
+    onSeekRight: () -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+    footer: @Composable () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = VivicastCardSizes.PlayerOverlayHeight)
+            .clip(VivicastShapes.PanelRadius)
+            .background(Color(0xE60A111D))
+            .border(VivicastBorders.Hairline, Color(0x8838BDF8), VivicastShapes.PanelRadius)
+            .padding(horizontal = VivicastSpacing.Space7, vertical = VivicastSpacing.Space5),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = VivicastTypography.TitleLarge)
+                BodyText(subtitle, maxLines = 1)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                badges.forEach { VivicastStreamInfoBadge(it) }
+                VivicastStatusBadge(statusLabel)
+            }
+        }
+
+        VivicastPlayerTimeline(
+            progress = progress,
+            focused = focusedTimeline,
+            seekable = seekable,
+            focusRequester = timelineFocusRequester,
+            onFocusChanged = onTimelineFocusChanged,
+            onTogglePlay = onTogglePlay,
+            onSeekLeft = onSeekLeft,
+            onSeekRight = onSeekRight,
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), content = actions)
+        footer()
     }
 }
 
@@ -708,28 +991,16 @@ fun VivicastPlayerTimeline(
     onSeekLeft: () -> Unit,
     onSeekRight: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = modifier) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            BodyText("00:${progress.toString().padStart(2, '0')}")
-            BodyText(if (seekable) "01:40" else "LIVE")
+            BodyText("00:${progress.toString().padStart(2, '0')}", maxLines = 1)
+            BodyText(if (seekable) "01:40" else "LIVE", maxLines = 1)
         }
-        Box(
+        VivicastFocusSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (focused) 30.dp else 24.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xFF101E2F), Color(0xFF07111D)),
-                    ),
-                )
-                .border(
-                    if (focused) 3.dp else 1.dp,
-                    if (focused) VivicastColors.Focus else Color(0xFF2E4453),
-                    RoundedCornerShape(999.dp),
-                )
+                .height(VivicastCardSizes.PlayerTimelineHeight)
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .onFocusChanged { onFocusChanged(it.isFocused) }
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (it.key) {
@@ -747,29 +1018,46 @@ fun VivicastPlayerTimeline(
                         }
                         else -> false
                     }
-                }
-                .focusable()
-                .padding(8.dp),
+                },
+            onClick = onTogglePlay,
+            onFocusChanged = onFocusChanged,
+            contentPadding = VivicastSpacing.Space3,
+            shape = VivicastShapes.PillRadius,
+            focusScale = VivicastFocusDefaults.ScaleSmall,
         ) {
-            ProgressLine(progress, modifier = Modifier.align(Alignment.Center))
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxWidth((progress.coerceIn(0, 100) / 100f))
-                    .height(if (focused) 12.dp else 8.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(VivicastColors.Accent),
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (focused) 14.dp else 10.dp)
+                        .clip(VivicastShapes.PillRadius)
+                        .background(Color(0xFF2A3548)),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(progress.coerceIn(0, 100) / 100f)
+                        .height(if (focused) 14.dp else 10.dp)
+                        .clip(VivicastShapes.PillRadius)
+                        .background(VivicastColors.Progress),
+                )
+            }
         }
     }
 }
 
 @Composable
-fun MiniLogo(text: String, missing: Boolean, modifier: Modifier = Modifier, imageResId: Int? = null) {
+fun MiniLogo(
+    text: String,
+    missing: Boolean,
+    modifier: Modifier = Modifier,
+    imageResId: Int? = null,
+) {
     Box(
         modifier = modifier
-            .size(52.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .width(VivicastCardSizes.ChannelLogoWidth)
+            .height(VivicastCardSizes.ChannelLogoHeight)
+            .clip(VivicastShapes.RadiusMediumShape)
             .background(
                 if (missing) {
                     Brush.verticalGradient(listOf(Color(0xFF2A303A), Color(0xFF111827)))
@@ -777,7 +1065,7 @@ fun MiniLogo(text: String, missing: Boolean, modifier: Modifier = Modifier, imag
                     Brush.verticalGradient(listOf(Color(0xFF0B66A5), Color(0xFF123A6A)))
                 },
             )
-            .border(1.dp, Color(0x554FC3F7), RoundedCornerShape(12.dp)),
+            .border(VivicastBorders.Hairline, Color(0x554FC3F7), VivicastShapes.RadiusMediumShape),
         contentAlignment = Alignment.Center,
     ) {
         if (imageResId != null) {
@@ -787,14 +1075,26 @@ fun MiniLogo(text: String, missing: Boolean, modifier: Modifier = Modifier, imag
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(7.dp),
+                    .padding(VivicastSpacing.Space2),
             )
         } else {
-            BasicText(
+            Text(
                 text = if (missing) "?" else text.take(2).uppercase(),
-                style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                style = VivicastTypography.LabelMedium.copy(color = Color.White),
             )
         }
+    }
+}
+
+private val VivicastShapes.RadiusMediumShape: RoundedCornerShape
+    get() = RoundedCornerShape(RadiusMedium)
+
+private fun focusSurfaceBrush(focused: Boolean, selected: Boolean, enabled: Boolean): Brush {
+    return when {
+        !enabled -> Brush.verticalGradient(listOf(VivicastColors.SurfaceDisabled, VivicastColors.SurfaceDisabled))
+        focused -> Brush.verticalGradient(listOf(Color(0xFF255077), Color(0xFF0E2A43), Color(0xFF081523)))
+        selected -> Brush.verticalGradient(listOf(Color(0xFF173F64), Color(0xFF0D273F), Color(0xFF081522)))
+        else -> Brush.verticalGradient(listOf(Color(0xEF152238), Color(0xE80B1423), Color(0xDE08111D)))
     }
 }
 

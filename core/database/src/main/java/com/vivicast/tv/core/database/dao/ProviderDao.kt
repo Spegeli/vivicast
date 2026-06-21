@@ -14,6 +14,9 @@ interface ProviderDao {
     @Query("SELECT * FROM providers WHERE id = :providerId")
     suspend fun getProvider(providerId: String): ProviderEntity?
 
+    @Query("SELECT * FROM providers")
+    suspend fun getProviders(): List<ProviderEntity>
+
     @Upsert
     suspend fun upsertProvider(provider: ProviderEntity)
 
@@ -29,4 +32,3 @@ interface ProviderDao {
     @Query("DELETE FROM providers WHERE id = :providerId")
     suspend fun deleteProvider(providerId: String)
 }
-

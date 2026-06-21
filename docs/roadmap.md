@@ -57,11 +57,12 @@ Implemented or partially implemented:
 
 Still stubbed or missing:
 
-- Dependency injection is only an empty `AppContainer`.
-- Room has an empty `VivicastDatabase` with no entities, DAOs, migrations, or schema strategy.
-- DataStore has only an interface and a minimal preferences model.
-- Security has only a `SecureValueStore` contract, with no Android Keystore implementation.
-- Provider, EPG, media, favorites, and playback repositories are contracts or empty interfaces.
+- Dependency injection is manual through `AppContainer`.
+- Room has PRD v1 entities, DAOs, indices, schema export, and provider repository wiring.
+- DataStore has typed preferences support for local app preferences.
+- Security has a `SecureValueStore` contract and Android Keystore-backed implementation.
+- Provider configuration is persisted locally with credentials stored outside Room.
+- EPG, media, favorites, and playback repositories are still contracts or minimal implementations.
 - M3U, Xtream, and XMLTV modules expose contracts only.
 - Player has only a controller contract, with no Media3 playback implementation.
 - Worker contains only job-name constants.
@@ -73,8 +74,8 @@ Still stubbed or missing:
 | --- | --- | --- | --- |
 | 01 | `docs/phase-01-docs-and-foundation-alignment.md` | Complete | Align local docs, ignored source clone, current module audit, and planning rules. |
 | 02 | `docs/phase-02-data-model-and-persistence.md` | Complete | Implement the PRD Room/DataStore data foundation. |
-| 03 | `docs/phase-03-provider-security-and-configuration.md` | Active | Add provider management and encrypted credential storage. |
-| 04 | `docs/phase-04-ingest-refresh-and-epg.md` | Planned | Add M3U, Xtream, XMLTV ingest, refresh scheduling, and EPG storage. |
+| 03 | `docs/phase-03-provider-security-and-configuration.md` | Complete | Add provider management and encrypted credential storage. |
+| 04 | `docs/phase-04-ingest-refresh-and-epg.md` | Active | Add M3U, Xtream, XMLTV ingest, refresh scheduling, and EPG storage. |
 | 05 | `docs/phase-05-live-tv-favorites-and-search.md` | Planned | Connect Live-TV, favorites, and local search to persisted data. |
 | 06 | `docs/phase-06-playback-timeshift-and-errors.md` | Planned | Add Media3 playback, timeline behavior, retries, reconnect, and timeshift. |
 | 07 | `docs/phase-07-vod-series-history-and-android-tv.md` | Planned | Complete movies, series, history, Continue Watching, and Android TV integration. |

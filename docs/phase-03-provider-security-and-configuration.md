@@ -58,6 +58,34 @@ This phase prepares secure configuration. It does not parse playlists, call prov
 - The app builds with `.\gradlew.bat assembleDebug`.
 - No real catalog import, parser implementation, provider API catalog call, or stream playback is included.
 
+## Status
+
+Complete as of 2026-06-21.
+
+Implemented:
+
+- Android Keystore-backed `SecureValueStore`.
+- Room-backed provider repository with stable credential key references in Room.
+- Local Settings provider management for M3U and Xtream configuration.
+- Provider status, enable/disable, rename/update, duplicate-name warning, and safe delete flow.
+- ADR-009 provider-owned deletion side effects for catalog, favorites, playback progress/history, and provider EPG mappings while keeping independent EPG sources.
+- Instrumentation tests for provider lifecycle, credential storage boundaries, and deletion side effects.
+
+Validated:
+
+- `.\gradlew.bat :data:provider:connectedDebugAndroidTest`
+- `.\gradlew.bat :core:security:testDebugUnitTest :core:database:testDebugUnitTest assembleDebug`
+- `.\gradlew.bat :app:installDebug`
+- Android TV emulator launch and D-Pad Settings/provider smoke test.
+
+Not included:
+
+- Playlist parsing.
+- Xtream catalog client calls.
+- XMLTV import.
+- WorkManager refresh scheduling.
+- Real stream playback.
+
 ## References
 
 - `external-docs/prd/PRD-v1/05-iptv-epg-favorites.md`
@@ -67,4 +95,3 @@ This phase prepares secure configuration. It does not parse playlists, call prov
 - `external-docs/architecture/decisions/ADR-004-backup-strategy.md`
 - `external-docs/architecture/decisions/ADR-009-provider-deletion-and-favorites.md`
 - `external-docs/design/design-system/05-screen-patterns.md`
-
