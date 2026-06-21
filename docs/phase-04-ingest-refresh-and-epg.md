@@ -119,6 +119,8 @@ Implemented and validated:
   - source save/delete operations clean linked provider priorities, mappings, and programs for removed sources
   - Settings exposes local EPG source create/edit/delete controls with active state and time shift controls
   - Settings exposes a basic saved-source to provider priority assignment action using the existing repository link hook
+  - Settings exposes provider EPG priority reorder and unlink actions for saved EPG sources
+  - provider EPG priority edits are transactional and compact remaining priorities after removal
   - Settings EPG view preserves Android TV master-detail D-Pad navigation by opening text-field editors only after explicit add/select actions
 
 Validated with:
@@ -135,8 +137,11 @@ Validated with:
 - `.\gradlew.bat assembleDebug`
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest :worker:testDebugUnitTest assembleDebug`
+- `.\gradlew.bat :feature:settings:compileDebugKotlin :data:epg:compileDebugKotlin`
+- `.\gradlew.bat :data:epg:connectedDebugAndroidTest assembleDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Screenshot: `docs/phase-04-settings-epg-smoke.png`
+- Screenshot: `docs/phase-04-epg-priority-smoke.png`
 - Temporary non-committed public refresh smoke JUnit run:
   - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
   - XMLTV: `https://iptv-epg.org/files/epg-de.xml`
@@ -144,7 +149,7 @@ Validated with:
 
 Still open:
 
-- EPG priority reorder/unlink UI and full manual mapping flow are still hooks, not complete end-user flows.
+- Full manual mapping flow is still a hook, not a complete end-user flow.
 - Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
 ## Definition of Done

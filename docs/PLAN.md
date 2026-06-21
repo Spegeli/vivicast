@@ -46,12 +46,13 @@ Done:
   - public M3U/XMLTV refresh smoke check passed through the refresh orchestrator using the user-approved public URLs
   - secure EPG source repository and Settings EPG source management UI are wired through `AppContainer`
   - Settings EPG UI exposes a basic provider-to-EPG source priority assignment action for saved EPG sources
+  - EPG provider priorities can be reordered and unlinked with compacted priorities
   - Android TV emulator D-Pad smoke check passed for the Settings EPG master-detail view
 
 Still important:
 
 - Existing UI uses demo data.
-- EPG priority reorder/unlink UI, full manual EPG channel mapping, real logo/cache jobs, and Media3 playback are not complete yet.
+- Full manual EPG channel mapping, real logo/cache jobs, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -81,9 +82,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with EPG priority reorder/unlink polish and refresh settings hooks.
+1. Continue Phase 04 with refresh settings hooks and manual EPG channel mapping preparation.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
 
-2026-06-21
+2026-06-22

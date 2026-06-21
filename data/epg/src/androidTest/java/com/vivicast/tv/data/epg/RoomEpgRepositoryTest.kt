@@ -152,6 +152,39 @@ class RoomEpgRepositoryTest {
         assertEquals(0, database.epgDao().getProviderEpgSources(PROVIDER_ID).size)
     }
 
+    @Test
+    fun secureEpgSourceRepositoryReordersAndUnlinksProviderPriorities() = runBlocking {
+        val sourceRepository = SecureEpgSourceRepository(
+            database = database,
+            secureValueStore = secureValueStore,
+            delegate = repository,
+        )
+        listOf("one", "two", "three").forEachIndexed { index, id ->
+            sourceRepository.saveSource(
+                EpgSourceEditRequest(
+                    sourceId = id,
+                    name = "EPG $id",
+                    url = "https://epg.example/$id.xml",
+                ),
+            )
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+        }
+
+        sourceRepository.moveSourcePriority(PROVIDER_ID, "three", EpgSourcePriorityDirection.Up)
+
+        assertEquals(
+            listOf("one" to 1, "three" to 2, "two" to 3),
+            database.epgDao().getProviderEpgSources(PROVIDER_ID).map { it.epgSourceId to it.priority },
+        )
+
+        sourceRepository.unlinkSourceFromProvider(PROVIDER_ID, "three")
+
+        assertEquals(
+            listOf("one" to 1, "two" to 2),
+            database.epgDao().getProviderEpgSources(PROVIDER_ID).map { it.epgSourceId to it.priority },
+        )
+    }
+
     private suspend fun seedLiveChannel(
         providerId: String,
         channelId: String,

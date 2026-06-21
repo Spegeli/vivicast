@@ -96,6 +96,9 @@ interface EpgDao {
     @Query("DELETE FROM provider_epg_sources WHERE providerId = :providerId")
     suspend fun deleteProviderEpgSources(providerId: String)
 
+    @Query("DELETE FROM provider_epg_sources WHERE providerId = :providerId AND epgSourceId = :epgSourceId")
+    suspend fun deleteProviderEpgSource(providerId: String, epgSourceId: String)
+
     @Query("DELETE FROM provider_epg_sources WHERE epgSourceId = :epgSourceId")
     suspend fun deleteProviderEpgSourcesForSource(epgSourceId: String)
 

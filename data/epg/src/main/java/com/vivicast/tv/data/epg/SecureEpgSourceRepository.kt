@@ -2,6 +2,7 @@ package com.vivicast.tv.data.epg
 
 import androidx.room.withTransaction
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.domain.model.EpgChannelMapping
@@ -17,6 +18,15 @@ interface EpgSourceRepository : EpgRepository {
     suspend fun deleteSource(sourceId: String)
 
     suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int)
+
+    suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String)
+
+    suspend fun moveSourcePriority(providerId: String, epgSourceId: String, direction: EpgSourcePriorityDirection)
+}
+
+enum class EpgSourcePriorityDirection {
+    Up,
+    Down,
 }
 
 data class EpgSourceEditRequest(
@@ -69,6 +79,46 @@ class SecureEpgSourceRepository(
         delegate.linkEpgSourceToProvider(providerId, epgSourceId, priority)
     }
 
+    override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {
+        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
+        require(epgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
+
+        database.withTransaction {
+            val links = database.epgDao().getProviderEpgSources(providerId)
+            val remaining = links.filterNot { it.epgSourceId == epgSourceId }
+            if (remaining.size == links.size) return@withTransaction
+
+            database.epgDao().deleteProviderEpgSource(providerId, epgSourceId)
+            rewritePriorities(remaining)
+        }
+    }
+
+    override suspend fun moveSourcePriority(
+        providerId: String,
+        epgSourceId: String,
+        direction: EpgSourcePriorityDirection,
+    ) {
+        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
+        require(epgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
+
+        database.withTransaction {
+            val links = database.epgDao().getProviderEpgSources(providerId).toMutableList()
+            val currentIndex = links.indexOfFirst { it.epgSourceId == epgSourceId }
+            if (currentIndex == -1) return@withTransaction
+
+            val targetIndex = when (direction) {
+                EpgSourcePriorityDirection.Up -> currentIndex - 1
+                EpgSourcePriorityDirection.Down -> currentIndex + 1
+            }
+            if (targetIndex !in links.indices) return@withTransaction
+
+            val moved = links[currentIndex]
+            links[currentIndex] = links[targetIndex]
+            links[targetIndex] = moved
+            rewritePriorities(links)
+        }
+    }
+
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         delegate.observeProviderEpgSources(providerId)
 
@@ -85,6 +135,21 @@ class SecureEpgSourceRepository(
 
     private fun urlKeyFor(sourceId: String): String =
         "$EPG_SOURCE_KEY_PREFIX$sourceId:url"
+
+    private suspend fun rewritePriorities(links: List<ProviderEpgSourceEntity>) {
+        if (links.isEmpty()) return
+
+        val temporaryLinks = links.mapIndexed { index, link ->
+            link.copy(priority = TEMPORARY_PRIORITY_OFFSET + index)
+        }
+        database.epgDao().upsertProviderEpgSources(temporaryLinks)
+
+        val normalizedLinks = links.mapIndexed { index, link ->
+            link.copy(priority = index + 1)
+        }
+        database.epgDao().upsertProviderEpgSources(normalizedLinks)
+    }
 }
 
 private const val EPG_SOURCE_KEY_PREFIX = "epg-source:"
+private const val TEMPORARY_PRIORITY_OFFSET = 10_000

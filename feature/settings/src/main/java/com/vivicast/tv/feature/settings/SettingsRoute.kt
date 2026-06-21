@@ -53,6 +53,7 @@ import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
+import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoSetting
@@ -262,6 +263,24 @@ private fun EpgSettingsPanel(
                                 }
                         }
                     },
+                    onUnlinkProvider = { providerId, sourceId ->
+                        scope.launch {
+                            runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }
+                                .onSuccess { message = "EPG Quelle wurde vom Provider entfernt." }
+                                .onFailure { error ->
+                                    message = "Entfernen fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
+                                }
+                        }
+                    },
+                    onMoveProviderLink = { providerId, sourceId, direction ->
+                        scope.launch {
+                            runCatching { epgSourceRepository.moveSourcePriority(providerId, sourceId, direction) }
+                                .onSuccess { message = "EPG Prioritaet wurde aktualisiert." }
+                                .onFailure { error ->
+                                    message = "Prioritaet fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
+                                }
+                        }
+                    },
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
                 )
             } else {
@@ -363,6 +382,8 @@ private fun EpgSourceEditor(
     onSave: () -> Unit,
     onDelete: () -> Unit,
     onLinkProvider: (providerId: String, sourceId: String, priority: Int) -> Unit,
+    onUnlinkProvider: (providerId: String, sourceId: String) -> Unit,
+    onMoveProviderLink: (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -493,17 +514,56 @@ private fun EpgSourceEditor(
                     val sourceId = editor.sourceId
                     val existingLink = providerLinks.firstOrNull { it.epgSourceId == sourceId }
                     val nextPriority = existingLink?.priority ?: (providerLinks.maxOfOrNull { it.priority } ?: 0) + 1
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                        ActionPill(
-                            label = existingLink?.let { "Priorität ${it.priority} gesetzt" } ?: "Als Priorität $nextPriority verwenden",
-                            modifier = Modifier.width(300.dp),
-                            selected = existingLink != null,
-                            onClick = {
-                                if (providerId != null && sourceId != null) {
-                                    onLinkProvider(providerId, sourceId, nextPriority)
-                                }
-                            },
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                            ActionPill(
+                                label = existingLink?.let { "Prioritaet ${it.priority}" } ?: "Als Prioritaet $nextPriority verwenden",
+                                modifier = Modifier.width(270.dp),
+                                selected = existingLink != null,
+                                onClick = {
+                                    if (providerId != null && sourceId != null && existingLink == null) {
+                                        onLinkProvider(providerId, sourceId, nextPriority)
+                                    }
+                                },
+                            )
+                            if (existingLink != null) {
+                                ActionPill(
+                                    label = "Entfernen",
+                                    modifier = Modifier.width(140.dp),
+                                    onClick = {
+                                        if (providerId != null && sourceId != null) {
+                                            onUnlinkProvider(providerId, sourceId)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        if (existingLink != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                                val canMoveUp = existingLink.priority > 1
+                                val canMoveDown = existingLink.priority < providerLinks.size
+                                ActionPill(
+                                    label = if (canMoveUp) "Hoeher" else "Oben",
+                                    modifier = Modifier.width(128.dp),
+                                    selected = !canMoveUp,
+                                    onClick = {
+                                        if (providerId != null && sourceId != null && canMoveUp) {
+                                            onMoveProviderLink(providerId, sourceId, EpgSourcePriorityDirection.Up)
+                                        }
+                                    },
+                                )
+                                ActionPill(
+                                    label = if (canMoveDown) "Tiefer" else "Unten",
+                                    modifier = Modifier.width(128.dp),
+                                    selected = !canMoveDown,
+                                    onClick = {
+                                        if (providerId != null && sourceId != null && canMoveDown) {
+                                            onMoveProviderLink(providerId, sourceId, EpgSourcePriorityDirection.Down)
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
