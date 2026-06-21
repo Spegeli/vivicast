@@ -28,6 +28,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:database"))
+    implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:live-tv"))
     implementation(project(":feature:movies"))

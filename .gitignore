@@ -12,6 +12,7 @@ build/
 
 # Local config
 local.properties
+external-docs/
 
 # Generated and local artifacts
 captures/

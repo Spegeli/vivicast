@@ -5,8 +5,10 @@
 At the start of every new session in this repository:
 
 1. Read `docs/PLAN.md` first.
-2. Use `docs/PLAN.md` as the source of truth for the current phase, active task, and next steps.
-3. Read `docs/setup/windows-android-setup.md` only when local environment, Android SDK, emulator, or device setup is relevant.
+2. Use `docs/PLAN.md` as the short startup pointer for the current phase, active task, and next steps.
+3. Read `docs/roadmap.md` for the long-form phase overview.
+4. Read the active `docs/phase-XX-*.md` file before implementation work.
+5. Read `docs/setup/windows-android-setup.md` only when local environment, Android SDK, emulator, or device setup is relevant.
 
 ## Plan Maintenance
 
@@ -19,6 +21,9 @@ At the start of every new session in this repository:
 ## Documentation Rules
 
 - Treat `docs/PLAN.md` as the living project memory.
+- Treat `docs/roadmap.md` as the long-form implementation roadmap.
+- Treat the active `docs/phase-XX-*.md` file as the detailed task source for long sessions.
+- `AGENTS.md` may be updated directly when it is genuinely useful for reliable long-running work. Keep edits minimal and additive; do not rewrite or remove major guidance without explicit user approval.
 - Keep markdown files lean.
 - Prefer updating existing docs over scattering progress across new markdown files.
 - Remove stale or duplicated markdown content when it no longer helps current development or project understanding.
@@ -26,11 +31,39 @@ At the start of every new session in this repository:
 
 ## Product Context
 
-- ViviCast is restarting from a clean Android TV Phase 1 foundation.
+- ViviCast is an Android TV IPTV client, not a server backend.
 - The previous app implementation, UI concept, architecture, and roadmap are no longer active direction.
-- Current app structure follows the Phase 1 bootstrap direction from `Spegeli/vivicast-docs`.
-- Phase 2 UI/demo work must only start after explicit user approval.
+- Current app direction follows PRD v1 and ADR-001 through ADR-009 from the read-only documentation repository.
+- Current app state includes the accepted Phase 1 foundation and the Phase 2/2C local UI demo/design-system work.
 - Android TV is the active first development target.
+
+## External Documentation
+
+- `external-docs/` is a local clone of `Spegeli/vivicast-docs` and must be treated as read-only.
+- Never edit, stage, or commit files under `external-docs/`.
+- Binding sources are only:
+  - `external-docs/prd/PRD-v1/`
+  - `external-docs/architecture/decisions/`
+  - `external-docs/architecture/diagrams/`
+  - `external-docs/design/`
+- Ignore the complete `external-docs/codex/` folder.
+- Ignore every reference or link to `codex/`, even if another documentation file mentions it.
+
+## Autonomous Execution
+
+- Work through `docs/roadmap.md` phase by phase without waiting for repeated user prompts.
+- After completing a task, validate it, document the result, and continue with the next task.
+- Stop only for real blockers such as missing credentials, OS permissions, external account/login steps, or explicit user direction.
+- Validate implementation work before moving on. Use builds, tests, Android TV emulator smoke tests, and screenshots when UI, focus, or visual behavior changes.
+
+## Implementation Decisions
+
+- Codex may choose the DI approach. Prefer the simplest approach that fits the codebase.
+- Record an ADR under `docs/decisions/` before introducing a DI framework or changing the app-wide DI strategy.
+- Public M3U/XMLTV test URLs may be used for later real ingest checks:
+  - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
+  - EPG XMLTV: `https://iptv-epg.org/files/epg-de.xml`
+- No Xtream Codes test credentials are currently available. Ask only when Xtream-specific real integration testing becomes necessary.
 
 ## Android TV Emulator Rule
 
@@ -61,7 +94,7 @@ At the start of every new session in this repository:
 
 - Never push to GitHub without the user's explicit permission for that specific push.
 - Never create remote repositories, publish branches, open pull requests, or upload commits unless the user has clearly approved that exact GitHub action.
-- Local commits are allowed only when they help preserve an approved work state; pushing those commits still requires separate explicit approval.
+- Local commits are allowed when they preserve a validated work state; pushing those commits still requires separate explicit approval.
 
 ## Security
 

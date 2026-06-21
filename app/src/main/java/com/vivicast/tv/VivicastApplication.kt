@@ -4,5 +4,5 @@ import android.app.Application
 import com.vivicast.tv.di.AppContainer
 
 class VivicastApplication : Application() {
-    val appContainer: AppContainer by lazy { AppContainer() }
+    val appContainer: AppContainer by lazy { AppContainer(this) }
 }

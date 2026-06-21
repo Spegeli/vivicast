@@ -21,4 +21,5 @@ kotlin {
 dependencies {
     implementation(project(":domain"))
     implementation(project(":core:security"))
+    implementation(libs.kotlinx.coroutines.core)
 }

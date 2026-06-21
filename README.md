@@ -1,13 +1,26 @@
 # ViviCast
 
-ViviCast is a clean Android TV app foundation for package `com.vivicast.tv`.
+ViviCast is an Android TV IPTV client for package `com.vivicast.tv`.
 
-Status: Phase 1 foundation scaffolded. The app currently contains only a minimal Android TV shell and placeholders. There are no demo data, provider integrations, parsers, or real player features.
+Status: The accepted Android TV foundation and Phase 2/2C local UI demo exist. The app has a TV-oriented Compose UI, reusable design-system components, and local demo catalog data. Real provider integrations, parser implementations, persistent PRD data flows, and Media3 playback are not complete yet.
 
 ## Source of Truth
 
-- Current plan and next steps: [docs/PLAN.md](docs/PLAN.md)
+- Short startup pointer: [docs/PLAN.md](docs/PLAN.md)
+- Long-form implementation roadmap: [docs/roadmap.md](docs/roadmap.md)
+- Phase details: `docs/phase-XX-*.md`
 - Local Windows/Android setup: [docs/setup/windows-android-setup.md](docs/setup/windows-android-setup.md)
+
+The local read-only documentation clone lives in `external-docs/` and is ignored by Git.
+
+Binding documentation sources:
+
+- `external-docs/prd/PRD-v1/`
+- `external-docs/architecture/decisions/`
+- `external-docs/architecture/diagrams/`
+- `external-docs/design/`
+
+Ignore `external-docs/codex/` and every link pointing to `codex/`.
 
 ## Development Quick Start
 
@@ -43,6 +56,22 @@ Build all debug modules:
 
 ## Current State
 
-Active Gradle modules are defined in `settings.gradle.kts` and follow the Phase 1 bootstrap structure from the documentation repository. Build, install, launch, and basic D-pad focus have been validated on the Android TV emulator.
+Active Gradle modules are defined in `settings.gradle.kts` and follow the PRD v1 multi-module Android TV structure.
 
-Phase 2 must only start after explicit approval.
+Implemented or partially implemented:
+
+- Android TV Leanback entry point and package/application ID `com.vivicast.tv`
+- Compose for TV screens for Live-TV, Movies, Series, Search, Settings, and Player Overlay
+- Reusable `:core:designsystem` TV components and tokens
+- Local demo catalog data and bundled demo assets in `:data:media`
+- Emulator-oriented scripts for environment checks, Android Studio, and Android TV startup
+
+Still stubbed or missing:
+
+- Dependency injection wiring
+- Room entities, DAOs, migrations, and real data repositories
+- DataStore implementation
+- Android Keystore-backed secure value storage
+- M3U, Xtream, and XMLTV implementations
+- WorkManager refresh jobs
+- Real Media3 playback and timeshift

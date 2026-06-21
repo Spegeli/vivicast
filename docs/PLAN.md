@@ -2,71 +2,66 @@
 
 ## Current Direction
 
-ViviCast is now building the Phase 2 Android TV UI demo on top of the accepted Phase 1 foundation from `Spegeli/vivicast-docs`.
+Vivicast is now aligned to the PRD v1 and ADR roadmap from the read-only docs repository.
+
+Use `docs/roadmap.md` as the detailed implementation roadmap. Use the active `docs/phase-XX-*.md` file for long sessions.
 
 ## Current Phase
 
-Phase 2 - UI demo with local demo data
+Phase 03 - Provider Security and Configuration
 
 ## Current Status
 
 Done:
 
-- Phase 1 foundation accepted and pushed to `Spegeli/vivicast`.
-- Added local, reproducible Phase 2 demo catalog data in `:data:media`.
-- Added Android TV demo screens for Live-TV, Movies, Series, Search, Settings, and Player Overlay.
-- Added D-pad-oriented focus behavior, top-level screen switching, adaptive Live-TV columns, VOD cards, search rows, settings master-detail, and player timeline controls.
-- Applied the Phase 2 visual passes toward the approved high-fidelity direction: premium dark palette, reusable high-fidelity designsystem components, stronger focus states, refined cards/panels, player removed from main navigation, debug/demo toggles removed from visible UI, and refreshed emulator screenshots in `build/visual-pass-shots`.
-- Added local bundled demo logos, poster images, and backdrop images in `:data:media`; sources are tracked in `docs/demo-assets.md`.
-- Kept provider data, parsers, real stream URLs, Media3 playback, network demo content, and DB imports out of Phase 2.
-- Verified latest Phase 2 visual pass build with `.\gradlew.bat assembleDebug`.
-- Verified APK install, launch, D-pad navigation across top navigation and Live-TV content, player overlay launch, timeline OK handling, and no app crash markers on `ViviCast_AndroidTV_API36`.
+- Phase 1 Android TV foundation exists.
+- Phase 2/2C demo UI and reusable TV design-system components exist.
+- `Spegeli/vivicast-docs` is cloned locally into `external-docs/`.
+- `external-docs/` is ignored by Git and must remain read-only context.
+- New PRD/ADR-based roadmap and phase files were created under `docs/`.
+- Phase 02 data model and persistence foundation is implemented:
+  - Room PRD entities, DAOs, indices, schema export, and database factory
+  - typed DataStore preferences implementation
+  - domain models and repository contracts
+  - manual app container persistence wiring
+  - local ID and secret-storage ADR
+  - schema/security unit tests
 
-Missing:
+Still important:
 
-- Phase 2 final review/acceptance by the user after the pushed visual/demo-asset state.
-
-## Active Module Structure
-
-- `:app`
-- `:core:common`
-- `:core:designsystem`
-- `:core:database`
-- `:core:datastore`
-- `:core:network`
-- `:core:player`
-- `:core:security`
-- `:data:provider`
-- `:data:epg`
-- `:data:media`
-- `:data:favorites`
-- `:data:playback`
-- `:domain`
-- `:feature:live-tv`
-- `:feature:movies`
-- `:feature:series`
-- `:feature:search`
-- `:feature:settings`
-- `:feature:player`
-- `:iptv:m3u`
-- `:iptv:xtream`
-- `:iptv:xmltv`
-- `:worker`
+- Existing UI uses demo data.
+- Keystore implementation, provider configuration flows, parser implementations, provider clients, WorkManager jobs, and Media3 playback are not complete yet.
+- The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
 
-- Treat this plan as the local active project memory.
-- Treat `Spegeli/vivicast-docs` as read-only unless the user explicitly says otherwise.
-- Do not use archived app code, removed UI concepts, or old roadmap assumptions as product direction.
-- Use old archived code only when the user explicitly asks for implementation reference.
-- Android TV is the active first target.
-- Start emulator testing through `scripts\start-tv-emulator.ps1`.
+- Treat `docs/roadmap.md` as the long-form roadmap.
+- Treat this file as the short startup pointer.
+- Work phase by phase.
+- Operate autonomously through the roadmap: after finishing a task, validate it, document the result, and continue with the next task unless blocked by missing credentials, OS permissions, external account/login steps, or explicit user direction.
+- Validate implementation work before moving on. Use builds, tests, emulator smoke tests, and visual screenshot checks when UI or focus behavior changes.
+- Local commits are allowed when they preserve a validated work state. Pushes still require explicit user approval.
+- The implementation may choose the DI approach. Prefer the simplest approach that fits the codebase; record an ADR if introducing a DI framework or changing the app-wide DI strategy.
+- Keep the active phase docs current when meaningful progress is made.
+- Record architecture decisions or deviations as ADRs under `docs/decisions/`.
+- Treat `external-docs/` as read-only and never commit it.
+- Start Android TV emulator testing through `scripts\start-tv-emulator.ps1`.
 - Do not install APKs on the physical Android TV unless explicitly requested.
+- `AGENTS.md` may be updated directly when it is genuinely useful for reliable long-running work. Keep edits minimal and additive; do not rewrite or remove major guidance without explicit user approval.
+
+## Public Test Sources
+
+These public URLs may be used later for real M3U/XMLTV tests:
+
+- M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
+- EPG XMLTV: `https://iptv-epg.org/files/epg-de.xml`
+
+No Xtream Codes test credentials are available yet. Ask the user only when Xtream-specific real integration testing becomes necessary.
 
 ## Next Steps
 
-1. User review of the pushed Phase 2 visual/demo-asset state.
-2. Wait for explicit acceptance before starting Phase 3.
+1. Start Phase 03: Provider Security and Configuration.
+2. Keep the existing demo UI compiling while adding secure provider configuration.
 
 ## Last Updated
 
