@@ -1,21 +1,20 @@
+# Gradle
 .gradle/
-.kotlin/
-.tmp/
-.idea/
 build/
-*/build/
-local.properties
-captures/
-screenshots/
-debug-artifacts/
+**/build/
+
+# Android Studio / IntelliJ
+.idea/
 *.iml
-*.apk
-*.aab
-emulator-*.png
-new-android-tv-home.png
-vivicast-tv-*.png
-vivicast-nav-*.png
-vivicast-m3u-*.png
-vivicast-xtream-*.png
-vivicast-*.png
-vivicast-*.sqlite
+
+# Local config
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
+captures/
+.externalNativeBuild/
+.cxx/
