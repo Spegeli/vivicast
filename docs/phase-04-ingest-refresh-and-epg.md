@@ -107,6 +107,13 @@ Implemented and validated:
   - unique WorkManager names and input keys for provider and EPG source refreshes
   - periodic background refresh enable/disable scheduling hook
   - network constraints for remote refresh jobs and no network constraint for cache cleanup
+- Network-backed refresh execution foundation:
+  - runtime M3U playlist fetch, parse, and Room import from encrypted provider credentials
+  - runtime Xtream live, VOD, series, season, and episode fetch/parse/import path from encrypted provider credentials
+  - runtime XMLTV fetch, parse, and provider-scoped Room import from encrypted EPG source URL keys
+  - provider status transitions for refreshing, active, connection error, and invalid credentials
+  - `AppContainer` runner registration for WorkManager workers without introducing a DI framework
+  - no-op logo/cache implementations kept explicit until real cache work is implemented
 
 Validated with:
 
@@ -118,13 +125,14 @@ Validated with:
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest`
 - `.\gradlew.bat :worker:testDebugUnitTest`
 - `.\gradlew.bat :worker:compileDebugKotlin`
+- `.\gradlew.bat :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- XMLTV import orchestration from encrypted EPG source URLs.
-- Network-backed refresh execution wired to secure provider and EPG source credentials.
 - Real public M3U/XMLTV smoke checks through refresh orchestration.
+- Persisted EPG source URL creation/editing UI is still not exposed beyond repository hooks.
+- Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
 ## Definition of Done
 

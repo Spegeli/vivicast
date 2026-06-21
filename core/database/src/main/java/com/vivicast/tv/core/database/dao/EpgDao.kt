@@ -40,6 +40,15 @@ interface EpgDao {
 
     @Query(
         """
+        SELECT * FROM provider_epg_sources
+        WHERE epgSourceId = :epgSourceId
+        ORDER BY providerId, priority
+        """,
+    )
+    suspend fun getProviderEpgSourcesForSource(epgSourceId: String): List<ProviderEpgSourceEntity>
+
+    @Query(
+        """
         SELECT * FROM epg_programs
         WHERE providerId = :providerId
             AND channelId = :channelId

@@ -5,4 +5,9 @@ import com.vivicast.tv.di.AppContainer
 
 class VivicastApplication : Application() {
     val appContainer: AppContainer by lazy { AppContainer(this) }
+
+    override fun onCreate() {
+        super.onCreate()
+        appContainer.installWorkerRunner()
+    }
 }

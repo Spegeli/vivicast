@@ -31,7 +31,10 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:network"))
     implementation(project(":core:security"))
+    implementation(project(":data:epg"))
+    implementation(project(":data:media"))
     implementation(project(":data:provider"))
     implementation(project(":feature:live-tv"))
     implementation(project(":feature:movies"))
@@ -39,6 +42,10 @@ dependencies {
     implementation(project(":feature:search"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:player"))
+    implementation(project(":iptv:m3u"))
+    implementation(project(":iptv:xmltv"))
+    implementation(project(":iptv:xtream"))
+    implementation(project(":worker"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -48,6 +55,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.tv.material)
+    implementation(libs.okhttp)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
