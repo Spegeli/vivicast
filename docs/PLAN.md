@@ -43,11 +43,12 @@ Done:
   - refresh orchestration foundation in `:worker` with ADR-003 order, EPG source deduplication, failure continuation, and diagnostics redaction
   - concrete WorkManager refresh worker wrappers and request scheduling foundation for global, playlist, EPG, logo, and cache jobs
   - network-backed refresh runner foundation wired through `AppContainer` for M3U, Xtream, and XMLTV runtime imports
+  - public M3U/XMLTV refresh smoke check passed through the refresh orchestrator using the user-approved public URLs
 
 Still important:
 
 - Existing UI uses demo data.
-- Real public M3U/XMLTV refresh smoke checks and Media3 playback are not complete yet.
+- Persisted EPG source URL editing UI, real logo/cache jobs, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -77,7 +78,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with real public M3U/XMLTV refresh smoke checks.
+1. Continue Phase 04 with persisted EPG source URL creation/editing and refresh settings hooks.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

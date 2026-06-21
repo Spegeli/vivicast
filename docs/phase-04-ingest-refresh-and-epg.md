@@ -127,10 +127,13 @@ Validated with:
 - `.\gradlew.bat :worker:compileDebugKotlin`
 - `.\gradlew.bat :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
+- Temporary non-committed public refresh smoke JUnit run:
+  - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
+  - XMLTV: `https://iptv-epg.org/files/epg-de.xml`
+  - validated fetch, parse, and ADR-003 orchestration without committing downloaded provider data
 
 Still open:
 
-- Real public M3U/XMLTV smoke checks through refresh orchestration.
 - Persisted EPG source URL creation/editing UI is still not exposed beyond repository hooks.
 - Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
