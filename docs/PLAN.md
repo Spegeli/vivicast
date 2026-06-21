@@ -35,13 +35,14 @@ Done:
 - Phase 04 ingest foundation is partially implemented:
   - M3U parser for live channel metadata, groups, logos, catch-up hints, and skipped-entry handling
   - XMLTV parser for channels, programmes, metadata, and platform-tolerant secure parser setup
+  - Xtream client request foundation for PRD live, VOD, series, and series-info endpoints with transport abstraction
   - Room-backed M3U live-channel import with provider isolation, delta updates, and removed-channel side-effect cleanup
   - Room-backed XMLTV EPG import with independent EPG source metadata, provider links, automatic mappings, time shift, and provider-scoped program replacement
 
 Still important:
 
 - Existing UI uses demo data.
-- Xtream client/import, WorkManager refresh jobs, network refresh orchestration, diagnostics, and Media3 playback are not complete yet.
+- Xtream response parsing/import, WorkManager refresh jobs, network refresh orchestration, diagnostics, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -71,7 +72,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with Xtream contracts/client fixture imports and refresh orchestration foundations.
+1. Continue Phase 04 with Xtream response parsing/import and refresh orchestration foundations.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

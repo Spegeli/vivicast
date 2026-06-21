@@ -66,6 +66,11 @@ Implemented and validated:
 
 - M3U parser in `:iptv:m3u` for live channel entries, categories, logos, channel numbers, catch-up hints, stable IDs, and skipped incomplete entries.
 - XMLTV parser in `:iptv:xmltv` for channels, programmes, titles, descriptions, categories, icons, skipped invalid programmes, and Android-compatible secure parser setup.
+- Xtream client foundation in `:iptv:xtream`:
+  - typed credential model
+  - transport abstraction for fixture tests and later HTTP use
+  - OkHttp transport without logging or persisting credential-bearing URLs
+  - PRD endpoint request methods for live categories, live streams, VOD categories, VOD streams, series categories, series lists, and series details
 - Room-backed M3U live-channel import in `:data:media`:
   - provider-isolated category and channel IDs
   - uncategorized fallback
@@ -85,13 +90,14 @@ Validated with:
 
 - `.\gradlew.bat :iptv:m3u:testDebugUnitTest`
 - `.\gradlew.bat :iptv:xmltv:testDebugUnitTest`
+- `.\gradlew.bat :iptv:xtream:testDebugUnitTest`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- Xtream client calls and fixture-backed imports.
+- Xtream response parsing and fixture-backed imports.
 - XMLTV import orchestration from encrypted EPG source URLs.
 - WorkManager playlist, EPG, logo, and cache workers.
 - Global refresh scheduler order from ADR-003.
