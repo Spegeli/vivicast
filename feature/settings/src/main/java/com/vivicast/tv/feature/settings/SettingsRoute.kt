@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.BasicText
@@ -30,6 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -60,8 +64,11 @@ import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoSetting
+import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -103,8 +110,12 @@ fun SettingsRoute(
 ) {
     var selectedSection by remember { mutableStateOf("Allgemein") }
     var showConfirm by remember { mutableStateOf(false) }
+    val detailFocusRequester = remember { FocusRequester() }
     val settingsSections = remember { DemoCatalog.settingsSections }
     val maintenanceSection = remember { settingsSections.last() }
+    val sectionsWithDetailFocus = remember(maintenanceSection) {
+        setOf("Allgemein", "Wiedergabelisten", "EPG", "Optik", maintenanceSection)
+    }
 
     LaunchedEffect(Unit) {
         onReloadCacheStats()
@@ -132,7 +143,14 @@ fun SettingsRoute(
                                 onFocused = { selectedSection = section },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(VivicastCardSizes.SettingsNavItemHeight),
+                                    .height(VivicastCardSizes.SettingsNavItemHeight)
+                                    .then(
+                                        if (section in sectionsWithDetailFocus) {
+                                            Modifier.focusProperties { right = detailFocusRequester }
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
                                 contentPadding = VivicastSpacing.Space4,
                             ) {
                                 BasicText(
@@ -159,13 +177,21 @@ fun SettingsRoute(
                             onBackgroundRefreshChanged = onBackgroundRefreshChanged,
                             onRememberSortingChanged = onRememberSortingChanged,
                             onRunGlobalRefresh = onRunGlobalRefresh,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
-                        "Wiedergabelisten" -> ProviderSettingsPanel(providerRepository = providerRepository)
+                        "Wiedergabelisten" -> ProviderSettingsPanel(
+                            providerRepository = providerRepository,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
                         "EPG" -> EpgSettingsPanel(
                             providerRepository = providerRepository,
                             epgSourceRepository = epgSourceRepository,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
-                        "Optik" -> SettingsOptions(showConfirm = { showConfirm = true })
+                        "Optik" -> SettingsOptions(
+                            showConfirm = { showConfirm = true },
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
                         maintenanceSection -> MaintenanceSettingsPanel(
                             cacheSettingsState = cacheSettingsState,
                             onCacheSizeChanged = onCacheSizeChanged,
@@ -173,6 +199,7 @@ fun SettingsRoute(
                             onRunCacheCleanup = onRunCacheCleanup,
                             onClearCache = onClearCache,
                             onReloadCacheStats = onReloadCacheStats,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
                         else -> InfoPanel(
                             title = selectedSection,
@@ -210,6 +237,7 @@ private fun GeneralSettingsPanel(
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onRememberSortingChanged: (Boolean) -> Unit,
     onRunGlobalRefresh: () -> Unit,
+    firstFocusModifier: Modifier = Modifier,
 ) {
     var message by remember { mutableStateOf<String?>(null) }
     val toggleBackgroundRefresh = {
@@ -239,7 +267,7 @@ private fun GeneralSettingsPanel(
                 title = "Hintergrundaktualisierung",
                 help = "Playlists und EPG im Hintergrund aktualisieren.",
                 value = if (state.backgroundRefreshEnabled) "Ein" else "Aus",
-                modifier = Modifier.onTvCenterClick(toggleBackgroundRefresh),
+                modifier = firstFocusModifier.onTvCenterClick(toggleBackgroundRefresh),
                 onClick = toggleBackgroundRefresh,
             )
         }
@@ -302,6 +330,7 @@ private fun Modifier.onTvCenterClick(action: () -> Unit): Modifier =
 private fun EpgSettingsPanel(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
+    firstFocusModifier: Modifier = Modifier,
 ) {
     val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -310,6 +339,7 @@ private fun EpgSettingsPanel(
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(EpgSourceEditorState.newSource()) }
     var showEditor by remember { mutableStateOf(false) }
+    var showManualMapping by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
     val providerLinks by (selectedProviderId?.let { epgSourceRepository.observeProviderEpgSources(it) } ?: flowOf(emptyList()))
@@ -334,23 +364,42 @@ private fun EpgSettingsPanel(
         Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
             ActionPill(
                 label = "EPG Quelle hinzufügen",
-                modifier = Modifier.width(250.dp),
+                modifier = firstFocusModifier.width(250.dp),
                 selected = showEditor && !editor.isEditing,
                 onClick = {
                     selectedSourceId = null
                     editor = EpgSourceEditorState.newSource()
                     showEditor = true
+                    showManualMapping = false
                     message = null
                 },
             )
             ActionPill(
                 label = "Manuelle Zuordnung",
                 modifier = Modifier.width(230.dp),
-                onClick = { message = "Manuelle EPG-Zuordnung ist als Phase-04-Hook vorbereitet." },
+                selected = showManualMapping,
+                onClick = {
+                    showManualMapping = true
+                    showEditor = false
+                    message = null
+                },
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+        if (showManualMapping) {
+            ManualEpgMappingPanel(
+                providers = providers,
+                sources = sources,
+                selectedProviderId = selectedProviderId,
+                providerLinks = providerLinks,
+                repository = epgSourceRepository,
+                message = message,
+                onSelectProvider = { selectedProviderId = it },
+                onMessage = { message = it },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
             EpgSourceList(
                 sources = sources,
                 selectedSourceId = selectedSourceId,
@@ -358,6 +407,7 @@ private fun EpgSettingsPanel(
                     selectedSourceId = source.id
                     editor = EpgSourceEditorState.from(source)
                     showEditor = true
+                    showManualMapping = false
                     message = null
                 },
                 modifier = Modifier.weight(0.42f).fillMaxHeight(),
@@ -431,6 +481,7 @@ private fun EpgSettingsPanel(
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
                 )
             }
+            }
         }
     }
 
@@ -455,6 +506,344 @@ private fun EpgSettingsPanel(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun ManualEpgMappingPanel(
+    providers: List<Provider>,
+    sources: List<EpgSource>,
+    selectedProviderId: String?,
+    providerLinks: List<ProviderEpgSource>,
+    repository: EpgSourceRepository,
+    message: String?,
+    onSelectProvider: (String) -> Unit,
+    onMessage: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var selectedChannelId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
+    var selectedSourceId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
+    var externalChannelId by remember(selectedProviderId) { mutableStateOf("") }
+    val channels by (selectedProviderId?.let { repository.observeChannelsForProvider(it) } ?: flowOf(emptyList()))
+        .collectAsState(initial = emptyList())
+    val mappings by (
+        if (selectedProviderId != null && selectedChannelId != null) {
+            repository.observeMappingsForChannel(selectedProviderId, selectedChannelId!!)
+        } else {
+            flowOf(emptyList())
+        }
+    ).collectAsState(initial = emptyList())
+    val linkedSources = remember(providerLinks, sources) {
+        providerLinks
+            .sortedBy { it.priority }
+            .mapNotNull { link -> sources.firstOrNull { it.id == link.epgSourceId } }
+    }
+    val selectedMapping = mappings.firstOrNull { it.epgSourceId == selectedSourceId }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(channels) {
+        if (selectedChannelId != null && channels.none { it.id == selectedChannelId }) {
+            selectedChannelId = null
+        }
+    }
+
+    LaunchedEffect(linkedSources) {
+        if (selectedSourceId == null || linkedSources.none { it.id == selectedSourceId }) {
+            selectedSourceId = linkedSources.firstOrNull()?.id
+        }
+    }
+
+    LaunchedEffect(selectedProviderId, selectedChannelId, selectedSourceId, selectedMapping?.epgChannelId) {
+        externalChannelId = selectedMapping?.epgChannelId.orEmpty()
+    }
+
+    if (providers.isEmpty()) {
+        InfoPanel(
+            title = "Keine Provider",
+            body = "Lege zuerst eine Wiedergabeliste an, um manuelle EPG-Zuordnungen zu bearbeiten.",
+            badge = "EPG",
+            modifier = modifier,
+        )
+        return
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = modifier) {
+        ManualMappingProviderList(
+            providers = providers,
+            selectedProviderId = selectedProviderId,
+            onSelectProvider = {
+                onSelectProvider(it)
+                onMessage(null)
+            },
+            modifier = Modifier.weight(0.28f).fillMaxHeight(),
+        )
+
+        ManualMappingChannelList(
+            channels = channels,
+            mappings = mappings,
+            selectedProviderId = selectedProviderId,
+            selectedChannelId = selectedChannelId,
+            onSelectChannel = {
+                selectedChannelId = it
+                onMessage(null)
+            },
+            modifier = Modifier.weight(0.34f).fillMaxHeight(),
+        )
+
+        ManualMappingDetail(
+            sources = linkedSources,
+            selectedProviderId = selectedProviderId,
+            selectedChannel = channels.firstOrNull { it.id == selectedChannelId },
+            selectedSourceId = selectedSourceId,
+            selectedMapping = selectedMapping,
+            externalChannelId = externalChannelId,
+            message = message,
+            onSelectSource = {
+                selectedSourceId = it
+                onMessage(null)
+            },
+            onExternalChannelIdChange = { externalChannelId = it },
+            onSave = {
+                val providerId = selectedProviderId
+                val channelId = selectedChannelId
+                val sourceId = selectedSourceId
+                val normalizedExternalId = externalChannelId.trim()
+                if (providerId == null || channelId == null || sourceId == null || normalizedExternalId.isBlank()) {
+                    onMessage("Provider, Sender, EPG Quelle und externe Kanal-ID muessen ausgewaehlt sein.")
+                    return@ManualMappingDetail
+                }
+                scope.launch {
+                    runCatching {
+                        repository.setManualChannelMapping(
+                            ManualEpgChannelMappingRequest(
+                                providerId = providerId,
+                                channelId = channelId,
+                                epgSourceId = sourceId,
+                                epgChannelId = normalizedExternalId,
+                            ),
+                        )
+                    }.onSuccess {
+                        onMessage("Manuelle EPG-Zuordnung gespeichert.")
+                    }.onFailure { error ->
+                        onMessage("Zuordnung fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}")
+                    }
+                }
+            },
+            onClear = {
+                val providerId = selectedProviderId
+                val channelId = selectedChannelId
+                val sourceId = selectedSourceId
+                if (providerId == null || channelId == null || sourceId == null) {
+                    onMessage("Provider, Sender und EPG Quelle muessen ausgewaehlt sein.")
+                    return@ManualMappingDetail
+                }
+                scope.launch {
+                    runCatching { repository.clearManualChannelMapping(providerId, channelId, sourceId) }
+                        .onSuccess {
+                            externalChannelId = ""
+                            onMessage("Manuelle Zuordnung entfernt. Automatische Zuordnung kann beim naechsten Import greifen.")
+                        }
+                        .onFailure { error ->
+                            onMessage("Entfernen fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}")
+                        }
+                }
+            },
+            modifier = Modifier.weight(0.38f).fillMaxHeight(),
+        )
+    }
+}
+
+@Composable
+private fun ManualMappingProviderList(
+    providers: List<Provider>,
+    selectedProviderId: String?,
+    onSelectProvider: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (providers.isEmpty()) {
+        InfoPanel(
+            title = "Keine Provider",
+            body = "Lege zuerst eine Wiedergabeliste an, um EPG Zuordnungen zu bearbeiten.",
+            modifier = modifier,
+        )
+        return
+    }
+
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        items(providers, key = { it.id }) { provider ->
+            FocusPanel(
+                selected = provider.id == selectedProviderId,
+                onClick = { onSelectProvider(provider.id) },
+                onFocused = { onSelectProvider(provider.id) },
+                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+                    BasicText(provider.name, style = VivicastTypography.LabelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BodyText(provider.status.label, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManualMappingChannelList(
+    channels: List<Channel>,
+    mappings: List<EpgChannelMapping>,
+    selectedProviderId: String?,
+    selectedChannelId: String?,
+    onSelectChannel: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (selectedProviderId == null) {
+        InfoPanel(
+            title = "Provider waehlen",
+            body = "Waehle links einen Provider, danach einen Sender fuer die manuelle EPG Zuordnung.",
+            modifier = modifier,
+        )
+        return
+    }
+    if (channels.isEmpty()) {
+        InfoPanel(
+            title = "Keine Sender",
+            body = "Dieser Provider hat noch keine importierten Live-TV-Sender.",
+            modifier = modifier,
+        )
+        return
+    }
+
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        items(channels, key = { it.id }) { channel ->
+            val hasManualMapping = mappings.any { it.channelId == channel.id && it.isManual }
+            FocusPanel(
+                selected = channel.id == selectedChannelId,
+                onClick = { onSelectChannel(channel.id) },
+                onFocused = { onSelectChannel(channel.id) },
+                modifier = Modifier.fillMaxWidth().height(104.dp),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                        BasicText(channel.name, style = VivicastTypography.LabelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        BodyText(channel.channelNumber?.let { "Kanal $it" } ?: channel.remoteId, maxLines = 1)
+                    }
+                    if (hasManualMapping) {
+                        StatusBadge("Manuell", tone = VivicastColors.Success)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ManualMappingDetail(
+    sources: List<EpgSource>,
+    selectedProviderId: String?,
+    selectedChannel: Channel?,
+    selectedSourceId: String?,
+    selectedMapping: EpgChannelMapping?,
+    externalChannelId: String,
+    message: String?,
+    onSelectSource: (String) -> Unit,
+    onExternalChannelIdChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(
+                title = "Manuelle Zuordnung",
+                body = "Ordnet einen lokalen Sender einer externen Kanal-ID aus einer verknuepften EPG Quelle zu.",
+                badge = selectedMapping?.let { if (it.isManual) "Manuell" else "Automatisch" } ?: "EPG",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        if (selectedProviderId == null || selectedChannel == null) {
+            item {
+                InfoPanel(
+                    title = "Sender waehlen",
+                    body = "Waehle zuerst Provider und Sender aus.",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            return@LazyColumn
+        }
+
+        item {
+            InfoPanel(
+                title = selectedChannel.name,
+                body = "Remote-ID: ${selectedChannel.remoteId}",
+                badge = selectedChannel.channelNumber?.let { "Kanal $it" },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        if (sources.isEmpty()) {
+            item {
+                InfoPanel(
+                    title = "Keine EPG Quelle verknuepft",
+                    body = "Ordne im EPG Quellenbereich zuerst eine Quelle diesem Provider zu.",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            return@LazyColumn
+        }
+
+        item {
+            SectionTitle("EPG Quelle")
+        }
+
+        items(sources, key = { it.id }) { source ->
+            FocusPanel(
+                selected = source.id == selectedSourceId,
+                onClick = { onSelectSource(source.id) },
+                onFocused = { onSelectSource(source.id) },
+                modifier = Modifier.fillMaxWidth().height(92.dp),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                        BasicText(source.name, style = VivicastTypography.LabelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        BodyText("Zeitversatz: ${source.timeShiftMinutes} Minuten", maxLines = 1)
+                    }
+                    StatusBadge(if (source.isActive) "Aktiv" else "Aus", tone = if (source.isActive) VivicastColors.Success else VivicastColors.SurfaceHigh)
+                }
+            }
+        }
+
+        item {
+            ProviderTextField(
+                label = "Externe EPG-Kanal-ID",
+                value = externalChannelId,
+                placeholder = "z.B. ard.de",
+                onValueChange = onExternalChannelIdChange,
+            )
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                ActionPill("Speichern", modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
+                ActionPill("Manuell loeschen", modifier = Modifier.width(190.dp), onClick = onClear)
+            }
+        }
+
+        if (message != null) {
+            item {
+                InfoPanel(title = "Hinweis", body = message, modifier = Modifier.fillMaxWidth())
+            }
+        }
     }
 }
 
@@ -746,7 +1135,10 @@ private fun DeleteEpgSourceDialog(
 }
 
 @Composable
-private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
+private fun ProviderSettingsPanel(
+    providerRepository: ProviderRepository,
+    firstFocusModifier: Modifier = Modifier,
+) {
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
@@ -773,7 +1165,7 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
         Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
             ActionPill(
                 label = "M3U hinzufügen",
-                modifier = Modifier.width(210.dp),
+                modifier = firstFocusModifier.width(210.dp),
                 selected = showEditor && !editor.isEditing && editor.type == ProviderType.M3u,
                 onClick = {
                     selectedProviderId = null
@@ -1210,10 +1602,16 @@ private fun DeleteProviderDialog(
 }
 
 @Composable
-private fun SettingsOptions(showConfirm: () -> Unit) {
+private fun SettingsOptions(
+    showConfirm: () -> Unit,
+    firstFocusModifier: Modifier = Modifier,
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-        items(DemoCatalog.settings) { setting ->
-            SettingRow(setting)
+        itemsIndexed(DemoCatalog.settings) { index, setting ->
+            SettingRow(
+                setting = setting,
+                modifier = if (index == 0) firstFocusModifier else Modifier,
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
@@ -1224,8 +1622,11 @@ private fun SettingsOptions(showConfirm: () -> Unit) {
 }
 
 @Composable
-private fun SettingRow(setting: DemoSetting) {
-    VivicastSettingsRow(title = setting.title, help = setting.help, value = setting.value)
+private fun SettingRow(
+    setting: DemoSetting,
+    modifier: Modifier = Modifier,
+) {
+    VivicastSettingsRow(title = setting.title, help = setting.help, value = setting.value, modifier = modifier)
 }
 
 @Composable
@@ -1236,6 +1637,7 @@ private fun MaintenanceSettingsPanel(
     onRunCacheCleanup: () -> Unit,
     onClearCache: () -> Unit,
     onReloadCacheStats: () -> Unit,
+    firstFocusModifier: Modifier = Modifier,
 ) {
     var message by remember { mutableStateOf<String?>(null) }
     val cacheOptions = listOf(250, 500, 1024, 2048, 0)
@@ -1255,6 +1657,7 @@ private fun MaintenanceSettingsPanel(
                 title = "Cache Informationen",
                 help = "${cacheSettingsState.fileCount} Dateien im lokalen Mediencache.",
                 value = "${formatCacheSize(cacheSettingsState.totalSizeBytes)} / ${formatCacheLimit(cacheSettingsState.maxCacheSizeMb)}",
+                modifier = firstFocusModifier,
                 onClick = {
                     onReloadCacheStats()
                     message = "Cache Informationen wurden aktualisiert."

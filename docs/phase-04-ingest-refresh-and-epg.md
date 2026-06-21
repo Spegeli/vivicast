@@ -146,6 +146,12 @@ Implemented and validated:
   - media image refresh and cache cleanup actions enqueue the existing WorkManager jobs
   - local cache clear removes stored media cache files and reloads cache stats
   - settings section matching uses the existing settings-section order instead of a hard-coded localized label
+- Manual EPG mapping UI:
+  - Settings EPG exposes a provider/channel/source detail flow for manual channel mapping
+  - the flow lists imported provider channels from Room and linked EPG sources by provider priority
+  - saving writes a manual `EPGChannelMappingEntity` through the existing repository API
+  - clearing removes the manual mapping so automatic mapping can be recreated by a later XMLTV import
+  - the current UI accepts an explicit external XMLTV channel ID instead of persisting a separate XMLTV channel candidate catalog
 
 Validated with:
 
@@ -172,6 +178,9 @@ Validated with:
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :app:installDebug`
 - `.\gradlew.bat :core:database:compileDebugKotlin :worker:compileDebugKotlin :worker:testDebugUnitTest :core:cache:testDebugUnitTest`
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest`
+- `.\gradlew.bat :data:epg:compileDebugKotlin :feature:settings:compileDebugKotlin`
+- `.\gradlew.bat :data:epg:connectedDebugAndroidTest :feature:settings:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat assembleDebug :app:installDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Android TV emulator D-Pad smoke test for Settings cache maintenance navigation, cache job actions, and focus visibility
@@ -186,7 +195,7 @@ Validated with:
 
 Still open:
 
-- Full end-user manual mapping UI is still open; the repository and import behavior are ready for it.
+- Manual EPG mapping uses explicit external XMLTV channel ID entry; a browsable XMLTV channel candidate picker is not implemented because XMLTV channel definitions are not persisted separately in PRD v1 storage.
 - Cached assets are not yet wired into UI image loading; current Phase 04 work prepares local storage, lookup, and worker maintenance only.
 
 ## Definition of Done

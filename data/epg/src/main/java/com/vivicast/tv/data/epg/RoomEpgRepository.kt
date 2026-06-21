@@ -7,6 +7,7 @@ import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
+import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.EpgSource
@@ -32,6 +33,9 @@ class RoomEpgRepository(
 
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         epgDao.observeProviderEpgSources(providerId).map { sources -> sources.map { it.toDomain() } }
+
+    override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> =
+        catalogDao.observeChannels(providerId, categoryId = null).map { channels -> channels.map { it.toDomain() } }
 
     override fun observeProgramsForChannel(
         providerId: String,
@@ -347,4 +351,17 @@ private fun EpgChannelMappingEntity.toDomain(): EpgChannelMapping =
         epgSourceId = epgSourceId,
         epgChannelId = epgChannelId,
         isManual = isManual,
+    )
+
+private fun ChannelEntity.toDomain(): Channel =
+    Channel(
+        id = id,
+        providerId = providerId,
+        categoryId = categoryId,
+        remoteId = remoteId,
+        channelNumber = channelNumber,
+        name = name,
+        logoUrl = logoUrl,
+        isCatchupAvailable = isCatchupAvailable,
+        catchupDays = catchupDays,
     )

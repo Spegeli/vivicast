@@ -46,6 +46,19 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun observeChannelsForProviderReturnsProviderChannels() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-zdf", remoteId = "zdf.provider", name = "ZDF HD", catchup = false)
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = true)
+        seedLiveChannel(providerId = OTHER_PROVIDER_ID, channelId = "other-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
+
+        val channels = repository.observeChannelsForProvider(PROVIDER_ID).first()
+
+        assertEquals(listOf("ARD HD", "ZDF HD"), channels.map { it.name })
+        assertEquals(listOf(PROVIDER_ID, PROVIDER_ID), channels.map { it.providerId })
+        assertEquals(listOf(true, false), channels.map { it.isCatchupAvailable })
+    }
+
+    @Test
     fun importXmltvMapsChannelsAndStoresPrograms() = runBlocking {
         seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = true)
         seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-zdf", remoteId = "zdf.provider", name = "ZDF HD", catchup = false)

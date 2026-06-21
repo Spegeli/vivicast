@@ -57,11 +57,13 @@ Done:
   - cache cleanup workers enforce the configured DataStore size limit
   - Settings "Über die App" exposes cache stats, cache size selection, media image refresh scheduling, cache cleanup scheduling, and local cache clear actions
   - Android TV emulator D-Pad smoke check passed for the Settings cache maintenance view
+  - Settings EPG exposes manual channel-to-EPG mapping controls for imported provider channels and linked EPG sources
 
 Still important:
 
 - Existing UI uses demo data.
-- Full end-user manual EPG channel mapping UI, wiring cached assets into UI image loading, and Media3 playback are not complete yet.
+- Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if Phase 04 needs more operator comfort.
+- Wiring cached assets into UI image loading and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules

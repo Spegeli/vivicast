@@ -4,12 +4,15 @@ import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.EpgSource
 import com.vivicast.tv.domain.model.ProviderEpgSource
+import com.vivicast.tv.domain.model.Channel
 import kotlinx.coroutines.flow.Flow
 
 interface EpgRepository {
     fun observeEpgSources(): Flow<List<EpgSource>>
 
     fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>>
+
+    fun observeChannelsForProvider(providerId: String): Flow<List<Channel>>
 
     fun observeProgramsForChannel(
         providerId: String,
