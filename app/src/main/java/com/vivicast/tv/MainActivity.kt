@@ -4,18 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -26,13 +23,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastTheme
+import com.vivicast.tv.core.designsystem.VivicastTopNavItem
 import com.vivicast.tv.feature.livetv.LiveTvRoute
 import com.vivicast.tv.feature.movies.MoviesRoute
 import com.vivicast.tv.feature.player.PlayerRoute
@@ -62,39 +62,51 @@ private fun VivicastApp() {
             AppDestination("Serien", "series") { SeriesRoute(onOpenPlayer = { playerVisible = true }) },
             AppDestination("Suche", "search") { SearchRoute() },
             AppDestination("Einstellungen", "settings") { SettingsRoute() },
-            AppDestination("Player", "player") { PlayerRoute() },
         )
     }
     val selectedDestination = destinations.first { it.route == selectedRoute }
 
-    if (selectedRoute == "player") {
-        PlayerRoute(onClose = { selectedRoute = "live-tv" })
-    } else {
+    VivicastScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF101418))
-                .padding(horizontal = 56.dp, vertical = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(36.dp),
+                .padding(horizontal = 56.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            BasicText(
-                text = "Vivicast",
-                style = TextStyle(
-                    color = Color(0xFFF2F5F7),
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                destinations.forEach { destination ->
-                    TopLevelNavItem(
-                        label = destination.label,
-                        selected = destination.route == selectedRoute,
-                        onSelected = { selectedRoute = destination.route },
-                        onFocused = { selectedRoute = destination.route },
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color(0xFF0EA5E9), Color(0xFF2563EB)),
+                                ),
+                            ),
+                    )
+                    BasicText(
+                        text = "VIVICAST",
+                        style = TextStyle(
+                            color = VivicastColors.TextPrimary,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
                     )
                 }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    destinations.forEach { destination ->
+                        VivicastTopNavItem(
+                            label = destination.label,
+                            selected = destination.route == selectedRoute,
+                            onSelected = { selectedRoute = destination.route },
+                            onFocused = { selectedRoute = destination.route },
+                            minWidth = if (destination.label == "Einstellungen") 144.dp else 96.dp,
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -105,44 +117,6 @@ private fun VivicastApp() {
 
     if (playerVisible) {
         PlayerRoute(onClose = { playerVisible = false })
-    }
-}
-
-@Composable
-private fun TopLevelNavItem(
-    label: String,
-    selected: Boolean,
-    onSelected: () -> Unit,
-    onFocused: () -> Unit,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-    val borderColor = when {
-        focused -> Color(0xFF51D7FF)
-        selected -> Color(0xFF5D7487)
-        else -> Color.Transparent
-    }
-    val backgroundColor = if (selected) Color(0xFF26313A) else Color(0xFF171D23)
-
-    Box(
-        modifier = Modifier
-            .onFocusChanged { if (it.isFocused) onFocused() }
-            .widthIn(min = 128.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onSelected)
-            .focusable(interactionSource = interactionSource)
-            .padding(horizontal = 22.dp, vertical = 14.dp),
-    ) {
-        BasicText(
-            text = label,
-            style = TextStyle(
-                color = if (selected || focused) Color.White else Color(0xFFC7D0D8),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-        )
     }
 }
 

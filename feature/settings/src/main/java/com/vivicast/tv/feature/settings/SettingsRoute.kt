@@ -23,10 +23,12 @@ import androidx.compose.ui.window.Dialog
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
+import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoSetting
@@ -37,15 +39,16 @@ fun SettingsRoute() {
     var showConfirm by remember { mutableStateOf(false) }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.weight(0.28f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.fillMaxSize()) {
+            GlassPanel(modifier = Modifier.weight(0.30f).fillMaxSize(), contentPadding = 22.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionTitle("Einstellungen")
                 DemoCatalog.settingsSections.forEach { section ->
                     FocusPanel(
                         selected = section == selectedSection,
                         onClick = { selectedSection = section },
                         onFocused = { selectedSection = section },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(70.dp),
                     ) {
                         BasicText(
                             text = section,
@@ -54,22 +57,23 @@ fun SettingsRoute() {
                     }
                 }
             }
+            }
 
-            Column(modifier = Modifier.weight(0.72f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            GlassPanel(modifier = Modifier.weight(0.70f).fillMaxSize(), contentPadding = 26.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     SectionTitle(selectedSection)
-                    StatusBadge("Preview-Startverhalten: Direkt starten")
                 }
                 when (selectedSection) {
                     "Optik" -> SettingsOptions(showConfirm = { showConfirm = true })
-                    "Demo States" -> DemoStates(showConfirm = { showConfirm = true })
+                    "Status" -> DemoStates(showConfirm = { showConfirm = true })
                     else -> InfoPanel(
-                        title = "$selectedSection Demo",
-                        body = "Phase-2 Optionskarten als Platzhalter ohne echte Systemfunktion.",
-                        badge = "Demo",
+                        title = selectedSection,
+                        body = "Bereich ist vorbereitet. Optionen werden später hier gebündelt.",
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
             }
         }
     }
@@ -77,9 +81,9 @@ fun SettingsRoute() {
     if (showConfirm) {
         Dialog(onDismissRequest = { showConfirm = false }) {
             InfoPanel(
-                title = "Confirm Dialog",
-                body = "Demo-Dialog: Diese Aktion aendert keine echten Einstellungen und speichert keine Daten.",
-                badge = "Dialog",
+                title = "Änderung bestätigen",
+                body = "Diese lokale UI-Aktion speichert keine echten Einstellungen.",
+                badge = "Bestätigen",
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -94,9 +98,7 @@ private fun SettingsOptions(showConfirm: () -> Unit) {
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                ActionPill("Confirm Dialog", onClick = showConfirm)
-                StatusBadge("Fokus auf Row")
-                StatusBadge("Preview-Startverhalten vorhanden")
+                ActionPill("Änderung prüfen", onClick = showConfirm)
             }
         }
     }
@@ -104,30 +106,16 @@ private fun SettingsOptions(showConfirm: () -> Unit) {
 
 @Composable
 private fun SettingRow(setting: DemoSetting) {
-    FocusPanel(onClick = {}, modifier = Modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.weight(1f)) {
-                BasicText(
-                    text = setting.title,
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                )
-                BodyText(setting.help)
-            }
-            BasicText(
-                text = setting.value,
-                style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Medium),
-            )
-        }
-    }
+    VivicastSettingsRow(title = setting.title, help = setting.help, value = setting.value)
 }
 
 @Composable
 private fun DemoStates(showConfirm: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        InfoPanel("Loading State", "Lokaler Demo-Ladezustand ohne Netzwerkzugriff.", badge = "Loading")
-        InfoPanel("Empty State", "Leere Kategorie und keine Suchtreffer sind sichtbar testbar.", badge = "Empty")
-        InfoPanel("Error State", "Provider B: Anmeldung fehlgeschlagen.", badge = "Error")
-        InfoPanel("Provider-Fehlerzustand", "Der Fehler wird im Live-TV Browser und hier angezeigt.", badge = "Provider B")
-        ActionPill("Confirm Dialog oeffnen", modifier = Modifier.height(62.dp), onClick = showConfirm)
+        InfoPanel("Ladezustand", "Lokaler Ladezustand ohne Netzwerkzugriff.", badge = "Laden")
+        InfoPanel("Leerer Zustand", "Leere Kategorie und keine Suchtreffer sind sichtbar testbar.", badge = "Leer")
+        InfoPanel("Fehlerzustand", "Provider B: Anmeldung fehlgeschlagen.", badge = "Fehler")
+        InfoPanel("Provider-Hinweis", "Der Fehler bleibt im Live-TV Browser nachvollziehbar.", badge = "Provider B")
+        ActionPill("Bestätigen", modifier = Modifier.height(62.dp), onClick = showConfirm)
     }
 }

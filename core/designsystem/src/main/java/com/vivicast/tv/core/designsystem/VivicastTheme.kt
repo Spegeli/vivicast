@@ -25,12 +25,21 @@ fun VivicastTheme(content: @Composable () -> Unit) {
 }
 
 object VivicastColors {
-    val Background = Color(0xFF101418)
-    val Surface = Color(0xFF171D23)
-    val SurfaceSelected = Color(0xFF26313A)
-    val TextPrimary = Color(0xFFF2F5F7)
-    val TextSecondary = Color(0xFFC7D0D8)
-    val Focus = Color(0xFF51D7FF)
+    val Background = Color(0xFF070A0F)
+    val BackgroundElevated = Color(0xFF0B1220)
+    val Surface = Color(0xFF111827)
+    val SurfaceHigh = Color(0xFF172033)
+    val SurfaceFocus = Color(0xFF1E3A5F)
+    val SurfaceSelected = Color(0xFF142B44)
+    val TextPrimary = Color(0xFFF8FAFC)
+    val TextSecondary = Color(0xFFCBD5E1)
+    val TextTertiary = Color(0xFF94A3B8)
+    val Focus = Color(0xFF7DD3FC)
+    val Accent = Color(0xFF38BDF8)
+    val AccentSoft = Color(0xFF0EA5E9)
+    val Error = Color(0xFFEF4444)
+    val Warning = Color(0xFFF59E0B)
+    val Success = Color(0xFF22C55E)
 }
 
 object VivicastTypography {
@@ -53,7 +62,9 @@ object VivicastSpacing {
 }
 
 object VivicastShapes {
-    val FocusRadius = RoundedCornerShape(8.dp)
+    val FocusRadius = RoundedCornerShape(16.dp)
+    val PanelRadius = RoundedCornerShape(24.dp)
+    val PillRadius = RoundedCornerShape(999.dp)
 }
 
 object VivicastFocusDefaults {

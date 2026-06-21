@@ -16,13 +16,15 @@ Done:
 - Added local, reproducible Phase 2 demo catalog data in `:data:media`.
 - Added Android TV demo screens for Live-TV, Movies, Series, Search, Settings, and Player Overlay.
 - Added D-pad-oriented focus behavior, top-level screen switching, adaptive Live-TV columns, VOD cards, search rows, settings master-detail, and player timeline controls.
+- Applied the Phase 2 visual passes toward the approved high-fidelity direction: premium dark palette, reusable high-fidelity designsystem components, stronger focus states, refined cards/panels, player removed from main navigation, debug/demo toggles removed from visible UI, and refreshed emulator screenshots in `build/visual-pass-shots`.
+- Added local bundled demo logos, poster images, and backdrop images in `:data:media`; sources are tracked in `docs/demo-assets.md`.
 - Kept provider data, parsers, real stream URLs, Media3 playback, network demo content, and DB imports out of Phase 2.
-- Verified latest Phase 2 build with `.\gradlew.bat assembleDebug`.
-- Verified APK install, launch, D-pad navigation, Live-TV sender mode, fullscreen player overlay, timeline OK/seek handling, back/restore overlay behavior, and no crash markers on `ViviCast_AndroidTV_API36`.
+- Verified latest Phase 2 visual pass build with `.\gradlew.bat assembleDebug`.
+- Verified APK install, launch, D-pad navigation across top navigation and Live-TV content, player overlay launch, timeline OK handling, and no app crash markers on `ViviCast_AndroidTV_API36`.
 
 Missing:
 
-- Phase 2 review/acceptance by the user.
+- Phase 2 final review/acceptance by the user after the pushed visual/demo-asset state.
 
 ## Active Module Structure
 
@@ -63,8 +65,8 @@ Missing:
 
 ## Next Steps
 
-1. User review of the local Phase 2 UI demo.
-2. Wait for explicit approval before committing or pushing Phase 2 changes.
+1. User review of the pushed Phase 2 visual/demo-asset state.
+2. Wait for explicit acceptance before starting Phase 3.
 
 ## Last Updated
 

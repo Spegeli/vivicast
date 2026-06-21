@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
@@ -24,10 +25,11 @@ import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
-import com.vivicast.tv.core.designsystem.StatusBadge
+import com.vivicast.tv.core.designsystem.VivicastSearchResultCard
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.data.media.DemoCatalog
+import com.vivicast.tv.data.media.R as MediaR
 
 @Composable
 fun SearchRoute() {
@@ -35,73 +37,69 @@ fun SearchRoute() {
     val hasResults = query.equals("dune", ignoreCase = true)
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                FocusPanel(modifier = Modifier.weight(1f).height(76.dp), onClick = { query = "dune" }) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxSize()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
+                FocusPanel(modifier = Modifier.weight(1f).height(96.dp), onClick = { query = "dune" }, contentPadding = 18.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BodyText("Lokale Demo-Suche")
+                        BodyText("Suche  /  lokale Ergebnisse")
                         BasicText(
-                            text = query,
+                            text = "⌕  $query",
                             style = TextStyle(
                                 color = VivicastColors.TextPrimary,
-                                fontSize = 28.sp,
+                                fontSize = 36.sp,
                                 fontWeight = FontWeight.SemiBold,
                             ),
                         )
                     }
                 }
-                ActionPill("Voice", modifier = Modifier.height(76.dp), onClick = { query = "dune" })
-                ActionPill("Keine Treffer", modifier = Modifier.height(76.dp), onClick = { query = "xyz" })
+                ActionPill("Voice", modifier = Modifier.width(118.dp).height(96.dp), onClick = { query = "dune" })
             }
 
             if (hasResults) {
-                SearchGroup("Kanaele", DemoCatalog.searchResults.channels.map { it to null })
-                SearchGroup("Filme", DemoCatalog.searchResults.movies.map { it.title to it.rating })
-                SearchGroup("Serien", DemoCatalog.searchResults.series.map { it.title to it.rating })
-                SearchGroup("EPG", DemoCatalog.searchResults.epg.map { it to null })
+                SearchGroup("Kanäle", DemoCatalog.searchResults.channels.map { SearchItem(it, "HD", null, false) })
+                SearchGroup("Filme", DemoCatalog.searchResults.movies.map { SearchItem(it.title, "Film", it.rating, true, demoImageFor(it.title)) })
+                SearchGroup("Serien", DemoCatalog.searchResults.series.map { SearchItem(it.title, "Serie", it.rating, true, demoImageFor(it.title)) })
+                SearchGroup("EPG", DemoCatalog.searchResults.epg.map { SearchItem(it, "Programmtreffer", null, false) })
             } else {
                 InfoPanel(
                     title = "Keine Treffer",
-                    body = "Fuer '$query' existieren in den lokalen Demo-Daten keine Ergebnisse.",
+                    body = "Für '$query' existieren lokal keine Ergebnisse.",
                     badge = "Empty State",
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusBadge("Keine Alle-anzeigen-Aktion")
-                StatusBadge("Horizontal scrollbar")
-                StatusBadge("Bewertung bei VOD")
-            }
         }
     }
 }
 
 @Composable
-private fun SearchGroup(title: String, rows: List<Pair<String, String?>>) {
+private fun SearchGroup(title: String, rows: List<SearchItem>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionTitle(title)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            items(rows) { (label, rating) ->
-                SearchResultCard(label = label, rating = rating)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+            items(rows) { item ->
+                VivicastSearchResultCard(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    rating = item.rating,
+                    posterLike = item.posterLike,
+                    imageResId = item.imageResId,
+                )
             }
         }
     }
 }
 
-@Composable
-private fun SearchResultCard(label: String, rating: String?) {
-    FocusPanel(modifier = Modifier.height(78.dp), onClick = {}) {
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            BasicText(
-                text = label,
-                style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-            )
-            if (rating != null) {
-                StatusBadge("Rating $rating")
-            } else {
-                BodyText("Demo-Ergebnis")
-            }
-        }
-    }
+private data class SearchItem(
+    val title: String,
+    val subtitle: String,
+    val rating: String?,
+    val posterLike: Boolean,
+    val imageResId: Int? = null,
+)
+
+private fun demoImageFor(title: String): Int? = when (title) {
+    "Dune", "Dune: Part Two" -> MediaR.drawable.demo_poster_dune
+    "Dune: Prophecy", "Dune: The Sisterhood" -> MediaR.drawable.demo_poster_prophecy
+    else -> null
 }
