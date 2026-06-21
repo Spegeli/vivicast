@@ -28,6 +28,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:cache"))
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))

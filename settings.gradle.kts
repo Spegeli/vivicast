@@ -18,6 +18,7 @@ rootProject.name = "ViviCast"
 
 include(":app")
 include(":core:common")
+include(":core:cache")
 include(":core:designsystem")
 include(":core:database")
 include(":core:datastore")

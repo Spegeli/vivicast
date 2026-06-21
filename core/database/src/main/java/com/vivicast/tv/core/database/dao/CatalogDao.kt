@@ -38,6 +38,15 @@ interface CatalogDao {
     @Query("SELECT * FROM channels WHERE providerId = :providerId")
     suspend fun getChannels(providerId: String): List<ChannelEntity>
 
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE logoUrl IS NOT NULL AND TRIM(logoUrl) != ''
+        ORDER BY providerId, name COLLATE NOCASE
+        """,
+    )
+    suspend fun getChannelsWithLogoUrls(): List<ChannelEntity>
+
     @Query("SELECT * FROM movies WHERE providerId = :providerId")
     suspend fun getMovies(providerId: String): List<MovieEntity>
 

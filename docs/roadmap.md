@@ -22,6 +22,7 @@ The Android TV foundation already exists and must not be replanned from zero.
 Existing modules:
 
 - `:app`
+- `:core:cache`
 - `:core:common`
 - `:core:designsystem`
 - `:core:database`
@@ -66,6 +67,7 @@ Still stubbed or missing:
 - M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser.
 - Player has only a controller contract, with no Media3 playback implementation.
 - Worker contains job-name constants, concrete WorkManager refresh wrappers, request scheduling, network-backed refresh runner wiring, a testable refresh orchestrator, and diagnostics redaction foundation.
+- `:core:cache` contains the file-backed media cache foundation for logo/poster/image storage, stats, clear, and size cleanup.
 - Existing UI uses demo data and must later be connected to local persisted data.
 
 ## Phase Overview

@@ -19,6 +19,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:cache"))
     implementation(project(":core:database"))
     implementation(project(":core:security"))
     implementation(project(":data:epg"))

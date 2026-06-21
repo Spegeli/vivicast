@@ -1,5 +1,8 @@
 package com.vivicast.tv.worker
 
+import com.vivicast.tv.core.cache.MediaCacheKey
+import com.vivicast.tv.core.cache.MediaCacheStore
+import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
@@ -17,7 +20,9 @@ import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.XtreamParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -241,7 +246,7 @@ class OkHttpTextFetcher(
     private val client: OkHttpClient,
 ) : TextFetcher {
     override suspend fun fetch(url: String): String =
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -255,12 +260,75 @@ class OkHttpTextFetcher(
         }
 }
 
-class NoOpLogoRefresher : LogoRefresher {
-    override suspend fun refreshLogos() = Unit
+interface BinaryFetcher {
+    suspend fun fetch(url: String): ByteArray
 }
 
-class NoOpCacheCleaner : CacheCleaner {
-    override suspend fun cleanup() = Unit
+class OkHttpBinaryFetcher(
+    private val client: OkHttpClient,
+) : BinaryFetcher {
+    override suspend fun fetch(url: String): ByteArray =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw RefreshHttpException(response.code)
+                }
+                response.body.bytes()
+            }
+        }
+}
+
+class DefaultLogoRefresher(
+    private val logoRefreshSource: LogoRefreshSource,
+    private val mediaCacheStore: MediaCacheStore,
+    private val binaryFetcher: BinaryFetcher,
+) : LogoRefresher {
+    override suspend fun refreshLogos() {
+        logoRefreshSource.collectLogoTargets().forEach { target ->
+            val key = MediaCacheKey(
+                type = MediaCacheType.ChannelLogo,
+                ownerId = target.ownerId,
+                sourceUrl = target.logoUrl,
+            )
+            if (!mediaCacheStore.hasEntry(key)) {
+                runCatching {
+                    mediaCacheStore.put(key, binaryFetcher.fetch(target.logoUrl))
+                }
+            }
+        }
+    }
+}
+
+interface LogoRefreshSource {
+    suspend fun collectLogoTargets(): List<LogoRefreshTarget>
+}
+
+data class LogoRefreshTarget(
+    val ownerId: String,
+    val logoUrl: String,
+)
+
+class RoomLogoRefreshSource(
+    private val database: VivicastDatabase,
+) : LogoRefreshSource {
+    override suspend fun collectLogoTargets(): List<LogoRefreshTarget> =
+        database.catalogDao().getChannelsWithLogoUrls().mapNotNull { channel ->
+            val logoUrl = channel.logoUrl?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            LogoRefreshTarget(ownerId = channel.id, logoUrl = logoUrl)
+        }
+}
+
+class DefaultCacheCleaner(
+    private val mediaCacheStore: MediaCacheStore,
+    private val maxSizeBytesProvider: suspend () -> Long,
+) : CacheCleaner {
+    override suspend fun cleanup() {
+        mediaCacheStore.cleanup(maxSizeBytesProvider())
+    }
 }
 
 class NoOpEpgMappingApplier : EpgMappingApplier {

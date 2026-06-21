@@ -13,6 +13,12 @@ import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
+import com.vivicast.tv.core.cache.MediaCacheCleanupResult
+import com.vivicast.tv.core.cache.MediaCacheEntry
+import com.vivicast.tv.core.cache.MediaCacheKey
+import com.vivicast.tv.core.cache.MediaCacheStats
+import com.vivicast.tv.core.cache.MediaCacheStore
+import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.domain.model.EpgSource
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
@@ -32,8 +38,8 @@ import com.vivicast.tv.iptv.xtream.XtreamVodItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 class RefreshExecutionTest {
@@ -130,6 +136,44 @@ class RefreshExecutionTest {
         assertEquals(EpgRefreshOutcome("epg-1", success = true), outcome)
         assertEquals(listOf(activeProvider.id), importRepository.providerIds)
         assertEquals("Morning News", importRepository.documents.single().programs.single().title)
+    }
+
+    @Test
+    fun logoRefreshCachesMissingLogosAndSkipsUnchangedCachedLogos() = runBlocking {
+        val cacheStore = FakeMediaCacheStore(
+            cached = setOf(MediaCacheKey(MediaCacheType.ChannelLogo, "channel-cached", "https://logos.example/cached.png")),
+        )
+        val fetcher = FakeBinaryFetcher(
+            "https://logos.example/new.png" to byteArrayOf(1, 2, 3),
+            "https://logos.example/broken.png" to null,
+        )
+        val refresher = DefaultLogoRefresher(
+            logoRefreshSource = object : LogoRefreshSource {
+                override suspend fun collectLogoTargets(): List<LogoRefreshTarget> =
+                    listOf(
+                        LogoRefreshTarget("channel-cached", "https://logos.example/cached.png"),
+                        LogoRefreshTarget("channel-new", "https://logos.example/new.png"),
+                        LogoRefreshTarget("channel-broken", "https://logos.example/broken.png"),
+                    )
+            },
+            mediaCacheStore = cacheStore,
+            binaryFetcher = fetcher,
+        )
+
+        refresher.refreshLogos()
+
+        assertEquals(listOf("https://logos.example/new.png", "https://logos.example/broken.png"), fetcher.urls)
+        assertEquals(listOf("channel-new"), cacheStore.putKeys.map { it.ownerId })
+    }
+
+    @Test
+    fun cacheCleanerUsesConfiguredSizeLimit() = runBlocking {
+        val cacheStore = FakeMediaCacheStore()
+        val cleaner = DefaultCacheCleaner(cacheStore) { 250L * 1024L * 1024L }
+
+        cleaner.cleanup()
+
+        assertEquals(listOf(250L * 1024L * 1024L), cacheStore.cleanupLimits)
     }
 
     private fun provider(
@@ -248,6 +292,52 @@ private class FakeTextFetcher(
         urls += url
         return responseMap.getValue(url)
     }
+}
+
+private class FakeBinaryFetcher(
+    private vararg val responses: Pair<String, ByteArray?>,
+) : BinaryFetcher {
+    private val responseMap = responses.toMap()
+    val urls = mutableListOf<String>()
+
+    override suspend fun fetch(url: String): ByteArray {
+        urls += url
+        return responseMap[url] ?: error("Failed to fetch logo")
+    }
+}
+
+private class FakeMediaCacheStore(
+    cached: Set<MediaCacheKey> = emptySet(),
+) : MediaCacheStore {
+    private val cachedKeys = cached.toMutableSet()
+    val putKeys = mutableListOf<MediaCacheKey>()
+    val cleanupLimits = mutableListOf<Long>()
+
+    override suspend fun hasEntry(key: MediaCacheKey): Boolean =
+        key in cachedKeys
+
+    override suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry {
+        putKeys += key
+        cachedKeys += key
+        return MediaCacheEntry(
+            key = key,
+            file = File("unused"),
+            sizeBytes = bytes.size.toLong(),
+            createdAt = 1L,
+            lastAccessedAt = 1L,
+        )
+    }
+
+    override suspend fun stats(): MediaCacheStats =
+        MediaCacheStats(totalSizeBytes = 0L, fileCount = cachedKeys.size)
+
+    override suspend fun cleanup(maxSizeBytes: Long): MediaCacheCleanupResult {
+        cleanupLimits += maxSizeBytes
+        return MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0L, remainingBytes = 0L)
+    }
+
+    override suspend fun clear(): MediaCacheCleanupResult =
+        MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0L, remainingBytes = 0L)
 }
 
 private class FakeEpgSourceReader(

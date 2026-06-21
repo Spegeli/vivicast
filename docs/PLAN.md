@@ -51,11 +51,13 @@ Done:
   - Android TV emulator D-Pad smoke check passed for the Settings EPG master-detail view
   - Settings Allgemein refresh controls are wired to DataStore and WorkManager scheduling
   - Android TV emulator D-Pad smoke check passed for Settings Allgemein refresh focus and manual refresh enqueue
+  - media cache foundation exists in `:core:cache` with file-backed storage, URL hashing, stats, clear, and size cleanup
+  - logo refresh workers now cache changed channel logos and cache cleanup workers enforce the configured DataStore size limit
 
 Still important:
 
 - Existing UI uses demo data.
-- Full end-user manual EPG channel mapping UI, real logo/cache jobs, and Media3 playback are not complete yet.
+- Full end-user manual EPG channel mapping UI, poster/episode cache consumption, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -85,7 +87,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with logo refresh and cache cleanup foundations.
+1. Continue Phase 04 with Settings cache management hooks and any remaining ingest/refresh polish before moving to Phase 05.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

@@ -108,13 +108,21 @@ Implemented and validated:
   - unique WorkManager names and input keys for provider and EPG source refreshes
   - periodic background refresh enable/disable scheduling hook
   - network constraints for remote refresh jobs and no network constraint for cache cleanup
+- Media cache foundation in `:core:cache`:
+  - file-backed cache store for channel logos, movie posters, series posters, season images, and episode images
+  - source URLs are hashed for cache keys and are not stored as plaintext cache metadata
+  - stats, clear, owner replacement, and least-recently-accessed size cleanup behavior
+- Logo/cache worker runtime:
+  - channel logo refresh now reads Room channel logo URLs and caches missing or changed logos
+  - per-logo download failures are isolated so one broken image does not fail the whole refresh
+  - cache cleanup uses the configured DataStore cache size limit
 - Network-backed refresh execution foundation:
   - runtime M3U playlist fetch, parse, and Room import from encrypted provider credentials
   - runtime Xtream live, VOD, series, season, and episode fetch/parse/import path from encrypted provider credentials
   - runtime XMLTV fetch, parse, and provider-scoped Room import from encrypted EPG source URL keys
   - provider status transitions for refreshing, active, connection error, and invalid credentials
   - `AppContainer` runner registration for WorkManager workers without introducing a DI framework
-  - no-op logo/cache implementations kept explicit until real cache work is implemented
+  - logo/cache implementations wired through `AppContainer`
 - Secure EPG source management:
   - `SecureEpgSourceRepository` stores EPG source URLs through `SecureValueStore` and keeps only URL keys in Room
   - source save/delete operations clean linked provider priorities, mappings, and programs for removed sources
@@ -150,6 +158,8 @@ Validated with:
 - `.\gradlew.bat :app:installDebug`
 - `.\gradlew.bat :data:epg:compileDebugKotlin :data:epg:connectedDebugAndroidTest`
 - `.\gradlew.bat :app:compileDebugKotlin :feature:settings:compileDebugKotlin assembleDebug`
+- `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :worker:compileDebugKotlin`
+- `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :app:compileDebugKotlin assembleDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Screenshot: `docs/phase-04-settings-epg-smoke.png`
@@ -163,7 +173,8 @@ Validated with:
 Still open:
 
 - Full end-user manual mapping UI is still open; the repository and import behavior are ready for it.
-- Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
+- Cached assets are not yet consumed by UI image loading; current Phase 04 work prepares local storage and worker maintenance only.
+- Poster, backdrop, season, and episode cache population is still pending beyond the generic cache store.
 
 ## Definition of Done
 

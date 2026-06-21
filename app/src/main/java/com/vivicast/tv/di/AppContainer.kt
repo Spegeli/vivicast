@@ -2,6 +2,8 @@ package com.vivicast.tv.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.vivicast.tv.core.cache.FileMediaCacheStore
+import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.VivicastDatabaseFactory
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
@@ -23,21 +25,25 @@ import com.vivicast.tv.iptv.xtream.DefaultXtreamParser
 import com.vivicast.tv.iptv.xtream.OkHttpXtreamTransport
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
 import com.vivicast.tv.worker.ActiveProviderPlaylistSource
+import com.vivicast.tv.worker.DefaultCacheCleaner
 import com.vivicast.tv.worker.DefaultEpgRefresher
+import com.vivicast.tv.worker.DefaultLogoRefresher
 import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
 import com.vivicast.tv.worker.GlobalRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
-import com.vivicast.tv.worker.NoOpCacheCleaner
 import com.vivicast.tv.worker.NoOpEpgMappingApplier
-import com.vivicast.tv.worker.NoOpLogoRefresher
+import com.vivicast.tv.worker.OkHttpBinaryFetcher
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
 import com.vivicast.tv.worker.RefreshWorkScheduler
 import com.vivicast.tv.worker.RefreshWorkerRegistry
 import com.vivicast.tv.worker.RefreshWorkerRunner
 import com.vivicast.tv.worker.RoomEpgSourceReader
+import com.vivicast.tv.worker.RoomLogoRefreshSource
 import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
+import kotlinx.coroutines.flow.first
+import java.io.File
 
 class AppContainer(
     context: Context,
@@ -90,8 +96,13 @@ class AppContainer(
         WorkManagerRefreshWorkScheduler(WorkManager.getInstance(appContext))
     }
 
+    val mediaCacheStore: MediaCacheStore by lazy {
+        FileMediaCacheStore(File(appContext.cacheDir, "media"))
+    }
+
     val refreshWorkerRunner: RefreshWorkerRunner by lazy {
         val textFetcher = OkHttpTextFetcher(okHttpClient)
+        val binaryFetcher = OkHttpBinaryFetcher(okHttpClient)
         val epgSourceReader = RoomEpgSourceReader(
             database = database,
             secureValueStore = secureValueStore,
@@ -112,8 +123,15 @@ class AppContainer(
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = epgImportRepository,
         )
-        val logoRefresher = NoOpLogoRefresher()
-        val cacheCleaner = NoOpCacheCleaner()
+        val logoRefresher = DefaultLogoRefresher(
+            logoRefreshSource = RoomLogoRefreshSource(database),
+            mediaCacheStore = mediaCacheStore,
+            binaryFetcher = binaryFetcher,
+        )
+        val cacheCleaner = DefaultCacheCleaner(mediaCacheStore) {
+            val maxSizeMb = userPreferencesStore.values.first().cache.maxCacheSizeMb
+            if (maxSizeMb <= 0) -1L else maxSizeMb * BYTES_PER_MEGABYTE
+        }
         val orchestrator = GlobalRefreshOrchestrator(
             playlistSource = ActiveProviderPlaylistSource(providerRepository),
             playlistRefresher = playlistRefresher,
@@ -135,5 +153,9 @@ class AppContainer(
 
     fun installWorkerRunner() {
         RefreshWorkerRegistry.install(refreshWorkerRunner)
+    }
+
+    private companion object {
+        const val BYTES_PER_MEGABYTE = 1024L * 1024L
     }
 }
