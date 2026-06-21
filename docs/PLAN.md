@@ -2,56 +2,69 @@
 
 ## Current Direction
 
-ViviCast is being restarted from a clean Android project baseline.
-
-The previous app implementation, architecture, roadmap, and UI concept are no longer active project direction. New product concept, information architecture, UI direction, and technical structure will be provided before new app development begins.
+ViviCast is restarting as a clean Android TV app using the Phase 1 foundation from `Spegeli/vivicast-docs`.
 
 ## Current Phase
 
-Phase 0 - Repository Reset
+Phase 1 - Foundation
 
 ## Current Status
 
 Done:
 
-- Removed the old active Android app modules from the Gradle project.
-- Removed old UI concept, design, architecture, refactoring, screenshot, debug, and generated build artifacts from the active project tree.
-- Archived the old app/code modules locally under `archive/pre-restart-2026-06-21/` for temporary reference only.
-- Reduced active documentation to this plan, the README, setup notes, scripts, and repository instructions.
+- Scaffolded the Android TV multi-module foundation for package `com.vivicast.tv`.
+- Added `:app`, core, data, domain, feature, IPTV, and worker modules from the docs bootstrap prompt.
+- Added a minimal Android TV manifest and Compose-based Phase 1 placeholder shell.
+- Added design system skeleton primitives and placeholder screen component.
+- Added foundation contracts for Room, DataStore, network, security, player, worker, IPTV, and repositories without real provider, parser, or playback logic.
+- Verified all modules with `.\gradlew.bat assembleDebug`.
+- Verified emulator launch, APK install, Leanback launcher resolution, basic D-pad focus, and placeholder navigation on `ViviCast_AndroidTV_API36`.
 
 Missing:
 
-- Define the new ViviCast product concept.
-- Decide the new module structure.
-- Scaffold the new Android TV application baseline.
-- Add the first clean build checkpoint for the new baseline.
+- Phase 2 UI demo implementation with local demo data after explicit start.
 
-## Preserved Project Infrastructure
+## Active Module Structure
 
-- `.agents/`
-- `AGENTS.md`
-- `docs/PLAN.md`
-- `docs/setup/windows-android-setup.md`
-- `scripts/`
-- Gradle wrapper and version catalog
-- Root Gradle settings/build files
-- Local Android setup files
+- `:app`
+- `:core:common`
+- `:core:designsystem`
+- `:core:database`
+- `:core:datastore`
+- `:core:network`
+- `:core:player`
+- `:core:security`
+- `:data:provider`
+- `:data:epg`
+- `:data:media`
+- `:data:favorites`
+- `:data:playback`
+- `:domain`
+- `:feature:live-tv`
+- `:feature:movies`
+- `:feature:series`
+- `:feature:search`
+- `:feature:settings`
+- `:feature:player`
+- `:iptv:m3u`
+- `:iptv:xtream`
+- `:iptv:xmltv`
+- `:worker`
 
 ## Working Rules
 
-- Treat this plan as the only active project memory.
+- Treat this plan as the local active project memory.
+- Treat `Spegeli/vivicast-docs` as read-only unless the user explicitly says otherwise.
 - Do not use archived app code, removed UI concepts, or old roadmap assumptions as product direction.
 - Use old archived code only when the user explicitly asks for implementation reference.
-- Android TV remains the first likely development target unless the next concept says otherwise.
+- Android TV is the active first target.
 - Start emulator testing through `scripts\start-tv-emulator.ps1`.
 - Do not install APKs on the physical Android TV unless explicitly requested.
 
 ## Next Steps
 
-1. Capture the new product concept and MVP scope.
-2. Choose the initial Android module structure.
-3. Scaffold a minimal Android TV app.
-4. Establish the first compile/install validation loop.
+1. Start Phase 2 only after explicit instruction using the docs Phase 2 files.
+2. Add local demo data only in Phase 2.
 
 ## Last Updated
 

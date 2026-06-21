@@ -50,28 +50,32 @@ In Android Studio settings:
 
 - Set Gradle JDK to the bundled Android Studio JDK.
 - Keep Gradle auto-sync enabled.
-- Add Logcat filters once the new app package and logging tags exist.
-- Use Database Inspector once the new app has a database.
+- Add Logcat filters for package `com.vivicast.tv` when app logging is introduced.
+- Use Database Inspector once the app has concrete Room entities and data.
 
 ## 3. Daily Android Development Workflow
 
-Use Android Studio and the emulator as complementary tools once a new app module exists:
+Use Android Studio and the emulator as complementary tools:
 
 1. Open the project with `scripts\open-android-studio.ps1` and let Gradle sync finish.
-2. Iterate on previewable Compose UI where the new app structure supports it.
+2. Iterate on previewable Compose UI where the active module structure supports it.
 3. Run compile checkpoints after structural UI or behavior changes.
 4. Start `ViviCast_AndroidTV_API36` through `scripts\start-tv-emulator.ps1` for TV interaction validation.
 5. Batch any fixes and repeat emulator checks once the active UI block is coherent.
 
 Compose Preview is a visual development surface, not a substitute for emulator testing. TV focus and remote behavior must be verified on the emulator. Codex can operate Android Studio and the emulator; user interaction is only needed for unavoidable Windows/Android Studio permission, license, login, or blocking setup dialogs.
 
-Useful root checkpoint while no app module exists:
+Useful root checkpoint:
 
 ```powershell
-.\gradlew.bat tasks
+.\gradlew.bat assembleDebug
 ```
 
-After the new Android TV module is scaffolded, add its compile/install commands here.
+Useful app install checkpoint with a running emulator:
+
+```powershell
+.\gradlew.bat :app:installDebug
+```
 
 ## 3a. Project-Local Android Skills
 
@@ -205,7 +209,7 @@ Normal Android debug APK installation is enough for ViviCast development and sho
 
 ## 8. Setup Acceptance Checklist
 
-Before feature development:
+Current baseline:
 
 - `adb version` works.
 - `git --version` works.
@@ -214,4 +218,6 @@ Before feature development:
 - Gradle JDK uses the bundled Android Studio JDK.
 - Android TV emulator starts: `ViviCast_AndroidTV_API36`.
 - Physical Android TV appears in `adb devices`: `192.168.178.40:5555`.
-- Once a new app module exists, a debug APK can be installed on the emulator. Install on the physical Android TV only when explicitly requested.
+- Debug APK can be installed on the emulator.
+- The Phase 1 placeholder shell launches on the emulator and supports basic D-pad focus.
+- Install on the physical Android TV only when explicitly requested.

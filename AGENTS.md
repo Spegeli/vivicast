@@ -26,10 +26,11 @@ At the start of every new session in this repository:
 
 ## Product Context
 
-- ViviCast is restarting from zero.
+- ViviCast is restarting from a clean Android TV Phase 1 foundation.
 - The previous app implementation, UI concept, architecture, and roadmap are no longer active direction.
-- New concept, structure, and product rules will be provided before new app development begins.
-- Android TV remains the first likely development target unless the new concept changes that.
+- Current app structure follows the Phase 1 bootstrap direction from `Spegeli/vivicast-docs`.
+- Phase 2 UI/demo work must only start after explicit user approval.
+- Android TV is the active first development target.
 
 ## Android TV Emulator Rule
 

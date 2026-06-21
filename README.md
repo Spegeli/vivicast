@@ -1,10 +1,8 @@
 # ViviCast
 
-ViviCast is restarting from a clean Android project baseline.
+ViviCast is a clean Android TV app foundation for package `com.vivicast.tv`.
 
-The previous application code has been removed from the active Gradle project. A local, ignored reference copy of the old app modules is stored under `archive/pre-restart-2026-06-21/`.
-
-Status: clean restart after concept phase.
+Status: Phase 1 foundation scaffolded. The app currently contains only a minimal Android TV shell and placeholders. There are no demo data, provider integrations, parsers, or real player features.
 
 ## Source of Truth
 
@@ -37,6 +35,14 @@ Start the default Android TV emulator:
 .\scripts\start-tv-emulator.ps1
 ```
 
+Build all debug modules:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
 ## Current State
 
-There are currently no active app modules. The next implementation step is to define the new ViviCast concept and scaffold the first Android TV module from scratch.
+Active Gradle modules are defined in `settings.gradle.kts` and follow the Phase 1 bootstrap structure from the documentation repository. Build, install, launch, and basic D-pad focus have been validated on the Android TV emulator.
+
+Phase 2 must only start after explicit approval.
