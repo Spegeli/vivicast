@@ -2,27 +2,27 @@
 
 ## Current Direction
 
-ViviCast is restarting as a clean Android TV app using the Phase 1 foundation from `Spegeli/vivicast-docs`.
+ViviCast is now building the Phase 2 Android TV UI demo on top of the accepted Phase 1 foundation from `Spegeli/vivicast-docs`.
 
 ## Current Phase
 
-Phase 1 - Foundation
+Phase 2 - UI demo with local demo data
 
 ## Current Status
 
 Done:
 
-- Scaffolded the Android TV multi-module foundation for package `com.vivicast.tv`.
-- Added `:app`, core, data, domain, feature, IPTV, and worker modules from the docs bootstrap prompt.
-- Added a minimal Android TV manifest and Compose-based Phase 1 placeholder shell.
-- Added design system skeleton primitives and placeholder screen component.
-- Added foundation contracts for Room, DataStore, network, security, player, worker, IPTV, and repositories without real provider, parser, or playback logic.
-- Verified all modules with `.\gradlew.bat assembleDebug`.
-- Verified emulator launch, APK install, Leanback launcher resolution, basic D-pad focus, and placeholder navigation on `ViviCast_AndroidTV_API36`.
+- Phase 1 foundation accepted and pushed to `Spegeli/vivicast`.
+- Added local, reproducible Phase 2 demo catalog data in `:data:media`.
+- Added Android TV demo screens for Live-TV, Movies, Series, Search, Settings, and Player Overlay.
+- Added D-pad-oriented focus behavior, top-level screen switching, adaptive Live-TV columns, VOD cards, search rows, settings master-detail, and player timeline controls.
+- Kept provider data, parsers, real stream URLs, Media3 playback, network demo content, and DB imports out of Phase 2.
+- Verified latest Phase 2 build with `.\gradlew.bat assembleDebug`.
+- Verified APK install, launch, D-pad navigation, Live-TV sender mode, fullscreen player overlay, timeline OK/seek handling, back/restore overlay behavior, and no crash markers on `ViviCast_AndroidTV_API36`.
 
 Missing:
 
-- Phase 2 UI demo implementation with local demo data after explicit start.
+- Phase 2 review/acceptance by the user.
 
 ## Active Module Structure
 
@@ -63,8 +63,8 @@ Missing:
 
 ## Next Steps
 
-1. Start Phase 2 only after explicit instruction using the docs Phase 2 files.
-2. Add local demo data only in Phase 2.
+1. User review of the local Phase 2 UI demo.
+2. Wait for explicit approval before committing or pushing Phase 2 changes.
 
 ## Last Updated
 

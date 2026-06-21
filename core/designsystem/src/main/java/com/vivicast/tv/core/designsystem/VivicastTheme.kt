@@ -30,7 +30,7 @@ object VivicastColors {
     val SurfaceSelected = Color(0xFF26313A)
     val TextPrimary = Color(0xFFF2F5F7)
     val TextSecondary = Color(0xFFC7D0D8)
-    val Focus = Color(0xFFE5B84B)
+    val Focus = Color(0xFF51D7FF)
 }
 
 object VivicastTypography {
