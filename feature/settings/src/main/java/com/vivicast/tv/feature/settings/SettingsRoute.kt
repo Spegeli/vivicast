@@ -80,18 +80,35 @@ data class GeneralSettingsState(
     val rememberSorting: Boolean = true,
 )
 
+data class CacheSettingsState(
+    val maxCacheSizeMb: Int = 500,
+    val totalSizeBytes: Long = 0L,
+    val fileCount: Int = 0,
+)
+
 @Composable
 fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
     generalSettingsState: GeneralSettingsState,
+    cacheSettingsState: CacheSettingsState,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onRememberSortingChanged: (Boolean) -> Unit,
     onRunGlobalRefresh: () -> Unit,
+    onCacheSizeChanged: (Int) -> Unit,
+    onRunLogoRefresh: () -> Unit,
+    onRunCacheCleanup: () -> Unit,
+    onClearCache: () -> Unit,
+    onReloadCacheStats: () -> Unit,
 ) {
     var selectedSection by remember { mutableStateOf("Allgemein") }
     var showConfirm by remember { mutableStateOf(false) }
     val settingsSections = remember { DemoCatalog.settingsSections }
+    val maintenanceSection = remember { settingsSections.last() }
+
+    LaunchedEffect(Unit) {
+        onReloadCacheStats()
+    }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -149,6 +166,14 @@ fun SettingsRoute(
                             epgSourceRepository = epgSourceRepository,
                         )
                         "Optik" -> SettingsOptions(showConfirm = { showConfirm = true })
+                        maintenanceSection -> MaintenanceSettingsPanel(
+                            cacheSettingsState = cacheSettingsState,
+                            onCacheSizeChanged = onCacheSizeChanged,
+                            onRunLogoRefresh = onRunLogoRefresh,
+                            onRunCacheCleanup = onRunCacheCleanup,
+                            onClearCache = onClearCache,
+                            onReloadCacheStats = onReloadCacheStats,
+                        )
                         else -> InfoPanel(
                             title = selectedSection,
                             body = "Dieser Bereich ist vorbereitet. Optionen werden hier gebündelt, sobald die jeweilige Verwaltung umgesetzt ist.",
@@ -1204,6 +1229,112 @@ private fun SettingRow(setting: DemoSetting) {
 }
 
 @Composable
+private fun MaintenanceSettingsPanel(
+    cacheSettingsState: CacheSettingsState,
+    onCacheSizeChanged: (Int) -> Unit,
+    onRunLogoRefresh: () -> Unit,
+    onRunCacheCleanup: () -> Unit,
+    onClearCache: () -> Unit,
+    onReloadCacheStats: () -> Unit,
+) {
+    var message by remember { mutableStateOf<String?>(null) }
+    val cacheOptions = listOf(250, 500, 1024, 2048, 0)
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(
+                title = "Vivicast",
+                body = "Lokale Android-TV-App. Wartungsaktionen bleiben lokal und speichern keine Provider-Geheimnisse.",
+                badge = "Phase 04",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Cache Informationen",
+                help = "${cacheSettingsState.fileCount} Dateien im lokalen Mediencache.",
+                value = "${formatCacheSize(cacheSettingsState.totalSizeBytes)} / ${formatCacheLimit(cacheSettingsState.maxCacheSizeMb)}",
+                onClick = {
+                    onReloadCacheStats()
+                    message = "Cache Informationen wurden aktualisiert."
+                },
+            )
+        }
+
+        item {
+            FocusPanel(
+                modifier = Modifier.fillMaxWidth().height(128.dp),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                    BasicText("Cache Größe", style = VivicastTypography.LabelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                        cacheOptions.forEach { sizeMb ->
+                            ActionPill(
+                                label = formatCacheLimit(sizeMb),
+                                modifier = Modifier.width(if (sizeMb == 0) 150.dp else 112.dp),
+                                selected = cacheSettingsState.maxCacheSizeMb == sizeMb,
+                                onClick = {
+                                    onCacheSizeChanged(sizeMb)
+                                    message = "Cache-Größe wurde aktualisiert."
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Logo Cache neu aufbauen",
+                help = "Senderlogos werden über den bestehenden Logo-Refresh-Worker aktualisiert.",
+                value = "Einplanen",
+                onClick = {
+                    onRunLogoRefresh()
+                    message = "Logo Cache Neuaufbau wurde eingeplant."
+                },
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Cache Cleanup",
+                help = "Entfernt alte Dateien, bis das konfigurierte Größenlimit eingehalten wird.",
+                value = "Einplanen",
+                onClick = {
+                    onRunCacheCleanup()
+                    message = "Cache Cleanup wurde eingeplant."
+                },
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Cache leeren",
+                help = "Entfernt lokal gespeicherte Medienbilder. Providerdaten bleiben erhalten.",
+                value = "Ausführen",
+                onClick = {
+                    onClearCache()
+                    message = "Cache wurde geleert."
+                },
+            )
+        }
+
+        if (message != null) {
+            item {
+                InfoPanel(
+                    title = "Hinweis",
+                    body = message.orEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DemoStates(showConfirm: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         InfoPanel("Ladezustand", "Lokaler Ladezustand ohne Netzwerkzugriff.", badge = "Laden")
@@ -1348,6 +1479,26 @@ private data class EpgSourceEditorState(
                 timeShiftMinutes = source.timeShiftMinutes,
                 isActive = source.isActive,
             )
+    }
+}
+
+private fun formatCacheLimit(sizeMb: Int): String =
+    when (sizeMb) {
+        0 -> "Unbegrenzt"
+        1024 -> "1 GB"
+        2048 -> "2 GB"
+        else -> "$sizeMb MB"
+    }
+
+private fun formatCacheSize(sizeBytes: Long): String {
+    val megabytes = sizeBytes / (1024L * 1024L)
+    if (megabytes < 1024L) return "$megabytes MB"
+    val gigabytes = megabytes / 1024L
+    val remainingMegabytes = megabytes % 1024L
+    return if (remainingMegabytes == 0L) {
+        "$gigabytes GB"
+    } else {
+        "$gigabytes.${remainingMegabytes * 10L / 1024L} GB"
     }
 }
 

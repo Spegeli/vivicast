@@ -137,6 +137,12 @@ Implemented and validated:
   - background refresh enablement updates DataStore and schedules/cancels the periodic global refresh worker
   - manual "Jetzt aktualisieren" action enqueues the existing global refresh worker path
   - Settings now opens on Allgemein to match the PRD/wireframe settings entry point
+- Cache maintenance settings hooks:
+  - Settings "Über die App" reads media cache stats from `MediaCacheStore`
+  - cache size selection updates DataStore-backed cache preferences
+  - logo refresh and cache cleanup actions enqueue the existing WorkManager jobs
+  - local cache clear removes stored media cache files and reloads cache stats
+  - settings section matching uses the existing settings-section order instead of a hard-coded localized label
 
 Validated with:
 
@@ -160,11 +166,14 @@ Validated with:
 - `.\gradlew.bat :app:compileDebugKotlin :feature:settings:compileDebugKotlin assembleDebug`
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :worker:compileDebugKotlin`
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :app:compileDebugKotlin assembleDebug`
+- `.\gradlew.bat :feature:settings:compileDebugKotlin :app:installDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
+- Android TV emulator D-Pad smoke test for Settings cache maintenance navigation, cache job actions, and focus visibility
 - Screenshot: `docs/phase-04-settings-epg-smoke.png`
 - Screenshot: `docs/phase-04-epg-priority-smoke.png`
 - Screenshot: `docs/phase-04-settings-refresh-smoke.png`
+- Screenshot: `docs/phase-04-cache-settings-smoke.png`
 - Temporary non-committed public refresh smoke JUnit run:
   - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
   - XMLTV: `https://iptv-epg.org/files/epg-de.xml`

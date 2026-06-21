@@ -18,11 +18,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.vivicast.tv.core.cache.MediaCacheStats
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
 import com.vivicast.tv.core.designsystem.VivicastTopNavigation
+import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
 import com.vivicast.tv.feature.livetv.LiveTvRoute
 import com.vivicast.tv.feature.movies.MoviesRoute
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
 private fun VivicastApp(appContainer: AppContainer) {
     var playerVisible by remember { mutableStateOf(false) }
     var selectedRoute by remember { mutableStateOf("live-tv") }
+    var cacheStats by remember { mutableStateOf(MediaCacheStats(totalSizeBytes = 0L, fileCount = 0)) }
     val preferences by appContainer.userPreferencesStore.values.collectAsState(initial = UserPreferences())
     val scope = rememberCoroutineScope()
 
@@ -56,6 +59,12 @@ private fun VivicastApp(appContainer: AppContainer) {
         appContainer.refreshWorkScheduler.setBackgroundRefreshEnabled(
             enabled = preferences.general.backgroundRefreshEnabled,
         )
+    }
+
+    LaunchedEffect(selectedRoute) {
+        if (selectedRoute == "settings") {
+            cacheStats = appContainer.mediaCacheStore.stats()
+        }
     }
 
     val destinations = listOf(
@@ -71,6 +80,11 @@ private fun VivicastApp(appContainer: AppContainer) {
                     launchOnBoot = preferences.general.launchOnBoot,
                     backgroundRefreshEnabled = preferences.general.backgroundRefreshEnabled,
                     rememberSorting = preferences.general.rememberSorting,
+                ),
+                cacheSettingsState = CacheSettingsState(
+                    maxCacheSizeMb = preferences.cache.maxCacheSizeMb,
+                    totalSizeBytes = cacheStats.totalSizeBytes,
+                    fileCount = cacheStats.fileCount,
                 ),
                 onBackgroundRefreshChanged = { enabled ->
                     scope.launch {
@@ -89,6 +103,30 @@ private fun VivicastApp(appContainer: AppContainer) {
                 },
                 onRunGlobalRefresh = {
                     appContainer.refreshWorkScheduler.enqueueGlobalRefresh()
+                },
+                onCacheSizeChanged = { maxSizeMb ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateCache(
+                            preferences.cache.copy(maxCacheSizeMb = maxSizeMb),
+                        )
+                    }
+                },
+                onRunLogoRefresh = {
+                    appContainer.refreshWorkScheduler.enqueueLogoRefresh()
+                },
+                onRunCacheCleanup = {
+                    appContainer.refreshWorkScheduler.enqueueCacheCleanup()
+                },
+                onClearCache = {
+                    scope.launch {
+                        appContainer.mediaCacheStore.clear()
+                        cacheStats = appContainer.mediaCacheStore.stats()
+                    }
+                },
+                onReloadCacheStats = {
+                    scope.launch {
+                        cacheStats = appContainer.mediaCacheStore.stats()
+                    }
                 },
             )
         },
