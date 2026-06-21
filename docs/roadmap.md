@@ -63,7 +63,7 @@ Still stubbed or missing:
 - Security has a `SecureValueStore` contract and Android Keystore-backed implementation.
 - Provider configuration is persisted locally with credentials stored outside Room.
 - EPG, media, favorites, and playback repositories are still contracts or minimal implementations; `:data:media` now includes a Room-backed M3U live import path and `:data:epg` now includes a Room-backed XMLTV import path.
-- M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation but does not parse responses or import catalog data yet.
+- M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser, but does not import catalog data into Room yet.
 - Player has only a controller contract, with no Media3 playback implementation.
 - Worker contains only job-name constants.
 - Existing UI uses demo data and must later be connected to local persisted data.

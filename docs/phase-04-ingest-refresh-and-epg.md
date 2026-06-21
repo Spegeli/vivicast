@@ -71,6 +71,10 @@ Implemented and validated:
   - transport abstraction for fixture tests and later HTTP use
   - OkHttp transport without logging or persisting credential-bearing URLs
   - PRD endpoint request methods for live categories, live streams, VOD categories, VOD streams, series categories, series lists, and series details
+- Xtream parser in `:iptv:xtream`:
+  - category, live stream, VOD item, series list, season, and episode DTOs
+  - tolerant parsing of common Xtream field variants
+  - local AndroidTest fixtures only, with no real provider data
 - Room-backed M3U live-channel import in `:data:media`:
   - provider-isolated category and channel IDs
   - uncategorized fallback
@@ -91,13 +95,14 @@ Validated with:
 - `.\gradlew.bat :iptv:m3u:testDebugUnitTest`
 - `.\gradlew.bat :iptv:xmltv:testDebugUnitTest`
 - `.\gradlew.bat :iptv:xtream:testDebugUnitTest`
+- `.\gradlew.bat :iptv:xtream:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- Xtream response parsing and fixture-backed imports.
+- Xtream Room imports from parsed fixture outputs.
 - XMLTV import orchestration from encrypted EPG source URLs.
 - WorkManager playlist, EPG, logo, and cache workers.
 - Global refresh scheduler order from ADR-003.
