@@ -22,6 +22,7 @@ kotlin {
 dependencies {
     implementation(project(":domain"))
     implementation(project(":core:database"))
+    implementation(project(":core:security"))
     implementation(project(":iptv:xmltv"))
     implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.coroutines.core)

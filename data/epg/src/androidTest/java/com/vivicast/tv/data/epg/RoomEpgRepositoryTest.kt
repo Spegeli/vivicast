@@ -9,6 +9,8 @@ import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.security.SecureKey
+import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -24,6 +26,7 @@ import org.junit.runner.RunWith
 class RoomEpgRepositoryTest {
     private lateinit var database: VivicastDatabase
     private lateinit var repository: RoomEpgRepository
+    private lateinit var secureValueStore: InMemorySecureValueStore
     private val parser = DefaultXmltvParser()
     private var now = 1_000L
 
@@ -34,6 +37,7 @@ class RoomEpgRepositoryTest {
             .allowMainThreadQueries()
             .build()
         repository = RoomEpgRepository(database) { now }
+        secureValueStore = InMemorySecureValueStore()
     }
 
     @After
@@ -105,6 +109,47 @@ class RoomEpgRepositoryTest {
         assertEquals(1, countPrograms(PROVIDER_ID, "shared-source"))
         assertEquals(1, countPrograms(OTHER_PROVIDER_ID, "shared-source"))
         assertEquals(1, result.programsImported)
+    }
+
+    @Test
+    fun secureEpgSourceRepositoryStoresUrlOutsideRoomAndDeletesSideEffects() = runBlocking {
+        val sourceRepository = SecureEpgSourceRepository(
+            database = database,
+            secureValueStore = secureValueStore,
+            delegate = repository,
+        )
+        val source = sourceRepository.saveSource(
+            EpgSourceEditRequest(
+                sourceId = "epg-source-1",
+                name = "Public EPG",
+                url = "https://epg.example/file.xml?token=secret",
+                timeShiftMinutes = 30,
+                isActive = true,
+            ),
+        )
+        sourceRepository.linkSourceToProvider(PROVIDER_ID, source.id, priority = 1)
+
+        assertEquals("epg-source:epg-source-1:url", source.urlKey)
+        assertEquals("https://epg.example/file.xml?token=secret", secureValueStore.values[source.urlKey])
+        assertFalse(epgSourceTableContains("https://epg.example/file.xml?token=secret"))
+
+        sourceRepository.saveSource(
+            EpgSourceEditRequest(
+                sourceId = source.id,
+                name = "Public EPG Updated",
+                url = null,
+                timeShiftMinutes = 60,
+                isActive = false,
+            ),
+        )
+
+        assertEquals("https://epg.example/file.xml?token=secret", secureValueStore.values[source.urlKey])
+
+        sourceRepository.deleteSource(source.id)
+
+        assertEquals(null, secureValueStore.values[source.urlKey])
+        assertEquals(0, database.epgDao().getEpgSources().size)
+        assertEquals(0, database.epgDao().getProviderEpgSources(PROVIDER_ID).size)
     }
 
     private suspend fun seedLiveChannel(
@@ -211,8 +256,29 @@ class RoomEpgRepositoryTest {
             cursor.getInt(0)
         }
 
+    private fun epgSourceTableContains(value: String): Boolean =
+        database.query(SimpleSQLiteQuery("SELECT COUNT(*) FROM epg_sources WHERE urlKey = ?", arrayOf<Any?>(value))).use { cursor ->
+            cursor.moveToFirst()
+            cursor.getInt(0) > 0
+        }
+
     private companion object {
         const val PROVIDER_ID = "provider-1"
         const val OTHER_PROVIDER_ID = "provider-2"
+    }
+}
+
+private class InMemorySecureValueStore : SecureValueStore {
+    val values = mutableMapOf<String, String>()
+
+    override suspend fun read(key: SecureKey): String? =
+        values[key.value]
+
+    override suspend fun write(key: SecureKey, value: String) {
+        values[key.value] = value
+    }
+
+    override suspend fun delete(key: SecureKey) {
+        values.remove(key.value)
     }
 }

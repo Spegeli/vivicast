@@ -96,8 +96,14 @@ interface EpgDao {
     @Query("DELETE FROM provider_epg_sources WHERE providerId = :providerId")
     suspend fun deleteProviderEpgSources(providerId: String)
 
+    @Query("DELETE FROM provider_epg_sources WHERE epgSourceId = :epgSourceId")
+    suspend fun deleteProviderEpgSourcesForSource(epgSourceId: String)
+
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId")
     suspend fun deleteMappingsForProvider(providerId: String)
+
+    @Query("DELETE FROM epg_channel_mappings WHERE epgSourceId = :epgSourceId")
+    suspend fun deleteMappingsForSource(epgSourceId: String)
 
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteMappingsForChannels(providerId: String, channelIds: List<String>)
@@ -113,4 +119,7 @@ interface EpgDao {
 
     @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteProgramsForChannels(providerId: String, channelIds: List<String>)
+
+    @Query("DELETE FROM epg_sources WHERE id = :epgSourceId")
+    suspend fun deleteEpgSource(epgSourceId: String)
 }
