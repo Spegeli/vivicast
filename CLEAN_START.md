@@ -1,3 +1,3 @@
-# Clean Start
+# Start
 
-Vivicast wird auf Basis des Konzepts neu aufgebaut.
+Temporary note.
