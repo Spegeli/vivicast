@@ -339,6 +339,19 @@ private class FakeMediaCacheStore(
     override suspend fun hasEntry(key: MediaCacheKey): Boolean =
         key in cachedKeys
 
+    override suspend fun getEntry(key: MediaCacheKey): MediaCacheEntry? =
+        if (key in cachedKeys) {
+            MediaCacheEntry(
+                key = key,
+                file = File("unused"),
+                sizeBytes = 1L,
+                createdAt = 1L,
+                lastAccessedAt = 1L,
+            )
+        } else {
+            null
+        }
+
     override suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry {
         putKeys += key
         cachedKeys += key

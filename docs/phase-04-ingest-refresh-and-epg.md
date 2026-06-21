@@ -112,6 +112,8 @@ Implemented and validated:
   - file-backed cache store for channel logos, movie posters, series posters, season images, and episode images
   - dedicated cache directories for movie and series backdrops
   - source URLs are hashed for cache keys and are not stored as plaintext cache metadata
+  - cached entries can be resolved to local files through `MediaCacheStore.getEntry`
+  - cache lookups update last-access metadata so size cleanup can keep recently used files
   - stats, clear, owner replacement, and least-recently-accessed size cleanup behavior
 - Logo/cache worker runtime:
   - media image refresh now reads Room image URLs for channel logos, movie posters/backdrops, series posters/backdrops, season images, and episode thumbnails
@@ -169,6 +171,7 @@ Validated with:
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :app:compileDebugKotlin assembleDebug`
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :app:installDebug`
 - `.\gradlew.bat :core:database:compileDebugKotlin :worker:compileDebugKotlin :worker:testDebugUnitTest :core:cache:testDebugUnitTest`
+- `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Android TV emulator D-Pad smoke test for Settings cache maintenance navigation, cache job actions, and focus visibility
@@ -184,7 +187,7 @@ Validated with:
 Still open:
 
 - Full end-user manual mapping UI is still open; the repository and import behavior are ready for it.
-- Cached assets are not yet consumed by UI image loading; current Phase 04 work prepares local storage and worker maintenance only.
+- Cached assets are not yet wired into UI image loading; current Phase 04 work prepares local storage, lookup, and worker maintenance only.
 
 ## Definition of Done
 

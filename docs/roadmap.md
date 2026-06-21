@@ -67,7 +67,7 @@ Still stubbed or missing:
 - M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser.
 - Player has only a controller contract, with no Media3 playback implementation.
 - Worker contains job-name constants, concrete WorkManager refresh wrappers, request scheduling, network-backed refresh runner wiring, a testable refresh orchestrator, diagnostics redaction foundation, and media image cache refresh for logos, posters, backdrops, season images, and episode thumbnails.
-- `:core:cache` contains the file-backed media cache foundation for logo/poster/backdrop/image storage, stats, clear, and size cleanup.
+- `:core:cache` contains the file-backed media cache foundation for logo/poster/backdrop/image storage, local file lookup, stats, clear, and size cleanup.
 - Settings exposes refresh controls, EPG source/provider priority management, and cache maintenance hooks for local cache stats, size limits, logo refresh, cleanup, and clearing.
 - Existing UI uses demo data and must later be connected to local persisted data.
 

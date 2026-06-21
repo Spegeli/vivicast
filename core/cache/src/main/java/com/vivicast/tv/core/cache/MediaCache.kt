@@ -7,6 +7,8 @@ import java.util.Properties
 interface MediaCacheStore {
     suspend fun hasEntry(key: MediaCacheKey): Boolean
 
+    suspend fun getEntry(key: MediaCacheKey): MediaCacheEntry?
+
     suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry
 
     suspend fun stats(): MediaCacheStats
@@ -63,15 +65,28 @@ class FileMediaCacheStore(
     private val rootDirectory: File,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : MediaCacheStore {
-    override suspend fun hasEntry(key: MediaCacheKey): Boolean {
+    override suspend fun hasEntry(key: MediaCacheKey): Boolean =
+        getEntry(key) != null
+
+    override suspend fun getEntry(key: MediaCacheKey): MediaCacheEntry? {
         val dataFile = dataFileFor(key)
         val metaFile = metaFileFor(key)
-        if (!dataFile.isFile || !metaFile.isFile) return false
+        if (!dataFile.isFile || !metaFile.isFile) return null
 
         val metadata = metaFile.readMetadata()
-        if (metadata?.ownerId != key.ownerId || metadata.sourceHash != key.sourceHash) return false
-        metadata.write(metaFile, lastAccessedAt = clock())
-        return true
+        if (metadata?.type != key.type || metadata.ownerId != key.ownerId || metadata.sourceHash != key.sourceHash) {
+            return null
+        }
+
+        val lastAccessedAt = clock()
+        metadata.write(metaFile, lastAccessedAt = lastAccessedAt)
+        return MediaCacheEntry(
+            key = key,
+            file = dataFile,
+            sizeBytes = metadata.sizeBytes,
+            createdAt = metadata.createdAt,
+            lastAccessedAt = lastAccessedAt,
+        )
     }
 
     override suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry {
