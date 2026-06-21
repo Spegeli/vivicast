@@ -38,6 +38,18 @@ interface CatalogDao {
     @Query("SELECT * FROM channels WHERE providerId = :providerId")
     suspend fun getChannels(providerId: String): List<ChannelEntity>
 
+    @Query("SELECT * FROM movies WHERE providerId = :providerId")
+    suspend fun getMovies(providerId: String): List<MovieEntity>
+
+    @Query("SELECT * FROM series WHERE providerId = :providerId")
+    suspend fun getSeries(providerId: String): List<SeriesEntity>
+
+    @Query("SELECT * FROM seasons WHERE providerId = :providerId")
+    suspend fun getSeasons(providerId: String): List<SeasonEntity>
+
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId")
+    suspend fun getEpisodes(providerId: String): List<EpisodeEntity>
+
     @Query(
         """
         SELECT * FROM movies
@@ -101,14 +113,26 @@ interface CatalogDao {
     @Query("DELETE FROM movies WHERE providerId = :providerId")
     suspend fun deleteMoviesForProvider(providerId: String)
 
+    @Query("DELETE FROM movies WHERE providerId = :providerId AND id IN (:movieIds)")
+    suspend fun deleteMovies(providerId: String, movieIds: List<String>)
+
     @Query("DELETE FROM series WHERE providerId = :providerId")
     suspend fun deleteSeriesForProvider(providerId: String)
+
+    @Query("DELETE FROM series WHERE providerId = :providerId AND id IN (:seriesIds)")
+    suspend fun deleteSeries(providerId: String, seriesIds: List<String>)
 
     @Query("DELETE FROM seasons WHERE providerId = :providerId")
     suspend fun deleteSeasonsForProvider(providerId: String)
 
+    @Query("DELETE FROM seasons WHERE providerId = :providerId AND id IN (:seasonIds)")
+    suspend fun deleteSeasons(providerId: String, seasonIds: List<String>)
+
     @Query("DELETE FROM episodes WHERE providerId = :providerId")
     suspend fun deleteEpisodesForProvider(providerId: String)
+
+    @Query("DELETE FROM episodes WHERE providerId = :providerId AND id IN (:episodeIds)")
+    suspend fun deleteEpisodes(providerId: String, episodeIds: List<String>)
 
     @Transaction
     suspend fun deleteCatalogForProvider(providerId: String) {

@@ -81,6 +81,13 @@ Implemented and validated:
   - delta add/update/remove behavior
   - cleanup of favorites, playback progress, channel history, EPG mappings, and EPG programmes for removed channels
   - no stream URLs stored in Room
+- Room-backed Xtream catalog import in `:data:media`:
+  - provider-isolated live, movie, and series categories
+  - live channel, VOD movie, series, season, and episode imports
+  - deterministic local IDs without storing stream URLs
+  - delta add/update/remove behavior
+  - cleanup of favorites and playback progress for removed VOD and series content
+  - cleanup of episode playback progress for removed episodes
 - Room-backed XMLTV EPG import in `:data:epg`:
   - EPG source metadata stored independently with URL key only
   - provider/source priority links
@@ -102,7 +109,6 @@ Validated with:
 
 Still open:
 
-- Xtream Room imports from parsed fixture outputs.
 - XMLTV import orchestration from encrypted EPG source URLs.
 - WorkManager playlist, EPG, logo, and cache workers.
 - Global refresh scheduler order from ADR-003.
