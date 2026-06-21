@@ -50,7 +50,10 @@ private fun VivicastApp(appContainer: AppContainer) {
             AppDestination("Serien", "series") { SeriesRoute(onOpenPlayer = { playerVisible = true }) },
             AppDestination("Suche", "search") { SearchRoute() },
             AppDestination("Einstellungen", "settings") {
-                SettingsRoute(providerRepository = appContainer.providerRepository)
+                SettingsRoute(
+                    providerRepository = appContainer.providerRepository,
+                    epgSourceRepository = appContainer.epgSourceRepository,
+                )
             },
         )
     }

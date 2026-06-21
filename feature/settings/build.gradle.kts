@@ -25,6 +25,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:designsystem"))
+    implementation(project(":data:epg"))
     implementation(project(":data:media"))
     implementation(project(":data:provider"))
     implementation(project(":domain"))

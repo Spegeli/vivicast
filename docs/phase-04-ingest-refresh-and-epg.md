@@ -114,6 +114,11 @@ Implemented and validated:
   - provider status transitions for refreshing, active, connection error, and invalid credentials
   - `AppContainer` runner registration for WorkManager workers without introducing a DI framework
   - no-op logo/cache implementations kept explicit until real cache work is implemented
+- Secure EPG source management:
+  - `SecureEpgSourceRepository` stores EPG source URLs through `SecureValueStore` and keeps only URL keys in Room
+  - source save/delete operations clean linked provider priorities, mappings, and programs for removed sources
+  - Settings exposes local EPG source create/edit/delete controls with active state and time shift controls
+  - Settings EPG view preserves Android TV master-detail D-Pad navigation by opening text-field editors only after explicit add/select actions
 
 Validated with:
 
@@ -127,6 +132,10 @@ Validated with:
 - `.\gradlew.bat :worker:compileDebugKotlin`
 - `.\gradlew.bat :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
+- `.\gradlew.bat :feature:settings:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :data:epg:connectedDebugAndroidTest :worker:testDebugUnitTest assembleDebug`
+- Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
+- Screenshot: `docs/phase-04-settings-epg-smoke.png`
 - Temporary non-committed public refresh smoke JUnit run:
   - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
   - XMLTV: `https://iptv-epg.org/files/epg-de.xml`
@@ -134,7 +143,7 @@ Validated with:
 
 Still open:
 
-- Persisted EPG source URL creation/editing UI is still not exposed beyond repository hooks.
+- Provider-to-EPG priority assignment UI and full manual mapping flow are still hooks, not complete end-user flows.
 - Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
 ## Definition of Done

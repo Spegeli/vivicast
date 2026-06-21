@@ -9,7 +9,9 @@ import com.vivicast.tv.core.network.NetworkClientFactory
 import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.data.epg.EpgImportRepository
+import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.RoomEpgRepository
+import com.vivicast.tv.data.epg.SecureEpgSourceRepository
 import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -66,6 +68,13 @@ class AppContainer(
 
     val epgImportRepository: EpgImportRepository by lazy {
         RoomEpgRepository(database = database)
+    }
+
+    val epgSourceRepository: EpgSourceRepository by lazy {
+        SecureEpgSourceRepository(
+            database = database,
+            secureValueStore = secureValueStore,
+        )
     }
 
     val refreshDiagnostics: RefreshDiagnostics by lazy {

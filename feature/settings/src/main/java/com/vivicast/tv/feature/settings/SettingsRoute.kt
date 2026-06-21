@@ -52,6 +52,8 @@ import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import com.vivicast.tv.data.epg.EpgSourceEditRequest
+import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoSetting
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
@@ -61,10 +63,14 @@ import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
+import com.vivicast.tv.domain.model.EpgSource
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsRoute(providerRepository: ProviderRepository) {
+fun SettingsRoute(
+    providerRepository: ProviderRepository,
+    epgSourceRepository: EpgSourceRepository,
+) {
     var selectedSection by remember { mutableStateOf("Wiedergabelisten") }
     var showConfirm by remember { mutableStateOf(false) }
     val settingsSections = remember { DemoCatalog.settingsSections }
@@ -114,6 +120,7 @@ fun SettingsRoute(providerRepository: ProviderRepository) {
                     SectionTitle(selectedSection)
                     when (selectedSection) {
                         "Wiedergabelisten" -> ProviderSettingsPanel(providerRepository = providerRepository)
+                        "EPG" -> EpgSettingsPanel(epgSourceRepository = epgSourceRepository)
                         "Optik" -> SettingsOptions(showConfirm = { showConfirm = true })
                         else -> InfoPanel(
                             title = selectedSection,
@@ -146,11 +153,299 @@ fun SettingsRoute(providerRepository: ProviderRepository) {
 }
 
 @Composable
+private fun EpgSettingsPanel(epgSourceRepository: EpgSourceRepository) {
+    val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    var selectedSourceId by remember { mutableStateOf<String?>(null) }
+    var editor by remember { mutableStateOf(EpgSourceEditorState.newSource()) }
+    var showEditor by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
+
+    LaunchedEffect(sources) {
+        val selectedSource = selectedSourceId?.let { id -> sources.firstOrNull { it.id == id } }
+        if (selectedSource == null && selectedSourceId != null) {
+            selectedSourceId = null
+            editor = EpgSourceEditorState.newSource()
+            showEditor = false
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
+            ActionPill(
+                label = "EPG Quelle hinzufügen",
+                modifier = Modifier.width(250.dp),
+                selected = showEditor && !editor.isEditing,
+                onClick = {
+                    selectedSourceId = null
+                    editor = EpgSourceEditorState.newSource()
+                    showEditor = true
+                    message = null
+                },
+            )
+            ActionPill(
+                label = "Manuelle Zuordnung",
+                modifier = Modifier.width(230.dp),
+                onClick = { message = "Manuelle EPG-Zuordnung ist als Phase-04-Hook vorbereitet." },
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+            EpgSourceList(
+                sources = sources,
+                selectedSourceId = selectedSourceId,
+                onSelectSource = { source ->
+                    selectedSourceId = source.id
+                    editor = EpgSourceEditorState.from(source)
+                    showEditor = true
+                    message = null
+                },
+                modifier = Modifier.weight(0.42f).fillMaxHeight(),
+            )
+
+            if (showEditor) {
+                EpgSourceEditor(
+                    editor = editor,
+                    message = message,
+                    onEditorChange = { editor = it },
+                    onSave = {
+                        val validationMessage = editor.validationMessage()
+                        if (validationMessage != null) {
+                            message = validationMessage
+                            return@EpgSourceEditor
+                        }
+                        scope.launch {
+                            runCatching { epgSourceRepository.saveSource(editor.toEditRequest()) }
+                                .onSuccess { source ->
+                                    selectedSourceId = source.id
+                                    editor = EpgSourceEditorState.from(source)
+                                    showEditor = true
+                                    message = "EPG Quelle gespeichert. URL bleibt verborgen."
+                                }
+                                .onFailure { error ->
+                                    message = "Speichern fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
+                                }
+                        }
+                    },
+                    onDelete = {
+                        pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
+                    },
+                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                )
+            } else {
+                InfoPanel(
+                    title = "EPG Verwaltung",
+                    body = message ?: "EPG Quellen werden separat gespeichert und später Providern priorisiert zugeordnet.",
+                    badge = "Phase 04",
+                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                )
+            }
+        }
+    }
+
+    pendingDelete?.let { source ->
+        DeleteEpgSourceDialog(
+            source = source,
+            onCancel = { pendingDelete = null },
+            onDelete = {
+                scope.launch {
+                    runCatching { epgSourceRepository.deleteSource(source.id) }
+                        .onSuccess {
+                            pendingDelete = null
+                            selectedSourceId = null
+                            editor = EpgSourceEditorState.newSource()
+                            showEditor = false
+                            message = "EPG Quelle geloescht. Programme und Zuordnungen dieser Quelle wurden entfernt."
+                        }
+                        .onFailure { error ->
+                            pendingDelete = null
+                            message = "Loeschen fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
+                        }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun EpgSourceList(
+    sources: List<EpgSource>,
+    selectedSourceId: String?,
+    onSelectSource: (EpgSource) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (sources.isEmpty()) {
+        InfoPanel(
+            title = "Keine EPGs",
+            body = "Quellen werden lokal hinzugefügt und später zugeordnet.",
+            modifier = modifier,
+        )
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        items(sources, key = { it.id }) { source ->
+            FocusPanel(
+                selected = source.id == selectedSourceId,
+                onClick = { onSelectSource(source) },
+                onFocused = { onSelectSource(source) },
+                modifier = Modifier.fillMaxWidth().height(116.dp),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        BasicText(
+                            text = source.name,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = VivicastTypography.LabelLarge,
+                        )
+                        Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
+                        StatusBadge(if (source.isActive) "Aktiv" else "Aus", tone = if (source.isActive) VivicastColors.Success else VivicastColors.SurfaceHigh)
+                    }
+                    BodyText("Zeitversatz: ${source.timeShiftMinutes} Minuten", maxLines = 1)
+                    BodyText("Verwendet von: noch nicht zugeordnet", maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpgSourceEditor(
+    editor: EpgSourceEditorState,
+    message: String?,
+    onEditorChange: (EpgSourceEditorState) -> Unit,
+    onSave: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        item {
+            InfoPanel(
+                title = if (editor.isEditing) "EPG Quelle bearbeiten" else "EPG Quelle",
+                body = if (editor.isEditing) "Name, Zeitversatz und Aktiv-Status ändern. URL nur bei Bedarf neu setzen." else "URL wird geschützt gespeichert und nicht in Room abgelegt.",
+                badge = if (editor.isActive) "Aktiv" else "Aus",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        item {
+            ProviderTextField(
+                label = "Name",
+                value = editor.name,
+                placeholder = "EPG Quelle",
+                onValueChange = { onEditorChange(editor.copy(name = it)) },
+            )
+        }
+
+        item {
+            ProviderTextField(
+                label = "URL",
+                value = editor.url,
+                placeholder = if (editor.isEditing) "Neu setzen oder leer lassen" else "https://...",
+                onValueChange = { onEditorChange(editor.copy(url = it)) },
+                secret = editor.isEditing,
+            )
+        }
+
+        item {
+            FocusPanel(
+                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                        BasicText("Zeitversatz", style = VivicastTypography.LabelLarge)
+                        BodyText("Korrigiert EPG-Zeiten in Minuten.", maxLines = 1)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                        ActionPill("-30", modifier = Modifier.width(82.dp), onClick = {
+                            onEditorChange(editor.copy(timeShiftMinutes = (editor.timeShiftMinutes - 30).coerceAtLeast(-720)))
+                        })
+                        BasicText("${editor.timeShiftMinutes} min", style = VivicastTypography.LabelLarge)
+                        ActionPill("+30", modifier = Modifier.width(82.dp), onClick = {
+                            onEditorChange(editor.copy(timeShiftMinutes = (editor.timeShiftMinutes + 30).coerceAtMost(720)))
+                        })
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                ActionPill(
+                    label = if (editor.isActive) "Aktiv" else "Aus",
+                    modifier = Modifier.width(132.dp),
+                    selected = editor.isActive,
+                    onClick = { onEditorChange(editor.copy(isActive = !editor.isActive)) },
+                )
+                ActionPill(label = "Speichern", modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
+                if (editor.isEditing) {
+                    ActionPill(label = "Loeschen", modifier = Modifier.width(140.dp), onClick = onDelete)
+                }
+            }
+        }
+
+        if (message != null) {
+            item {
+                InfoPanel(
+                    title = "Hinweis",
+                    body = message,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteEpgSourceDialog(
+    source: EpgSource,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Dialog(onDismissRequest = onCancel) {
+        GlassPanel(modifier = Modifier.widthIn(min = 560.dp, max = 680.dp), contentPadding = VivicastSpacing.Space5) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                InfoPanel(
+                    title = "EPG Quelle wirklich loeschen?",
+                    body = "Diese EPG Quelle, ihre Programme und ihre Zuordnungen werden entfernt. Provider bleiben erhalten.",
+                    badge = source.name,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), selected = true, onClick = onCancel)
+                    ActionPill("Loeschen", modifier = Modifier.width(140.dp), onClick = onDelete)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(ProviderEditorState.newProvider(ProviderType.M3u)) }
+    var showEditor by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Provider?>(null) }
 
@@ -159,6 +454,7 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
         if (selectedProvider == null && selectedProviderId != null) {
             selectedProviderId = null
             editor = ProviderEditorState.newProvider(ProviderType.M3u)
+            showEditor = false
         }
     }
 
@@ -172,20 +468,22 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
             ActionPill(
                 label = "M3U hinzufügen",
                 modifier = Modifier.width(210.dp),
-                selected = !editor.isEditing && editor.type == ProviderType.M3u,
+                selected = showEditor && !editor.isEditing && editor.type == ProviderType.M3u,
                 onClick = {
                     selectedProviderId = null
                     editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                    showEditor = true
                     message = null
                 },
             )
             ActionPill(
                 label = "Xtream hinzufügen",
                 modifier = Modifier.width(240.dp),
-                selected = !editor.isEditing && editor.type == ProviderType.Xtream,
+                selected = showEditor && !editor.isEditing && editor.type == ProviderType.Xtream,
                 onClick = {
                     selectedProviderId = null
                     editor = ProviderEditorState.newProvider(ProviderType.Xtream)
+                    showEditor = true
                     message = null
                 },
             )
@@ -198,13 +496,15 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
                 onSelectProvider = { provider ->
                     selectedProviderId = provider.id
                     editor = ProviderEditorState.from(provider)
+                    showEditor = true
                     message = null
                 },
                 modifier = Modifier.weight(0.42f).fillMaxHeight(),
             )
 
-            ProviderEditor(
-                editor = editor,
+            if (showEditor) {
+                ProviderEditor(
+                    editor = editor,
                 duplicateName = duplicateName,
                 message = message,
                 onEditorChange = { editor = it },
@@ -250,6 +550,14 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
                 },
                 modifier = Modifier.weight(0.58f).fillMaxHeight(),
             )
+            } else {
+                InfoPanel(
+                    title = "Provider Verwaltung",
+                    body = message ?: "Provider werden lokal konfiguriert. Zugangsdaten bleiben außerhalb der Datenbank gespeichert.",
+                    badge = "Sicher",
+                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                )
+            }
         }
     }
 
@@ -264,6 +572,7 @@ private fun ProviderSettingsPanel(providerRepository: ProviderRepository) {
                             pendingDelete = null
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                            showEditor = false
                             message = "Provider gelöscht. Providerbezogene Daten wurden entfernt."
                         }
                         .onFailure { error ->
@@ -712,6 +1021,51 @@ private data class ProviderEditorState(
                 includeMovies = provider.includeMovies,
                 includeSeries = provider.includeSeries,
                 refreshIntervalHours = provider.refreshIntervalHours,
+            )
+    }
+}
+
+private data class EpgSourceEditorState(
+    val sourceId: String?,
+    val name: String,
+    val url: String,
+    val timeShiftMinutes: Int,
+    val isActive: Boolean,
+) {
+    val isEditing: Boolean get() = sourceId != null
+
+    fun validationMessage(): String? {
+        if (name.isBlank()) return "Name fehlt."
+        if (!isEditing && url.isBlank()) return "EPG URL fehlt."
+        return null
+    }
+
+    fun toEditRequest(): EpgSourceEditRequest =
+        EpgSourceEditRequest(
+            sourceId = sourceId,
+            name = name,
+            url = url.ifBlank { null },
+            timeShiftMinutes = timeShiftMinutes,
+            isActive = isActive,
+        )
+
+    companion object {
+        fun newSource(): EpgSourceEditorState =
+            EpgSourceEditorState(
+                sourceId = null,
+                name = "",
+                url = "",
+                timeShiftMinutes = 0,
+                isActive = true,
+            )
+
+        fun from(source: EpgSource): EpgSourceEditorState =
+            EpgSourceEditorState(
+                sourceId = source.id,
+                name = source.name,
+                url = "",
+                timeShiftMinutes = source.timeShiftMinutes,
+                isActive = source.isActive,
             )
     }
 }
