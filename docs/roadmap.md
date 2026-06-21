@@ -62,8 +62,8 @@ Still stubbed or missing:
 - DataStore has typed preferences support for local app preferences.
 - Security has a `SecureValueStore` contract and Android Keystore-backed implementation.
 - Provider configuration is persisted locally with credentials stored outside Room.
-- EPG, media, favorites, and playback repositories are still contracts or minimal implementations.
-- M3U, Xtream, and XMLTV modules expose contracts only.
+- EPG, media, favorites, and playback repositories are still contracts or minimal implementations; `:data:media` now includes a Room-backed M3U live import path and `:data:epg` now includes a Room-backed XMLTV import path.
+- M3U and XMLTV modules include parser implementations; Xtream still exposes contracts only.
 - Player has only a controller contract, with no Media3 playback implementation.
 - Worker contains only job-name constants.
 - Existing UI uses demo data and must later be connected to local persisted data.

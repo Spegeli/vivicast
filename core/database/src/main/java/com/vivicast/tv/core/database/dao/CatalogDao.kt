@@ -32,6 +32,12 @@ interface CatalogDao {
     )
     fun observeChannels(providerId: String, categoryId: String?): Flow<List<ChannelEntity>>
 
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND type = :type")
+    suspend fun getCategories(providerId: String, type: String): List<CategoryEntity>
+
+    @Query("SELECT * FROM channels WHERE providerId = :providerId")
+    suspend fun getChannels(providerId: String): List<ChannelEntity>
+
     @Query(
         """
         SELECT * FROM movies
@@ -83,8 +89,14 @@ interface CatalogDao {
     @Query("DELETE FROM categories WHERE providerId = :providerId")
     suspend fun deleteCategoriesForProvider(providerId: String)
 
+    @Query("DELETE FROM categories WHERE providerId = :providerId AND type = :type AND id IN (:categoryIds)")
+    suspend fun deleteCategories(providerId: String, type: String, categoryIds: List<String>)
+
     @Query("DELETE FROM channels WHERE providerId = :providerId")
     suspend fun deleteChannelsForProvider(providerId: String)
+
+    @Query("DELETE FROM channels WHERE providerId = :providerId AND id IN (:channelIds)")
+    suspend fun deleteChannels(providerId: String, channelIds: List<String>)
 
     @Query("DELETE FROM movies WHERE providerId = :providerId")
     suspend fun deleteMoviesForProvider(providerId: String)
@@ -108,4 +120,3 @@ interface CatalogDao {
         deleteCategoriesForProvider(providerId)
     }
 }
-

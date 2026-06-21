@@ -14,6 +14,12 @@ interface EpgDao {
     @Query("SELECT * FROM epg_sources ORDER BY name COLLATE NOCASE")
     fun observeEpgSources(): Flow<List<EpgSourceEntity>>
 
+    @Query("SELECT * FROM epg_sources ORDER BY name COLLATE NOCASE")
+    suspend fun getEpgSources(): List<EpgSourceEntity>
+
+    @Query("SELECT * FROM epg_sources WHERE id = :sourceId")
+    suspend fun getEpgSource(sourceId: String): EpgSourceEntity?
+
     @Query(
         """
         SELECT * FROM provider_epg_sources
@@ -22,6 +28,15 @@ interface EpgDao {
         """,
     )
     fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSourceEntity>>
+
+    @Query(
+        """
+        SELECT * FROM provider_epg_sources
+        WHERE providerId = :providerId
+        ORDER BY priority
+        """,
+    )
+    suspend fun getProviderEpgSources(providerId: String): List<ProviderEpgSourceEntity>
 
     @Query(
         """
@@ -49,6 +64,14 @@ interface EpgDao {
     )
     fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMappingEntity>>
 
+    @Query(
+        """
+        SELECT * FROM epg_channel_mappings
+        WHERE providerId = :providerId AND epgSourceId = :epgSourceId
+        """,
+    )
+    suspend fun getMappingsForProviderAndSource(providerId: String, epgSourceId: String): List<EpgChannelMappingEntity>
+
     @Upsert
     suspend fun upsertEpgSources(sources: List<EpgSourceEntity>)
 
@@ -67,9 +90,18 @@ interface EpgDao {
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId")
     suspend fun deleteMappingsForProvider(providerId: String)
 
+    @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND channelId IN (:channelIds)")
+    suspend fun deleteMappingsForChannels(providerId: String, channelIds: List<String>)
+
     @Query("DELETE FROM epg_programs WHERE epgSourceId = :epgSourceId")
     suspend fun deleteProgramsForSource(epgSourceId: String)
 
+    @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND epgSourceId = :epgSourceId")
+    suspend fun deleteProgramsForProviderAndSource(providerId: String, epgSourceId: String)
+
     @Query("DELETE FROM epg_programs WHERE providerId = :providerId")
     suspend fun deleteProgramsForProvider(providerId: String)
+
+    @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND channelId IN (:channelIds)")
+    suspend fun deleteProgramsForChannels(providerId: String, channelIds: List<String>)
 }

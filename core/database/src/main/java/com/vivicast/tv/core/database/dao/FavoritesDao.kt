@@ -36,5 +36,7 @@ interface FavoritesDao {
 
     @Query("DELETE FROM favorites WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId = :mediaId")
     suspend fun deleteFavoriteByMedia(providerId: String, mediaType: String, mediaId: String)
-}
 
+    @Query("DELETE FROM favorites WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId IN (:mediaIds)")
+    suspend fun deleteFavoritesByMediaIds(providerId: String, mediaType: String, mediaIds: List<String>)
+}

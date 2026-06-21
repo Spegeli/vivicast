@@ -47,5 +47,10 @@ interface PlaybackDao {
 
     @Query("DELETE FROM channel_history WHERE providerId = :providerId")
     suspend fun deleteHistoryForProvider(providerId: String)
-}
 
+    @Query("DELETE FROM playback_progress WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId IN (:mediaIds)")
+    suspend fun deleteProgressForMediaIds(providerId: String, mediaType: String, mediaIds: List<String>)
+
+    @Query("DELETE FROM channel_history WHERE providerId = :providerId AND channelId IN (:channelIds)")
+    suspend fun deleteHistoryForChannels(providerId: String, channelIds: List<String>)
+}
