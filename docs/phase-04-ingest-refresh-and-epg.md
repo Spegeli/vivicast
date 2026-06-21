@@ -96,6 +96,12 @@ Implemented and validated:
   - provider-scoped programme replacement for shared EPG sources
   - source time shift applied during import
   - catch-up availability derived from local channel capability
+- Refresh orchestration foundation in `:worker`:
+  - ADR-003 order for playlist, EPG, mapping, logo, and cache steps
+  - shared EPG source de-duplication per refresh cycle
+  - failure continuation so old usable data is not cleared by orchestration failures
+  - diagnostic events with URL, username, password, token, auth, and key redaction
+  - worker job names and input keys for later WorkManager wrappers
 
 Validated with:
 
@@ -105,14 +111,14 @@ Validated with:
 - `.\gradlew.bat :iptv:xtream:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest`
+- `.\gradlew.bat :worker:testDebugUnitTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - XMLTV import orchestration from encrypted EPG source URLs.
-- WorkManager playlist, EPG, logo, and cache workers.
-- Global refresh scheduler order from ADR-003.
-- Diagnostics events with credential and URL redaction.
+- Concrete WorkManager playlist, EPG, logo, and cache worker wrappers.
+- Network-backed refresh execution wired to secure provider and EPG source credentials.
 - Real public M3U/XMLTV smoke checks through refresh orchestration.
 
 ## Definition of Done

@@ -20,4 +20,7 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.kotlinx.coroutines.core)
+
+    testImplementation(libs.junit)
 }

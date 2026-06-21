@@ -65,7 +65,7 @@ Still stubbed or missing:
 - EPG, media, favorites, and playback repositories are still contracts or minimal implementations; `:data:media` now includes Room-backed M3U live and Xtream catalog import paths, and `:data:epg` now includes a Room-backed XMLTV import path.
 - M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser.
 - Player has only a controller contract, with no Media3 playback implementation.
-- Worker contains only job-name constants.
+- Worker contains job-name constants plus a testable refresh orchestrator and diagnostics redaction foundation; concrete WorkManager wrappers are still missing.
 - Existing UI uses demo data and must later be connected to local persisted data.
 
 ## Phase Overview
