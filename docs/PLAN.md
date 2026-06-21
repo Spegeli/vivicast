@@ -41,11 +41,12 @@ Done:
   - Room-backed Xtream catalog import for live channels, VOD, series, seasons, and episodes with delta cleanup
   - Room-backed XMLTV EPG import with independent EPG source metadata, provider links, automatic mappings, time shift, and provider-scoped program replacement
   - refresh orchestration foundation in `:worker` with ADR-003 order, EPG source deduplication, failure continuation, and diagnostics redaction
+  - concrete WorkManager refresh worker wrappers and request scheduling foundation for global, playlist, EPG, logo, and cache jobs
 
 Still important:
 
 - Existing UI uses demo data.
-- Concrete WorkManager worker classes, network-backed refresh execution, and Media3 playback are not complete yet.
+- Network-backed refresh execution and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -75,7 +76,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with concrete WorkManager worker wrappers and encrypted-source refresh execution.
+1. Continue Phase 04 with encrypted-source network-backed refresh execution.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

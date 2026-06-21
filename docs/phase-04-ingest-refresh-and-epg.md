@@ -101,7 +101,12 @@ Implemented and validated:
   - shared EPG source de-duplication per refresh cycle
   - failure continuation so old usable data is not cleared by orchestration failures
   - diagnostic events with URL, username, password, token, auth, and key redaction
-  - worker job names and input keys for later WorkManager wrappers
+- Concrete WorkManager foundation in `:worker`:
+  - global, playlist, EPG, logo, and cache `CoroutineWorker` wrappers
+  - process-local runner registry for current manual DI strategy
+  - unique WorkManager names and input keys for provider and EPG source refreshes
+  - periodic background refresh enable/disable scheduling hook
+  - network constraints for remote refresh jobs and no network constraint for cache cleanup
 
 Validated with:
 
@@ -112,12 +117,12 @@ Validated with:
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest`
 - `.\gradlew.bat :worker:testDebugUnitTest`
+- `.\gradlew.bat :worker:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - XMLTV import orchestration from encrypted EPG source URLs.
-- Concrete WorkManager playlist, EPG, logo, and cache worker wrappers.
 - Network-backed refresh execution wired to secure provider and EPG source credentials.
 - Real public M3U/XMLTV smoke checks through refresh orchestration.
 
