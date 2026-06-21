@@ -1288,12 +1288,12 @@ private fun MaintenanceSettingsPanel(
 
         item {
             VivicastSettingsRow(
-                title = "Logo Cache neu aufbauen",
-                help = "Senderlogos werden über den bestehenden Logo-Refresh-Worker aktualisiert.",
+                title = "Medienbilder neu aufbauen",
+                help = "Senderlogos, Poster, Backdrops und Episodenbilder werden über den bestehenden Refresh-Worker aktualisiert.",
                 value = "Einplanen",
                 onClick = {
                     onRunLogoRefresh()
-                    message = "Logo Cache Neuaufbau wurde eingeplant."
+                    message = "Medienbild-Neuaufbau wurde eingeplant."
                 },
             )
         }

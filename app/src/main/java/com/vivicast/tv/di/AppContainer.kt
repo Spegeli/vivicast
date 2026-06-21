@@ -40,7 +40,7 @@ import com.vivicast.tv.worker.RefreshWorkScheduler
 import com.vivicast.tv.worker.RefreshWorkerRegistry
 import com.vivicast.tv.worker.RefreshWorkerRunner
 import com.vivicast.tv.worker.RoomEpgSourceReader
-import com.vivicast.tv.worker.RoomLogoRefreshSource
+import com.vivicast.tv.worker.RoomMediaImageRefreshSource
 import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -124,7 +124,7 @@ class AppContainer(
             epgImportRepository = epgImportRepository,
         )
         val logoRefresher = DefaultLogoRefresher(
-            logoRefreshSource = RoomLogoRefreshSource(database),
+            mediaImageRefreshSource = RoomMediaImageRefreshSource(database),
             mediaCacheStore = mediaCacheStore,
             binaryFetcher = binaryFetcher,
         )

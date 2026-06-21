@@ -110,11 +110,12 @@ Implemented and validated:
   - network constraints for remote refresh jobs and no network constraint for cache cleanup
 - Media cache foundation in `:core:cache`:
   - file-backed cache store for channel logos, movie posters, series posters, season images, and episode images
+  - dedicated cache directories for movie and series backdrops
   - source URLs are hashed for cache keys and are not stored as plaintext cache metadata
   - stats, clear, owner replacement, and least-recently-accessed size cleanup behavior
 - Logo/cache worker runtime:
-  - channel logo refresh now reads Room channel logo URLs and caches missing or changed logos
-  - per-logo download failures are isolated so one broken image does not fail the whole refresh
+  - media image refresh now reads Room image URLs for channel logos, movie posters/backdrops, series posters/backdrops, season images, and episode thumbnails
+  - per-image download failures are isolated so one broken image does not fail the whole refresh
   - cache cleanup uses the configured DataStore cache size limit
 - Network-backed refresh execution foundation:
   - runtime M3U playlist fetch, parse, and Room import from encrypted provider credentials
@@ -140,7 +141,7 @@ Implemented and validated:
 - Cache maintenance settings hooks:
   - Settings "Über die App" reads media cache stats from `MediaCacheStore`
   - cache size selection updates DataStore-backed cache preferences
-  - logo refresh and cache cleanup actions enqueue the existing WorkManager jobs
+  - media image refresh and cache cleanup actions enqueue the existing WorkManager jobs
   - local cache clear removes stored media cache files and reloads cache stats
   - settings section matching uses the existing settings-section order instead of a hard-coded localized label
 
@@ -167,6 +168,7 @@ Validated with:
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :worker:compileDebugKotlin`
 - `.\gradlew.bat :core:cache:testDebugUnitTest :worker:testDebugUnitTest :app:compileDebugKotlin assembleDebug`
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :app:installDebug`
+- `.\gradlew.bat :core:database:compileDebugKotlin :worker:compileDebugKotlin :worker:testDebugUnitTest :core:cache:testDebugUnitTest`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Android TV emulator D-Pad smoke test for Settings cache maintenance navigation, cache job actions, and focus visibility
@@ -183,7 +185,6 @@ Still open:
 
 - Full end-user manual mapping UI is still open; the repository and import behavior are ready for it.
 - Cached assets are not yet consumed by UI image loading; current Phase 04 work prepares local storage and worker maintenance only.
-- Poster, backdrop, season, and episode cache population is still pending beyond the generic cache store.
 
 ## Definition of Done
 

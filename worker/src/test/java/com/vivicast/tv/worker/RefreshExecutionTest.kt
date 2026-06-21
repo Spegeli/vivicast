@@ -139,21 +139,27 @@ class RefreshExecutionTest {
     }
 
     @Test
-    fun logoRefreshCachesMissingLogosAndSkipsUnchangedCachedLogos() = runBlocking {
+    fun logoRefreshCachesMissingMediaImagesAndSkipsUnchangedCachedImages() = runBlocking {
         val cacheStore = FakeMediaCacheStore(
             cached = setOf(MediaCacheKey(MediaCacheType.ChannelLogo, "channel-cached", "https://logos.example/cached.png")),
         )
         val fetcher = FakeBinaryFetcher(
             "https://logos.example/new.png" to byteArrayOf(1, 2, 3),
+            "https://posters.example/movie.png" to byteArrayOf(4, 5, 6),
+            "https://backdrops.example/movie.png" to byteArrayOf(7, 8, 9),
+            "https://episodes.example/episode.png" to byteArrayOf(10, 11, 12),
             "https://logos.example/broken.png" to null,
         )
         val refresher = DefaultLogoRefresher(
-            logoRefreshSource = object : LogoRefreshSource {
-                override suspend fun collectLogoTargets(): List<LogoRefreshTarget> =
+            mediaImageRefreshSource = object : MediaImageRefreshSource {
+                override suspend fun collectImageTargets(): List<MediaImageRefreshTarget> =
                     listOf(
-                        LogoRefreshTarget("channel-cached", "https://logos.example/cached.png"),
-                        LogoRefreshTarget("channel-new", "https://logos.example/new.png"),
-                        LogoRefreshTarget("channel-broken", "https://logos.example/broken.png"),
+                        MediaImageRefreshTarget(MediaCacheType.ChannelLogo, "channel-cached", "https://logos.example/cached.png"),
+                        MediaImageRefreshTarget(MediaCacheType.ChannelLogo, "channel-new", "https://logos.example/new.png"),
+                        MediaImageRefreshTarget(MediaCacheType.MoviePoster, "movie-1", "https://posters.example/movie.png"),
+                        MediaImageRefreshTarget(MediaCacheType.MovieBackdrop, "movie-1", "https://backdrops.example/movie.png"),
+                        MediaImageRefreshTarget(MediaCacheType.EpisodeImage, "episode-1", "https://episodes.example/episode.png"),
+                        MediaImageRefreshTarget(MediaCacheType.ChannelLogo, "channel-broken", "https://logos.example/broken.png"),
                     )
             },
             mediaCacheStore = cacheStore,
@@ -162,8 +168,25 @@ class RefreshExecutionTest {
 
         refresher.refreshLogos()
 
-        assertEquals(listOf("https://logos.example/new.png", "https://logos.example/broken.png"), fetcher.urls)
-        assertEquals(listOf("channel-new"), cacheStore.putKeys.map { it.ownerId })
+        assertEquals(
+            listOf(
+                "https://logos.example/new.png",
+                "https://posters.example/movie.png",
+                "https://backdrops.example/movie.png",
+                "https://episodes.example/episode.png",
+                "https://logos.example/broken.png",
+            ),
+            fetcher.urls,
+        )
+        assertEquals(
+            listOf(
+                MediaCacheType.ChannelLogo to "channel-new",
+                MediaCacheType.MoviePoster to "movie-1",
+                MediaCacheType.MovieBackdrop to "movie-1",
+                MediaCacheType.EpisodeImage to "episode-1",
+            ),
+            cacheStore.putKeys.map { it.type to it.ownerId },
+        )
     }
 
     @Test

@@ -283,43 +283,70 @@ class OkHttpBinaryFetcher(
 }
 
 class DefaultLogoRefresher(
-    private val logoRefreshSource: LogoRefreshSource,
+    private val mediaImageRefreshSource: MediaImageRefreshSource,
     private val mediaCacheStore: MediaCacheStore,
     private val binaryFetcher: BinaryFetcher,
 ) : LogoRefresher {
     override suspend fun refreshLogos() {
-        logoRefreshSource.collectLogoTargets().forEach { target ->
+        mediaImageRefreshSource.collectImageTargets().forEach { target ->
             val key = MediaCacheKey(
-                type = MediaCacheType.ChannelLogo,
+                type = target.type,
                 ownerId = target.ownerId,
-                sourceUrl = target.logoUrl,
+                sourceUrl = target.sourceUrl,
             )
             if (!mediaCacheStore.hasEntry(key)) {
                 runCatching {
-                    mediaCacheStore.put(key, binaryFetcher.fetch(target.logoUrl))
+                    mediaCacheStore.put(key, binaryFetcher.fetch(target.sourceUrl))
                 }
             }
         }
     }
 }
 
-interface LogoRefreshSource {
-    suspend fun collectLogoTargets(): List<LogoRefreshTarget>
+interface MediaImageRefreshSource {
+    suspend fun collectImageTargets(): List<MediaImageRefreshTarget>
 }
 
-data class LogoRefreshTarget(
+data class MediaImageRefreshTarget(
+    val type: MediaCacheType,
     val ownerId: String,
-    val logoUrl: String,
+    val sourceUrl: String,
 )
 
-class RoomLogoRefreshSource(
+class RoomMediaImageRefreshSource(
     private val database: VivicastDatabase,
-) : LogoRefreshSource {
-    override suspend fun collectLogoTargets(): List<LogoRefreshTarget> =
-        database.catalogDao().getChannelsWithLogoUrls().mapNotNull { channel ->
-            val logoUrl = channel.logoUrl?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            LogoRefreshTarget(ownerId = channel.id, logoUrl = logoUrl)
+) : MediaImageRefreshSource {
+    override suspend fun collectImageTargets(): List<MediaImageRefreshTarget> {
+        val catalogDao = database.catalogDao()
+        return buildList {
+            catalogDao.getChannelsWithLogoUrls().forEach { channel ->
+                addImageTarget(MediaCacheType.ChannelLogo, channel.id, channel.logoUrl)
+            }
+            catalogDao.getMoviesWithImageUrls().forEach { movie ->
+                addImageTarget(MediaCacheType.MoviePoster, movie.id, movie.posterUrl)
+                addImageTarget(MediaCacheType.MovieBackdrop, movie.id, movie.backdropUrl)
+            }
+            catalogDao.getSeriesWithImageUrls().forEach { series ->
+                addImageTarget(MediaCacheType.SeriesPoster, series.id, series.posterUrl)
+                addImageTarget(MediaCacheType.SeriesBackdrop, series.id, series.backdropUrl)
+            }
+            catalogDao.getSeasonsWithImageUrls().forEach { season ->
+                addImageTarget(MediaCacheType.SeasonImage, season.id, season.posterUrl)
+            }
+            catalogDao.getEpisodesWithImageUrls().forEach { episode ->
+                addImageTarget(MediaCacheType.EpisodeImage, episode.id, episode.thumbnailUrl)
+            }
         }
+    }
+
+    private fun MutableList<MediaImageRefreshTarget>.addImageTarget(
+        type: MediaCacheType,
+        ownerId: String,
+        sourceUrl: String?,
+    ) {
+        val normalizedUrl = sourceUrl?.trim()?.takeIf { it.isNotBlank() } ?: return
+        add(MediaImageRefreshTarget(type = type, ownerId = ownerId, sourceUrl = normalizedUrl))
+    }
 }
 
 class DefaultCacheCleaner(

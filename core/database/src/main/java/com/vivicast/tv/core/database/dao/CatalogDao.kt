@@ -47,6 +47,44 @@ interface CatalogDao {
     )
     suspend fun getChannelsWithLogoUrls(): List<ChannelEntity>
 
+    @Query(
+        """
+        SELECT * FROM movies
+        WHERE (posterUrl IS NOT NULL AND TRIM(posterUrl) != '')
+           OR (backdropUrl IS NOT NULL AND TRIM(backdropUrl) != '')
+        ORDER BY providerId, name COLLATE NOCASE
+        """,
+    )
+    suspend fun getMoviesWithImageUrls(): List<MovieEntity>
+
+    @Query(
+        """
+        SELECT * FROM series
+        WHERE (posterUrl IS NOT NULL AND TRIM(posterUrl) != '')
+           OR (backdropUrl IS NOT NULL AND TRIM(backdropUrl) != '')
+        ORDER BY providerId, name COLLATE NOCASE
+        """,
+    )
+    suspend fun getSeriesWithImageUrls(): List<SeriesEntity>
+
+    @Query(
+        """
+        SELECT * FROM seasons
+        WHERE posterUrl IS NOT NULL AND TRIM(posterUrl) != ''
+        ORDER BY providerId, seriesId, seasonNumber
+        """,
+    )
+    suspend fun getSeasonsWithImageUrls(): List<SeasonEntity>
+
+    @Query(
+        """
+        SELECT * FROM episodes
+        WHERE thumbnailUrl IS NOT NULL AND TRIM(thumbnailUrl) != ''
+        ORDER BY providerId, seriesId, seasonNumber, episodeNumber
+        """,
+    )
+    suspend fun getEpisodesWithImageUrls(): List<EpisodeEntity>
+
     @Query("SELECT * FROM movies WHERE providerId = :providerId")
     suspend fun getMovies(providerId: String): List<MovieEntity>
 

@@ -32,7 +32,9 @@ data class MediaCacheKey(
 enum class MediaCacheType(val directoryName: String) {
     ChannelLogo("channel-logos"),
     MoviePoster("movie-posters"),
+    MovieBackdrop("movie-backdrops"),
     SeriesPoster("series-posters"),
+    SeriesBackdrop("series-backdrops"),
     SeasonImage("season-images"),
     EpisodeImage("episode-images"),
 }
