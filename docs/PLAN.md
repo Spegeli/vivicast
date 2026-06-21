@@ -48,6 +48,8 @@ Done:
   - Settings EPG UI exposes a basic provider-to-EPG source priority assignment action for saved EPG sources
   - EPG provider priorities can be reordered and unlinked with compacted priorities
   - Android TV emulator D-Pad smoke check passed for the Settings EPG master-detail view
+  - Settings Allgemein refresh controls are wired to DataStore and WorkManager scheduling
+  - Android TV emulator D-Pad smoke check passed for Settings Allgemein refresh focus and manual refresh enqueue
 
 Still important:
 
@@ -82,7 +84,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with refresh settings hooks and manual EPG channel mapping preparation.
+1. Continue Phase 04 with manual EPG channel mapping preparation.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

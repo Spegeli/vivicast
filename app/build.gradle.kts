@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.tv.material)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.okhttp)
 
     debugImplementation(libs.androidx.compose.ui.tooling)

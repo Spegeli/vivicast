@@ -1,6 +1,7 @@
 package com.vivicast.tv.di
 
 import android.content.Context
+import androidx.work.WorkManager
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.VivicastDatabaseFactory
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
@@ -32,23 +33,27 @@ import com.vivicast.tv.worker.NoOpEpgMappingApplier
 import com.vivicast.tv.worker.NoOpLogoRefresher
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
+import com.vivicast.tv.worker.RefreshWorkScheduler
 import com.vivicast.tv.worker.RefreshWorkerRegistry
 import com.vivicast.tv.worker.RefreshWorkerRunner
 import com.vivicast.tv.worker.RoomEpgSourceReader
+import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
 
 class AppContainer(
     context: Context,
 ) {
+    private val appContext = context.applicationContext
+
     val database: VivicastDatabase by lazy {
-        VivicastDatabaseFactory.create(context)
+        VivicastDatabaseFactory.create(appContext)
     }
 
     val userPreferencesStore: UserPreferencesStore by lazy {
-        DataStoreUserPreferencesStore(context)
+        DataStoreUserPreferencesStore(appContext)
     }
 
     val secureValueStore: SecureValueStore by lazy {
-        AndroidKeystoreSecureValueStore(context)
+        AndroidKeystoreSecureValueStore(appContext)
     }
 
     val providerRepository: ProviderRepository by lazy {
@@ -79,6 +84,10 @@ class AppContainer(
 
     val refreshDiagnostics: RefreshDiagnostics by lazy {
         InMemoryRefreshDiagnostics()
+    }
+
+    val refreshWorkScheduler: RefreshWorkScheduler by lazy {
+        WorkManagerRefreshWorkScheduler(WorkManager.getInstance(appContext))
     }
 
     val refreshWorkerRunner: RefreshWorkerRunner by lazy {

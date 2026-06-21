@@ -122,6 +122,12 @@ Implemented and validated:
   - Settings exposes provider EPG priority reorder and unlink actions for saved EPG sources
   - provider EPG priority edits are transactional and compact remaining priorities after removal
   - Settings EPG view preserves Android TV master-detail D-Pad navigation by opening text-field editors only after explicit add/select actions
+- Refresh settings hooks:
+  - `AppContainer` exposes a WorkManager-backed `RefreshWorkScheduler`
+  - Settings Allgemein reads `backgroundRefreshEnabled`, `launchOnBoot`, and `rememberSorting` from DataStore-backed preferences
+  - background refresh enablement updates DataStore and schedules/cancels the periodic global refresh worker
+  - manual "Jetzt aktualisieren" action enqueues the existing global refresh worker path
+  - Settings now opens on Allgemein to match the PRD/wireframe settings entry point
 
 Validated with:
 
@@ -139,9 +145,13 @@ Validated with:
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest :worker:testDebugUnitTest assembleDebug`
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :data:epg:compileDebugKotlin`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest assembleDebug`
+- `.\gradlew.bat :app:compileDebugKotlin :feature:settings:compileDebugKotlin :worker:testDebugUnitTest`
+- `.\gradlew.bat :app:installDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
+- Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Screenshot: `docs/phase-04-settings-epg-smoke.png`
 - Screenshot: `docs/phase-04-epg-priority-smoke.png`
+- Screenshot: `docs/phase-04-settings-refresh-smoke.png`
 - Temporary non-committed public refresh smoke JUnit run:
   - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
   - XMLTV: `https://iptv-epg.org/files/epg-de.xml`

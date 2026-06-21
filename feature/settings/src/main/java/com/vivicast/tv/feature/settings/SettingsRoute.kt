@@ -32,6 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,12 +74,22 @@ import com.vivicast.tv.domain.model.EpgSource
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
+data class GeneralSettingsState(
+    val launchOnBoot: Boolean = false,
+    val backgroundRefreshEnabled: Boolean = true,
+    val rememberSorting: Boolean = true,
+)
+
 @Composable
 fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
+    generalSettingsState: GeneralSettingsState,
+    onBackgroundRefreshChanged: (Boolean) -> Unit,
+    onRememberSortingChanged: (Boolean) -> Unit,
+    onRunGlobalRefresh: () -> Unit,
 ) {
-    var selectedSection by remember { mutableStateOf("Wiedergabelisten") }
+    var selectedSection by remember { mutableStateOf("Allgemein") }
     var showConfirm by remember { mutableStateOf(false) }
     val settingsSections = remember { DemoCatalog.settingsSections }
 
@@ -122,6 +137,12 @@ fun SettingsRoute(
                 Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                     SectionTitle(selectedSection)
                     when (selectedSection) {
+                        "Allgemein" -> GeneralSettingsPanel(
+                            state = generalSettingsState,
+                            onBackgroundRefreshChanged = onBackgroundRefreshChanged,
+                            onRememberSortingChanged = onRememberSortingChanged,
+                            onRunGlobalRefresh = onRunGlobalRefresh,
+                        )
                         "Wiedergabelisten" -> ProviderSettingsPanel(providerRepository = providerRepository)
                         "EPG" -> EpgSettingsPanel(
                             providerRepository = providerRepository,
@@ -157,6 +178,100 @@ fun SettingsRoute(
         }
     }
 }
+
+@Composable
+private fun GeneralSettingsPanel(
+    state: GeneralSettingsState,
+    onBackgroundRefreshChanged: (Boolean) -> Unit,
+    onRememberSortingChanged: (Boolean) -> Unit,
+    onRunGlobalRefresh: () -> Unit,
+) {
+    var message by remember { mutableStateOf<String?>(null) }
+    val toggleBackgroundRefresh = {
+        val enabled = !state.backgroundRefreshEnabled
+        onBackgroundRefreshChanged(enabled)
+        message = if (enabled) {
+            "Hintergrundaktualisierung aktiviert."
+        } else {
+            "Hintergrundaktualisierung deaktiviert."
+        }
+    }
+    val showBootNotice = {
+        message = "Autostart wird erst mit Boot-Receiver-Unterstuetzung aktiv."
+    }
+    val toggleRememberSorting = {
+        onRememberSortingChanged(!state.rememberSorting)
+        message = "Sortierverhalten aktualisiert."
+    }
+    val runGlobalRefresh = {
+        onRunGlobalRefresh()
+        message = "Globale Aktualisierung wurde eingeplant."
+    }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            VivicastSettingsRow(
+                title = "Hintergrundaktualisierung",
+                help = "Playlists und EPG im Hintergrund aktualisieren.",
+                value = if (state.backgroundRefreshEnabled) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(toggleBackgroundRefresh),
+                onClick = toggleBackgroundRefresh,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "App beim TV-Start starten",
+                help = "System-Startintegration ist vorbereitet, aber noch nicht aktiviert.",
+                value = if (state.launchOnBoot) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(showBootNotice),
+                onClick = showBootNotice,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Sortierung merken",
+                help = "Lokale Listenreihenfolge pro Ansicht beibehalten.",
+                value = if (state.rememberSorting) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(toggleRememberSorting),
+                onClick = toggleRememberSorting,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Jetzt aktualisieren",
+                help = "Playlists, EPG, Logos und Cache nach Refresh-Plan einplanen.",
+                value = "Starten",
+                modifier = Modifier.onTvCenterClick(runGlobalRefresh),
+                onClick = runGlobalRefresh,
+            )
+        }
+
+        if (message != null) {
+            item {
+                InfoPanel(
+                    title = "Hinweis",
+                    body = requireNotNull(message),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+private fun Modifier.onTvCenterClick(action: () -> Unit): Modifier =
+    onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        when (event.key) {
+            Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                action()
+                true
+            }
+            else -> false
+        }
+    }
 
 @Composable
 private fun EpgSettingsPanel(
