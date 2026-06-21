@@ -61,9 +61,11 @@ import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.ProviderEpgSource
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.EpgSource
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 @Composable
@@ -120,7 +122,10 @@ fun SettingsRoute(
                     SectionTitle(selectedSection)
                     when (selectedSection) {
                         "Wiedergabelisten" -> ProviderSettingsPanel(providerRepository = providerRepository)
-                        "EPG" -> EpgSettingsPanel(epgSourceRepository = epgSourceRepository)
+                        "EPG" -> EpgSettingsPanel(
+                            providerRepository = providerRepository,
+                            epgSourceRepository = epgSourceRepository,
+                        )
                         "Optik" -> SettingsOptions(showConfirm = { showConfirm = true })
                         else -> InfoPanel(
                             title = selectedSection,
@@ -153,14 +158,21 @@ fun SettingsRoute(
 }
 
 @Composable
-private fun EpgSettingsPanel(epgSourceRepository: EpgSourceRepository) {
+private fun EpgSettingsPanel(
+    providerRepository: ProviderRepository,
+    epgSourceRepository: EpgSourceRepository,
+) {
     val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
+    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
+    var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(EpgSourceEditorState.newSource()) }
     var showEditor by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
+    val providerLinks by (selectedProviderId?.let { epgSourceRepository.observeProviderEpgSources(it) } ?: flowOf(emptyList()))
+        .collectAsState(initial = emptyList())
 
     LaunchedEffect(sources) {
         val selectedSource = selectedSourceId?.let { id -> sources.firstOrNull { it.id == id } }
@@ -168,6 +180,12 @@ private fun EpgSettingsPanel(epgSourceRepository: EpgSourceRepository) {
             selectedSourceId = null
             editor = EpgSourceEditorState.newSource()
             showEditor = false
+        }
+    }
+
+    LaunchedEffect(providers) {
+        if (selectedProviderId != null && providers.none { it.id == selectedProviderId }) {
+            selectedProviderId = null
         }
     }
 
@@ -207,8 +225,12 @@ private fun EpgSettingsPanel(epgSourceRepository: EpgSourceRepository) {
             if (showEditor) {
                 EpgSourceEditor(
                     editor = editor,
+                    providers = providers,
+                    selectedProviderId = selectedProviderId,
+                    providerLinks = providerLinks,
                     message = message,
                     onEditorChange = { editor = it },
+                    onSelectProvider = { selectedProviderId = it },
                     onSave = {
                         val validationMessage = editor.validationMessage()
                         if (validationMessage != null) {
@@ -230,6 +252,15 @@ private fun EpgSettingsPanel(epgSourceRepository: EpgSourceRepository) {
                     },
                     onDelete = {
                         pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
+                    },
+                    onLinkProvider = { providerId, sourceId, priority ->
+                        scope.launch {
+                            runCatching { epgSourceRepository.linkSourceToProvider(providerId, sourceId, priority) }
+                                .onSuccess { message = "EPG Quelle wurde dem Provider zugeordnet." }
+                                .onFailure { error ->
+                                    message = "Zuordnung fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
+                                }
+                        }
                     },
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
                 )
@@ -323,10 +354,15 @@ private fun EpgSourceList(
 @Composable
 private fun EpgSourceEditor(
     editor: EpgSourceEditorState,
+    providers: List<Provider>,
+    selectedProviderId: String?,
+    providerLinks: List<ProviderEpgSource>,
     message: String?,
     onEditorChange: (EpgSourceEditorState) -> Unit,
+    onSelectProvider: (String) -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
+    onLinkProvider: (providerId: String, sourceId: String, priority: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -399,6 +435,76 @@ private fun EpgSourceEditor(
                 ActionPill(label = "Speichern", modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
                 if (editor.isEditing) {
                     ActionPill(label = "Loeschen", modifier = Modifier.width(140.dp), onClick = onDelete)
+                }
+            }
+        }
+
+        if (editor.isEditing) {
+            item {
+                InfoPanel(
+                    title = "Provider-Zuordnung",
+                    body = "Priorität ist pro Provider konfigurierbar. Manuelle Kanalzuordnung bleibt ein separater Flow.",
+                    badge = "EPG",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            if (providers.isEmpty()) {
+                item {
+                    InfoPanel(
+                        title = "Keine Provider",
+                        body = "Lege zuerst eine Wiedergabeliste an, um EPG Quellen zuzuordnen.",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            } else {
+                items(providers, key = { it.id }) { provider ->
+                    FocusPanel(
+                        selected = provider.id == selectedProviderId,
+                        onClick = { onSelectProvider(provider.id) },
+                        onFocused = { onSelectProvider(provider.id) },
+                        modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
+                        contentPadding = VivicastSpacing.Space4,
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                                BasicText(provider.name, style = VivicastTypography.LabelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                BodyText(provider.status.label, maxLines = 1)
+                            }
+                            val link = if (provider.id == selectedProviderId) {
+                                providerLinks.firstOrNull { it.epgSourceId == editor.sourceId }
+                            } else {
+                                null
+                            }
+                            StatusBadge(
+                                label = link?.let { "Priorität ${it.priority}" } ?: "Nicht zugeordnet",
+                                tone = if (link != null) VivicastColors.Success else VivicastColors.SurfaceHigh,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    val providerId = selectedProviderId
+                    val sourceId = editor.sourceId
+                    val existingLink = providerLinks.firstOrNull { it.epgSourceId == sourceId }
+                    val nextPriority = existingLink?.priority ?: (providerLinks.maxOfOrNull { it.priority } ?: 0) + 1
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                        ActionPill(
+                            label = existingLink?.let { "Priorität ${it.priority} gesetzt" } ?: "Als Priorität $nextPriority verwenden",
+                            modifier = Modifier.width(300.dp),
+                            selected = existingLink != null,
+                            onClick = {
+                                if (providerId != null && sourceId != null) {
+                                    onLinkProvider(providerId, sourceId, nextPriority)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

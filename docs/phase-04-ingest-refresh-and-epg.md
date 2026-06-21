@@ -118,6 +118,7 @@ Implemented and validated:
   - `SecureEpgSourceRepository` stores EPG source URLs through `SecureValueStore` and keeps only URL keys in Room
   - source save/delete operations clean linked provider priorities, mappings, and programs for removed sources
   - Settings exposes local EPG source create/edit/delete controls with active state and time shift controls
+  - Settings exposes a basic saved-source to provider priority assignment action using the existing repository link hook
   - Settings EPG view preserves Android TV master-detail D-Pad navigation by opening text-field editors only after explicit add/select actions
 
 Validated with:
@@ -143,7 +144,7 @@ Validated with:
 
 Still open:
 
-- Provider-to-EPG priority assignment UI and full manual mapping flow are still hooks, not complete end-user flows.
+- EPG priority reorder/unlink UI and full manual mapping flow are still hooks, not complete end-user flows.
 - Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
 ## Definition of Done
