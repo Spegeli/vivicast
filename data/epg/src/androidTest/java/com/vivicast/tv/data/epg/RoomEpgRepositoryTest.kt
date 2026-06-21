@@ -112,6 +112,107 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun manualMappingOverridesAutomaticMappingOnImport() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(
+                sourceId = "epg-source-1",
+                name = "Public EPG",
+                urlKey = "secure:epg-source-1",
+                timeShiftMinutes = 0,
+                isActive = true,
+            ),
+        )
+
+        val mapping = repository.setManualChannelMapping(
+            ManualEpgChannelMappingRequest(
+                providerId = PROVIDER_ID,
+                channelId = "channel-ard",
+                epgSourceId = "epg-source-1",
+                epgChannelId = "zdf.xml",
+            ),
+        )
+        val result = repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+
+        assertTrue(mapping.isManual)
+        assertEquals("zdf.xml", mapping.epgChannelId)
+        assertEquals(1, result.programsImported)
+        assertEquals(0, result.mappingsAdded)
+
+        val programs = repository.observeProgramsForChannel(
+            providerId = PROVIDER_ID,
+            channelId = "channel-ard",
+            fromMillis = 0L,
+            toMillis = Long.MAX_VALUE,
+        ).first()
+        assertEquals(listOf("heute journal"), programs.map { it.title })
+        assertEquals(listOf(true), repository.observeMappingsForChannel(PROVIDER_ID, "channel-ard").first().map { it.isManual })
+    }
+
+    @Test
+    fun clearedManualMappingAllowsAutomaticMappingOnNextImport() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(
+                sourceId = "epg-source-1",
+                name = "Public EPG",
+                urlKey = "secure:epg-source-1",
+                timeShiftMinutes = 0,
+                isActive = true,
+            ),
+        )
+        repository.setManualChannelMapping(
+            ManualEpgChannelMappingRequest(
+                providerId = PROVIDER_ID,
+                channelId = "channel-ard",
+                epgSourceId = "epg-source-1",
+                epgChannelId = "zdf.xml",
+            ),
+        )
+        repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+
+        repository.clearManualChannelMapping(PROVIDER_ID, "channel-ard", "epg-source-1")
+        val result = repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+
+        assertEquals(1, result.programsImported)
+        assertEquals(1, result.mappingsAdded)
+        val programs = repository.observeProgramsForChannel(
+            providerId = PROVIDER_ID,
+            channelId = "channel-ard",
+            fromMillis = 0L,
+            toMillis = Long.MAX_VALUE,
+        ).first()
+        assertEquals(listOf("Tagesschau"), programs.map { it.title })
+        assertEquals(listOf(false), repository.observeMappingsForChannel(PROVIDER_ID, "channel-ard").first().map { it.isManual })
+    }
+
+    @Test
+    fun clearingAutomaticMappingDoesNotRemovePrograms() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(
+                sourceId = "epg-source-1",
+                name = "Public EPG",
+                urlKey = "secure:epg-source-1",
+                timeShiftMinutes = 0,
+                isActive = true,
+            ),
+        )
+        repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+
+        repository.clearManualChannelMapping(PROVIDER_ID, "channel-ard", "epg-source-1")
+
+        val programs = repository.observeProgramsForChannel(
+            providerId = PROVIDER_ID,
+            channelId = "channel-ard",
+            fromMillis = 0L,
+            toMillis = Long.MAX_VALUE,
+        ).first()
+        assertEquals(listOf("Tagesschau"), programs.map { it.title })
+        assertEquals(listOf(false), repository.observeMappingsForChannel(PROVIDER_ID, "channel-ard").first().map { it.isManual })
+    }
+
+    @Test
     fun secureEpgSourceRepositoryStoresUrlOutsideRoomAndDeletesSideEffects() = runBlocking {
         val sourceRepository = SecureEpgSourceRepository(
             database = database,

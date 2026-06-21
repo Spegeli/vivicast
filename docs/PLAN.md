@@ -47,6 +47,7 @@ Done:
   - secure EPG source repository and Settings EPG source management UI are wired through `AppContainer`
   - Settings EPG UI exposes a basic provider-to-EPG source priority assignment action for saved EPG sources
   - EPG provider priorities can be reordered and unlinked with compacted priorities
+  - manual EPG channel mapping repository APIs can set, clear, and reapply mappings through the XMLTV import path
   - Android TV emulator D-Pad smoke check passed for the Settings EPG master-detail view
   - Settings Allgemein refresh controls are wired to DataStore and WorkManager scheduling
   - Android TV emulator D-Pad smoke check passed for Settings Allgemein refresh focus and manual refresh enqueue
@@ -54,7 +55,7 @@ Done:
 Still important:
 
 - Existing UI uses demo data.
-- Full manual EPG channel mapping, real logo/cache jobs, and Media3 playback are not complete yet.
+- Full end-user manual EPG channel mapping UI, real logo/cache jobs, and Media3 playback are not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -84,7 +85,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with manual EPG channel mapping preparation.
+1. Continue Phase 04 with logo refresh and cache cleanup foundations.
 2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

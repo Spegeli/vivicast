@@ -81,6 +81,20 @@ interface EpgDao {
     )
     suspend fun getMappingsForProviderAndSource(providerId: String, epgSourceId: String): List<EpgChannelMappingEntity>
 
+    @Query(
+        """
+        SELECT * FROM epg_channel_mappings
+        WHERE providerId = :providerId
+            AND channelId = :channelId
+            AND epgSourceId = :epgSourceId
+        """,
+    )
+    suspend fun getMappingForChannelSource(
+        providerId: String,
+        channelId: String,
+        epgSourceId: String,
+    ): EpgChannelMappingEntity?
+
     @Upsert
     suspend fun upsertEpgSources(sources: List<EpgSourceEntity>)
 
@@ -111,6 +125,21 @@ interface EpgDao {
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteMappingsForChannels(providerId: String, channelIds: List<String>)
 
+    @Query(
+        """
+        DELETE FROM epg_channel_mappings
+        WHERE providerId = :providerId
+            AND channelId = :channelId
+            AND epgSourceId = :epgSourceId
+            AND isManual = 1
+        """,
+    )
+    suspend fun deleteManualMappingForChannelSource(
+        providerId: String,
+        channelId: String,
+        epgSourceId: String,
+    )
+
     @Query("DELETE FROM epg_programs WHERE epgSourceId = :epgSourceId")
     suspend fun deleteProgramsForSource(epgSourceId: String)
 
@@ -122,6 +151,20 @@ interface EpgDao {
 
     @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteProgramsForChannels(providerId: String, channelIds: List<String>)
+
+    @Query(
+        """
+        DELETE FROM epg_programs
+        WHERE providerId = :providerId
+            AND channelId = :channelId
+            AND epgSourceId = :epgSourceId
+        """,
+    )
+    suspend fun deleteProgramsForChannelAndSource(
+        providerId: String,
+        channelId: String,
+        epgSourceId: String,
+    )
 
     @Query("DELETE FROM epg_sources WHERE id = :epgSourceId")
     suspend fun deleteEpgSource(epgSourceId: String)

@@ -45,6 +45,73 @@ class RoomEpgRepository(
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
         epgDao.observeMappingsForChannel(providerId, channelId).map { mappings -> mappings.map { it.toDomain() } }
 
+    override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping {
+        val providerId = request.providerId.trim()
+        val channelId = request.channelId.trim()
+        val epgSourceId = request.epgSourceId.trim()
+        val epgChannelId = request.epgChannelId.trim()
+        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
+        require(channelId.isNotBlank()) { "Channel ID must not be blank." }
+        require(epgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
+        require(epgChannelId.isNotBlank()) { "EPG channel ID must not be blank." }
+
+        val now = clock()
+        val mapping = database.withTransaction {
+            require(epgDao.getEpgSource(epgSourceId) != null) { "EPG source not found: $epgSourceId" }
+            require(catalogDao.getChannels(providerId).any { it.id == channelId }) {
+                "Channel not found for provider: $channelId"
+            }
+
+            val existing = epgDao.getMappingForChannelSource(
+                providerId = providerId,
+                channelId = channelId,
+                epgSourceId = epgSourceId,
+            )
+            val manualMapping = EpgChannelMappingEntity(
+                id = existing?.id ?: epgMappingId(providerId, epgSourceId, channelId),
+                providerId = providerId,
+                channelId = channelId,
+                epgSourceId = epgSourceId,
+                epgChannelId = epgChannelId,
+                isManual = true,
+                createdAt = existing?.createdAt ?: now,
+            )
+            epgDao.upsertMappings(listOf(manualMapping))
+            epgDao.deleteProgramsForChannelAndSource(providerId, channelId, epgSourceId)
+            manualMapping
+        }
+        return mapping.toDomain()
+    }
+
+    override suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String) {
+        val normalizedProviderId = providerId.trim()
+        val normalizedChannelId = channelId.trim()
+        val normalizedEpgSourceId = epgSourceId.trim()
+        require(normalizedProviderId.isNotBlank()) { "Provider ID must not be blank." }
+        require(normalizedChannelId.isNotBlank()) { "Channel ID must not be blank." }
+        require(normalizedEpgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
+
+        database.withTransaction {
+            val existing = epgDao.getMappingForChannelSource(
+                providerId = normalizedProviderId,
+                channelId = normalizedChannelId,
+                epgSourceId = normalizedEpgSourceId,
+            )
+            if (existing?.isManual != true) return@withTransaction
+
+            epgDao.deleteManualMappingForChannelSource(
+                providerId = normalizedProviderId,
+                channelId = normalizedChannelId,
+                epgSourceId = normalizedEpgSourceId,
+            )
+            epgDao.deleteProgramsForChannelAndSource(
+                providerId = normalizedProviderId,
+                channelId = normalizedChannelId,
+                epgSourceId = normalizedEpgSourceId,
+            )
+        }
+    }
+
     override suspend fun saveEpgSource(request: EpgSourceSaveRequest): EpgSource {
         val name = request.name.trim()
         val urlKey = request.urlKey.trim()

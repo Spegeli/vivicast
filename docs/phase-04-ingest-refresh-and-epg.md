@@ -92,7 +92,8 @@ Implemented and validated:
   - EPG source metadata stored independently with URL key only
   - provider/source priority links
   - automatic channel mapping by XMLTV ID or display name
-  - manual mapping preservation hooks
+  - manual mapping repository APIs for setting and clearing per-provider channel mappings
+  - manual mappings override automatic matches and can be cleared so the next import recreates automatic mappings
   - provider-scoped programme replacement for shared EPG sources
   - source time shift applied during import
   - catch-up availability derived from local channel capability
@@ -147,6 +148,8 @@ Validated with:
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest assembleDebug`
 - `.\gradlew.bat :app:compileDebugKotlin :feature:settings:compileDebugKotlin :worker:testDebugUnitTest`
 - `.\gradlew.bat :app:installDebug`
+- `.\gradlew.bat :data:epg:compileDebugKotlin :data:epg:connectedDebugAndroidTest`
+- `.\gradlew.bat :app:compileDebugKotlin :feature:settings:compileDebugKotlin assembleDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Screenshot: `docs/phase-04-settings-epg-smoke.png`
@@ -159,7 +162,7 @@ Validated with:
 
 Still open:
 
-- Full manual mapping flow is still a hook, not a complete end-user flow.
+- Full end-user manual mapping UI is still open; the repository and import behavior are ready for it.
 - Logo refresh and cache cleanup are worker-runnable no-ops until the media cache implementation exists.
 
 ## Definition of Done
