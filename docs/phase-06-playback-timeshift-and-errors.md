@@ -79,11 +79,13 @@ Implemented and validated:
 - Fullscreen Player CH+/CH- now zaps through the current Live-TV channel list with wrap-around and starts only the selected next/previous channel through the shared controller path.
 - Media3 playback errors now flow into `DefaultVivicastPlayerController`, which performs up to 5 reconnect attempts for stream aborts before entering `PlaybackStatus.Error`.
 - The fullscreen player now shows a focused error dialog with retry, choose another channel, and close actions.
+- Eligible past EPG items can now launch Xtream catch-up playback through runtime-generated timeshift URLs; final stream URLs are still not stored in Room.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
 - Controller unit coverage verifies stream-abort reconnect success and reconnect exhaustion.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
+- Stream resolver unit coverage verifies Xtream catch-up URL generation from an EPG time window.
 - Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
 - Player instrumentation coverage verifies CH+/CH- callback routing.
 - Player instrumentation coverage verifies error dialog focus and retry action routing.
@@ -104,12 +106,13 @@ Validated with:
 - `.\gradlew.bat :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat :feature:live-tv:compileDebugKotlin :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :core:player:testDebugUnitTest :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin :feature:player:connectedDebugAndroidTest`
+- `.\gradlew.bat :data:playback:testDebugUnitTest :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - M3U playback stream reference handling without storing final stream URLs in Room.
-- Timeshift and catch-up entry handling.
+- Local timeshift buffer behavior according to ADR-006.
 - Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done

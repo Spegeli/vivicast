@@ -99,6 +99,7 @@ Done:
   - fullscreen Player CH+/CH- zapping now starts previous/next channels from the current Live-TV channel list with wrap-around
   - Media3 stream-abort errors now trigger up to 5 reconnect attempts before surfacing a player error
   - Player error dialog offers retry, choose another channel, and close actions
+  - Xtream catch-up playback can be opened from eligible past EPG items using runtime-generated timeshift URLs
   - timeline OK handling no longer double-toggles playback
   - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, CH+/CH- callback routing, error retry focus/action, and stop-on-close
   - playback repository instrumentation tests cover continue-watching, recent-channel history, media scoping, and provider cleanup
@@ -137,7 +138,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Add timeshift behavior and catch-up entry handling where provider and EPG support it.
+1. Add local timeshift buffer behavior for live playback according to ADR-006.
 2. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
 3. Add configurable completed-threshold settings if the fixed 90 percent threshold is not enough for the first playback slice.
 

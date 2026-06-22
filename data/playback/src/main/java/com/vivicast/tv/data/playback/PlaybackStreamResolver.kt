@@ -7,6 +7,10 @@ import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 interface PlaybackStreamResolver {
     suspend fun resolve(request: PlaybackStreamRequest): PlaybackStreamResult
@@ -18,6 +22,8 @@ data class PlaybackStreamRequest(
     val mediaType: MediaType,
     val remoteId: String,
     val containerExtension: String? = null,
+    val catchupStartMillis: Long? = null,
+    val catchupEndMillis: Long? = null,
 )
 
 sealed interface PlaybackStreamResult {
@@ -95,7 +101,16 @@ class DefaultPlaybackStreamResolver(
         val encodedRemoteId = remoteId.pathSegment()
 
         val url = when (request.mediaType) {
-            MediaType.Channel -> "$serverUrl/live/$username/$password/$encodedRemoteId.ts"
+            MediaType.Channel -> {
+                if (request.catchupStartMillis != null && request.catchupEndMillis != null) {
+                    val durationMinutes = ((request.catchupEndMillis - request.catchupStartMillis) / MILLIS_PER_MINUTE)
+                        .coerceAtLeast(1L)
+                    val start = request.catchupStartMillis.toXtreamCatchupStart().pathSegment()
+                    "$serverUrl/timeshift/$username/$password/$durationMinutes/$start/$encodedRemoteId.ts"
+                } else {
+                    "$serverUrl/live/$username/$password/$encodedRemoteId.ts"
+                }
+            }
             MediaType.Movie -> {
                 val extension = request.containerExtension.normalizedExtension()
                     ?: return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingContainerExtension)
@@ -132,5 +147,17 @@ class DefaultPlaybackStreamResolver(
         val extension = this?.trim()?.trimStart('.') ?: return null
         if (extension.isBlank() || extension.any { it == '/' || it == '\\' }) return null
         return extension
+    }
+
+    private fun Long.toXtreamCatchupStart(): String =
+        XtreamCatchupDateFormat.get()!!.format(Date(this))
+
+    private companion object {
+        const val MILLIS_PER_MINUTE = 60_000L
+        val XtreamCatchupDateFormat: ThreadLocal<SimpleDateFormat> = ThreadLocal.withInitial {
+            SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+        }
     }
 }

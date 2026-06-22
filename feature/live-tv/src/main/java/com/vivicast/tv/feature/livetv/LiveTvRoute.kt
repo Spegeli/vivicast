@@ -78,6 +78,7 @@ fun LiveTvRoute(
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: (Channel) -> Unit = {},
     onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
+    onOpenCatchUp: (Channel, EpgProgram) -> Unit = { _, _ -> },
 ) {
     if (providerRepository == null || mediaRepository == null || epgRepository == null || favoritesRepository == null) {
         DemoLiveTvRoute()
@@ -92,6 +93,7 @@ fun LiveTvRoute(
             resolveChannelLogoModel = resolveChannelLogoModel,
             onOpenPlayer = onOpenPlayer,
             onPlayableChannelsChanged = onPlayableChannelsChanged,
+            onOpenCatchUp = onOpenCatchUp,
         )
     }
 }
@@ -107,6 +109,7 @@ private fun RoomLiveTvRoute(
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: (Channel) -> Unit,
     onPlayableChannelsChanged: (List<Channel>) -> Unit,
+    onOpenCatchUp: (Channel, EpgProgram) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -257,6 +260,7 @@ private fun RoomLiveTvRoute(
                     channel = selectedChannel,
                     programs = selectedPrograms,
                     nowMillis = nowMillis,
+                    onOpenCatchUp = onOpenCatchUp,
                     modifier = Modifier.weight(0.31f),
                 )
             }
@@ -408,6 +412,7 @@ private fun RoomEpgColumn(
     channel: Channel?,
     programs: List<EpgProgram>,
     nowMillis: Long,
+    onOpenCatchUp: (Channel, EpgProgram) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
@@ -424,7 +429,17 @@ private fun RoomEpgColumn(
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
                         items(programs, key = { it.id }) { program ->
                             val current = program.isCurrentAt(nowMillis)
-                            FocusPanel(selected = current, contentPadding = 14.dp, modifier = Modifier.fillMaxWidth()) {
+                            val catchUpReady = program.isCatchupAvailable && program.endTime <= nowMillis
+                            FocusPanel(
+                                selected = current,
+                                onClick = {
+                                    if (catchUpReady) {
+                                        onOpenCatchUp(channel, program)
+                                    }
+                                },
+                                contentPadding = 14.dp,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
                                     BasicText(
@@ -438,10 +453,10 @@ private fun RoomEpgColumn(
                                     program.description?.takeIf { it.isNotBlank() }?.let {
                                         BodyText(it, color = VivicastColors.TextSecondary)
                                     }
-                                    if (current || program.isCatchupAvailable) {
+                                    if (current || catchUpReady) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             if (current) StatusBadge("Aktuell")
-                                            if (program.isCatchupAvailable) StatusBadge("Catch-Up")
+                                            if (catchUpReady) StatusBadge("Catch-Up")
                                         }
                                     }
                                 }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 class DefaultPlaybackStreamResolverTest {
     @Test
@@ -79,6 +80,25 @@ class DefaultPlaybackStreamResolverTest {
 
         val stream = (result as PlaybackStreamResult.Resolved).stream
         assertEquals("https://provider.example/series/demo/secret/episode-1.mp4", stream.url)
+    }
+
+    @Test
+    fun resolvesXtreamCatchupUrlFromEpgWindow() = runBlocking {
+        val resolver = xtreamResolver()
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "channel-local-id",
+                mediaType = MediaType.Channel,
+                remoteId = "100",
+                catchupStartMillis = Instant.parse("2026-01-02T03:04:00Z").toEpochMilli(),
+                catchupEndMillis = Instant.parse("2026-01-02T03:34:00Z").toEpochMilli(),
+            ),
+        )
+
+        val stream = (result as PlaybackStreamResult.Resolved).stream
+        assertEquals("https://provider.example/timeshift/demo/secret/30/2026-01-02%3A03-04/100.ts", stream.url)
     }
 
     @Test

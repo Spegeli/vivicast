@@ -43,6 +43,7 @@ import com.vivicast.tv.data.playback.PlaybackStreamRequest
 import com.vivicast.tv.data.playback.PlaybackStreamResult
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.Episode
+import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
@@ -109,6 +110,14 @@ private fun VivicastApp(appContainer: AppContainer) {
         }
     }
 
+    fun openCatchUp(channel: Channel, program: EpgProgram) {
+        scope.launch {
+            appContainer.openCatchUpPlayback(channel, program) {
+                playerVisible = true
+            }
+        }
+    }
+
     LaunchedEffect(preferences.general.backgroundRefreshEnabled) {
         appContainer.refreshWorkScheduler.setBackgroundRefreshEnabled(
             enabled = preferences.general.backgroundRefreshEnabled,
@@ -143,6 +152,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = ::openChannel,
                 onPlayableChannelsChanged = { channels -> livePlaybackChannels = channels },
+                onOpenCatchUp = ::openCatchUp,
             )
         },
         AppDestination("Filme", "movies") {
@@ -391,6 +401,33 @@ private suspend fun AppContainer.openEpisodePlayback(episode: Episode, onStarted
             streamUrl = stream.url,
             seekable = true,
             startPositionMillis = progress?.positionMillis ?: 0L,
+        ),
+    )
+    onStarted()
+}
+
+private suspend fun AppContainer.openCatchUpPlayback(channel: Channel, program: EpgProgram, onStarted: () -> Unit) {
+    if (!program.isCatchupAvailable) return
+    val stream = playbackStreamResolver.resolve(
+        PlaybackStreamRequest(
+            providerId = channel.providerId,
+            mediaId = channel.id,
+            mediaType = MediaType.Channel,
+            remoteId = channel.remoteId,
+            catchupStartMillis = program.startTime,
+            catchupEndMillis = program.endTime,
+        ),
+    ).resolvedStreamOrNull() ?: return
+
+    playerController.play(
+        PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.CatchUp,
+            title = "${channel.name} - ${program.title}",
+            streamUrl = stream.url,
+            seekable = true,
         ),
     )
     onStarted()
