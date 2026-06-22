@@ -81,6 +81,7 @@ Implemented and validated:
 - The fullscreen player now shows a focused error dialog with retry, choose another channel, and close actions.
 - Eligible past EPG items can now launch Xtream catch-up playback through runtime-generated timeshift URLs; final stream URLs are still not stored in Room.
 - Live channel playback now maps stored ADR-006 timeshift settings into `PlaybackRequest`, exposes the configured storage/window in player state, starts at the live edge, tracks a bounded live-edge offset for seek/pause state, resets the window on new channel requests, and offers a fullscreen Live action when playback is behind the live edge.
+- Media3 playback now includes HLS support, a 120-minute back buffer for live playback, and an app-cache-backed Media3 `SimpleCache` path for ADR-006 internal-storage timeshift mode.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
@@ -112,12 +113,14 @@ Validated with:
 - `.\gradlew.bat :data:playback:testDebugUnitTest :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :core:player:testDebugUnitTest :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :feature:player:connectedDebugAndroidTest`
+- `.\gradlew.bat :core:player:compileDebugKotlin`
+- `.\gradlew.bat :core:player:testDebugUnitTest :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - M3U playback stream reference handling without storing final stream URLs in Room.
-- Media3-backed local timeshift buffer/storage layer for ADR-006 RAM/Internal modes beneath the current timeshift request/state/UI model.
+- Real live-stream timeshift smoke coverage once a safe stream source can be resolved without storing final M3U URLs in Room.
 - Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done

@@ -5,7 +5,14 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -22,6 +29,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 interface VivicastPlayerController {
     val state: StateFlow<VivicastPlayerState>
@@ -405,7 +413,27 @@ class Media3PlaybackEngine(
     context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : PlaybackEngine {
-    private val player = ExoPlayer.Builder(context.applicationContext).build()
+    private val appContext = context.applicationContext
+    private val defaultDataSourceFactory = DefaultDataSource.Factory(appContext)
+    private val timeshiftCache = SimpleCache(
+        File(appContext.cacheDir, TIMESHIFT_CACHE_DIR_NAME),
+        LeastRecentlyUsedCacheEvictor(TIMESHIFT_CACHE_MAX_BYTES),
+        StandaloneDatabaseProvider(appContext),
+    )
+    private val cachedDataSourceFactory = CacheDataSource.Factory()
+        .setCache(timeshiftCache)
+        .setUpstreamDataSourceFactory(defaultDataSourceFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    private val defaultMediaSourceFactory = DefaultMediaSourceFactory(defaultDataSourceFactory)
+    private val cachedMediaSourceFactory = DefaultMediaSourceFactory(cachedDataSourceFactory)
+    private val player = ExoPlayer.Builder(appContext)
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBackBuffer(TIMESHIFT_BACK_BUFFER_MILLIS, true)
+                .build(),
+        )
+        .setMediaSourceFactory(defaultMediaSourceFactory)
+        .build()
     private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
 
     init {
@@ -428,7 +456,16 @@ class Media3PlaybackEngine(
 
     override suspend fun start(request: PlaybackRequest) {
         withContext(dispatcher) {
-            player.setMediaItem(MediaItem.fromUri(request.streamUrl), request.startPositionMillis)
+            val mediaItem = MediaItem.fromUri(request.streamUrl)
+            val mediaSourceFactory = if (request.timeshift?.storage == PlaybackTimeshiftStorage.InternalStorage) {
+                cachedMediaSourceFactory
+            } else {
+                defaultMediaSourceFactory
+            }
+            player.setMediaSource(
+                mediaSourceFactory.createMediaSource(mediaItem),
+                request.startPositionMillis,
+            )
             player.prepare()
             player.playWhenReady = true
         }
@@ -453,5 +490,12 @@ class Media3PlaybackEngine(
 
     override fun release() {
         player.release()
+        timeshiftCache.release()
+    }
+
+    private companion object {
+        const val TIMESHIFT_CACHE_DIR_NAME = "playback-timeshift"
+        const val TIMESHIFT_BACK_BUFFER_MILLIS = 120 * 60 * 1_000
+        const val TIMESHIFT_CACHE_MAX_BYTES = 512L * 1024L * 1024L
     }
 }
