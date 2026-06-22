@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.vivicastPreferencesDataStore by preferencesDataStore(name = "vivicast_preferences")
-private const val SEARCH_HISTORY_SEPARATOR = "\u001F"
+private const val LIST_SEPARATOR = "\u001F"
 private const val MAX_SEARCH_HISTORY = 20
 
 class DataStoreUserPreferencesStore(
@@ -57,6 +57,7 @@ class DataStoreUserPreferencesStore(
                     watchedThresholdPercent = preferences[Keys.WatchedThresholdPercent] ?: 95,
                 ),
                 searchHistory = preferences[Keys.SearchHistory].toSearchHistory(),
+                expandedLiveTvProviderIds = preferences[Keys.ExpandedLiveTvProviderIds].toStoredIdSet(),
                 cache = CachePreferences(
                     maxCacheSizeMb = preferences[Keys.MaxCacheSizeMb] ?: 500,
                 ),
@@ -124,7 +125,13 @@ class DataStoreUserPreferencesStore(
 
     override suspend fun updateSearchHistory(searchHistory: List<String>) {
         dataStore.edit { preferences ->
-            preferences[Keys.SearchHistory] = searchHistory.cleanSearchHistory().joinToString(separator = SEARCH_HISTORY_SEPARATOR)
+            preferences[Keys.SearchHistory] = searchHistory.cleanSearchHistory().joinToString(separator = LIST_SEPARATOR)
+        }
+    }
+
+    override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[Keys.ExpandedLiveTvProviderIds] = providerIds.cleanStoredIds().joinToString(separator = LIST_SEPARATOR)
         }
     }
 
@@ -181,6 +188,7 @@ class DataStoreUserPreferencesStore(
         val MaxRecentChannels = intPreferencesKey("max_recent_channels")
         val WatchedThresholdPercent = intPreferencesKey("watched_threshold_percent")
         val SearchHistory = stringPreferencesKey("search_history")
+        val ExpandedLiveTvProviderIds = stringPreferencesKey("expanded_live_tv_provider_ids")
 
         val MaxCacheSizeMb = intPreferencesKey("max_cache_size_mb")
 
@@ -201,14 +209,28 @@ private inline fun <reified T : Enum<T>> Preferences.enumValue(key: Preferences.
 
 private fun String?.toSearchHistory(): List<String> =
     this
-        ?.split(SEARCH_HISTORY_SEPARATOR)
+        ?.split(LIST_SEPARATOR)
         ?.cleanSearchHistory()
         ?: emptyList()
 
 private fun List<String>.cleanSearchHistory(): List<String> =
     asSequence()
-        .map { it.trim().replace(SEARCH_HISTORY_SEPARATOR, " ") }
+        .map { it.trim().replace(LIST_SEPARATOR, " ") }
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .take(MAX_SEARCH_HISTORY)
+        .toList()
+
+private fun String?.toStoredIdSet(): Set<String> =
+    this
+        ?.split(LIST_SEPARATOR)
+        ?.cleanStoredIds()
+        ?.toSet()
+        ?: emptySet()
+
+private fun Iterable<String>.cleanStoredIds(): List<String> =
+    asSequence()
+        .map { it.trim().replace(LIST_SEPARATOR, " ") }
+        .filter { it.isNotBlank() }
+        .distinct()
         .toList()

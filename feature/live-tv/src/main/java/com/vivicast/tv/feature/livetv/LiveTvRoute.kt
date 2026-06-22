@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -71,6 +72,8 @@ fun LiveTvRoute(
     mediaRepository: MediaRepository? = null,
     epgRepository: EpgRepository? = null,
     favoritesRepository: FavoritesRepository? = null,
+    expandedProviderIds: Set<String> = emptySet(),
+    onExpandedProviderIdsChanged: (Set<String>) -> Unit = {},
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: () -> Unit = {},
 ) {
@@ -82,6 +85,8 @@ fun LiveTvRoute(
             mediaRepository = mediaRepository,
             epgRepository = epgRepository,
             favoritesRepository = favoritesRepository,
+            expandedProviderIds = expandedProviderIds,
+            onExpandedProviderIdsChanged = onExpandedProviderIdsChanged,
             resolveChannelLogoModel = resolveChannelLogoModel,
             onOpenPlayer = onOpenPlayer,
         )
@@ -94,6 +99,8 @@ private fun RoomLiveTvRoute(
     mediaRepository: MediaRepository,
     epgRepository: EpgRepository,
     favoritesRepository: FavoritesRepository,
+    expandedProviderIds: Set<String>,
+    onExpandedProviderIdsChanged: (Set<String>) -> Unit,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: () -> Unit,
 ) {
@@ -120,12 +127,15 @@ private fun RoomLiveTvRoute(
     }
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val favoriteChannelIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
+    val selectedProviderExpanded = selectedProviderId in expandedProviderIds
     val categoriesWithFavorites = remember(selectedProviderId, categories) {
         selectedProviderId?.let { listOf(favoriteCategory(it)) + categories } ?: categories
     }
 
-    LaunchedEffect(selectedProviderId, categoriesWithFavorites, favoriteChannelIds) {
-        if (selectedCategoryId == null || categoriesWithFavorites.none { it.id == selectedCategoryId }) {
+    LaunchedEffect(selectedProviderId, selectedProviderExpanded, categoriesWithFavorites, favoriteChannelIds) {
+        if (!selectedProviderExpanded) {
+            selectedCategoryId = null
+        } else if (selectedCategoryId == null || categoriesWithFavorites.none { it.id == selectedCategoryId }) {
             selectedCategoryId = when {
                 favoriteChannelIds.isNotEmpty() -> FAVORITES_CATEGORY_ID
                 else -> categories.firstOrNull()?.id ?: categoriesWithFavorites.firstOrNull()?.id
@@ -182,11 +192,25 @@ private fun RoomLiveTvRoute(
                 RoomProviderCategoryColumn(
                     providers = providers,
                     selectedProviderId = selectedProviderId,
+                    expandedProviderIds = expandedProviderIds,
                     categories = categoriesWithFavorites,
                     selectedCategoryId = selectedCategoryId,
                     onProviderFocused = {
                         selectedProviderId = it.id
-                        selectedCategoryId = null
+                        if (it.id !in expandedProviderIds) selectedCategoryId = null
+                        selectedChannelId = null
+                        previewStarted = false
+                    },
+                    onProviderToggle = { provider ->
+                        val wasExpanded = provider.id in expandedProviderIds
+                        val nextExpandedProviderIds = if (wasExpanded) {
+                            expandedProviderIds - provider.id
+                        } else {
+                            expandedProviderIds + provider.id
+                        }
+                        onExpandedProviderIdsChanged(nextExpandedProviderIds)
+                        selectedProviderId = provider.id
+                        if (wasExpanded) selectedCategoryId = null
                         selectedChannelId = null
                         previewStarted = false
                     },
@@ -256,9 +280,11 @@ private fun RoomLiveTvRoute(
 private fun RoomProviderCategoryColumn(
     providers: List<Provider>,
     selectedProviderId: String?,
+    expandedProviderIds: Set<String>,
     categories: List<Category>,
     selectedCategoryId: String?,
     onProviderFocused: (Provider) -> Unit,
+    onProviderToggle: (Provider) -> Unit,
     onCategoryFocused: (Category) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -266,43 +292,56 @@ private fun RoomProviderCategoryColumn(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle("Provider")
             if (providers.isEmpty()) {
-                InfoPanel("Keine Wiedergabelisten", "Lege in den Einstellungen zuerst einen Provider an.", badge = "Leer")
+                InfoPanel("Keine Listen", "Lege in den Einstellungen zuerst einen Provider an.", badge = "Leer")
             }
-            providers.forEach { provider ->
-                FocusPanel(
-                    selected = provider.id == selectedProviderId,
-                    onClick = { onProviderFocused(provider) },
-                    onFocused = { onProviderFocused(provider) },
-                    contentPadding = 10.dp,
-                    modifier = Modifier.fillMaxWidth().height(74.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        BasicText(
-                            text = provider.name,
-                            style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                        BodyText(provider.status.label, color = provider.status.color)
-                    }
-                }
-            }
-
-            SectionTitle("Kategorien")
-            if (categories.isEmpty() && providers.isNotEmpty()) {
-                InfoPanel("Keine Kategorien", "Dieser Provider enthält keine importierten Live-TV-Kategorien.", badge = "Leer")
-            }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(categories, key = { it.id }) { category ->
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                items(providers, key = { it.id }) { provider ->
+                    val selected = provider.id == selectedProviderId
+                    val expanded = provider.id in expandedProviderIds
                     FocusPanel(
-                        selected = category.id == selectedCategoryId,
-                        onClick = { onCategoryFocused(category) },
-                        onFocused = { onCategoryFocused(category) },
-                        contentPadding = 14.dp,
-                        modifier = Modifier.fillMaxWidth(),
+                        selected = selected,
+                        onClick = { onProviderToggle(provider) },
+                        onFocused = { onProviderFocused(provider) },
+                        contentPadding = 10.dp,
+                        modifier = Modifier.fillMaxWidth().height(74.dp),
                     ) {
-                        BasicText(
-                            text = category.displayName,
-                            style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            BasicText(
+                                text = "${if (expanded) "v" else ">"} ${provider.name}",
+                                style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                            )
+                            BodyText(provider.status.label, color = provider.status.color)
+                        }
+                    }
+
+                    if (selected && expanded) {
+                        if (categories.isEmpty()) {
+                            InfoPanel(
+                                "Keine Kategorien",
+                                "Dieser Provider enthaelt keine importierten Live-TV-Kategorien.",
+                                badge = "Leer",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            categories.forEach { category ->
+                                FocusPanel(
+                                    selected = category.id == selectedCategoryId,
+                                    onClick = { onCategoryFocused(category) },
+                                    onFocused = { onCategoryFocused(category) },
+                                    contentPadding = 14.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                                ) {
+                                    BasicText(
+                                        text = category.displayName,
+                                        style = TextStyle(
+                                            color = VivicastColors.TextPrimary,
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -441,7 +480,7 @@ private fun RoomPreviewColumn(
                 )
             }
             InfoPanel(
-                title = channel?.name ?: "Kein Sender ausgewählt",
+                title = channel?.name ?: "Kein Sender",
                 body = channel?.let {
                     buildString {
                         append("Provider: ${provider?.name.orEmpty()}")

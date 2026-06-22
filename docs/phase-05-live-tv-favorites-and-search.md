@@ -67,6 +67,8 @@ Implemented and validated:
 - Series are wired to local providers, provider-owned Room categories, cached poster/backdrop images, and provider-scoped series favorites.
 - Movies and Series preserve the demo route fallback for isolated previews/usages.
 - Poster cards can update their hero on focus for TV-first browsing.
+- Live-TV provider rows now support expanded/collapsed tree state persisted through DataStore.
+- Live-TV categories are nested under the active expanded provider, matching the PRD provider tree model.
 
 Validated with:
 
@@ -85,10 +87,13 @@ Validated with:
 - Android TV emulator Movies/Series empty-state visual smoke check
 - Screenshot: `docs/phase-05-movies-room-smoke.png`
 - Screenshot: `docs/phase-05-series-room-smoke.png`
+- `.\gradlew.bat :core:datastore:compileDebugKotlin :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
+- Android TV emulator Live-TV provider-tree empty-state visual smoke check
+- Screenshot: `docs/phase-05-provider-tree-empty-smoke.png`
 
 Still open:
 
-- Provider expanded/collapsed tree state persistence is not implemented yet.
+- D-Pad and focus-restore tests can still be expanded for Live-TV, search, dialogs, and provider/category transitions.
 
 ## Definition of Done
 

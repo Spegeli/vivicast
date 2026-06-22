@@ -79,6 +79,12 @@ private fun VivicastApp(appContainer: AppContainer) {
                 mediaRepository = appContainer.mediaRepository,
                 epgRepository = appContainer.epgSourceRepository,
                 favoritesRepository = appContainer.favoritesRepository,
+                expandedProviderIds = preferences.expandedLiveTvProviderIds,
+                onExpandedProviderIdsChanged = { providerIds ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateExpandedLiveTvProviderIds(providerIds)
+                    }
+                },
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = { playerVisible = true },
             )

@@ -71,10 +71,10 @@ Done:
   - Search history persists in DataStore with a maximum of 20 entries and supports per-entry removal plus clear-all
   - Movies now render provider-owned Room categories, cached poster/backdrop images, and provider-scoped movie favorites with a demo fallback
   - Series now render provider-owned Room categories, cached poster/backdrop images, and provider-scoped series favorites with a demo fallback
+  - Live-TV provider rows now support persisted expanded/collapsed tree state with categories nested under the active expanded provider
 
 Still important:
 
-- Provider expanded/collapsed tree state persistence is not implemented yet.
 - Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
 - Media3 playback is not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
@@ -106,7 +106,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by adding provider expanded/collapsed tree state persistence where the final provider tree UI needs it.
+1. Continue Phase 05 by tightening D-Pad/focus-restore coverage for Live-TV, search, dialogs, and provider/category transitions.
 2. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
