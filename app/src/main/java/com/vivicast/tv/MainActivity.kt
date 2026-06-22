@@ -173,6 +173,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                 providerRepository = appContainer.providerRepository,
                 mediaRepository = appContainer.mediaRepository,
                 favoritesRepository = appContainer.favoritesRepository,
+                playbackRepository = appContainer.playbackRepository,
                 resolveMoviePosterModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MoviePoster) },
                 resolveMovieBackdropModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MovieBackdrop) },
                 onOpenPlayer = ::openMovie,

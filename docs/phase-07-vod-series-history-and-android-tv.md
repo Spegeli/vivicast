@@ -65,6 +65,29 @@ Complete the user-facing movie and series flows on real local data, then integra
 - Add focus restore for overview-to-detail-to-overview and player-to-detail flows.
 - Add emulator smoke tests for D-Pad navigation, detail pages, trailer fallback, voice search entry, deep links, and Watch Next publishing where feasible.
 
+## Current Progress
+
+Implemented and validated:
+
+- Movies already render provider-owned Room categories, cached poster/backdrop images, and provider-scoped favorites with a demo fallback.
+- Movies now observe `PlaybackRepository.observeContinueWatching` and add the optional `Fortsetzen` category when non-completed movie progress exists.
+- Movies sort `Fortsetzen` items by most recent playback progress and show stored progress percent on the card metadata.
+- The Movies hero primary action now displays `Fortsetzen` instead of `Abspielen` for movies with open progress; playback already resumes from stored movie progress through the app player path.
+- Movies continue-watching UI has Compose Android instrumentation coverage with fake repositories.
+
+Validated with:
+
+- `.\gradlew.bat :feature:movies:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:movies:compileDebugAndroidTestKotlin`
+- `.\gradlew.bat :feature:movies:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=com.vivicast.tv.feature.movies.MoviesRouteContinueTest"`
+- `.\gradlew.bat assembleDebug`
+
+Still open:
+
+- Movie detail screen with continue, play from beginning, trailer, favorite, and watched-state actions.
+- Series continue-watching from episode progress, including exact season/episode/position metadata.
+- History clear actions and Android TV integrations from ADR-008.
+
 ## Definition of Done
 
 - Movies and series use local persisted provider data, not demo-only data.
@@ -88,4 +111,3 @@ Complete the user-facing movie and series flows on real local data, then integra
 - `external-docs/architecture/decisions/ADR-008-android-tv-integration.md`
 - `external-docs/design/design-system/05-screen-patterns.md`
 - `external-docs/design/mockups/high-fidelity/02-ui-direction-decisions.md`
-

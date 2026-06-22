@@ -113,6 +113,11 @@ Done:
   - M3U channels resolve playback streams from the private stream-reference store without Room final URLs
   - a real public M3U live playback/timeshift smoke passes on the Android TV emulator
   - `assembleDebug` passes
+- Phase 07 VOD/history work has started:
+  - Movies now expose a `Fortsetzen` category when non-completed movie playback progress exists
+  - Movie cards show stored progress percent for continue-watching items
+  - Movie hero action switches from `Abspielen` to `Fortsetzen` when open progress exists
+  - Movies continue-watching UI has Compose Android instrumentation coverage
 
 Still important:
 
@@ -147,8 +152,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Start Phase 07 by auditing current Movies/Series data wiring against PRD v1 and the design wireframes.
-2. Implement the next smallest Movies/Series persisted-data gap with focused tests.
+1. Add the Movie detail surface with PRD actions: continue, play from beginning, trailer, favorite, and watched state.
+2. Add Series continue-watching from episode progress, including exact season/episode/position metadata.
 
 ## Last Updated
 

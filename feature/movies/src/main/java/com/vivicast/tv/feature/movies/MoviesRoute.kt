@@ -34,11 +34,13 @@ import com.vivicast.tv.data.media.AssetState
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoVodItem
 import com.vivicast.tv.data.media.MediaRepository
+import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
+import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Provider
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -49,17 +51,19 @@ fun MoviesRoute(
     providerRepository: ProviderRepository? = null,
     mediaRepository: MediaRepository? = null,
     favoritesRepository: FavoritesRepository? = null,
+    playbackRepository: PlaybackRepository? = null,
     resolveMoviePosterModel: suspend (Movie) -> Any? = { null },
     resolveMovieBackdropModel: suspend (Movie) -> Any? = { null },
     onOpenPlayer: (Movie) -> Unit = {},
 ) {
-    if (providerRepository == null || mediaRepository == null || favoritesRepository == null) {
+    if (providerRepository == null || mediaRepository == null || favoritesRepository == null || playbackRepository == null) {
         DemoMoviesRoute()
     } else {
         RoomMoviesRoute(
             providerRepository = providerRepository,
             mediaRepository = mediaRepository,
             favoritesRepository = favoritesRepository,
+            playbackRepository = playbackRepository,
             resolveMoviePosterModel = resolveMoviePosterModel,
             resolveMovieBackdropModel = resolveMovieBackdropModel,
             onOpenPlayer = onOpenPlayer,
@@ -72,6 +76,7 @@ private fun RoomMoviesRoute(
     providerRepository: ProviderRepository,
     mediaRepository: MediaRepository,
     favoritesRepository: FavoritesRepository,
+    playbackRepository: PlaybackRepository,
     resolveMoviePosterModel: suspend (Movie) -> Any?,
     resolveMovieBackdropModel: suspend (Movie) -> Any?,
     onOpenPlayer: (Movie) -> Unit,
@@ -102,32 +107,58 @@ private fun RoomMoviesRoute(
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val favoriteMovieIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
     val favoriteOrder = remember(favorites) { favorites.mapIndexed { index, favorite -> favorite.mediaId to index }.toMap() }
-    val categoriesWithFavorites = remember(selectedProviderId, categories) {
-        selectedProviderId?.let { listOf(favoriteCategory(it, CategoryType.Movies)) + categories } ?: categories
+    val continueFlow = remember(selectedProviderId) {
+        selectedProviderId?.let { playbackRepository.observeContinueWatching(it) } ?: flowOf(emptyList())
+    }
+    val continueProgress by continueFlow.collectAsState(initial = emptyList())
+    val continueMovieProgress = remember(continueProgress) {
+        continueProgress
+            .filter { it.mediaType == MediaType.Movie }
+            .associateBy { it.mediaId }
+    }
+    val continueOrder = remember(continueMovieProgress) {
+        continueMovieProgress.values
+            .sortedByDescending { it.lastWatchedAt }
+            .mapIndexed { index, progress -> progress.mediaId to index }
+            .toMap()
+    }
+    val categoriesWithSpecials = remember(selectedProviderId, categories, continueMovieProgress) {
+        selectedProviderId?.let { providerId ->
+            buildList {
+                if (continueMovieProgress.isNotEmpty()) {
+                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, "Fortsetzen"))
+                }
+                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, "Favoriten"))
+                addAll(categories)
+            }
+        } ?: categories
     }
 
-    LaunchedEffect(selectedProviderId, categoriesWithFavorites, favoriteMovieIds) {
-        if (selectedCategoryId == null || categoriesWithFavorites.none { it.id == selectedCategoryId }) {
+    LaunchedEffect(selectedProviderId, categoriesWithSpecials, favoriteMovieIds, continueMovieProgress) {
+        if (selectedCategoryId == null || categoriesWithSpecials.none { it.id == selectedCategoryId }) {
             selectedCategoryId = when {
+                continueMovieProgress.isNotEmpty() -> CONTINUE_CATEGORY_ID
                 favoriteMovieIds.isNotEmpty() -> FAVORITES_CATEGORY_ID
-                else -> categories.firstOrNull()?.id ?: categoriesWithFavorites.firstOrNull()?.id
+                else -> categories.firstOrNull()?.id ?: categoriesWithSpecials.firstOrNull()?.id
             }
         }
     }
 
     val moviesFlow = remember(selectedProviderId, selectedCategoryId) {
         selectedProviderId?.let { providerId ->
-            mediaRepository.observeMovies(providerId, selectedCategoryId?.takeUnless { it == FAVORITES_CATEGORY_ID })
+            mediaRepository.observeMovies(providerId, selectedCategoryId?.takeUnless { it in SPECIAL_CATEGORY_IDS })
         } ?: flowOf(emptyList())
     }
     val observedMovies by moviesFlow.collectAsState(initial = emptyList())
-    val movies = remember(observedMovies, selectedCategoryId, favoriteMovieIds, favoriteOrder) {
-        if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
-            observedMovies
+    val movies = remember(observedMovies, selectedCategoryId, favoriteMovieIds, favoriteOrder, continueMovieProgress, continueOrder) {
+        when (selectedCategoryId) {
+            CONTINUE_CATEGORY_ID -> observedMovies
+                .filter { it.id in continueMovieProgress }
+                .sortedWith(compareBy<Movie> { continueOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
+            FAVORITES_CATEGORY_ID -> observedMovies
                 .filter { it.id in favoriteMovieIds }
                 .sortedWith(compareBy<Movie> { favoriteOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
-        } else {
-            observedMovies
+            else -> observedMovies
         }
     }
 
@@ -139,7 +170,8 @@ private fun RoomMoviesRoute(
 
     val selectedMovie = movies.firstOrNull { it.id == selectedMovieId }
     val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categoriesWithFavorites.firstOrNull { it.id == selectedCategoryId }
+    val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == selectedCategoryId }
+    val selectedProgress = selectedMovie?.let { continueMovieProgress[it.id] }
     val backdropModel by produceState<Any?>(initialValue = null, selectedMovie?.id, selectedMovie?.backdropUrl) {
         value = selectedMovie?.let { resolveMovieBackdropModel(it) }
     }
@@ -151,6 +183,7 @@ private fun RoomMoviesRoute(
                 provider = selectedProvider,
                 backdropModel = backdropModel,
                 isFavorite = selectedMovie?.id in favoriteMovieIds,
+                progress = selectedProgress,
                 onOpenPlayer = { selectedMovie?.let(onOpenPlayer) },
                 onToggleFavorite = {
                     val providerId = selectedProviderId
@@ -161,7 +194,7 @@ private fun RoomMoviesRoute(
                 },
             )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                items(categoriesWithFavorites, key = { it.id }) { category ->
+                items(categoriesWithSpecials, key = { it.id }) { category ->
                     ActionPill(
                         label = category.displayName,
                         selected = selectedCategoryId == category.id,
@@ -191,12 +224,12 @@ private fun RoomMoviesRoute(
                         val posterModel by produceState<Any?>(initialValue = null, movie.id, movie.posterUrl) {
                             value = resolveMoviePosterModel(movie)
                         }
-                        PosterCard(
-                            title = movie.name,
-                            rating = movie.rating?.takeIf { it.isNotBlank() } ?: "-",
-                            meta = movie.cardMeta,
+                            PosterCard(
+                                title = movie.name,
+                                rating = movie.rating?.takeIf { it.isNotBlank() } ?: "-",
+                            meta = continueMovieProgress[movie.id]?.let { "${it.progressPercent} %" } ?: movie.cardMeta,
                             hasPoster = !movie.posterUrl.isNullOrBlank() || posterModel != null,
-                            progressPercent = 0,
+                            progressPercent = continueMovieProgress[movie.id]?.progressPercent ?: 0,
                             favorite = movie.id in favoriteMovieIds,
                             seen = false,
                             imageModel = posterModel,
@@ -216,6 +249,7 @@ private fun MovieHero(
     provider: Provider?,
     backdropModel: Any?,
     isFavorite: Boolean,
+    progress: PlaybackProgress?,
     onOpenPlayer: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -227,7 +261,7 @@ private fun MovieHero(
         backdropModel = backdropModel,
         action = {
             if (movie != null) {
-                ActionPill("Abspielen", onClick = onOpenPlayer)
+                ActionPill(if (progress != null) "Fortsetzen" else "Abspielen", onClick = onOpenPlayer)
                 ActionPill(if (isFavorite) "Favorit" else "Merken", selected = isFavorite, onClick = onToggleFavorite)
             }
         },
@@ -296,13 +330,13 @@ private fun DemoMovieHero(movie: DemoVodItem, onOpenPlayer: () -> Unit) {
     )
 }
 
-private fun favoriteCategory(providerId: String, type: CategoryType): Category =
+private fun specialCategory(providerId: String, id: String, name: String): Category =
     Category(
-        id = FAVORITES_CATEGORY_ID,
+        id = id,
         providerId = providerId,
-        type = type,
-        remoteId = FAVORITES_CATEGORY_ID,
-        name = "Favoriten",
+        type = CategoryType.Movies,
+        remoteId = id,
+        name = name,
         sortOrder = Int.MIN_VALUE,
         isHidden = false,
     )
@@ -310,6 +344,7 @@ private fun favoriteCategory(providerId: String, type: CategoryType): Category =
 private fun emptyTitle(provider: Provider?, category: Category?): String =
     when {
         provider == null -> "Keine Wiedergabelisten"
+        category?.id == CONTINUE_CATEGORY_ID -> "Keine begonnenen Filme"
         category?.id == FAVORITES_CATEGORY_ID -> "Keine Film-Favoriten"
         else -> "Keine Filme"
     }
@@ -317,6 +352,7 @@ private fun emptyTitle(provider: Provider?, category: Category?): String =
 private fun emptyBody(provider: Provider?, category: Category?): String =
     when {
         provider == null -> "Lege in den Einstellungen zuerst einen Provider an."
+        category?.id == CONTINUE_CATEGORY_ID -> "Begonnene Filme erscheinen hier, solange sie nicht abgeschlossen sind."
         category?.id == FAVORITES_CATEGORY_ID -> "Fuege Filme ueber die Merken-Aktion zu deinen Favoriten hinzu."
         category == null -> "Dieser Provider enthaelt keine importierten Filmkategorien."
         else -> "Diese Kategorie enthaelt keine importierten Filme."
@@ -343,3 +379,5 @@ private fun Long?.minutesLabel(): String? {
 }
 
 private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
+private const val CONTINUE_CATEGORY_ID = "__CONTINUE__"
+private val SPECIAL_CATEGORY_IDS = setOf(FAVORITES_CATEGORY_ID, CONTINUE_CATEGORY_ID)
