@@ -76,10 +76,10 @@ fun LiveTvRoute(
     expandedProviderIds: Set<String> = emptySet(),
     onExpandedProviderIdsChanged: (Set<String>) -> Unit = {},
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
-    onOpenPlayer: () -> Unit = {},
+    onOpenPlayer: (Channel) -> Unit = {},
 ) {
     if (providerRepository == null || mediaRepository == null || epgRepository == null || favoritesRepository == null) {
-        DemoLiveTvRoute(onOpenPlayer = onOpenPlayer)
+        DemoLiveTvRoute()
     } else {
         RoomLiveTvRoute(
             providerRepository = providerRepository,
@@ -103,7 +103,7 @@ private fun RoomLiveTvRoute(
     expandedProviderIds: Set<String>,
     onExpandedProviderIdsChanged: (Set<String>) -> Unit,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
-    onOpenPlayer: () -> Unit,
+    onOpenPlayer: (Channel) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -262,7 +262,7 @@ private fun RoomLiveTvRoute(
                 nextProgram = nextProgram,
                 isFavorite = selectedChannel?.id in favoriteChannelIds,
                 onStartPreview = { if (selectedChannel != null) previewStarted = true },
-                onOpenPlayer = onOpenPlayer,
+                onOpenPlayer = { selectedChannel?.let(onOpenPlayer) },
                 onShowCategoryMode = { mode = LiveColumnMode.Category },
                 onToggleFavorite = {
                     val providerId = selectedProviderId

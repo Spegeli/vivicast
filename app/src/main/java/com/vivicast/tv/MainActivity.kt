@@ -26,6 +26,8 @@ import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
 import com.vivicast.tv.core.designsystem.VivicastTopNavigation
+import com.vivicast.tv.core.player.PlaybackMediaType
+import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
 import com.vivicast.tv.feature.livetv.LiveTvRoute
@@ -35,7 +37,10 @@ import com.vivicast.tv.feature.search.SearchRoute
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
+import com.vivicast.tv.data.playback.PlaybackStreamRequest
+import com.vivicast.tv.data.playback.PlaybackStreamResult
 import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.launch
@@ -59,6 +64,22 @@ private fun VivicastApp(appContainer: AppContainer) {
     var cacheStats by remember { mutableStateOf(MediaCacheStats(totalSizeBytes = 0L, fileCount = 0)) }
     val preferences by appContainer.userPreferencesStore.values.collectAsState(initial = UserPreferences())
     val scope = rememberCoroutineScope()
+
+    fun openChannel(channel: Channel) {
+        scope.launch {
+            appContainer.openChannelPlayback(channel) {
+                playerVisible = true
+            }
+        }
+    }
+
+    fun openMovie(movie: Movie) {
+        scope.launch {
+            appContainer.openMoviePlayback(movie) {
+                playerVisible = true
+            }
+        }
+    }
 
     LaunchedEffect(preferences.general.backgroundRefreshEnabled) {
         appContainer.refreshWorkScheduler.setBackgroundRefreshEnabled(
@@ -86,7 +107,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                     }
                 },
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
-                onOpenPlayer = { playerVisible = true },
+                onOpenPlayer = ::openChannel,
             )
         },
         AppDestination("Filme", "movies") {
@@ -96,7 +117,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                 favoritesRepository = appContainer.favoritesRepository,
                 resolveMoviePosterModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MoviePoster) },
                 resolveMovieBackdropModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MovieBackdrop) },
-                onOpenPlayer = { playerVisible = true },
+                onOpenPlayer = ::openMovie,
             )
         },
         AppDestination("Serien", "series") {
@@ -253,3 +274,58 @@ private suspend fun AppContainer.resolveSeriesImageModel(series: Series, type: M
         ),
     )?.file
 }
+
+private suspend fun AppContainer.openChannelPlayback(channel: Channel, onStarted: () -> Unit) {
+    val stream = playbackStreamResolver.resolve(
+        PlaybackStreamRequest(
+            providerId = channel.providerId,
+            mediaId = channel.id,
+            mediaType = MediaType.Channel,
+            remoteId = channel.remoteId,
+        ),
+    ).resolvedStreamOrNull() ?: return
+
+    playerController.play(
+        PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.Channel,
+            title = channel.name,
+            streamUrl = stream.url,
+            seekable = false,
+        ),
+    )
+    onStarted()
+}
+
+private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -> Unit) {
+    val stream = playbackStreamResolver.resolve(
+        PlaybackStreamRequest(
+            providerId = movie.providerId,
+            mediaId = movie.id,
+            mediaType = MediaType.Movie,
+            remoteId = movie.remoteId,
+            containerExtension = movie.containerExtension,
+        ),
+    ).resolvedStreamOrNull() ?: return
+
+    playerController.play(
+        PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.Movie,
+            title = movie.name,
+            streamUrl = stream.url,
+            seekable = true,
+        ),
+    )
+    onStarted()
+}
+
+private fun PlaybackStreamResult.resolvedStreamOrNull() =
+    (this as? PlaybackStreamResult.Resolved)?.stream
+
+private fun playbackId(providerId: String, mediaType: MediaType, mediaId: String): String =
+    "$providerId:${mediaType.name.lowercase()}:$mediaId:${System.currentTimeMillis()}"

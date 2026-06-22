@@ -51,10 +51,10 @@ fun MoviesRoute(
     favoritesRepository: FavoritesRepository? = null,
     resolveMoviePosterModel: suspend (Movie) -> Any? = { null },
     resolveMovieBackdropModel: suspend (Movie) -> Any? = { null },
-    onOpenPlayer: () -> Unit = {},
+    onOpenPlayer: (Movie) -> Unit = {},
 ) {
     if (providerRepository == null || mediaRepository == null || favoritesRepository == null) {
-        DemoMoviesRoute(onOpenPlayer = onOpenPlayer)
+        DemoMoviesRoute()
     } else {
         RoomMoviesRoute(
             providerRepository = providerRepository,
@@ -74,7 +74,7 @@ private fun RoomMoviesRoute(
     favoritesRepository: FavoritesRepository,
     resolveMoviePosterModel: suspend (Movie) -> Any?,
     resolveMovieBackdropModel: suspend (Movie) -> Any?,
-    onOpenPlayer: () -> Unit,
+    onOpenPlayer: (Movie) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -151,7 +151,7 @@ private fun RoomMoviesRoute(
                 provider = selectedProvider,
                 backdropModel = backdropModel,
                 isFavorite = selectedMovie?.id in favoriteMovieIds,
-                onOpenPlayer = onOpenPlayer,
+                onOpenPlayer = { selectedMovie?.let(onOpenPlayer) },
                 onToggleFavorite = {
                     val providerId = selectedProviderId
                     val movieId = selectedMovie?.id

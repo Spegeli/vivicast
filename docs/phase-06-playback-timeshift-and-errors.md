@@ -72,6 +72,7 @@ Implemented and validated:
 - `AppContainer` now provides a lazy Media3-backed `VivicastPlayerController`.
 - `PlayerRoute` can render controller state, toggle pause/resume, seek through the controller, and stop playback when the player closes while keeping the existing timeline-centered overlay behavior.
 - App wiring now passes the shared `VivicastPlayerController` into the fullscreen player route.
+- Live-TV channel and movie actions now resolve runtime streams and start `VivicastPlayerController` playback requests before opening the fullscreen player.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
@@ -86,10 +87,12 @@ Validated with:
 - `.\gradlew.bat :feature:player:compileDebugKotlin :app:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin`
 - `.\gradlew.bat :core:designsystem:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:provider:compileDebugAndroidTestKotlin :data:media:compileDebugAndroidTestKotlin :data:epg:compileDebugAndroidTestKotlin :data:favorites:compileDebugAndroidTestKotlin :feature:live-tv:compileDebugAndroidTestKotlin :feature:search:compileDebugAndroidTestKotlin :iptv:xtream:compileDebugAndroidTestKotlin`
+- `.\gradlew.bat :feature:live-tv:compileDebugKotlin :feature:live-tv:compileDebugAndroidTestKotlin :feature:movies:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- Playback entry-point handoff from locally imported Live-TV/movie/episode items into the resolver and controller.
+- Playback entry-point handoff for series episodes.
 - M3U playback stream reference handling without storing final stream URLs in Room.
 - Playback progress persistence for movies and episodes.
 - Channel zapping, reconnect, timeshift, and error dialogs.
