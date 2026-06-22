@@ -65,7 +65,7 @@ Still stubbed or missing:
 - Provider configuration is persisted locally with credentials stored outside Room.
 - EPG, media, favorites, and playback repositories are still contracts or minimal implementations; `:data:media` now includes Room-backed M3U live and Xtream catalog import paths, and `:data:epg` now includes a Room-backed XMLTV import path.
 - M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser.
-- Player has only a controller contract, with no Media3 playback implementation.
+- Player now has a Media3-backed controller path, runtime stream resolution, retry/reconnect behavior, progress persistence, and ADR-006 timeshift state wiring in progress.
 - Worker contains job-name constants, concrete WorkManager refresh wrappers, request scheduling, network-backed refresh runner wiring, a testable refresh orchestrator, diagnostics redaction foundation, and media image cache refresh for logos, posters, backdrops, season images, and episode thumbnails.
 - `:core:cache` contains the file-backed media cache foundation for logo/poster/backdrop/image storage, local file lookup, stats, clear, and size cleanup.
 - Settings exposes refresh controls, EPG source/provider priority management, manual EPG channel mapping, and cache maintenance hooks for local cache stats, size limits, logo refresh, cleanup, and clearing.

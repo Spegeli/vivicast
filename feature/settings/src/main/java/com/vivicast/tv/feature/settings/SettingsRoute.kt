@@ -94,14 +94,20 @@ data class CacheSettingsState(
     val fileCount: Int = 0,
 )
 
+data class PlaybackSettingsState(
+    val watchedThresholdPercent: Int = 95,
+)
+
 @Composable
 fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
     generalSettingsState: GeneralSettingsState,
     cacheSettingsState: CacheSettingsState,
+    playbackSettingsState: PlaybackSettingsState,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onRememberSortingChanged: (Boolean) -> Unit,
+    onWatchedThresholdChanged: (Int) -> Unit,
     onRunGlobalRefresh: () -> Unit,
     onCacheSizeChanged: (Int) -> Unit,
     onRunLogoRefresh: () -> Unit,
@@ -115,7 +121,7 @@ fun SettingsRoute(
     val settingsSections = remember { DemoCatalog.settingsSections }
     val maintenanceSection = remember { settingsSections.last() }
     val sectionsWithDetailFocus = remember(maintenanceSection) {
-        setOf("Allgemein", "Wiedergabelisten", "EPG", "Optik", maintenanceSection)
+        setOf("Allgemein", "Wiedergabelisten", "EPG", "Optik", "Wiedergabe", maintenanceSection)
     }
 
     LaunchedEffect(Unit) {
@@ -193,6 +199,11 @@ fun SettingsRoute(
                             showConfirm = { showConfirm = true },
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
+                        "Wiedergabe" -> PlaybackSettingsPanel(
+                            state = playbackSettingsState,
+                            onWatchedThresholdChanged = onWatchedThresholdChanged,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
                         maintenanceSection -> MaintenanceSettingsPanel(
                             cacheSettingsState = cacheSettingsState,
                             onCacheSizeChanged = onCacheSizeChanged,
@@ -227,6 +238,88 @@ fun SettingsRoute(
                         ActionPill("Schließen", modifier = Modifier.width(150.dp), onClick = { showConfirm = false })
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaybackSettingsPanel(
+    state: PlaybackSettingsState,
+    onWatchedThresholdChanged: (Int) -> Unit,
+    firstFocusModifier: Modifier = Modifier,
+) {
+    var message by remember { mutableStateOf<String?>(null) }
+    val threshold = state.watchedThresholdPercent.coerceIn(
+        WATCHED_THRESHOLD_MIN_PERCENT,
+        WATCHED_THRESHOLD_MAX_PERCENT,
+    )
+    val updateThreshold = { value: Int ->
+        val next = value.coerceIn(WATCHED_THRESHOLD_MIN_PERCENT, WATCHED_THRESHOLD_MAX_PERCENT)
+        onWatchedThresholdChanged(next)
+        message = "Schwellwert fuer abgeschlossene Wiedergaben aktualisiert."
+    }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(
+                title = "Wiedergabe",
+                body = "Lokale Wiedergabeoptionen fuer Fortschritt, Timeshift und Player-Verhalten.",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        item {
+            FocusPanel(
+                modifier = firstFocusModifier.fillMaxWidth().height(132.dp),
+                contentPadding = VivicastSpacing.Space4,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+                        BasicText("Gesehen ab", style = VivicastTypography.LabelLarge)
+                        BodyText("Markiert Filme und Episoden ab diesem Fortschritt als abgeschlossen.", maxLines = 2)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                        ActionPill(
+                            "-5",
+                            modifier = Modifier
+                                .width(82.dp)
+                                .testTag(settingsPlaybackThresholdMinusTag()),
+                            onClick = { updateThreshold(threshold - WATCHED_THRESHOLD_STEP_PERCENT) },
+                        )
+                        BasicText("$threshold %", style = VivicastTypography.LabelLarge)
+                        ActionPill(
+                            "+5",
+                            modifier = Modifier
+                                .width(82.dp)
+                                .testTag(settingsPlaybackThresholdPlusTag()),
+                            onClick = { updateThreshold(threshold + WATCHED_THRESHOLD_STEP_PERCENT) },
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            InfoPanel(
+                title = "Timeshift",
+                body = "Speicherort und maximale Groesse folgen aktuell den gespeicherten ADR-006 Playback-Einstellungen.",
+                badge = "Aktiv",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        if (message != null) {
+            item {
+                InfoPanel(
+                    title = "Hinweis",
+                    body = message.orEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
@@ -1821,6 +1914,8 @@ fun deleteProviderConfirmTag(providerId: String): String = "settings-delete-prov
 fun deleteEpgSourceDialogTag(sourceId: String): String = "settings-delete-epg-source-dialog-$sourceId"
 fun deleteEpgSourceCancelTag(sourceId: String): String = "settings-delete-epg-source-cancel-$sourceId"
 fun deleteEpgSourceConfirmTag(sourceId: String): String = "settings-delete-epg-source-confirm-$sourceId"
+fun settingsPlaybackThresholdMinusTag(): String = "settings-playback-threshold-minus"
+fun settingsPlaybackThresholdPlusTag(): String = "settings-playback-threshold-plus"
 
 private data class ProviderEditorState(
     val providerId: String?,
@@ -2011,3 +2106,7 @@ private val Provider.importSummary: String
         "Filme".takeIf { includeMovies },
         "Serien".takeIf { includeSeries },
     ).joinToString(" | ") + " | alle $refreshIntervalHours h"
+
+private const val WATCHED_THRESHOLD_MIN_PERCENT = 50
+private const val WATCHED_THRESHOLD_MAX_PERCENT = 100
+private const val WATCHED_THRESHOLD_STEP_PERCENT = 5

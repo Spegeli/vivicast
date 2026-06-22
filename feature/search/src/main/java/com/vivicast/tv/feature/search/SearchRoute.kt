@@ -55,13 +55,15 @@ private const val MAX_SEARCH_HISTORY = 20
 fun SearchRoute(
     mediaRepository: MediaRepository? = null,
     userPreferencesStore: UserPreferencesStore? = null,
+    autoFocusField: Boolean = true,
 ) {
     if (mediaRepository == null || userPreferencesStore == null) {
-        DemoSearchRoute()
+        DemoSearchRoute(autoFocusField = autoFocusField)
     } else {
         RoomSearchRoute(
             mediaRepository = mediaRepository,
             userPreferencesStore = userPreferencesStore,
+            autoFocusField = autoFocusField,
         )
     }
 }
@@ -70,6 +72,7 @@ fun SearchRoute(
 private fun RoomSearchRoute(
     mediaRepository: MediaRepository,
     userPreferencesStore: UserPreferencesStore,
+    autoFocusField: Boolean,
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList(), emptyList())) }
@@ -93,6 +96,7 @@ private fun RoomSearchRoute(
         history = preferences.searchHistory,
         results = results.toSearchGroups(),
         debouncedQuery = debouncedQuery,
+        autoFocusField = autoFocusField,
         onHistorySelected = { query = it },
         onHistoryDeleted = { term ->
             scope.launch { userPreferencesStore.updateSearchHistory(preferences.searchHistory.filterNot { it.equals(term, ignoreCase = true) }) }
@@ -105,7 +109,7 @@ private fun RoomSearchRoute(
 }
 
 @Composable
-private fun DemoSearchRoute() {
+private fun DemoSearchRoute(autoFocusField: Boolean) {
     var query by remember { mutableStateOf("dune") }
     val hasResults = query.equals("dune", ignoreCase = true)
     val results = if (hasResults) {
@@ -125,6 +129,7 @@ private fun DemoSearchRoute() {
         history = listOf("Dune", "ARD", "Tatort"),
         results = results,
         debouncedQuery = query,
+        autoFocusField = autoFocusField,
         onHistorySelected = { query = it },
         onHistoryDeleted = {},
         onClearHistory = {},
@@ -139,6 +144,7 @@ private fun SearchContent(
     history: List<String>,
     results: List<SearchGroupData>,
     debouncedQuery: String,
+    autoFocusField: Boolean,
     onHistorySelected: (String) -> Unit,
     onHistoryDeleted: (String) -> Unit,
     onClearHistory: () -> Unit,
@@ -153,6 +159,7 @@ private fun SearchContent(
                 SearchField(
                     query = query,
                     onQueryChanged = onQueryChanged,
+                    autoFocus = autoFocusField,
                     modifier = Modifier.weight(1f).height(96.dp),
                 )
                 ActionPill("Voice", modifier = Modifier.width(118.dp).height(96.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
@@ -194,11 +201,14 @@ private fun SearchContent(
 private fun SearchField(
     query: String,
     onQueryChanged: (String) -> Unit,
+    autoFocus: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val textFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        textFocusRequester.requestFocus()
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            textFocusRequester.requestFocus()
+        }
     }
     FocusPanel(modifier = modifier.testTag(searchFieldPanelTag()), onClick = { textFocusRequester.requestFocus() }, contentPadding = 18.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -36,6 +36,7 @@ import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
+import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.livetv.LiveTvRoute
 import com.vivicast.tv.feature.movies.MoviesRoute
 import com.vivicast.tv.feature.player.PlayerRoute
@@ -134,9 +135,17 @@ private fun VivicastApp(appContainer: AppContainer) {
         }
     }
 
-    LaunchedEffect(appContainer) {
+    val watchedThresholdPercent = preferences.history.watchedThresholdPercent.coerceIn(
+        WATCHED_THRESHOLD_MIN_PERCENT,
+        WATCHED_THRESHOLD_MAX_PERCENT,
+    )
+
+    LaunchedEffect(appContainer, watchedThresholdPercent) {
         appContainer.playerController.state.collectLatest { state ->
-            appContainer.savePlaybackProgress(state)
+            appContainer.savePlaybackProgress(
+                state = state,
+                completedThresholdPercent = watchedThresholdPercent,
+            )
         }
     }
 
@@ -183,6 +192,7 @@ private fun VivicastApp(appContainer: AppContainer) {
             SearchRoute(
                 mediaRepository = appContainer.mediaRepository,
                 userPreferencesStore = appContainer.userPreferencesStore,
+                autoFocusField = false,
             )
         },
         AppDestination("Einstellungen", "settings") {
@@ -199,6 +209,9 @@ private fun VivicastApp(appContainer: AppContainer) {
                     totalSizeBytes = cacheStats.totalSizeBytes,
                     fileCount = cacheStats.fileCount,
                 ),
+                playbackSettingsState = PlaybackSettingsState(
+                    watchedThresholdPercent = watchedThresholdPercent,
+                ),
                 onBackgroundRefreshChanged = { enabled ->
                     scope.launch {
                         appContainer.userPreferencesStore.updateGeneral(
@@ -211,6 +224,13 @@ private fun VivicastApp(appContainer: AppContainer) {
                     scope.launch {
                         appContainer.userPreferencesStore.updateGeneral(
                             preferences.general.copy(rememberSorting = enabled),
+                        )
+                    }
+                },
+                onWatchedThresholdChanged = { threshold ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateHistory(
+                            preferences.history.copy(watchedThresholdPercent = threshold),
                         )
                     }
                 },
@@ -443,7 +463,10 @@ private suspend fun AppContainer.openCatchUpPlayback(channel: Channel, program: 
     onStarted()
 }
 
-private suspend fun AppContainer.savePlaybackProgress(state: VivicastPlayerState) {
+private suspend fun AppContainer.savePlaybackProgress(
+    state: VivicastPlayerState,
+    completedThresholdPercent: Int,
+) {
     val request = state.request ?: return
     val mediaType = request.mediaType.toDomainProgressMediaType() ?: return
     if (state.status != PlaybackStatus.Playing && state.status != PlaybackStatus.Paused) return
@@ -451,6 +474,10 @@ private suspend fun AppContainer.savePlaybackProgress(state: VivicastPlayerState
 
     val now = System.currentTimeMillis()
     val progressPercent = progressPercent(state.positionMillis, state.durationMillis)
+    val thresholdPercent = completedThresholdPercent.coerceIn(
+        WATCHED_THRESHOLD_MIN_PERCENT,
+        WATCHED_THRESHOLD_MAX_PERCENT,
+    )
     val existing = playbackRepository.getProgress(request.providerId, mediaType, request.mediaId)
     playbackRepository.saveProgress(
         PlaybackProgress(
@@ -461,7 +488,7 @@ private suspend fun AppContainer.savePlaybackProgress(state: VivicastPlayerState
             positionMillis = state.positionMillis,
             durationMillis = state.durationMillis,
             progressPercent = progressPercent,
-            isCompleted = progressPercent >= COMPLETED_THRESHOLD_PERCENT,
+            isCompleted = progressPercent >= thresholdPercent,
             lastWatchedAt = now,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
@@ -512,4 +539,5 @@ private fun TimeshiftStoragePreference.toPlayerStorage(): PlaybackTimeshiftStora
 private fun Int.floorMod(modulus: Int): Int =
     ((this % modulus) + modulus) % modulus
 
-private const val COMPLETED_THRESHOLD_PERCENT = 90
+private const val WATCHED_THRESHOLD_MIN_PERCENT = 50
+private const val WATCHED_THRESHOLD_MAX_PERCENT = 100

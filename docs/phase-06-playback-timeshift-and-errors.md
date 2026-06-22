@@ -83,6 +83,8 @@ Implemented and validated:
 - Live channel playback now maps stored ADR-006 timeshift settings into `PlaybackRequest`, exposes the configured storage/window in player state, starts at the live edge, tracks a bounded live-edge offset for seek/pause state, resets the window on new channel requests, and offers a fullscreen Live action when playback is behind the live edge.
 - Media3 playback now includes HLS support, a 120-minute back buffer for live playback, and an app-cache-backed Media3 `SimpleCache` path for ADR-006 internal-storage timeshift mode.
 - M3U imports now write per-channel stream references to a private file-backed reference store outside Room, and playback resolves M3U channel streams from that store at runtime.
+- Settings Wiedergabe now exposes the DataStore-backed watched/completed threshold with 5 percent step actions, and movie/episode progress persistence uses that threshold instead of a fixed constant.
+- App-shell Search now disables route-level input autofocus so D-Pad top navigation can move from Suche to Einstellungen without being trapped by the search field.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
@@ -120,12 +122,15 @@ Validated with:
 - `.\gradlew.bat :core:player:testDebugUnitTest :app:compileDebugKotlin`
 - `.\gradlew.bat :core:cache:testDebugUnitTest :data:playback:testDebugUnitTest :data:media:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
+- `.\gradlew.bat :feature:settings:compileDebugKotlin :feature:settings:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:search:compileDebugKotlin :feature:search:compileDebugAndroidTestKotlin :feature:settings:compileDebugKotlin :feature:settings:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:search:connectedDebugAndroidTest :feature:settings:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
+- Android TV emulator smoke verified D-Pad top navigation can reach Settings after Search and the Settings Wiedergabe panel shows the watched threshold controls. Screenshot: `docs/phase-06-settings-playback-threshold-smoke.png`
 
 Still open:
 
 - Real M3U live playback/timeshift smoke coverage against a safe public stream source without storing final URLs in Room, logs, docs, screenshots, or demo data.
-- Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done
 
