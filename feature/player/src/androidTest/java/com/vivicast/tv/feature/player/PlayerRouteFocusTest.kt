@@ -14,6 +14,8 @@ import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackError
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
+import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.designsystem.playerTimelineTag
@@ -179,6 +181,17 @@ class PlayerRouteFocusTest {
         }
     }
 
+    @Test
+    fun timeshiftShowsLiveEdgeActionWhenBehindLive() {
+        val controller = TimeshiftPlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        compose.onNodeWithTag(playerLiveEdgeTag()).assertIsDisplayed()
+    }
+
     private fun pressBack() {
         compose.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
@@ -225,6 +238,8 @@ class PlayerRouteFocusTest {
             seekDeltas += deltaMillis
         }
 
+        override fun seekToLiveEdge() = Unit
+
         override fun stop() {
             stopCount += 1
             mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
@@ -268,6 +283,50 @@ class PlayerRouteFocusTest {
         override fun pause() = Unit
         override fun resume() = Unit
         override fun seekBy(deltaMillis: Long) = Unit
+        override fun seekToLiveEdge() = Unit
+        override fun stop() = Unit
+        override fun release() = Unit
+    }
+
+    private class TimeshiftPlayerController : VivicastPlayerController {
+        private val mutableState = MutableStateFlow(
+            VivicastPlayerState(
+                status = PlaybackStatus.Playing,
+                request = PlaybackRequest(
+                    playbackId = "playback-1",
+                    providerId = "provider-1",
+                    mediaId = "channel-1",
+                    mediaType = PlaybackMediaType.Channel,
+                    title = "Controller Channel",
+                    streamUrl = "https://stream.example/channel.m3u8",
+                    seekable = true,
+                    timeshift = PlaybackTimeshiftConfig(
+                        storage = PlaybackTimeshiftStorage.Automatic,
+                        windowMillis = 30 * 60_000L,
+                    ),
+                ),
+                positionMillis = 30 * 60_000L - 30_000L,
+                durationMillis = 30 * 60_000L,
+                liveEdgeOffsetMillis = 30_000L,
+                timeshiftWindowMillis = 30 * 60_000L,
+                timeshiftStorage = PlaybackTimeshiftStorage.Automatic,
+            ),
+        )
+        var seekToLiveEdgeCount = 0
+
+        override val state: StateFlow<VivicastPlayerState> = mutableState
+
+        override fun play(request: PlaybackRequest) = Unit
+        override fun pause() = Unit
+        override fun resume() = Unit
+        override fun seekBy(deltaMillis: Long) = Unit
+        override fun seekToLiveEdge() {
+            seekToLiveEdgeCount += 1
+            mutableState.value = mutableState.value.copy(
+                positionMillis = 30 * 60_000L,
+                liveEdgeOffsetMillis = 0L,
+            )
+        }
         override fun stop() = Unit
         override fun release() = Unit
     }

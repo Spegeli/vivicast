@@ -80,15 +80,18 @@ Implemented and validated:
 - Media3 playback errors now flow into `DefaultVivicastPlayerController`, which performs up to 5 reconnect attempts for stream aborts before entering `PlaybackStatus.Error`.
 - The fullscreen player now shows a focused error dialog with retry, choose another channel, and close actions.
 - Eligible past EPG items can now launch Xtream catch-up playback through runtime-generated timeshift URLs; final stream URLs are still not stored in Room.
+- Live channel playback now maps stored ADR-006 timeshift settings into `PlaybackRequest`, exposes the configured storage/window in player state, starts at the live edge, tracks a bounded live-edge offset for seek/pause state, resets the window on new channel requests, and offers a fullscreen Live action when playback is behind the live edge.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
 - Controller unit coverage verifies stream-abort reconnect success and reconnect exhaustion.
+- Controller unit coverage verifies live timeshift window initialization, seek offset tracking, and returning to the live edge.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
 - Stream resolver unit coverage verifies Xtream catch-up URL generation from an EPG time window.
 - Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
 - Player instrumentation coverage verifies CH+/CH- callback routing.
 - Player instrumentation coverage verifies error dialog focus and retry action routing.
+- Player instrumentation coverage verifies that a behind-live timeshift state exposes the fullscreen Live action.
 - Playback repository instrumentation coverage verifies progress scoping, continue-watching ordering, recent-channel limits, and provider cleanup.
 
 Validated with:
@@ -107,12 +110,14 @@ Validated with:
 - `.\gradlew.bat :feature:live-tv:compileDebugKotlin :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :core:player:testDebugUnitTest :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:playback:testDebugUnitTest :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :core:player:testDebugUnitTest :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - M3U playback stream reference handling without storing final stream URLs in Room.
-- Local timeshift buffer behavior according to ADR-006.
+- Media3-backed local timeshift buffer/storage layer for ADR-006 RAM/Internal modes beneath the current timeshift request/state/UI model.
 - Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done

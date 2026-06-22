@@ -129,6 +129,47 @@ class DefaultVivicastPlayerControllerTest {
         assertEquals(5, controller.state.value.error?.retryCount)
     }
 
+    @Test
+    fun liveTimeshiftStartsAtLiveEdgeWithConfiguredWindow() = runBlocking {
+        val engine = BlockingPlaybackEngine()
+        val controller = testController(engine)
+
+        controller.play(TIMESHIFT_REQUEST)
+        withTimeout(5_000) { engine.awaitStarted("timeshift") }
+        engine.complete("timeshift")
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        assertEquals(30 * 60_000L, controller.state.value.durationMillis)
+        assertEquals(30 * 60_000L, controller.state.value.positionMillis)
+        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
+        assertTrue(controller.state.value.isAtLiveEdge)
+    }
+
+    @Test
+    fun liveTimeshiftSeekTracksOffsetAndCanReturnToLiveEdge() = runBlocking {
+        val engine = BlockingPlaybackEngine()
+        val controller = testController(engine)
+
+        controller.play(TIMESHIFT_REQUEST)
+        withTimeout(5_000) { engine.awaitStarted("timeshift") }
+        engine.complete("timeshift")
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        controller.seekBy(-30_000L)
+        assertEquals(30_000L, controller.state.value.liveEdgeOffsetMillis)
+        assertEquals(30 * 60_000L - 30_000L, controller.state.value.positionMillis)
+        assertEquals(listOf(-30_000L), engine.seekDeltas)
+
+        controller.seekToLiveEdge()
+        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
+        assertEquals(30 * 60_000L, controller.state.value.positionMillis)
+        assertEquals(listOf(-30_000L, 30_000L), engine.seekDeltas)
+    }
+
     private fun testController(engine: PlaybackEngine): DefaultVivicastPlayerController =
         DefaultVivicastPlayerController(
             engine = engine,
@@ -146,6 +187,7 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     var released = false
     override var currentPositionMillis = 0L
     override var durationMillis = 0L
+    val seekDeltas = mutableListOf<Long>()
 
     override suspend fun start(request: PlaybackRequest) {
         startedIds += request.playbackId
@@ -173,7 +215,9 @@ private class BlockingPlaybackEngine : PlaybackEngine {
 
     override fun pause() = Unit
     override fun resume() = Unit
-    override fun seekBy(deltaMillis: Long) = Unit
+    override fun seekBy(deltaMillis: Long) {
+        seekDeltas += deltaMillis
+    }
     override fun stop() = Unit
     override fun release() {
         released = true
@@ -239,4 +283,13 @@ private val SECOND_REQUEST = TEST_REQUEST.copy(
     mediaId = "channel-b",
     title = "Channel B",
     streamUrl = "https://stream.example/channel-b.m3u8",
+)
+
+private val TIMESHIFT_REQUEST = TEST_REQUEST.copy(
+    playbackId = "timeshift",
+    seekable = true,
+    timeshift = PlaybackTimeshiftConfig(
+        storage = PlaybackTimeshiftStorage.Automatic,
+        windowMillis = 30 * 60_000L,
+    ),
 )

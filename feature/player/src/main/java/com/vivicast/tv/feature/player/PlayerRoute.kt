@@ -62,6 +62,7 @@ fun PlayerRoute(
     val errorRetryFocusRequester = remember { FocusRequester() }
     val demoPlayerState = DemoCatalog.playerStates.first()
     val controllerState by playerController?.state?.collectAsState() ?: remember { mutableStateOf(null) }
+    val currentState = controllerState
     val request = controllerState?.request
     val playing = when (controllerState?.status) {
         PlaybackStatus.Starting, PlaybackStatus.Playing -> true
@@ -74,6 +75,7 @@ fun PlayerRoute(
     val seekable = request?.seekable ?: demoPlayerState.seekable
     val progress = controllerState?.progressPercent() ?: demoProgress
     val title = request?.title ?: demoPlayerState.title
+    val badges = controllerState?.badges() ?: demoPlayerState.badges
 
     DisposableEffect(playerController) {
         onDispose {
@@ -137,13 +139,19 @@ fun PlayerRoute(
                 title = title,
                 subtitle = if (controllerState?.status == PlaybackStatus.Error) {
                     "Wiedergabe konnte nicht gestartet werden."
+                } else if (currentState?.isTimeshiftEnabled == true) {
+                    if (currentState.isAtLiveEdge) {
+                        "Timeshift-Fenster aktiv. Live-Kante erreicht."
+                    } else {
+                        "Timeshift: ${currentState.liveEdgeOffsetMillis.formatOffset()} hinter Live."
+                    }
                 } else if (seekable) {
                     "Timeline steuert die Position."
                 } else {
                     "Timeshift fuer diesen Sender nicht verfuegbar."
                 },
-                statusLabel = controllerState?.status?.statusLabel(request?.mediaType) ?: if (playing) "Live" else "Pausiert",
-                badges = demoPlayerState.badges,
+                statusLabel = controllerState?.status?.statusLabel(controllerState) ?: if (playing) "Live" else "Pausiert",
+                badges = badges,
                 progress = progress,
                 seekable = seekable,
                 focusedTimeline = focusedTimeline,
@@ -175,6 +183,14 @@ fun PlayerRoute(
                     }
                 },
                 actions = {
+                    if (currentState?.isTimeshiftEnabled == true && !currentState.isAtLiveEdge) {
+                        ActionPill(
+                            "Live",
+                            selected = true,
+                            modifier = Modifier.testTag(playerLiveEdgeTag()),
+                            onClick = { playerController?.seekToLiveEdge() },
+                        )
+                    }
                     ActionPill("Audio", onClick = {})
                     ActionPill("Untertitel", onClick = {})
                     ActionPill("Bildformat", onClick = {})
@@ -242,6 +258,7 @@ fun playerErrorDialogTag(): String = "player-error-dialog"
 fun playerErrorRetryTag(): String = "player-error-retry"
 fun playerErrorChooseAnotherTag(): String = "player-error-choose-another"
 fun playerErrorCloseTag(): String = "player-error-close"
+fun playerLiveEdgeTag(): String = "player-live-edge"
 
 @Composable
 private fun PlaybackErrorDialog(
@@ -286,11 +303,29 @@ private fun VivicastPlayerState.progressPercent(): Int {
     return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
 }
 
-private fun PlaybackStatus.statusLabel(mediaType: PlaybackMediaType?): String =
+private fun VivicastPlayerState.badges(): List<String> =
+    if (isTimeshiftEnabled) {
+        listOf("Timeshift", "${timeshiftWindowMillis / 60_000L} min")
+    } else {
+        emptyList()
+    }
+
+private fun Long.formatOffset(): String {
+    val totalSeconds = (this / 1_000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "${minutes}:${seconds.toString().padStart(2, '0')} min"
+}
+
+private fun PlaybackStatus.statusLabel(state: VivicastPlayerState?): String =
     when (this) {
         PlaybackStatus.Idle -> "Bereit"
         PlaybackStatus.Starting -> "Startet"
-        PlaybackStatus.Playing -> if (mediaType == PlaybackMediaType.Channel) "Live" else "Wiedergabe"
+        PlaybackStatus.Playing -> when {
+            state?.isTimeshiftEnabled == true && !state.isAtLiveEdge -> "Timeshift"
+            state?.request?.mediaType == PlaybackMediaType.Channel -> "Live"
+            else -> "Wiedergabe"
+        }
         PlaybackStatus.Paused -> "Pausiert"
         PlaybackStatus.Error -> "Fehler"
         PlaybackStatus.Released -> "Beendet"

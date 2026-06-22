@@ -13,13 +13,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -33,6 +33,8 @@ interface VivicastPlayerController {
     fun resume()
 
     fun seekBy(deltaMillis: Long)
+
+    fun seekToLiveEdge()
 
     fun stop()
 
@@ -48,17 +50,39 @@ data class PlaybackRequest(
     val streamUrl: String,
     val seekable: Boolean,
     val startPositionMillis: Long = 0L,
+    val timeshift: PlaybackTimeshiftConfig? = null,
 )
 
 enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
+
+data class PlaybackTimeshiftConfig(
+    val storage: PlaybackTimeshiftStorage,
+    val windowMillis: Long,
+) {
+    val enabled: Boolean
+        get() = windowMillis > 0L
+}
+
+enum class PlaybackTimeshiftStorage { Automatic, Ram, InternalStorage }
+
+private const val LIVE_EDGE_TOLERANCE_MILLIS = 2_000L
 
 data class VivicastPlayerState(
     val status: PlaybackStatus = PlaybackStatus.Idle,
     val request: PlaybackRequest? = null,
     val positionMillis: Long = 0L,
     val durationMillis: Long = 0L,
+    val liveEdgeOffsetMillis: Long = 0L,
+    val timeshiftWindowMillis: Long = 0L,
+    val timeshiftStorage: PlaybackTimeshiftStorage? = null,
     val error: PlaybackError? = null,
-)
+) {
+    val isTimeshiftEnabled: Boolean
+        get() = timeshiftWindowMillis > 0L
+
+    val isAtLiveEdge: Boolean
+        get() = !isTimeshiftEnabled || liveEdgeOffsetMillis <= LIVE_EDGE_TOLERANCE_MILLIS
+}
 
 enum class PlaybackStatus { Idle, Starting, Playing, Paused, Error, Released }
 
@@ -81,6 +105,7 @@ class DefaultVivicastPlayerController(
     private var progressJob: Job? = null
     private var reconnectJob: Job? = null
     private var engineErrorJob: Job? = null
+    private var liveEdgeOffsetMillis = 0L
     private var released = false
 
     override val state: StateFlow<VivicastPlayerState> = mutableState.asStateFlow()
@@ -99,6 +124,7 @@ class DefaultVivicastPlayerController(
         reconnectJob?.cancel()
         stopProgressPolling()
         engine.stop()
+        liveEdgeOffsetMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Starting, request = request)
         startJob = scope.launch(dispatcher) {
             startWithRetries(request)
@@ -119,7 +145,25 @@ class DefaultVivicastPlayerController(
 
     override fun seekBy(deltaMillis: Long) {
         if (released || mutableState.value.request?.seekable != true) return
+        val current = mutableState.value
+        if (current.isTimeshiftEnabled) {
+            seekTimeshiftBy(deltaMillis, current)
+            return
+        }
         engine.seekBy(deltaMillis)
+    }
+
+    override fun seekToLiveEdge() {
+        if (released) return
+        val current = mutableState.value
+        if (!current.isTimeshiftEnabled || current.isAtLiveEdge) return
+        val offset = liveEdgeOffsetMillis
+        liveEdgeOffsetMillis = 0L
+        engine.seekBy(offset)
+        mutableState.value = current.copy(
+            positionMillis = current.timeshiftWindowMillis,
+            liveEdgeOffsetMillis = 0L,
+        )
     }
 
     override fun stop() {
@@ -130,6 +174,7 @@ class DefaultVivicastPlayerController(
         reconnectJob = null
         stopProgressPolling()
         engine.stop()
+        liveEdgeOffsetMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
     }
 
@@ -144,6 +189,7 @@ class DefaultVivicastPlayerController(
         engineErrorJob = null
         stopProgressPolling()
         engine.release()
+        liveEdgeOffsetMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Released)
     }
 
@@ -152,12 +198,7 @@ class DefaultVivicastPlayerController(
         while (true) {
             try {
                 engine.start(request)
-                mutableState.value = VivicastPlayerState(
-                    status = PlaybackStatus.Playing,
-                    request = request,
-                    positionMillis = engine.currentPositionMillis,
-                    durationMillis = engine.durationMillis,
-                )
+                mutableState.value = playingState(request)
                 startProgressPolling()
                 return
             } catch (error: CancellationException) {
@@ -217,15 +258,14 @@ class DefaultVivicastPlayerController(
             try {
                 engine.stop()
                 val reconnectRequest = request.copy(
-                    startPositionMillis = if (request.seekable) lastPositionMillis.coerceAtLeast(0L) else 0L,
+                    startPositionMillis = when {
+                        request.isLiveTimeshift() -> 0L
+                        request.seekable -> lastPositionMillis.coerceAtLeast(0L)
+                        else -> 0L
+                    },
                 )
                 engine.start(reconnectRequest)
-                mutableState.value = VivicastPlayerState(
-                    status = PlaybackStatus.Playing,
-                    request = reconnectRequest,
-                    positionMillis = engine.currentPositionMillis,
-                    durationMillis = engine.durationMillis,
-                )
+                mutableState.value = playingState(reconnectRequest)
                 startProgressPolling()
                 return
             } catch (error: CancellationException) {
@@ -240,6 +280,9 @@ class DefaultVivicastPlayerController(
             request = request,
             positionMillis = lastPositionMillis,
             durationMillis = mutableState.value.durationMillis,
+            liveEdgeOffsetMillis = mutableState.value.liveEdgeOffsetMillis,
+            timeshiftWindowMillis = mutableState.value.timeshiftWindowMillis,
+            timeshiftStorage = mutableState.value.timeshiftStorage,
             error = PlaybackError(
                 playbackId = request.playbackId,
                 retryCount = maxReconnectAttempts,
@@ -251,16 +294,24 @@ class DefaultVivicastPlayerController(
     private fun startProgressPolling() {
         stopProgressPolling()
         progressJob = scope.launch(dispatcher) {
+            var lastPollMillis = System.currentTimeMillis()
             while (true) {
                 delay(PROGRESS_POLL_INTERVAL_MILLIS)
+                val nowMillis = System.currentTimeMillis()
+                val elapsedMillis = (nowMillis - lastPollMillis).coerceAtLeast(0L)
+                lastPollMillis = nowMillis
                 val current = mutableState.value
                 if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) {
                     return@launch
                 }
-                mutableState.value = current.copy(
-                    positionMillis = engine.currentPositionMillis,
-                    durationMillis = engine.durationMillis,
-                )
+                mutableState.value = if (current.isTimeshiftEnabled) {
+                    timeshiftProgressState(current, elapsedMillis)
+                } else {
+                    current.copy(
+                        positionMillis = engine.currentPositionMillis,
+                        durationMillis = engine.durationMillis,
+                    )
+                }
             }
         }
     }
@@ -268,6 +319,57 @@ class DefaultVivicastPlayerController(
     private fun stopProgressPolling() {
         progressJob?.cancel()
         progressJob = null
+    }
+
+    private fun playingState(request: PlaybackRequest): VivicastPlayerState {
+        val timeshift = request.timeshift?.takeIf { it.enabled }
+        return if (request.isLiveTimeshift() && timeshift != null) {
+            liveEdgeOffsetMillis = 0L
+            VivicastPlayerState(
+                status = PlaybackStatus.Playing,
+                request = request,
+                positionMillis = timeshift.windowMillis,
+                durationMillis = timeshift.windowMillis,
+                liveEdgeOffsetMillis = 0L,
+                timeshiftWindowMillis = timeshift.windowMillis,
+                timeshiftStorage = timeshift.storage,
+            )
+        } else {
+            VivicastPlayerState(
+                status = PlaybackStatus.Playing,
+                request = request,
+                positionMillis = engine.currentPositionMillis,
+                durationMillis = engine.durationMillis,
+            )
+        }
+    }
+
+    private fun PlaybackRequest.isLiveTimeshift(): Boolean =
+        mediaType == PlaybackMediaType.Channel && timeshift?.enabled == true
+
+    private fun seekTimeshiftBy(deltaMillis: Long, current: VivicastPlayerState) {
+        val windowMillis = current.timeshiftWindowMillis
+        val targetOffset = (liveEdgeOffsetMillis - deltaMillis).coerceIn(0L, windowMillis)
+        val actualDeltaMillis = liveEdgeOffsetMillis - targetOffset
+        liveEdgeOffsetMillis = targetOffset
+        if (actualDeltaMillis != 0L) {
+            engine.seekBy(actualDeltaMillis)
+        }
+        mutableState.value = current.copy(
+            positionMillis = windowMillis - targetOffset,
+            liveEdgeOffsetMillis = targetOffset,
+        )
+    }
+
+    private fun timeshiftProgressState(current: VivicastPlayerState, elapsedMillis: Long): VivicastPlayerState {
+        if (current.status == PlaybackStatus.Paused) {
+            liveEdgeOffsetMillis = (liveEdgeOffsetMillis + elapsedMillis).coerceAtMost(current.timeshiftWindowMillis)
+        }
+        return current.copy(
+            positionMillis = current.timeshiftWindowMillis - liveEdgeOffsetMillis,
+            durationMillis = current.timeshiftWindowMillis,
+            liveEdgeOffsetMillis = liveEdgeOffsetMillis,
+        )
     }
 
     companion object {

@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import com.vivicast.tv.core.cache.MediaCacheStats
 import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
+import com.vivicast.tv.core.datastore.PlaybackPreferences
+import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
@@ -29,6 +31,8 @@ import com.vivicast.tv.core.designsystem.VivicastTopNavigation
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
+import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
@@ -74,7 +78,7 @@ private fun VivicastApp(appContainer: AppContainer) {
 
     fun openChannel(channel: Channel) {
         scope.launch {
-            appContainer.openChannelPlayback(channel) {
+            appContainer.openChannelPlayback(channel, preferences.playback) {
                 playerVisible = true
             }
         }
@@ -326,7 +330,11 @@ private suspend fun AppContainer.resolveSeriesImageModel(series: Series, type: M
     )?.file
 }
 
-private suspend fun AppContainer.openChannelPlayback(channel: Channel, onStarted: () -> Unit) {
+private suspend fun AppContainer.openChannelPlayback(
+    channel: Channel,
+    playbackPreferences: PlaybackPreferences,
+    onStarted: () -> Unit,
+) {
     val stream = playbackStreamResolver.resolve(
         PlaybackStreamRequest(
             providerId = channel.providerId,
@@ -335,6 +343,7 @@ private suspend fun AppContainer.openChannelPlayback(channel: Channel, onStarted
             remoteId = channel.remoteId,
         ),
     ).resolvedStreamOrNull() ?: return
+    val timeshift = playbackPreferences.timeshiftConfig()
 
     playerController.play(
         PlaybackRequest(
@@ -344,7 +353,8 @@ private suspend fun AppContainer.openChannelPlayback(channel: Channel, onStarted
             mediaType = PlaybackMediaType.Channel,
             title = channel.name,
             streamUrl = stream.url,
-            seekable = false,
+            seekable = timeshift != null,
+            timeshift = timeshift,
         ),
     )
     onStarted()
@@ -480,6 +490,24 @@ private fun progressPercent(positionMillis: Long, durationMillis: Long): Int {
     if (durationMillis <= 0L) return 0
     return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
 }
+
+private fun PlaybackPreferences.timeshiftConfig(): PlaybackTimeshiftConfig? {
+    val minutes = when (timeshiftMinutes) {
+        15, 30, 60, 120 -> timeshiftMinutes
+        else -> return null
+    }
+    return PlaybackTimeshiftConfig(
+        storage = timeshiftStorage.toPlayerStorage(),
+        windowMillis = minutes * 60_000L,
+    )
+}
+
+private fun TimeshiftStoragePreference.toPlayerStorage(): PlaybackTimeshiftStorage =
+    when (this) {
+        TimeshiftStoragePreference.Automatic -> PlaybackTimeshiftStorage.Automatic
+        TimeshiftStoragePreference.Ram -> PlaybackTimeshiftStorage.Ram
+        TimeshiftStoragePreference.InternalStorage -> PlaybackTimeshiftStorage.InternalStorage
+    }
 
 private fun Int.floorMod(modulus: Int): Int =
     ((this % modulus) + modulus) % modulus

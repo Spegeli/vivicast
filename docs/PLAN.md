@@ -100,8 +100,9 @@ Done:
   - Media3 stream-abort errors now trigger up to 5 reconnect attempts before surfacing a player error
   - Player error dialog offers retry, choose another channel, and close actions
   - Xtream catch-up playback can be opened from eligible past EPG items using runtime-generated timeshift URLs
+  - live channel playback now carries ADR-006 timeshift settings into the player request, tracks a bounded live window/live-edge offset, resets the window on new channel requests, and exposes a player Live action when playback is behind the live edge
   - timeline OK handling no longer double-toggles playback
-  - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, CH+/CH- callback routing, error retry focus/action, and stop-on-close
+  - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, CH+/CH- callback routing, error retry focus/action, timeshift live-edge action presence, and stop-on-close
   - playback repository instrumentation tests cover continue-watching, recent-channel history, media scoping, and provider cleanup
   - instrumentation-tested modules now target SDK 36 for test APKs to avoid older-Android warning dialogs during emulator QA
 
@@ -138,7 +139,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Add local timeshift buffer behavior for live playback according to ADR-006.
+1. Add the Media3-backed local timeshift buffer/storage layer for ADR-006 RAM/Internal modes below the new timeshift request/state model.
 2. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
 3. Add configurable completed-threshold settings if the fixed 90 percent threshold is not enough for the first playback slice.
 
