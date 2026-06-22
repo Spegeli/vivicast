@@ -44,6 +44,33 @@ This phase replaces demo-backed Live-TV/search behavior with Room-backed app beh
 - Keep search result rows horizontal and remove all "show all" style actions.
 - Add D-Pad and focus-restore tests for Live-TV, search, dialogs, and provider/category transitions.
 
+## Current Progress
+
+Implemented and validated:
+
+- Room-backed `MediaRepository` implementation for categories, channels, movies, series, seasons, episodes, and local search.
+- Local Room search DAO queries for channels, movies, series, and EPG programs.
+- AppContainer wiring for `RoomMediaRepository`.
+- Live-TV can render provider, category, and channel columns from local Room data while preserving the demo route fallback for isolated previews/usages.
+- Live-TV empty states handle no-provider and no-channel startup without blocking app launch.
+- Channel logo image loading resolves cached local files through `MediaCacheStore.getEntry` before the UI receives an image model.
+- Design-system hero, poster, search-result, and channel-logo image slots support local file-backed Coil models while keeping existing drawable resource fallbacks.
+
+Validated with:
+
+- `.\gradlew.bat :core:database:compileDebugKotlin :data:media:compileDebugKotlin :core:designsystem:compileDebugKotlin :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :data:media:connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug :app:installDebug`
+- Android TV emulator launch and Live-TV empty-state visual smoke check
+- Screenshot: `docs/phase-05-live-tv-room-empty-smoke.png`
+
+Still open:
+
+- Live-TV current/next EPG panel is still placeholder text.
+- Favorites are not wired into Live-TV cards or toggles yet.
+- Provider expanded/collapsed tree state persistence is not implemented yet.
+- Search UI still uses demo data and is not connected to `RoomMediaRepository.search`.
+
 ## Definition of Done
 
 - Live-TV displays real locally imported provider data.
@@ -68,4 +95,3 @@ This phase replaces demo-backed Live-TV/search behavior with Room-backed app beh
 - `external-docs/design/interaction/01-live-tv-adaptive-columns.md`
 - `external-docs/design/design-system/04-focus-navigation.md`
 - `external-docs/design/mockups/high-fidelity/02-ui-direction-decisions.md`
-

@@ -127,6 +127,40 @@ interface CatalogDao {
     )
     fun observeEpisodes(providerId: String, seasonId: String): Flow<List<EpisodeEntity>>
 
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchChannels(query: String, limit: Int): List<ChannelEntity>
+
+    @Query(
+        """
+        SELECT * FROM movies
+        WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
+           OR originalName LIKE '%' || :query || '%' COLLATE NOCASE
+           OR genre LIKE '%' || :query || '%' COLLATE NOCASE
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchMovies(query: String, limit: Int): List<MovieEntity>
+
+    @Query(
+        """
+        SELECT * FROM series
+        WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
+           OR originalName LIKE '%' || :query || '%' COLLATE NOCASE
+           OR genre LIKE '%' || :query || '%' COLLATE NOCASE
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchSeries(query: String, limit: Int): List<SeriesEntity>
+
     @Upsert
     suspend fun upsertCategories(categories: List<CategoryEntity>)
 

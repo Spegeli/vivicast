@@ -26,6 +26,8 @@ kotlin {
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":data:media"))
+    implementation(project(":data:provider"))
+    implementation(project(":domain"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.runtime)

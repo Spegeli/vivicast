@@ -8,7 +8,7 @@ Use `docs/roadmap.md` as the detailed implementation roadmap. Use the active `do
 
 ## Current Phase
 
-Phase 04 - Ingest, Refresh, and EPG
+Phase 05 - Live-TV, Favorites, and Search
 
 ## Current Status
 
@@ -58,12 +58,18 @@ Done:
   - Settings "Über die App" exposes cache stats, cache size selection, media image refresh scheduling, cache cleanup scheduling, and local cache clear actions
   - Android TV emulator D-Pad smoke check passed for the Settings cache maintenance view
   - Settings EPG exposes manual channel-to-EPG mapping controls for imported provider channels and linked EPG sources
+- Phase 05 Live-TV data wiring has started:
+  - `RoomMediaRepository` exposes Room-backed categories, channels, movies, series, seasons, episodes, and local search results
+  - Live-TV can now render provider/category/channel columns from local Room data through `AppContainer`
+  - Live-TV keeps the old demo route as a fallback when repositories are not provided
+  - cached channel logos resolve to local files before reaching UI image loading
+  - reusable TV artwork components can load local file-backed images through Coil while preserving demo resource fallbacks
 
 Still important:
 
-- Existing UI uses demo data.
-- Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if Phase 04 needs more operator comfort.
-- Wiring cached assets into UI image loading and Media3 playback are not complete yet.
+- Movies, Series, Search, favorites, and the Live-TV EPG panel are not fully Room-backed yet.
+- Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
+- Media3 playback is not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -93,8 +99,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 04 with any remaining ingest/refresh polish before moving to Phase 05.
-2. Keep Phase 03 provider security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
+1. Continue Phase 05 by wiring Live-TV current/next EPG and channel favorites from local repositories.
+2. Connect Search to `RoomMediaRepository.search` with 300 ms debounce and local search history.
+3. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
 

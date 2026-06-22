@@ -152,6 +152,9 @@ Implemented and validated:
   - saving writes a manual `EPGChannelMappingEntity` through the existing repository API
   - clearing removes the manual mapping so automatic mapping can be recreated by a later XMLTV import
   - the current UI accepts an explicit external XMLTV channel ID instead of persisting a separate XMLTV channel candidate catalog
+- Phase handoff polish:
+  - reusable artwork components can load local file-backed Coil image models while preserving demo drawable fallbacks
+  - Live-TV channel logos are resolved through `MediaCacheStore.getEntry` before UI image loading, so original source URLs are not passed to the image loader
 
 Validated with:
 
@@ -181,6 +184,9 @@ Validated with:
 - `.\gradlew.bat :data:epg:compileDebugKotlin :feature:settings:compileDebugKotlin`
 - `.\gradlew.bat :data:epg:connectedDebugAndroidTest :feature:settings:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug :app:installDebug`
+- `.\gradlew.bat :core:database:compileDebugKotlin :data:media:compileDebugKotlin :core:designsystem:compileDebugKotlin :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :data:media:connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug :app:installDebug`
 - Android TV emulator install, launch, and D-Pad smoke test for Settings EPG master-detail navigation
 - Android TV emulator install, launch, and D-Pad smoke test for Settings Allgemein refresh focus and manual refresh enqueue
 - Android TV emulator D-Pad smoke test for Settings cache maintenance navigation, cache job actions, and focus visibility
@@ -188,6 +194,7 @@ Validated with:
 - Screenshot: `docs/phase-04-epg-priority-smoke.png`
 - Screenshot: `docs/phase-04-settings-refresh-smoke.png`
 - Screenshot: `docs/phase-04-cache-settings-smoke.png`
+- Screenshot: `docs/phase-05-live-tv-room-empty-smoke.png`
 - Temporary non-committed public refresh smoke JUnit run:
   - M3U: `https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u`
   - XMLTV: `https://iptv-epg.org/files/epg-de.xml`
@@ -196,7 +203,7 @@ Validated with:
 Still open:
 
 - Manual EPG mapping uses explicit external XMLTV channel ID entry; a browsable XMLTV channel candidate picker is not implemented because XMLTV channel definitions are not persisted separately in PRD v1 storage.
-- Cached assets are not yet wired into UI image loading; current Phase 04 work prepares local storage, lookup, and worker maintenance only.
+- Movie, series, search, and player surfaces still need their persisted data/image wiring in later phases.
 
 ## Definition of Done
 

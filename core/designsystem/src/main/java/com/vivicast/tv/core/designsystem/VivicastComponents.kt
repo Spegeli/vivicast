@@ -53,6 +53,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
 import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
 
 @Composable
 fun VivicastScreen(
@@ -388,6 +389,7 @@ fun HeroPanel(
     modifier: Modifier = Modifier,
     meta: String? = null,
     backdropResId: Int? = null,
+    backdropModel: Any? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     VivicastHeroPanel(
@@ -396,6 +398,7 @@ fun HeroPanel(
         modifier = modifier,
         meta = meta,
         backdropResId = backdropResId,
+        backdropModel = backdropModel,
         action = action,
     )
 }
@@ -407,6 +410,7 @@ fun VivicastHeroPanel(
     modifier: Modifier = Modifier,
     meta: String? = null,
     backdropResId: Int? = null,
+    backdropModel: Any? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     VivicastGlassPanel(modifier = modifier, contentPadding = VivicastSpacing.Space2) {
@@ -422,13 +426,22 @@ fun VivicastHeroPanel(
                 )
                 .border(VivicastBorders.Hairline, Color(0x554FC3F7), VivicastShapes.PanelRadius),
         ) {
-            if (backdropResId != null) {
-                Image(
-                    painter = painterResource(backdropResId),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
-                )
+            if (backdropModel != null || backdropResId != null) {
+                if (backdropModel != null) {
+                    AsyncImage(
+                        model = backdropModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                } else if (backdropResId != null) {
+                    Image(
+                        painter = painterResource(backdropResId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -487,6 +500,7 @@ fun PosterCard(
     seen: Boolean,
     modifier: Modifier = Modifier,
     imageResId: Int? = null,
+    imageModel: Any? = null,
     onClick: () -> Unit = {},
 ) {
     VivicastPosterCard(
@@ -499,6 +513,7 @@ fun PosterCard(
         seen = seen,
         modifier = modifier,
         imageResId = imageResId,
+        imageModel = imageModel,
         onClick = onClick,
     )
 }
@@ -514,6 +529,7 @@ fun VivicastPosterCard(
     seen: Boolean,
     modifier: Modifier = Modifier,
     imageResId: Int? = null,
+    imageModel: Any? = null,
     onClick: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -538,6 +554,7 @@ fun VivicastPosterCard(
                 favorite = favorite,
                 seen = seen,
                 imageResId = imageResId,
+                imageModel = imageModel,
                 focused = isFocused,
                 progressPercent = progressPercent,
             )
@@ -562,6 +579,7 @@ private fun PosterArtwork(
     favorite: Boolean,
     seen: Boolean,
     imageResId: Int?,
+    imageModel: Any?,
     focused: Boolean,
     progressPercent: Int,
 ) {
@@ -576,7 +594,19 @@ private fun PosterArtwork(
                 },
             ),
     ) {
-        if (imageResId != null) {
+        if (imageModel != null) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xA8050910)))),
+            )
+        } else if (imageResId != null) {
             Image(
                 painter = painterResource(imageResId),
                 contentDescription = null,
@@ -685,6 +715,7 @@ fun VivicastSearchResultCard(
     rating: String? = null,
     posterLike: Boolean = false,
     imageResId: Int? = null,
+    imageModel: Any? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
@@ -697,7 +728,7 @@ fun VivicastSearchResultCard(
     ) { focused ->
         if (posterLike) {
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
-                SearchPosterThumb(title = title, rating = rating, imageResId = imageResId, focused = focused)
+                SearchPosterThumb(title = title, rating = rating, imageResId = imageResId, imageModel = imageModel, focused = focused)
                 Text(
                     text = title,
                     maxLines = 1,
@@ -729,6 +760,7 @@ private fun SearchPosterThumb(
     title: String,
     rating: String?,
     imageResId: Int?,
+    imageModel: Any?,
     focused: Boolean,
 ) {
     Box(
@@ -740,7 +772,19 @@ private fun SearchPosterThumb(
             .border(VivicastBorders.Hairline, Color(0x334FC3F7), VivicastShapes.RadiusMediumShape),
         contentAlignment = Alignment.Center,
     ) {
-        if (imageResId != null) {
+        if (imageModel != null) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99070A12)))),
+            )
+        } else if (imageResId != null) {
             Image(
                 painter = painterResource(imageResId),
                 contentDescription = null,
@@ -888,6 +932,7 @@ fun VivicastChannelCard(
     favorite: Boolean,
     catchUp: Boolean,
     logoResId: Int? = null,
+    logoModel: Any? = null,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit,
     onClick: () -> Unit,
@@ -904,7 +949,7 @@ fun VivicastChannelCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            MiniLogo(logoText, logoMissing, imageResId = logoResId)
+            MiniLogo(logoText, logoMissing, imageResId = logoResId, imageModel = logoModel)
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.weight(1f)) {
                 Text(
                     text = channelName,
@@ -1052,6 +1097,7 @@ fun MiniLogo(
     missing: Boolean,
     modifier: Modifier = Modifier,
     imageResId: Int? = null,
+    imageModel: Any? = null,
 ) {
     Box(
         modifier = modifier
@@ -1068,7 +1114,16 @@ fun MiniLogo(
             .border(VivicastBorders.Hairline, Color(0x554FC3F7), VivicastShapes.RadiusMediumShape),
         contentAlignment = Alignment.Center,
     ) {
-        if (imageResId != null) {
+        if (imageModel != null) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(VivicastSpacing.Space2),
+            )
+        } else if (imageResId != null) {
             Image(
                 painter = painterResource(imageResId),
                 contentDescription = null,

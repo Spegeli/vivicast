@@ -19,6 +19,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.vivicast.tv.core.cache.MediaCacheStats
+import com.vivicast.tv.core.cache.MediaCacheKey
+import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
@@ -33,6 +35,7 @@ import com.vivicast.tv.feature.search.SearchRoute
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
+import com.vivicast.tv.domain.model.Channel
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -68,7 +71,14 @@ private fun VivicastApp(appContainer: AppContainer) {
     }
 
     val destinations = listOf(
-        AppDestination("Live-TV", "live-tv") { LiveTvRoute(onOpenPlayer = { playerVisible = true }) },
+        AppDestination("Live-TV", "live-tv") {
+            LiveTvRoute(
+                providerRepository = appContainer.providerRepository,
+                mediaRepository = appContainer.mediaRepository,
+                resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
+                onOpenPlayer = { playerVisible = true },
+            )
+        },
         AppDestination("Filme", "movies") { MoviesRoute(onOpenPlayer = { playerVisible = true }) },
         AppDestination("Serien", "series") { SeriesRoute(onOpenPlayer = { playerVisible = true }) },
         AppDestination("Suche", "search") { SearchRoute() },
@@ -166,3 +176,14 @@ private data class AppDestination(
     val route: String,
     val content: @Composable () -> Unit,
 )
+
+private suspend fun AppContainer.resolveChannelLogoModel(channel: Channel): Any? {
+    val logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: return null
+    return mediaCacheStore.getEntry(
+        MediaCacheKey(
+            type = MediaCacheType.ChannelLogo,
+            ownerId = channel.id,
+            sourceUrl = logoUrl,
+        ),
+    )?.file
+}

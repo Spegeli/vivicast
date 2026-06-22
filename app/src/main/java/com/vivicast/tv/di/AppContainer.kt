@@ -16,7 +16,9 @@ import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.RoomEpgRepository
 import com.vivicast.tv.data.epg.SecureEpgSourceRepository
 import com.vivicast.tv.data.media.CatalogImportRepository
+import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
+import com.vivicast.tv.data.media.RoomMediaRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.RoomProviderRepository
 import com.vivicast.tv.iptv.m3u.DefaultM3uParser
@@ -75,6 +77,10 @@ class AppContainer(
 
     val catalogImportRepository: CatalogImportRepository by lazy {
         RoomCatalogImportRepository(database = database)
+    }
+
+    val mediaRepository: MediaRepository by lazy {
+        RoomMediaRepository(database = database)
     }
 
     val epgImportRepository: EpgImportRepository by lazy {
