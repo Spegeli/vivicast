@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -303,7 +304,7 @@ private fun RoomProviderCategoryColumn(
                         onClick = { onProviderToggle(provider) },
                         onFocused = { onProviderFocused(provider) },
                         contentPadding = 10.dp,
-                        modifier = Modifier.fillMaxWidth().height(74.dp),
+                        modifier = Modifier.fillMaxWidth().height(74.dp).testTag(providerTreeProviderTag(provider.id)),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             BasicText(
@@ -329,7 +330,7 @@ private fun RoomProviderCategoryColumn(
                                     onClick = { onCategoryFocused(category) },
                                     onFocused = { onCategoryFocused(category) },
                                     contentPadding = 14.dp,
-                                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp).testTag(providerTreeCategoryTag(category.id)),
                                 ) {
                                     BasicText(
                                         text = category.displayName,
@@ -387,6 +388,7 @@ private fun RoomChannelColumn(
                         favorite = channel.id in favoriteChannelIds,
                         catchUp = channel.isCatchupAvailable && isSelected && selectedCurrentProgram != null,
                         logoModel = logoModel,
+                        modifier = Modifier.testTag(channelRowTag(channel.id)),
                     )
                 }
             }
@@ -539,6 +541,9 @@ private val Category.displayName: String
 private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
 private const val EPG_PAST_WINDOW_MILLIS = 4L * 60L * 60L * 1000L
 private const val EPG_FUTURE_WINDOW_MILLIS = 8L * 60L * 60L * 1000L
+internal fun providerTreeProviderTag(providerId: String): String = "live-tv-provider-$providerId"
+internal fun providerTreeCategoryTag(categoryId: String): String = "live-tv-category-$categoryId"
+internal fun channelRowTag(channelId: String): String = "live-tv-channel-$channelId"
 
 private val ProviderStatus.label: String
     get() = when (this) {

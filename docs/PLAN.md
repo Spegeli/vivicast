@@ -72,6 +72,7 @@ Done:
   - Movies now render provider-owned Room categories, cached poster/backdrop images, and provider-scoped movie favorites with a demo fallback
   - Series now render provider-owned Room categories, cached poster/backdrop images, and provider-scoped series favorites with a demo fallback
   - Live-TV provider rows now support persisted expanded/collapsed tree state with categories nested under the active expanded provider
+  - Live-TV provider-tree and provider/category transition coverage now has Compose Android instrumentation tests
 
 Still important:
 
@@ -106,7 +107,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by tightening D-Pad/focus-restore coverage for Live-TV, search, dialogs, and provider/category transitions.
+1. Continue Phase 05 by tightening D-Pad/focus-restore coverage for Search, dialogs, Back behavior, and remaining cross-screen focus restore.
 2. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
