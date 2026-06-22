@@ -61,6 +61,27 @@ This phase turns the player overlay from demo behavior into controlled playback 
   - close
 - Add tests around start cancellation, retry limits, progress persistence, and controller lifecycle.
 
+## Current Progress
+
+Implemented and validated:
+
+- `DefaultVivicastPlayerController` exposes state, playback start, pause/resume, seek, stop, and release operations.
+- `Media3PlaybackEngine` wraps ExoPlayer for dynamic runtime media item playback without storing final stream URLs in Room.
+- `AppContainer` now provides a lazy Media3-backed `VivicastPlayerController`.
+- Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
+
+Validated with:
+
+- `.\gradlew.bat :core:player:compileDebugKotlin :core:player:testDebugUnitTest`
+- `.\gradlew.bat :app:compileDebugKotlin`
+
+Still open:
+
+- Dynamic stream URL resolution from provider credentials and media metadata.
+- Player UI/controller state integration.
+- Playback progress persistence for movies and episodes.
+- Channel zapping, reconnect, timeshift, and error dialogs.
+
 ## Definition of Done
 
 - Media3 playback works for locally imported provider content.
@@ -82,4 +103,3 @@ This phase turns the player overlay from demo behavior into controlled playback 
 - `external-docs/architecture/decisions/ADR-006-timeshift-strategy.md`
 - `external-docs/design/interaction/02-player-timeline-controls.md`
 - `external-docs/design/mockups/high-fidelity/02-ui-direction-decisions.md`
-

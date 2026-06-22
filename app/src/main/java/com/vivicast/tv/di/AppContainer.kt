@@ -9,6 +9,9 @@ import com.vivicast.tv.core.database.VivicastDatabaseFactory
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.network.NetworkClientFactory
+import com.vivicast.tv.core.player.DefaultVivicastPlayerController
+import com.vivicast.tv.core.player.Media3PlaybackEngine
+import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.data.epg.EpgImportRepository
@@ -110,6 +113,12 @@ class AppContainer(
 
     val mediaCacheStore: MediaCacheStore by lazy {
         FileMediaCacheStore(File(appContext.cacheDir, "media"))
+    }
+
+    val playerController: VivicastPlayerController by lazy {
+        DefaultVivicastPlayerController(
+            engine = Media3PlaybackEngine(appContext),
+        )
     }
 
     val refreshWorkerRunner: RefreshWorkerRunner by lazy {

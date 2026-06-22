@@ -82,6 +82,10 @@ Done:
   - D-Pad/focus/Back coverage exists for Live-TV provider tree, provider/category transitions, Search, destructive dialogs, Top navigation, and Player overlay
   - `assembleDebug` passes
 - Phase 06 playback work is now active.
+- Phase 06 Media3 controller foundation has started:
+  - `DefaultVivicastPlayerController` exposes playback state, start, pause, resume, seek, stop, and release
+  - Media3-backed engine wrapper is wired through `AppContainer`
+  - start cancellation, 5-retry exhaustion, and release lifecycle have unit coverage
 
 Still important:
 
@@ -116,9 +120,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Start Phase 06 by implementing the Media3-backed player controller foundation in `:core:player`.
-2. Keep stream URL generation dynamic from secure provider configuration and media metadata; do not persist final stream URLs in Room.
-3. Preserve TV-first player behavior: fullscreen first, OK opens overlay, Back closes overlay or returns to origin, timeline remains central focused control.
+1. Continue Phase 06 by adding dynamic stream URL resolution from provider credentials and media metadata.
+2. Wire `:feature:player` to controller state while preserving fullscreen-first and timeline-centered behavior.
+3. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data.
 
 ## Last Updated
 

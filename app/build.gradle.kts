@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:network"))
+    implementation(project(":core:player"))
     implementation(project(":core:security"))
     implementation(project(":data:epg"))
     implementation(project(":data:favorites"))

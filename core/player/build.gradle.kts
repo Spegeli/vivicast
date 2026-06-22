@@ -20,4 +20,8 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.kotlinx.coroutines.core)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.core)
 }
