@@ -67,18 +67,22 @@ Implemented and validated:
 
 - `DefaultVivicastPlayerController` exposes state, playback start, pause/resume, seek, stop, and release operations.
 - `Media3PlaybackEngine` wraps ExoPlayer for dynamic runtime media item playback without storing final stream URLs in Room.
+- `DefaultPlaybackStreamResolver` resolves Xtream live, movie, and episode playback URLs from secure provider credentials plus local media metadata at runtime.
+- M3U playback resolution remains blocked until per-channel stream references can be provided outside Room; M3U final stream URLs are still not persisted.
 - `AppContainer` now provides a lazy Media3-backed `VivicastPlayerController`.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
+- Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
 
 Validated with:
 
 - `.\gradlew.bat :core:player:compileDebugKotlin :core:player:testDebugUnitTest`
+- `.\gradlew.bat :data:playback:testDebugUnitTest :data:playback:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :app:compileDebugKotlin`
 
 Still open:
 
-- Dynamic stream URL resolution from provider credentials and media metadata.
-- Player UI/controller state integration.
+- Player UI/controller state integration using resolved runtime streams.
+- M3U playback stream reference handling without storing final stream URLs in Room.
 - Playback progress persistence for movies and episodes.
 - Channel zapping, reconnect, timeshift, and error dialogs.
 

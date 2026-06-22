@@ -20,5 +20,9 @@ kotlin {
 
 dependencies {
     implementation(project(":domain"))
+    implementation(project(":data:provider"))
     implementation(libs.kotlinx.coroutines.core)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.core)
 }

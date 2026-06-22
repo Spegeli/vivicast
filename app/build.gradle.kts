@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":data:epg"))
     implementation(project(":data:favorites"))
     implementation(project(":data:media"))
+    implementation(project(":data:playback"))
     implementation(project(":data:provider"))
     implementation(project(":domain"))
     implementation(project(":feature:live-tv"))

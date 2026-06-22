@@ -86,6 +86,10 @@ Done:
   - `DefaultVivicastPlayerController` exposes playback state, start, pause, resume, seek, stop, and release
   - Media3-backed engine wrapper is wired through `AppContainer`
   - start cancellation, 5-retry exhaustion, and release lifecycle have unit coverage
+- Phase 06 dynamic stream resolution has started:
+  - Xtream live, movie, and episode playback URLs are generated at runtime from secure credentials plus local media metadata
+  - `AppContainer` exposes a lazy `PlaybackStreamResolver`
+  - resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary
 
 Still important:
 
@@ -120,9 +124,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 06 by adding dynamic stream URL resolution from provider credentials and media metadata.
-2. Wire `:feature:player` to controller state while preserving fullscreen-first and timeline-centered behavior.
-3. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data.
+1. Wire `:feature:player` to controller state and `PlaybackStreamResolver` output while preserving fullscreen-first and timeline-centered behavior.
+2. Add playback entry-point handoff from locally imported Live-TV/movie/episode items.
+3. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
 
 ## Last Updated
 
