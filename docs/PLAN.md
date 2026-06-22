@@ -8,7 +8,7 @@ Use `docs/roadmap.md` as the detailed implementation roadmap. Use the active `do
 
 ## Current Phase
 
-Phase 05 - Live-TV, Favorites, and Search
+Phase 06 - Playback, Timeshift, and Errors
 
 ## Current Status
 
@@ -76,11 +76,17 @@ Done:
   - Search now has Compose Android instrumentation coverage for initial focus, debounce/local results, scrollable result groups, and history actions
   - Settings destructive Provider/EPG delete dialogs now request Cancel focus, handle Back dismissal, and have Compose Android instrumentation coverage
   - Top navigation now has Compose Android instrumentation coverage for focus-driven main-area selection
+  - Player overlay focus and Back/OK behavior now has Compose Android instrumentation coverage
+- Phase 05 is complete:
+  - local Room-backed Live-TV, Movies, Series, Favorites, and Search wiring exists
+  - D-Pad/focus/Back coverage exists for Live-TV provider tree, provider/category transitions, Search, destructive dialogs, Top navigation, and Player overlay
+  - `assembleDebug` passes
+- Phase 06 playback work is now active.
 
 Still important:
 
 - Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
-- Media3 playback is not complete yet.
+- Media3 playback is the active next implementation area.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -110,8 +116,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by reviewing whether any remaining Phase 05 focus-restore gaps need app-shell or player-overlay coverage before moving to Media3 playback.
-2. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
+1. Start Phase 06 by implementing the Media3-backed player controller foundation in `:core:player`.
+2. Keep stream URL generation dynamic from secure provider configuration and media metadata; do not persist final stream URLs in Room.
+3. Preserve TV-first player behavior: fullscreen first, OK opens overlay, Back closes overlay or returns to origin, timeline remains central focused control.
 
 ## Last Updated
 

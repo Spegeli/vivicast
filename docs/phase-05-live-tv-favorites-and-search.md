@@ -74,6 +74,7 @@ Implemented and validated:
 - Search focus and history behavior now has Compose Android instrumentation coverage for initial focus, debounce/local results, EPG group scrolling, history selection, single delete, and clear-all.
 - Settings destructive Provider and EPG source delete dialogs now request focus on "Abbrechen", handle TV Back key dismissal, expose stable test tags, and use AndroidTest target SDK 36 to avoid emulator old-target warnings.
 - Top navigation now exposes stable tags and has Compose Android instrumentation coverage for focus-driven main-area selection, matching the top-navigation model in the wireframes.
+- Player overlay focus and Back/OK behavior now has Compose Android instrumentation coverage: timeline initial focus, Back hides overlay, OK restores overlay, and Back again closes player.
 
 Validated with:
 
@@ -102,10 +103,12 @@ Validated with:
 - `.\gradlew.bat :app:compileDebugKotlin`
 - `.\gradlew.bat :core:designsystem:compileDebugKotlin :core:designsystem:compileDebugAndroidTestKotlin :core:designsystem:connectedDebugAndroidTest`
 - `.\gradlew.bat :app:compileDebugKotlin`
+- `.\gradlew.bat :core:designsystem:compileDebugKotlin :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :feature:player:connectedDebugAndroidTest`
+- `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- Remaining Phase 05 focus-restore gaps should be reviewed for app-shell or player-overlay coverage before moving to Phase 06 playback.
+- No remaining Phase 05 items. Continue with Phase 06 playback.
 
 ## Definition of Done
 

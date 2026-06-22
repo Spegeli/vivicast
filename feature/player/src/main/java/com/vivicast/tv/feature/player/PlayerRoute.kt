@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
@@ -97,7 +98,8 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
                 timelineFocusRequester = timelineFocusRequester,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 48.dp, vertical = 28.dp),
+                    .padding(horizontal = 48.dp, vertical = 28.dp)
+                    .testTag(playerOverlayTag()),
                 onTimelineFocusChanged = { focusedTimeline = it },
                 onTogglePlay = { playing = !playing },
                 onSeekLeft = { if (playerState.seekable) progress = (progress - 8).coerceAtLeast(0) },
@@ -121,7 +123,8 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(48.dp),
+                    .padding(48.dp)
+                    .testTag(playerHiddenOverlayTag()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 InfoPanel(
@@ -130,10 +133,16 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
                 )
                 ActionPill(
                     label = "Overlay",
-                    modifier = Modifier.focusRequester(hiddenOverlayFocusRequester),
+                    modifier = Modifier
+                        .focusRequester(hiddenOverlayFocusRequester)
+                        .testTag(playerHiddenOverlayActionTag()),
                     onClick = { overlayVisible = true },
                 )
             }
         }
     }
 }
+
+fun playerOverlayTag(): String = "player-overlay"
+fun playerHiddenOverlayTag(): String = "player-hidden-overlay"
+fun playerHiddenOverlayActionTag(): String = "player-hidden-overlay-action"

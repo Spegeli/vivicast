@@ -894,6 +894,7 @@ fun VivicastTopNavigation(
 }
 
 fun topNavItemTag(label: String): String = "top-nav-item-$label"
+fun playerTimelineTag(): String = "player-timeline"
 
 @Composable
 fun VivicastTopNavItem(
@@ -1053,6 +1054,7 @@ fun VivicastPlayerTimeline(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(VivicastCardSizes.PlayerTimelineHeight)
+                .testTag(playerTimelineTag())
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

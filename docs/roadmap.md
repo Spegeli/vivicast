@@ -79,8 +79,8 @@ Still stubbed or missing:
 | 02 | `docs/phase-02-data-model-and-persistence.md` | Complete | Implement the PRD Room/DataStore data foundation. |
 | 03 | `docs/phase-03-provider-security-and-configuration.md` | Complete | Add provider management and encrypted credential storage. |
 | 04 | `docs/phase-04-ingest-refresh-and-epg.md` | Complete | Add M3U, Xtream, XMLTV ingest, refresh scheduling, and EPG storage. |
-| 05 | `docs/phase-05-live-tv-favorites-and-search.md` | Active | Connect Live-TV, favorites, and local search to persisted data. |
-| 06 | `docs/phase-06-playback-timeshift-and-errors.md` | Planned | Add Media3 playback, timeline behavior, retries, reconnect, and timeshift. |
+| 05 | `docs/phase-05-live-tv-favorites-and-search.md` | Complete | Connect Live-TV, favorites, and local search to persisted data. |
+| 06 | `docs/phase-06-playback-timeshift-and-errors.md` | Active | Add Media3 playback, timeline behavior, retries, reconnect, and timeshift. |
 | 07 | `docs/phase-07-vod-series-history-and-android-tv.md` | Planned | Complete movies, series, history, Continue Watching, and Android TV integration. |
 | 08 | `docs/phase-08-backup-privacy-polish-and-release.md` | Planned | Add backup/restore, diagnostics, privacy hardening, performance polish, and release readiness. |
 
