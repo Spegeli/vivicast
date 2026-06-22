@@ -92,7 +92,8 @@ Done:
   - resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary
 - Phase 06 player UI/controller integration has started:
   - `PlayerRoute` renders controller state and forwards timeline pause/resume/seek/close actions to `VivicastPlayerController`
-  - Live-TV channel and movie actions resolve runtime streams and start controller playback requests before opening fullscreen player
+  - Live-TV channel, movie, and series episode actions resolve runtime streams and start controller playback requests before opening fullscreen player
+  - Series exposes a compact season/episode selector for imported episodes
   - timeline OK handling no longer double-toggles playback
   - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close
   - instrumentation-tested modules now target SDK 36 for test APKs to avoid older-Android warning dialogs during emulator QA
@@ -130,8 +131,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Add playback entry-point handoff for series episodes through `PlaybackStreamResolver` into `VivicastPlayerController`.
-2. Preserve fullscreen-first and timeline-centered player behavior while adding remaining playback requests.
+1. Add playback progress persistence for movies and episodes.
+2. Add channel zapping/reconnect/timeshift/error-dialog behavior.
 3. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
 
 ## Last Updated

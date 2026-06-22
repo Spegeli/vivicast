@@ -37,8 +37,10 @@ import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
+import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -51,10 +53,10 @@ fun SeriesRoute(
     favoritesRepository: FavoritesRepository? = null,
     resolveSeriesPosterModel: suspend (Series) -> Any? = { null },
     resolveSeriesBackdropModel: suspend (Series) -> Any? = { null },
-    onOpenPlayer: () -> Unit = {},
+    onOpenPlayer: (Episode) -> Unit = {},
 ) {
     if (providerRepository == null || mediaRepository == null || favoritesRepository == null) {
-        DemoSeriesRoute(onOpenPlayer = onOpenPlayer)
+        DemoSeriesRoute()
     } else {
         RoomSeriesRoute(
             providerRepository = providerRepository,
@@ -74,13 +76,15 @@ private fun RoomSeriesRoute(
     favoritesRepository: FavoritesRepository,
     resolveSeriesPosterModel: suspend (Series) -> Any?,
     resolveSeriesBackdropModel: suspend (Series) -> Any?,
-    onOpenPlayer: () -> Unit,
+    onOpenPlayer: (Episode) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var selectedSeriesId by remember { mutableStateOf<String?>(null) }
+    var selectedSeasonId by remember { mutableStateOf<String?>(null) }
+    var selectedEpisodeId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(providers) {
         val seriesProviders = providers.filter { it.includeSeries }
@@ -140,6 +144,29 @@ private fun RoomSeriesRoute(
     val selectedSeries = seriesItems.firstOrNull { it.id == selectedSeriesId }
     val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
     val selectedCategory = categoriesWithFavorites.firstOrNull { it.id == selectedCategoryId }
+    val seasonsFlow = remember(selectedProviderId, selectedSeries?.id) {
+        val providerId = selectedProviderId
+        val seriesId = selectedSeries?.id
+        if (providerId == null || seriesId == null) flowOf(emptyList()) else mediaRepository.observeSeasons(providerId, seriesId)
+    }
+    val seasons by seasonsFlow.collectAsState(initial = emptyList())
+    LaunchedEffect(selectedSeries?.id, seasons) {
+        if (selectedSeasonId == null || seasons.none { it.id == selectedSeasonId }) {
+            selectedSeasonId = seasons.firstOrNull()?.id
+        }
+    }
+    val episodesFlow = remember(selectedProviderId, selectedSeasonId) {
+        val providerId = selectedProviderId
+        val seasonId = selectedSeasonId
+        if (providerId == null || seasonId == null) flowOf(emptyList()) else mediaRepository.observeEpisodes(providerId, seasonId)
+    }
+    val episodes by episodesFlow.collectAsState(initial = emptyList())
+    LaunchedEffect(selectedSeasonId, episodes) {
+        if (selectedEpisodeId == null || episodes.none { it.id == selectedEpisodeId }) {
+            selectedEpisodeId = episodes.firstOrNull()?.id
+        }
+    }
+    val selectedEpisode = episodes.firstOrNull { it.id == selectedEpisodeId } ?: episodes.firstOrNull()
     val backdropModel by produceState<Any?>(initialValue = null, selectedSeries?.id, selectedSeries?.backdropUrl) {
         value = selectedSeries?.let { resolveSeriesBackdropModel(it) }
     }
@@ -151,7 +178,8 @@ private fun RoomSeriesRoute(
                 provider = selectedProvider,
                 backdropModel = backdropModel,
                 isFavorite = selectedSeries?.id in favoriteSeriesIds,
-                onOpenPlayer = onOpenPlayer,
+                episode = selectedEpisode,
+                onOpenPlayer = { selectedEpisode?.let(onOpenPlayer) },
                 onToggleFavorite = {
                     val providerId = selectedProviderId
                     val seriesId = selectedSeries?.id
@@ -159,6 +187,18 @@ private fun RoomSeriesRoute(
                         scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Series, seriesId) }
                     }
                 },
+            )
+            SeriesEpisodeSelector(
+                seasons = seasons,
+                selectedSeasonId = selectedSeasonId,
+                onSeasonSelected = {
+                    selectedSeasonId = it.id
+                    selectedEpisodeId = null
+                },
+                episodes = episodes,
+                selectedEpisodeId = selectedEpisodeId,
+                onEpisodeSelected = { selectedEpisodeId = it.id },
+                onEpisodePlay = onOpenPlayer,
             )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
                 items(categoriesWithFavorites, key = { it.id }) { category ->
@@ -216,6 +256,7 @@ private fun SeriesHero(
     provider: Provider?,
     backdropModel: Any?,
     isFavorite: Boolean,
+    episode: Episode?,
     onOpenPlayer: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -227,11 +268,60 @@ private fun SeriesHero(
         backdropModel = backdropModel,
         action = {
             if (series != null) {
-                ActionPill("Abspielen", onClick = onOpenPlayer)
+                if (episode != null) {
+                    ActionPill("Abspielen", onClick = onOpenPlayer)
+                }
                 ActionPill(if (isFavorite) "Favorit" else "Merken", selected = isFavorite, onClick = onToggleFavorite)
             }
         },
     )
+}
+
+@Composable
+private fun SeriesEpisodeSelector(
+    seasons: List<Season>,
+    selectedSeasonId: String?,
+    onSeasonSelected: (Season) -> Unit,
+    episodes: List<Episode>,
+    selectedEpisodeId: String?,
+    onEpisodeSelected: (Episode) -> Unit,
+    onEpisodePlay: (Episode) -> Unit,
+) {
+    if (seasons.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            items(seasons, key = { it.id }) { season ->
+                ActionPill(
+                    label = season.name.ifBlank { "Staffel ${season.seasonNumber}" },
+                    selected = season.id == selectedSeasonId,
+                    onClick = { onSeasonSelected(season) },
+                )
+            }
+        }
+
+        if (episodes.isEmpty()) {
+            InfoPanel(
+                title = "Keine Episoden",
+                body = "Fuer diese Staffel sind keine Episoden importiert.",
+                badge = "Leer",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                items(episodes, key = { it.id }) { episode ->
+                    ActionPill(
+                        label = "S${episode.seasonNumber}E${episode.episodeNumber} ${episode.name}",
+                        selected = episode.id == selectedEpisodeId,
+                        onClick = {
+                            onEpisodeSelected(episode)
+                            onEpisodePlay(episode)
+                        },
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

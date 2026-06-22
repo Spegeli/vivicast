@@ -40,6 +40,7 @@ import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.data.playback.PlaybackStreamRequest
 import com.vivicast.tv.data.playback.PlaybackStreamResult
 import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.Series
@@ -76,6 +77,14 @@ private fun VivicastApp(appContainer: AppContainer) {
     fun openMovie(movie: Movie) {
         scope.launch {
             appContainer.openMoviePlayback(movie) {
+                playerVisible = true
+            }
+        }
+    }
+
+    fun openEpisode(episode: Episode) {
+        scope.launch {
+            appContainer.openEpisodePlayback(episode) {
                 playerVisible = true
             }
         }
@@ -127,7 +136,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                 favoritesRepository = appContainer.favoritesRepository,
                 resolveSeriesPosterModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesPoster) },
                 resolveSeriesBackdropModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesBackdrop) },
-                onOpenPlayer = { playerVisible = true },
+                onOpenPlayer = ::openEpisode,
             )
         },
         AppDestination("Suche", "search") {
@@ -317,6 +326,31 @@ private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -
             mediaId = stream.mediaId,
             mediaType = PlaybackMediaType.Movie,
             title = movie.name,
+            streamUrl = stream.url,
+            seekable = true,
+        ),
+    )
+    onStarted()
+}
+
+private suspend fun AppContainer.openEpisodePlayback(episode: Episode, onStarted: () -> Unit) {
+    val stream = playbackStreamResolver.resolve(
+        PlaybackStreamRequest(
+            providerId = episode.providerId,
+            mediaId = episode.id,
+            mediaType = MediaType.Episode,
+            remoteId = episode.remoteId,
+            containerExtension = episode.containerExtension,
+        ),
+    ).resolvedStreamOrNull() ?: return
+
+    playerController.play(
+        PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.Episode,
+            title = episode.name,
             streamUrl = stream.url,
             seekable = true,
         ),
