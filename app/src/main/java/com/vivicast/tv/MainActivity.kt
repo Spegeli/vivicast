@@ -83,7 +83,12 @@ private fun VivicastApp(appContainer: AppContainer) {
         },
         AppDestination("Filme", "movies") { MoviesRoute(onOpenPlayer = { playerVisible = true }) },
         AppDestination("Serien", "series") { SeriesRoute(onOpenPlayer = { playerVisible = true }) },
-        AppDestination("Suche", "search") { SearchRoute() },
+        AppDestination("Suche", "search") {
+            SearchRoute(
+                mediaRepository = appContainer.mediaRepository,
+                userPreferencesStore = appContainer.userPreferencesStore,
+            )
+        },
         AppDestination("Einstellungen", "settings") {
             SettingsRoute(
                 providerRepository = appContainer.providerRepository,

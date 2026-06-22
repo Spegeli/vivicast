@@ -60,22 +60,27 @@ Implemented and validated:
 - Live-TV channel cards now show favorite state, focused-channel current program title/progress, and catch-up state from local repositories.
 - Live-TV preview can toggle the selected channel favorite and shows current/next EPG details from the local EPG repository.
 - Live-TV channel-mode EPG panel now renders past/current/upcoming local EPG programs for the focused channel with missing-EPG fallback.
+- Search is wired to `RoomMediaRepository.search` for local channels, movies, series, and EPG results.
+- Search applies the ADR-005 300 ms debounce before querying Room.
+- Search history is persisted through DataStore, capped to 20 distinct entries, and supports per-entry removal plus clear-all.
 
 Validated with:
 
 - `.\gradlew.bat :core:database:compileDebugKotlin :data:media:compileDebugKotlin :core:designsystem:compileDebugKotlin :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat :data:favorites:connectedDebugAndroidTest`
+- `.\gradlew.bat :core:datastore:compileDebugKotlin :feature:search:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat assembleDebug :app:installDebug`
 - Android TV emulator launch and Live-TV empty-state visual smoke check
 - Screenshot: `docs/phase-05-live-tv-room-empty-smoke.png`
 - Screenshot: `docs/phase-05-live-tv-favorites-epg-smoke.png`
+- Android TV emulator Search input/history empty-result smoke check
+- Screenshot: `docs/phase-05-search-room-smoke.png`
 
 Still open:
 
 - Movie and series favorites are not wired into their feature UIs yet.
 - Provider expanded/collapsed tree state persistence is not implemented yet.
-- Search UI still uses demo data and is not connected to `RoomMediaRepository.search`.
 
 ## Definition of Done
 

@@ -67,10 +67,12 @@ Done:
   - `RoomFavoritesRepository` stores provider-scoped favorites by media type and media ID
   - Live-TV now shows a provider-owned Favorites category, channel favorite state, and local favorite toggling
   - Live-TV now renders current/next/local EPG data for the focused channel through the local EPG repository
+  - Search now queries `RoomMediaRepository.search` locally with 300 ms debounce
+  - Search history persists in DataStore with a maximum of 20 entries and supports per-entry removal plus clear-all
 
 Still important:
 
-- Movies, Series, Search, and non-channel favorites are not fully Room-backed yet.
+- Movies, Series, and non-channel favorites are not fully Room-backed yet.
 - Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
 - Media3 playback is not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
@@ -102,8 +104,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Connect Search to `RoomMediaRepository.search` with 300 ms debounce and local search history.
-2. Continue Phase 05 by wiring Movies/Series and non-channel favorites to local repositories.
+1. Continue Phase 05 by wiring Movies/Series and non-channel favorites to local repositories.
+2. Add provider expanded/collapsed tree state persistence where the final provider tree UI needs it.
 3. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

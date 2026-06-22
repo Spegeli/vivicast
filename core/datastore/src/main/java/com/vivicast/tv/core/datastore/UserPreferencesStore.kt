@@ -10,6 +10,7 @@ interface UserPreferencesStore {
     suspend fun updateAppearance(appearance: AppearancePreferences)
     suspend fun updatePlayback(playback: PlaybackPreferences)
     suspend fun updateHistory(history: HistoryPreferences)
+    suspend fun updateSearchHistory(searchHistory: List<String>)
     suspend fun updateCache(cache: CachePreferences)
     suspend fun updateParentalControl(parentalControl: ParentalControlPreferences)
 }
@@ -20,6 +21,7 @@ data class UserPreferences(
     val appearance: AppearancePreferences = AppearancePreferences(),
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val history: HistoryPreferences = HistoryPreferences(),
+    val searchHistory: List<String> = emptyList(),
     val cache: CachePreferences = CachePreferences(),
     val parentalControl: ParentalControlPreferences = ParentalControlPreferences(),
 )
@@ -89,4 +91,3 @@ enum class DecoderPreference { Automatic, Hardware, Software }
 enum class TimeshiftStoragePreference { Automatic, Ram, InternalStorage }
 
 enum class ExternalPlayerPreference { Internal, External, AskEveryTime }
-
