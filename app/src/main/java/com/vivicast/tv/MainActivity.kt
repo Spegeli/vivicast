@@ -75,6 +75,8 @@ private fun VivicastApp(appContainer: AppContainer) {
             LiveTvRoute(
                 providerRepository = appContainer.providerRepository,
                 mediaRepository = appContainer.mediaRepository,
+                epgRepository = appContainer.epgSourceRepository,
+                favoritesRepository = appContainer.favoritesRepository,
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = { playerVisible = true },
             )

@@ -55,19 +55,25 @@ Implemented and validated:
 - Live-TV empty states handle no-provider and no-channel startup without blocking app launch.
 - Channel logo image loading resolves cached local files through `MediaCacheStore.getEntry` before the UI receives an image model.
 - Design-system hero, poster, search-result, and channel-logo image slots support local file-backed Coil models while keeping existing drawable resource fallbacks.
+- Room-backed `FavoritesRepository` implementation stores provider-scoped favorites by `providerId`, `mediaType`, and `mediaId`.
+- Live-TV adds a provider-owned Favorites category before imported categories and filters it locally by channel favorite IDs.
+- Live-TV channel cards now show favorite state, focused-channel current program title/progress, and catch-up state from local repositories.
+- Live-TV preview can toggle the selected channel favorite and shows current/next EPG details from the local EPG repository.
+- Live-TV channel-mode EPG panel now renders past/current/upcoming local EPG programs for the focused channel with missing-EPG fallback.
 
 Validated with:
 
 - `.\gradlew.bat :core:database:compileDebugKotlin :data:media:compileDebugKotlin :core:designsystem:compileDebugKotlin :feature:live-tv:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :data:media:connectedDebugAndroidTest`
+- `.\gradlew.bat :data:favorites:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug :app:installDebug`
 - Android TV emulator launch and Live-TV empty-state visual smoke check
 - Screenshot: `docs/phase-05-live-tv-room-empty-smoke.png`
+- Screenshot: `docs/phase-05-live-tv-favorites-epg-smoke.png`
 
 Still open:
 
-- Live-TV current/next EPG panel is still placeholder text.
-- Favorites are not wired into Live-TV cards or toggles yet.
+- Movie and series favorites are not wired into their feature UIs yet.
 - Provider expanded/collapsed tree state persistence is not implemented yet.
 - Search UI still uses demo data and is not connected to `RoomMediaRepository.search`.
 

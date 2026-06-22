@@ -15,6 +15,8 @@ import com.vivicast.tv.data.epg.EpgImportRepository
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.RoomEpgRepository
 import com.vivicast.tv.data.epg.SecureEpgSourceRepository
+import com.vivicast.tv.data.favorites.FavoritesRepository
+import com.vivicast.tv.data.favorites.RoomFavoritesRepository
 import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
@@ -81,6 +83,10 @@ class AppContainer(
 
     val mediaRepository: MediaRepository by lazy {
         RoomMediaRepository(database = database)
+    }
+
+    val favoritesRepository: FavoritesRepository by lazy {
+        RoomFavoritesRepository(database = database)
     }
 
     val epgImportRepository: EpgImportRepository by lazy {

@@ -12,4 +12,6 @@ interface FavoritesRepository {
     suspend fun addFavorite(favorite: Favorite)
 
     suspend fun removeFavorite(providerId: String, mediaType: MediaType, mediaId: String)
+
+    suspend fun toggleFavorite(providerId: String, mediaType: MediaType, mediaId: String): Boolean
 }

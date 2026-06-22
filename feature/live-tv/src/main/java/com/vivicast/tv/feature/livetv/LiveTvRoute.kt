@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,8 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastChannelCard
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
+import com.vivicast.tv.data.epg.EpgRepository
+import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.media.AssetState
 import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.DemoChannel
@@ -50,9 +53,15 @@ import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgProgram
+import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private enum class LiveColumnMode { Category, Channel }
 
@@ -60,15 +69,19 @@ private enum class LiveColumnMode { Category, Channel }
 fun LiveTvRoute(
     providerRepository: ProviderRepository? = null,
     mediaRepository: MediaRepository? = null,
+    epgRepository: EpgRepository? = null,
+    favoritesRepository: FavoritesRepository? = null,
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: () -> Unit = {},
 ) {
-    if (providerRepository == null || mediaRepository == null) {
+    if (providerRepository == null || mediaRepository == null || epgRepository == null || favoritesRepository == null) {
         DemoLiveTvRoute(onOpenPlayer = onOpenPlayer)
     } else {
         RoomLiveTvRoute(
             providerRepository = providerRepository,
             mediaRepository = mediaRepository,
+            epgRepository = epgRepository,
+            favoritesRepository = favoritesRepository,
             resolveChannelLogoModel = resolveChannelLogoModel,
             onOpenPlayer = onOpenPlayer,
         )
@@ -79,9 +92,12 @@ fun LiveTvRoute(
 private fun RoomLiveTvRoute(
     providerRepository: ProviderRepository,
     mediaRepository: MediaRepository,
+    epgRepository: EpgRepository,
+    favoritesRepository: FavoritesRepository,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
@@ -99,19 +115,38 @@ private fun RoomLiveTvRoute(
         selectedProviderId?.let { mediaRepository.observeCategories(it, CategoryType.LiveTv) } ?: flowOf(emptyList())
     }
     val categories by categoriesFlow.collectAsState(initial = emptyList())
+    val favoritesFlow = remember(selectedProviderId) {
+        selectedProviderId?.let { favoritesRepository.observeFavorites(it, MediaType.Channel) } ?: flowOf(emptyList())
+    }
+    val favorites by favoritesFlow.collectAsState(initial = emptyList())
+    val favoriteChannelIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
+    val categoriesWithFavorites = remember(selectedProviderId, categories) {
+        selectedProviderId?.let { listOf(favoriteCategory(it)) + categories } ?: categories
+    }
 
-    LaunchedEffect(selectedProviderId, categories) {
-        if (selectedCategoryId == null || categories.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = categories.firstOrNull()?.id
+    LaunchedEffect(selectedProviderId, categoriesWithFavorites, favoriteChannelIds) {
+        if (selectedCategoryId == null || categoriesWithFavorites.none { it.id == selectedCategoryId }) {
+            selectedCategoryId = when {
+                favoriteChannelIds.isNotEmpty() -> FAVORITES_CATEGORY_ID
+                else -> categories.firstOrNull()?.id ?: categoriesWithFavorites.firstOrNull()?.id
+            }
         }
     }
 
     val channelsFlow = remember(selectedProviderId, selectedCategoryId) {
         selectedProviderId?.let { providerId ->
-            mediaRepository.observeChannels(providerId, selectedCategoryId)
+            val categoryId = selectedCategoryId?.takeUnless { it == FAVORITES_CATEGORY_ID }
+            mediaRepository.observeChannels(providerId, categoryId)
         } ?: flowOf(emptyList())
     }
-    val channels by channelsFlow.collectAsState(initial = emptyList())
+    val observedChannels by channelsFlow.collectAsState(initial = emptyList())
+    val channels = remember(observedChannels, selectedCategoryId, favoriteChannelIds) {
+        if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
+            observedChannels.filter { it.id in favoriteChannelIds }.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        } else {
+            observedChannels
+        }
+    }
 
     LaunchedEffect(channels) {
         if (selectedChannelId == null || channels.none { it.id == selectedChannelId }) {
@@ -121,8 +156,25 @@ private fun RoomLiveTvRoute(
     }
 
     val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId }
+    val selectedCategory = categoriesWithFavorites.firstOrNull { it.id == selectedCategoryId }
     val selectedChannel = channels.firstOrNull { it.id == selectedChannelId }
+    val nowMillis = remember(selectedChannel?.id) { System.currentTimeMillis() }
+    val programsFlow = remember(selectedProviderId, selectedChannel?.id, nowMillis) {
+        val providerId = selectedProviderId
+        if (providerId == null || selectedChannel == null) {
+            flowOf(emptyList())
+        } else {
+            epgRepository.observeProgramsForChannel(
+                providerId = providerId,
+                channelId = selectedChannel.id,
+                fromMillis = nowMillis - EPG_PAST_WINDOW_MILLIS,
+                toMillis = nowMillis + EPG_FUTURE_WINDOW_MILLIS,
+            )
+        }
+    }
+    val selectedPrograms by programsFlow.collectAsState(initial = emptyList())
+    val currentProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.currentAt(nowMillis) }
+    val nextProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.nextAfter(nowMillis) }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
@@ -130,7 +182,7 @@ private fun RoomLiveTvRoute(
                 RoomProviderCategoryColumn(
                     providers = providers,
                     selectedProviderId = selectedProviderId,
-                    categories = categories,
+                    categories = categoriesWithFavorites,
                     selectedCategoryId = selectedCategoryId,
                     onProviderFocused = {
                         selectedProviderId = it.id
@@ -152,6 +204,9 @@ private fun RoomLiveTvRoute(
                 selectedChannelId = selectedChannelId,
                 emptyMessage = emptyChannelMessage(selectedProvider, selectedCategory),
                 resolveChannelLogoModel = resolveChannelLogoModel,
+                nowMillis = nowMillis,
+                selectedCurrentProgram = currentProgram,
+                favoriteChannelIds = favoriteChannelIds,
                 onChannelFocused = {
                     selectedChannelId = it.id
                     mode = LiveColumnMode.Channel
@@ -166,16 +221,31 @@ private fun RoomLiveTvRoute(
             )
 
             if (mode == LiveColumnMode.Channel) {
-                RoomEpgColumn(channel = selectedChannel, modifier = Modifier.weight(0.31f))
+                RoomEpgColumn(
+                    channel = selectedChannel,
+                    programs = selectedPrograms,
+                    nowMillis = nowMillis,
+                    modifier = Modifier.weight(0.31f),
+                )
             }
 
             RoomPreviewColumn(
                 channel = selectedChannel,
                 previewStarted = previewStarted,
                 provider = selectedProvider,
+                currentProgram = currentProgram,
+                nextProgram = nextProgram,
+                isFavorite = selectedChannel?.id in favoriteChannelIds,
                 onStartPreview = { if (selectedChannel != null) previewStarted = true },
                 onOpenPlayer = onOpenPlayer,
                 onShowCategoryMode = { mode = LiveColumnMode.Category },
+                onToggleFavorite = {
+                    val providerId = selectedProviderId
+                    val channelId = selectedChannel?.id
+                    if (providerId != null && channelId != null) {
+                        scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Channel, channelId) }
+                    }
+                },
                 modifier = Modifier.weight(0.42f),
             )
         }
@@ -246,6 +316,9 @@ private fun RoomChannelColumn(
     selectedChannelId: String?,
     emptyMessage: String,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
+    nowMillis: Long,
+    selectedCurrentProgram: EpgProgram?,
+    favoriteChannelIds: Set<String>,
     onChannelFocused: (Channel) -> Unit,
     onChannelClick: (Channel) -> Unit,
     modifier: Modifier = Modifier,
@@ -261,17 +334,19 @@ private fun RoomChannelColumn(
                     val logoModel by produceState<Any?>(initialValue = null, channel.id, channel.logoUrl) {
                         value = resolveChannelLogoModel(channel)
                     }
+                    val isSelected = channel.id == selectedChannelId
+                    val program = if (isSelected) selectedCurrentProgram?.title ?: "Keine Programminformationen" else "EPG bei Fokus"
                     VivicastChannelCard(
                         channelName = channel.name,
-                        program = "Keine Programminformationen",
+                        program = program,
                         logoText = channel.name,
                         logoMissing = channel.logoUrl.isNullOrBlank() && logoModel == null,
-                        selected = channel.id == selectedChannelId,
+                        selected = isSelected,
                         onFocused = { onChannelFocused(channel) },
                         onClick = { onChannelClick(channel) },
-                        progressPercent = 0,
-                        favorite = false,
-                        catchUp = channel.isCatchupAvailable,
+                        progressPercent = if (isSelected) selectedCurrentProgram.progressAt(nowMillis) else 0,
+                        favorite = channel.id in favoriteChannelIds,
+                        catchUp = channel.isCatchupAvailable && isSelected && selectedCurrentProgram != null,
                         logoModel = logoModel,
                     )
                 }
@@ -281,15 +356,52 @@ private fun RoomChannelColumn(
 }
 
 @Composable
-private fun RoomEpgColumn(channel: Channel?, modifier: Modifier = Modifier) {
+private fun RoomEpgColumn(
+    channel: Channel?,
+    programs: List<EpgProgram>,
+    nowMillis: Long,
+    modifier: Modifier = Modifier,
+) {
     GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle("Sender-EPG")
-            InfoPanel(
-                title = channel?.name ?: "Kein Sender ausgewählt",
-                body = "Programminformationen werden im nächsten Schritt aus dem lokalen EPG-Repository angebunden.",
-                badge = "EPG",
-            )
+            when {
+                channel == null -> {
+                    InfoPanel("Kein Sender ausgewaehlt", "Waehle einen Sender aus, um dessen EPG zu sehen.", badge = "EPG")
+                }
+                programs.isEmpty() -> {
+                    InfoPanel("Keine Programminformationen", "${channel.name} hat aktuell keine lokalen EPG-Daten.", badge = "Ohne EPG")
+                }
+                else -> {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                        items(programs, key = { it.id }) { program ->
+                            val current = program.isCurrentAt(nowMillis)
+                            FocusPanel(selected = current, contentPadding = 14.dp, modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
+                                    BasicText(
+                                        text = program.title,
+                                        style = TextStyle(
+                                            color = VivicastColors.TextPrimary,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        ),
+                                    )
+                                    program.description?.takeIf { it.isNotBlank() }?.let {
+                                        BodyText(it, color = VivicastColors.TextSecondary)
+                                    }
+                                    if (current || program.isCatchupAvailable) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            if (current) StatusBadge("Aktuell")
+                                            if (program.isCatchupAvailable) StatusBadge("Catch-Up")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -299,9 +411,13 @@ private fun RoomPreviewColumn(
     channel: Channel?,
     previewStarted: Boolean,
     provider: Provider?,
+    currentProgram: EpgProgram?,
+    nextProgram: EpgProgram?,
+    isFavorite: Boolean,
     onStartPreview: () -> Unit,
     onOpenPlayer: () -> Unit,
     onShowCategoryMode: () -> Unit,
+    onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 16.dp) {
@@ -314,13 +430,25 @@ private fun RoomPreviewColumn(
             ) {
                 PreviewBox(if (previewStarted) "Vorschau läuft" else "OK startet Vorschau")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ActionPill("Ansehen", modifier = Modifier.width(160.dp), onClick = onOpenPlayer)
-                ActionPill("Kategorien", modifier = Modifier.width(190.dp), onClick = onShowCategoryMode)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                ActionPill("Live", modifier = Modifier.weight(1f), onClick = onOpenPlayer)
+                ActionPill("Kat.", modifier = Modifier.weight(1f), onClick = onShowCategoryMode)
+                ActionPill(
+                    if (isFavorite) "★" else "☆",
+                    modifier = Modifier.weight(1f),
+                    selected = isFavorite,
+                    onClick = onToggleFavorite,
+                )
             }
             InfoPanel(
                 title = channel?.name ?: "Kein Sender ausgewählt",
-                body = channel?.let { "Provider: ${provider?.name.orEmpty()}" } ?: "Wähle links einen Provider und Sender aus.",
+                body = channel?.let {
+                    buildString {
+                        append("Provider: ${provider?.name.orEmpty()}")
+                        append("\nJetzt: ${currentProgram?.title ?: "Keine Programminformationen"}")
+                        nextProgram?.let { next -> append("\nDanach: ${next.startTime.hhMm()} ${next.title}") }
+                    }
+                } ?: "Wähle links einen Provider und Sender aus.",
                 badge = if (previewStarted) "Live" else "Details",
             )
             if (provider?.status == ProviderStatus.ConnectionError || provider?.status == ProviderStatus.InvalidCredentials) {
@@ -333,12 +461,45 @@ private fun RoomPreviewColumn(
 private fun emptyChannelMessage(provider: Provider?, category: Category?): String =
     when {
         provider == null -> "Lege in den Einstellungen zuerst eine Wiedergabeliste an."
+        category?.id == FAVORITES_CATEGORY_ID -> "Noch keine Live-TV-Favoriten gespeichert."
         category == null -> "Dieser Provider enthält keine importierten Live-TV-Sender."
         else -> "Diese Kategorie enthält keine importierten Live-TV-Sender."
     }
 
+private fun favoriteCategory(providerId: String): Category =
+    Category(
+        id = FAVORITES_CATEGORY_ID,
+        providerId = providerId,
+        type = CategoryType.LiveTv,
+        remoteId = FAVORITES_CATEGORY_ID,
+        name = "Favoriten",
+        sortOrder = Int.MIN_VALUE,
+        isHidden = false,
+    )
+
+private fun List<EpgProgram>.currentAt(nowMillis: Long): EpgProgram? =
+    firstOrNull { it.isCurrentAt(nowMillis) }
+
+private fun List<EpgProgram>.nextAfter(nowMillis: Long): EpgProgram? =
+    firstOrNull { it.startTime > nowMillis }
+
+private fun EpgProgram?.progressAt(nowMillis: Long): Int {
+    if (this == null || endTime <= startTime || !isCurrentAt(nowMillis)) return 0
+    return (((nowMillis - startTime) * 100) / (endTime - startTime)).toInt().coerceIn(0, 100)
+}
+
+private fun EpgProgram.isCurrentAt(nowMillis: Long): Boolean =
+    nowMillis >= startTime && nowMillis < endTime
+
+private fun Long.hhMm(): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(this))
+
 private val Category.displayName: String
     get() = if (remoteId == "__UNCATEGORIZED__") "Nicht kategorisiert" else name
+
+private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
+private const val EPG_PAST_WINDOW_MILLIS = 4L * 60L * 60L * 1000L
+private const val EPG_FUTURE_WINDOW_MILLIS = 8L * 60L * 60L * 1000L
 
 private val ProviderStatus.label: String
     get() = when (this) {

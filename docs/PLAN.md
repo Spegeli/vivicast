@@ -64,10 +64,13 @@ Done:
   - Live-TV keeps the old demo route as a fallback when repositories are not provided
   - cached channel logos resolve to local files before reaching UI image loading
   - reusable TV artwork components can load local file-backed images through Coil while preserving demo resource fallbacks
+  - `RoomFavoritesRepository` stores provider-scoped favorites by media type and media ID
+  - Live-TV now shows a provider-owned Favorites category, channel favorite state, and local favorite toggling
+  - Live-TV now renders current/next/local EPG data for the focused channel through the local EPG repository
 
 Still important:
 
-- Movies, Series, Search, favorites, and the Live-TV EPG panel are not fully Room-backed yet.
+- Movies, Series, Search, and non-channel favorites are not fully Room-backed yet.
 - Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
 - Media3 playback is not complete yet.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
@@ -99,8 +102,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by wiring Live-TV current/next EPG and channel favorites from local repositories.
-2. Connect Search to `RoomMediaRepository.search` with 300 ms debounce and local search history.
+1. Connect Search to `RoomMediaRepository.search` with 300 ms debounce and local search history.
+2. Continue Phase 05 by wiring Movies/Series and non-channel favorites to local repositories.
 3. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated
