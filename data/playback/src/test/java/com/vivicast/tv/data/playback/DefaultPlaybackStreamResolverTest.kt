@@ -1,6 +1,7 @@
 package com.vivicast.tv.data.playback
 
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -102,12 +103,19 @@ class DefaultPlaybackStreamResolverTest {
     }
 
     @Test
-    fun rejectsM3uUntilPerChannelStreamReferenceIsAvailableOutsideRoom() = runBlocking {
+    fun resolvesM3uChannelUrlFromExternalStreamReferenceStore() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf("ard.de" to "https://streams.example/ard.m3u8"),
+            )
+        }
         val resolver = DefaultPlaybackStreamResolver(
             providerRepository = FakeProviderRepository(
                 provider = provider(type = ProviderType.M3u),
                 credentials = ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
             ),
+            m3uStreamReferenceStore = streamReferenceStore,
         )
 
         val result = resolver.resolve(
@@ -119,10 +127,31 @@ class DefaultPlaybackStreamResolverTest {
             ),
         )
 
-        assertEquals(
-            PlaybackStreamFailureReason.UnsupportedProvider,
-            (result as PlaybackStreamResult.Failed).reason,
+        val stream = (result as PlaybackStreamResult.Resolved).stream
+        assertEquals("https://streams.example/ard.m3u8", stream.url)
+        assertEquals("channel-local-id", stream.mediaId)
+    }
+
+    @Test
+    fun rejectsM3uWhenExternalStreamReferenceIsMissing() = runBlocking {
+        val resolver = DefaultPlaybackStreamResolver(
+            providerRepository = FakeProviderRepository(
+                provider = provider(type = ProviderType.M3u),
+                credentials = ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
+            ),
+            m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
         )
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "channel-local-id",
+                mediaType = MediaType.Channel,
+                remoteId = "ard.de",
+            ),
+        )
+
+        assertEquals(PlaybackStreamFailureReason.MissingStreamReference, (result as PlaybackStreamResult.Failed).reason)
     }
 
     @Test
@@ -211,6 +240,21 @@ class DefaultPlaybackStreamResolverTest {
         override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
 
         override suspend fun deleteProvider(providerId: String) = Unit
+    }
+
+    private class FakeM3uStreamReferenceStore : M3uStreamReferenceStore {
+        private val references = mutableMapOf<String, MutableMap<String, String>>()
+
+        override fun replaceProviderReferences(providerId: String, references: Map<String, String>) {
+            this.references[providerId] = references.toMutableMap()
+        }
+
+        override fun getStreamUrl(providerId: String, remoteId: String): String? =
+            references[providerId]?.get(remoteId)
+
+        override fun deleteProviderReferences(providerId: String) {
+            references.remove(providerId)
+        }
     }
 
     private companion object {

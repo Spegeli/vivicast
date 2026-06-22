@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
@@ -32,6 +33,7 @@ import org.junit.runner.RunWith
 class RoomCatalogImportRepositoryTest {
     private lateinit var database: VivicastDatabase
     private lateinit var repository: RoomCatalogImportRepository
+    private lateinit var streamReferenceStore: FakeM3uStreamReferenceStore
     private val parser = DefaultM3uParser()
     private var now = 1_000L
 
@@ -41,7 +43,8 @@ class RoomCatalogImportRepositoryTest {
         database = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = RoomCatalogImportRepository(database) { now }
+        streamReferenceStore = FakeM3uStreamReferenceStore()
+        repository = RoomCatalogImportRepository(database, streamReferenceStore) { now }
     }
 
     @After
@@ -66,6 +69,7 @@ class RoomCatalogImportRepositoryTest {
         assertEquals("https://logos.example/ard.png", channels.first { it.remoteId == "ard.de" }.logoUrl)
         assertEquals("1", channels.first { it.remoteId == "ard.de" }.channelNumber)
         assertEquals(7, channels.first { it.remoteId == "ard.de" }.catchupDays)
+        assertEquals("https://streams.example/ard.m3u8", streamReferenceStore.getStreamUrl(PROVIDER_ID, "ard.de"))
     }
 
     @Test
@@ -479,5 +483,20 @@ class RoomCatalogImportRepositoryTest {
 
     private companion object {
         const val PROVIDER_ID = "provider-1"
+    }
+
+    private class FakeM3uStreamReferenceStore : M3uStreamReferenceStore {
+        private val references = mutableMapOf<String, MutableMap<String, String>>()
+
+        override fun replaceProviderReferences(providerId: String, references: Map<String, String>) {
+            this.references[providerId] = references.toMutableMap()
+        }
+
+        override fun getStreamUrl(providerId: String, remoteId: String): String? =
+            references[providerId]?.get(remoteId)
+
+        override fun deleteProviderReferences(providerId: String) {
+            references.remove(providerId)
+        }
     }
 }

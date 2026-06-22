@@ -25,6 +25,7 @@ kotlin {
 
 dependencies {
     implementation(project(":domain"))
+    implementation(project(":core:cache"))
     implementation(project(":core:database"))
     implementation(project(":iptv:m3u"))
     implementation(project(":iptv:xtream"))

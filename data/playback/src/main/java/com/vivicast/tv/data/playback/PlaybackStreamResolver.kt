@@ -1,5 +1,7 @@
 package com.vivicast.tv.data.playback
 
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
+import com.vivicast.tv.core.cache.NoOpM3uStreamReferenceStore
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.MediaType
@@ -46,12 +48,14 @@ enum class PlaybackStreamFailureReason {
     UnsupportedProvider,
     UnsupportedMediaType,
     MissingRemoteId,
+    MissingStreamReference,
     MissingContainerExtension,
     InvalidServerUrl,
 }
 
 class DefaultPlaybackStreamResolver(
     private val providerRepository: ProviderRepository,
+    private val m3uStreamReferenceStore: M3uStreamReferenceStore = NoOpM3uStreamReferenceStore,
 ) : PlaybackStreamResolver {
     override suspend fun resolve(request: PlaybackStreamRequest): PlaybackStreamResult {
         val provider = providerRepository.getProvider(request.providerId)
@@ -76,10 +80,31 @@ class DefaultPlaybackStreamResolver(
                 if (credentials !is ProviderCredentials.M3u) {
                     PlaybackStreamResult.Failed(PlaybackStreamFailureReason.CredentialTypeMismatch)
                 } else {
-                    PlaybackStreamResult.Failed(PlaybackStreamFailureReason.UnsupportedProvider)
+                    resolveM3u(request)
                 }
             }
         }
+    }
+
+    private fun resolveM3u(request: PlaybackStreamRequest): PlaybackStreamResult {
+        if (request.mediaType != MediaType.Channel) {
+            return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.UnsupportedMediaType)
+        }
+        val remoteId = request.remoteId.trim()
+        if (remoteId.isBlank()) {
+            return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingRemoteId)
+        }
+        val streamUrl = m3uStreamReferenceStore.getStreamUrl(request.providerId, remoteId)
+            ?: return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingStreamReference)
+
+        return PlaybackStreamResult.Resolved(
+            PlaybackStream(
+                providerId = request.providerId,
+                mediaId = request.mediaId,
+                mediaType = request.mediaType,
+                url = streamUrl,
+            ),
+        )
     }
 
     private fun resolveXtream(

@@ -82,6 +82,7 @@ Implemented and validated:
 - Eligible past EPG items can now launch Xtream catch-up playback through runtime-generated timeshift URLs; final stream URLs are still not stored in Room.
 - Live channel playback now maps stored ADR-006 timeshift settings into `PlaybackRequest`, exposes the configured storage/window in player state, starts at the live edge, tracks a bounded live-edge offset for seek/pause state, resets the window on new channel requests, and offers a fullscreen Live action when playback is behind the live edge.
 - Media3 playback now includes HLS support, a 120-minute back buffer for live playback, and an app-cache-backed Media3 `SimpleCache` path for ADR-006 internal-storage timeshift mode.
+- M3U imports now write per-channel stream references to a private file-backed reference store outside Room, and playback resolves M3U channel streams from that store at runtime.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
@@ -89,6 +90,8 @@ Implemented and validated:
 - Controller unit coverage verifies live timeshift window initialization, seek offset tracking, and returning to the live edge.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
 - Stream resolver unit coverage verifies Xtream catch-up URL generation from an EPG time window.
+- Stream resolver unit coverage verifies M3U playback URL resolution from the external stream reference store and a missing-reference failure path.
+- M3U import instrumentation coverage verifies the external stream reference store is populated while channel Room rows stay metadata-only.
 - Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
 - Player instrumentation coverage verifies CH+/CH- callback routing.
 - Player instrumentation coverage verifies error dialog focus and retry action routing.
@@ -115,12 +118,13 @@ Validated with:
 - `.\gradlew.bat :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat :core:player:compileDebugKotlin`
 - `.\gradlew.bat :core:player:testDebugUnitTest :app:compileDebugKotlin`
+- `.\gradlew.bat :core:cache:testDebugUnitTest :data:playback:testDebugUnitTest :data:media:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :data:media:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
-- M3U playback stream reference handling without storing final stream URLs in Room.
-- Real live-stream timeshift smoke coverage once a safe stream source can be resolved without storing final M3U URLs in Room.
+- Real M3U live playback/timeshift smoke coverage against a safe public stream source without storing final URLs in Room, logs, docs, screenshots, or demo data.
 - Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done

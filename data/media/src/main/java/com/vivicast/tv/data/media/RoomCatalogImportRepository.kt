@@ -1,6 +1,8 @@
 package com.vivicast.tv.data.media
 
 import androidx.room.withTransaction
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
+import com.vivicast.tv.core.cache.NoOpM3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
@@ -21,6 +23,7 @@ import java.security.MessageDigest
 
 class RoomCatalogImportRepository(
     private val database: VivicastDatabase,
+    private val m3uStreamReferenceStore: M3uStreamReferenceStore = NoOpM3uStreamReferenceStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : CatalogImportRepository {
     private val catalogDao = database.catalogDao()
@@ -32,7 +35,7 @@ class RoomCatalogImportRepository(
         val now = clock()
         val uniqueChannels = playlist.channels.associateBy { it.remoteId }
 
-        return database.withTransaction {
+        val result = database.withTransaction {
             val categoryResult = buildCategories(
                 providerId = providerId,
                 type = CATEGORY_TYPE_LIVE,
@@ -72,6 +75,11 @@ class RoomCatalogImportRepository(
                 skippedEntries = playlist.skippedEntries,
             )
         }
+        m3uStreamReferenceStore.replaceProviderReferences(
+            providerId = providerId,
+            references = uniqueChannels.values.associate { it.remoteId to it.streamUrl },
+        )
+        return result
     }
 
     override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult {

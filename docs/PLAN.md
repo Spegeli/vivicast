@@ -102,6 +102,7 @@ Done:
   - Xtream catch-up playback can be opened from eligible past EPG items using runtime-generated timeshift URLs
   - live channel playback now carries ADR-006 timeshift settings into the player request, tracks a bounded live window/live-edge offset, resets the window on new channel requests, and exposes a player Live action when playback is behind the live edge
   - Media3 playback now includes HLS support, a 120-minute back buffer, and an internal-storage timeshift cache path for ADR-006 storage mode wiring
+  - M3U imports now write per-channel stream references to a private file-backed reference store outside Room, and playback resolves M3U channel streams from that store at runtime
   - timeline OK handling no longer double-toggles playback
   - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, CH+/CH- callback routing, error retry focus/action, timeshift live-edge action presence, and stop-on-close
   - playback repository instrumentation tests cover continue-watching, recent-channel history, media scoping, and provider cleanup
@@ -140,9 +141,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
-2. Add configurable completed-threshold settings if the fixed 90 percent threshold is not enough for the first playback slice.
-3. Run a real live-stream timeshift smoke once a safe stream source can be resolved without storing final M3U URLs in Room.
+1. Add configurable completed-threshold settings if the fixed 90 percent threshold is not enough for the first playback slice.
+2. Run a real M3U live playback/timeshift smoke against a safe public stream source without storing final URLs in Room, logs, docs, screenshots, or demo data.
 
 ## Last Updated
 

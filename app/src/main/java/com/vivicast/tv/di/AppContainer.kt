@@ -3,6 +3,8 @@ package com.vivicast.tv.di
 import android.content.Context
 import androidx.work.WorkManager
 import com.vivicast.tv.core.cache.FileMediaCacheStore
+import com.vivicast.tv.core.cache.FileM3uStreamReferenceStore
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.VivicastDatabaseFactory
@@ -85,7 +87,10 @@ class AppContainer(
     }
 
     val catalogImportRepository: CatalogImportRepository by lazy {
-        RoomCatalogImportRepository(database = database)
+        RoomCatalogImportRepository(
+            database = database,
+            m3uStreamReferenceStore = m3uStreamReferenceStore,
+        )
     }
 
     val mediaRepository: MediaRepository by lazy {
@@ -119,8 +124,15 @@ class AppContainer(
         FileMediaCacheStore(File(appContext.cacheDir, "media"))
     }
 
+    private val m3uStreamReferenceStore: M3uStreamReferenceStore by lazy {
+        FileM3uStreamReferenceStore(File(appContext.filesDir, "m3u-streams"))
+    }
+
     val playbackStreamResolver: PlaybackStreamResolver by lazy {
-        DefaultPlaybackStreamResolver(providerRepository = providerRepository)
+        DefaultPlaybackStreamResolver(
+            providerRepository = providerRepository,
+            m3uStreamReferenceStore = m3uStreamReferenceStore,
+        )
     }
 
     val playbackRepository: PlaybackRepository by lazy {
