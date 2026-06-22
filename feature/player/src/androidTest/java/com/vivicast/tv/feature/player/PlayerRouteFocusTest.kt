@@ -10,7 +10,15 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import com.vivicast.tv.core.player.PlaybackMediaType
+import com.vivicast.tv.core.player.PlaybackRequest
+import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.VivicastPlayerController
+import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.designsystem.playerTimelineTag
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -67,9 +75,117 @@ class PlayerRouteFocusTest {
         compose.waitUntil(timeoutMillis = 5_000) { closed }
     }
 
+    @Test
+    fun timelineOkPausesAndResumesControllerPlayback() {
+        val controller = FakePlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+        compose.runOnIdle {
+            assertEquals(1, controller.pauseCount)
+            assertEquals(PlaybackStatus.Paused, controller.state.value.status)
+        }
+
+        compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+        compose.runOnIdle {
+            assertEquals(1, controller.resumeCount)
+            assertEquals(PlaybackStatus.Playing, controller.state.value.status)
+        }
+    }
+
+    @Test
+    fun timelineLeftRightSeekThroughControllerWhenSeekable() {
+        val controller = FakePlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
+            pressKey(Key.DirectionLeft)
+            pressKey(Key.DirectionRight)
+        }
+
+        compose.runOnIdle {
+            assertEquals(listOf(-30_000L, 30_000L), controller.seekDeltas)
+        }
+    }
+
+    @Test
+    fun closingPlayerStopsController() {
+        val controller = FakePlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        pressBack()
+        pressBack()
+
+        compose.runOnIdle {
+            assertEquals(1, controller.stopCount)
+            assertEquals(PlaybackStatus.Idle, controller.state.value.status)
+        }
+    }
+
     private fun pressBack() {
         compose.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
         }
+    }
+
+    private class FakePlayerController : VivicastPlayerController {
+        private val mutableState = MutableStateFlow(
+            VivicastPlayerState(
+                status = PlaybackStatus.Playing,
+                request = PlaybackRequest(
+                    playbackId = "playback-1",
+                    providerId = "provider-1",
+                    mediaId = "movie-1",
+                    mediaType = PlaybackMediaType.Movie,
+                    title = "Controller Movie",
+                    streamUrl = "https://stream.example/movie.mp4",
+                    seekable = true,
+                ),
+                positionMillis = 30_000L,
+                durationMillis = 120_000L,
+            ),
+        )
+        var pauseCount = 0
+        var resumeCount = 0
+        var stopCount = 0
+        val seekDeltas = mutableListOf<Long>()
+
+        override val state: StateFlow<VivicastPlayerState> = mutableState
+
+        override fun play(request: PlaybackRequest) = Unit
+
+        override fun pause() {
+            pauseCount += 1
+            mutableState.value = mutableState.value.copy(status = PlaybackStatus.Paused)
+        }
+
+        override fun resume() {
+            resumeCount += 1
+            mutableState.value = mutableState.value.copy(status = PlaybackStatus.Playing)
+        }
+
+        override fun seekBy(deltaMillis: Long) {
+            seekDeltas += deltaMillis
+        }
+
+        override fun stop() {
+            stopCount += 1
+            mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
+        }
+
+        override fun release() = Unit
     }
 }

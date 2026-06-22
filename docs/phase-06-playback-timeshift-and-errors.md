@@ -70,18 +70,26 @@ Implemented and validated:
 - `DefaultPlaybackStreamResolver` resolves Xtream live, movie, and episode playback URLs from secure provider credentials plus local media metadata at runtime.
 - M3U playback resolution remains blocked until per-channel stream references can be provided outside Room; M3U final stream URLs are still not persisted.
 - `AppContainer` now provides a lazy Media3-backed `VivicastPlayerController`.
+- `PlayerRoute` can render controller state, toggle pause/resume, seek through the controller, and stop playback when the player closes while keeping the existing timeline-centered overlay behavior.
+- App wiring now passes the shared `VivicastPlayerController` into the fullscreen player route.
+- AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
+- Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
+- Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
 
 Validated with:
 
 - `.\gradlew.bat :core:player:compileDebugKotlin :core:player:testDebugUnitTest`
 - `.\gradlew.bat :data:playback:testDebugUnitTest :data:playback:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:player:compileDebugKotlin :app:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin`
+- `.\gradlew.bat :core:designsystem:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :feature:player:connectedDebugAndroidTest`
+- `.\gradlew.bat :data:provider:compileDebugAndroidTestKotlin :data:media:compileDebugAndroidTestKotlin :data:epg:compileDebugAndroidTestKotlin :data:favorites:compileDebugAndroidTestKotlin :feature:live-tv:compileDebugAndroidTestKotlin :feature:search:compileDebugAndroidTestKotlin :iptv:xtream:compileDebugAndroidTestKotlin`
 
 Still open:
 
-- Player UI/controller state integration using resolved runtime streams.
+- Playback entry-point handoff from locally imported Live-TV/movie/episode items into the resolver and controller.
 - M3U playback stream reference handling without storing final stream URLs in Room.
 - Playback progress persistence for movies and episodes.
 - Channel zapping, reconnect, timeshift, and error dialogs.

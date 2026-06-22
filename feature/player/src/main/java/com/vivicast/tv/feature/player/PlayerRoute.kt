@@ -3,14 +3,16 @@ package com.vivicast.tv.feature.player
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,17 +38,43 @@ import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.VivicastContentCard
 import com.vivicast.tv.core.designsystem.VivicastPlayerOverlay
 import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.player.PlaybackMediaType
+import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.VivicastPlayerController
+import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.data.media.DemoCatalog
 
 @Composable
-fun PlayerRoute(onClose: () -> Unit = {}) {
+fun PlayerRoute(
+    playerController: VivicastPlayerController? = null,
+    onClose: () -> Unit = {},
+) {
     var overlayVisible by remember { mutableStateOf(true) }
-    var playing by remember { mutableStateOf(true) }
-    var progress by remember { mutableIntStateOf(42) }
+    var demoPlaying by remember { mutableStateOf(true) }
+    var demoProgress by remember { mutableIntStateOf(42) }
     var focusedTimeline by remember { mutableStateOf(false) }
     val timelineFocusRequester = remember { FocusRequester() }
     val hiddenOverlayFocusRequester = remember { FocusRequester() }
-    val playerState = DemoCatalog.playerStates.first()
+    val demoPlayerState = DemoCatalog.playerStates.first()
+    val controllerState by playerController?.state?.collectAsState() ?: remember { mutableStateOf(null) }
+    val request = controllerState?.request
+    val playing = when (controllerState?.status) {
+        PlaybackStatus.Starting, PlaybackStatus.Playing -> true
+        PlaybackStatus.Idle,
+        PlaybackStatus.Paused,
+        PlaybackStatus.Error,
+        PlaybackStatus.Released -> false
+        null -> demoPlaying
+    }
+    val seekable = request?.seekable ?: demoPlayerState.seekable
+    val progress = controllerState?.progressPercent() ?: demoProgress
+    val title = request?.title ?: demoPlayerState.title
+
+    DisposableEffect(playerController) {
+        onDispose {
+            playerController?.stop()
+        }
+    }
 
     LaunchedEffect(overlayVisible) {
         if (overlayVisible) {
@@ -60,6 +88,7 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
         if (overlayVisible) {
             overlayVisible = false
         } else {
+            playerController?.stop()
             onClose()
         }
     }
@@ -78,22 +107,24 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
             },
     ) {
         Column(modifier = Modifier.padding(40.dp)) {
-            SectionTitle(playerState.title)
+            SectionTitle(title)
             BodyText(if (playing) "Wiedergabe" else "Pausiert")
         }
 
         if (overlayVisible) {
             VivicastPlayerOverlay(
-                title = playerState.title,
-                subtitle = if (playerState.seekable) {
+                title = title,
+                subtitle = if (controllerState?.status == PlaybackStatus.Error) {
+                    "Wiedergabe konnte nicht gestartet werden."
+                } else if (seekable) {
                     "Timeline steuert die Position."
                 } else {
-                    "Timeshift für diesen Sender nicht verfügbar."
+                    "Timeshift fuer diesen Sender nicht verfuegbar."
                 },
-                statusLabel = if (playing) "Live" else "Pausiert",
-                badges = playerState.badges,
+                statusLabel = controllerState?.status?.statusLabel(request?.mediaType) ?: if (playing) "Live" else "Pausiert",
+                badges = demoPlayerState.badges,
                 progress = progress,
-                seekable = playerState.seekable,
+                seekable = seekable,
                 focusedTimeline = focusedTimeline,
                 timelineFocusRequester = timelineFocusRequester,
                 modifier = Modifier
@@ -101,9 +132,27 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
                     .padding(horizontal = 48.dp, vertical = 28.dp)
                     .testTag(playerOverlayTag()),
                 onTimelineFocusChanged = { focusedTimeline = it },
-                onTogglePlay = { playing = !playing },
-                onSeekLeft = { if (playerState.seekable) progress = (progress - 8).coerceAtLeast(0) },
-                onSeekRight = { if (playerState.seekable) progress = (progress + 8).coerceAtMost(100) },
+                onTogglePlay = {
+                    if (playerController == null) {
+                        demoPlaying = !demoPlaying
+                    } else if (controllerState?.status == PlaybackStatus.Playing) {
+                        playerController.pause()
+                    } else {
+                        playerController.resume()
+                    }
+                },
+                onSeekLeft = {
+                    if (seekable) {
+                        playerController?.seekBy(-SEEK_STEP_MILLIS)
+                            ?: run { demoProgress = (demoProgress - 8).coerceAtLeast(0) }
+                    }
+                },
+                onSeekRight = {
+                    if (seekable) {
+                        playerController?.seekBy(SEEK_STEP_MILLIS)
+                            ?: run { demoProgress = (demoProgress + 8).coerceAtMost(100) }
+                    }
+                },
                 actions = {
                     ActionPill("Audio", onClick = {})
                     ActionPill("Untertitel", onClick = {})
@@ -113,7 +162,7 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
                 footer = {
                     VivicastContentCard(modifier = Modifier.fillMaxWidth().height(70.dp), contentPadding = 14.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                            BodyText("Nächstes Programm", maxLines = 1)
+                            BodyText("Naechstes Programm", maxLines = 1)
                             BodyText("20:15 - 20:45 Tagesthemen", maxLines = 1)
                         }
                     }
@@ -129,7 +178,7 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
             ) {
                 InfoPanel(
                     title = "Overlay versteckt",
-                    body = "Bild läuft weiter. Overlay kann wieder eingeblendet werden.",
+                    body = "Bild laeuft weiter. Overlay kann wieder eingeblendet werden.",
                 )
                 ActionPill(
                     label = "Overlay",
@@ -146,3 +195,20 @@ fun PlayerRoute(onClose: () -> Unit = {}) {
 fun playerOverlayTag(): String = "player-overlay"
 fun playerHiddenOverlayTag(): String = "player-hidden-overlay"
 fun playerHiddenOverlayActionTag(): String = "player-hidden-overlay-action"
+
+private const val SEEK_STEP_MILLIS = 30_000L
+
+private fun VivicastPlayerState.progressPercent(): Int {
+    if (durationMillis <= 0L) return 0
+    return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
+}
+
+private fun PlaybackStatus.statusLabel(mediaType: PlaybackMediaType?): String =
+    when (this) {
+        PlaybackStatus.Idle -> "Bereit"
+        PlaybackStatus.Starting -> "Startet"
+        PlaybackStatus.Playing -> if (mediaType == PlaybackMediaType.Channel) "Live" else "Wiedergabe"
+        PlaybackStatus.Paused -> "Pausiert"
+        PlaybackStatus.Error -> "Fehler"
+        PlaybackStatus.Released -> "Beendet"
+    }

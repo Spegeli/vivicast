@@ -199,7 +199,10 @@ private fun VivicastApp(appContainer: AppContainer) {
     }
 
     if (playerVisible) {
-        PlayerRoute(onClose = { playerVisible = false })
+        PlayerRoute(
+            playerController = appContainer.playerController,
+            onClose = { playerVisible = false },
+        )
     }
 }
 

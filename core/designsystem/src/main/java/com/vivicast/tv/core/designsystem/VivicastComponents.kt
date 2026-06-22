@@ -1059,10 +1059,6 @@ fun VivicastPlayerTimeline(
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (it.key) {
-                        Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                            onTogglePlay()
-                            true
-                        }
                         Key.DirectionLeft -> {
                             onSeekLeft()
                             true
