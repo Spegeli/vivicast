@@ -63,6 +63,10 @@ Implemented and validated:
 - Search is wired to `RoomMediaRepository.search` for local channels, movies, series, and EPG results.
 - Search applies the ADR-005 300 ms debounce before querying Room.
 - Search history is persisted through DataStore, capped to 20 distinct entries, and supports per-entry removal plus clear-all.
+- Movies are wired to local providers, provider-owned Room categories, cached poster/backdrop images, and provider-scoped movie favorites.
+- Series are wired to local providers, provider-owned Room categories, cached poster/backdrop images, and provider-scoped series favorites.
+- Movies and Series preserve the demo route fallback for isolated previews/usages.
+- Poster cards can update their hero on focus for TV-first browsing.
 
 Validated with:
 
@@ -76,10 +80,14 @@ Validated with:
 - Screenshot: `docs/phase-05-live-tv-favorites-epg-smoke.png`
 - Android TV emulator Search input/history empty-result smoke check
 - Screenshot: `docs/phase-05-search-room-smoke.png`
+- `.\gradlew.bat :core:designsystem:compileDebugKotlin :feature:movies:compileDebugKotlin :feature:series:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :app:installDebug`
+- Android TV emulator Movies/Series empty-state visual smoke check
+- Screenshot: `docs/phase-05-movies-room-smoke.png`
+- Screenshot: `docs/phase-05-series-room-smoke.png`
 
 Still open:
 
-- Movie and series favorites are not wired into their feature UIs yet.
 - Provider expanded/collapsed tree state persistence is not implemented yet.
 
 ## Definition of Done

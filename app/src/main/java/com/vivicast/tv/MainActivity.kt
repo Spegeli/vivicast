@@ -36,6 +36,8 @@ import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.Movie
+import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -81,8 +83,26 @@ private fun VivicastApp(appContainer: AppContainer) {
                 onOpenPlayer = { playerVisible = true },
             )
         },
-        AppDestination("Filme", "movies") { MoviesRoute(onOpenPlayer = { playerVisible = true }) },
-        AppDestination("Serien", "series") { SeriesRoute(onOpenPlayer = { playerVisible = true }) },
+        AppDestination("Filme", "movies") {
+            MoviesRoute(
+                providerRepository = appContainer.providerRepository,
+                mediaRepository = appContainer.mediaRepository,
+                favoritesRepository = appContainer.favoritesRepository,
+                resolveMoviePosterModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MoviePoster) },
+                resolveMovieBackdropModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MovieBackdrop) },
+                onOpenPlayer = { playerVisible = true },
+            )
+        },
+        AppDestination("Serien", "series") {
+            SeriesRoute(
+                providerRepository = appContainer.providerRepository,
+                mediaRepository = appContainer.mediaRepository,
+                favoritesRepository = appContainer.favoritesRepository,
+                resolveSeriesPosterModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesPoster) },
+                resolveSeriesBackdropModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesBackdrop) },
+                onOpenPlayer = { playerVisible = true },
+            )
+        },
         AppDestination("Suche", "search") {
             SearchRoute(
                 mediaRepository = appContainer.mediaRepository,
@@ -191,6 +211,36 @@ private suspend fun AppContainer.resolveChannelLogoModel(channel: Channel): Any?
             type = MediaCacheType.ChannelLogo,
             ownerId = channel.id,
             sourceUrl = logoUrl,
+        ),
+    )?.file
+}
+
+private suspend fun AppContainer.resolveMovieImageModel(movie: Movie, type: MediaCacheType): Any? {
+    val sourceUrl = when (type) {
+        MediaCacheType.MoviePoster -> movie.posterUrl
+        MediaCacheType.MovieBackdrop -> movie.backdropUrl
+        else -> null
+    }?.takeIf { it.isNotBlank() } ?: return null
+    return mediaCacheStore.getEntry(
+        MediaCacheKey(
+            type = type,
+            ownerId = movie.id,
+            sourceUrl = sourceUrl,
+        ),
+    )?.file
+}
+
+private suspend fun AppContainer.resolveSeriesImageModel(series: Series, type: MediaCacheType): Any? {
+    val sourceUrl = when (type) {
+        MediaCacheType.SeriesPoster -> series.posterUrl
+        MediaCacheType.SeriesBackdrop -> series.backdropUrl
+        else -> null
+    }?.takeIf { it.isNotBlank() } ?: return null
+    return mediaCacheStore.getEntry(
+        MediaCacheKey(
+            type = type,
+            ownerId = series.id,
+            sourceUrl = sourceUrl,
         ),
     )?.file
 }

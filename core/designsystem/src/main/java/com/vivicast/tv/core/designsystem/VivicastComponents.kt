@@ -501,6 +501,7 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     imageResId: Int? = null,
     imageModel: Any? = null,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit = {},
 ) {
     VivicastPosterCard(
@@ -514,6 +515,7 @@ fun PosterCard(
         modifier = modifier,
         imageResId = imageResId,
         imageModel = imageModel,
+        onFocused = onFocused,
         onClick = onClick,
     )
 }
@@ -530,6 +532,7 @@ fun VivicastPosterCard(
     modifier: Modifier = Modifier,
     imageResId: Int? = null,
     imageModel: Any? = null,
+    onFocused: () -> Unit = {},
     onClick: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -542,6 +545,7 @@ fun VivicastPosterCard(
                 .fillMaxWidth()
                 .height(VivicastCardSizes.PosterImageHeight),
             onClick = onClick,
+            onFocused = onFocused,
             onFocusChanged = { focused = it },
             contentPadding = VivicastSpacing.Space0,
             shape = VivicastShapes.PosterRadius,
