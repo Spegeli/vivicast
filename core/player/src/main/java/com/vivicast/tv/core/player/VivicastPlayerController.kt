@@ -3,6 +3,8 @@ package com.vivicast.tv.core.player
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -12,8 +14,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -67,18 +73,30 @@ class DefaultVivicastPlayerController(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val maxStartRetries: Int = DEFAULT_MAX_START_RETRIES,
+    private val maxReconnectAttempts: Int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
     private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
 ) : VivicastPlayerController {
     private val mutableState = MutableStateFlow(VivicastPlayerState())
     private var startJob: Job? = null
     private var progressJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var engineErrorJob: Job? = null
     private var released = false
 
     override val state: StateFlow<VivicastPlayerState> = mutableState.asStateFlow()
 
+    init {
+        engineErrorJob = scope.launch(dispatcher) {
+            engine.playbackErrors.collect { error ->
+                handlePlaybackError(error)
+            }
+        }
+    }
+
     override fun play(request: PlaybackRequest) {
         if (released) return
         startJob?.cancel()
+        reconnectJob?.cancel()
         stopProgressPolling()
         engine.stop()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Starting, request = request)
@@ -108,6 +126,8 @@ class DefaultVivicastPlayerController(
         if (released) return
         startJob?.cancel()
         startJob = null
+        reconnectJob?.cancel()
+        reconnectJob = null
         stopProgressPolling()
         engine.stop()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
@@ -118,6 +138,10 @@ class DefaultVivicastPlayerController(
         released = true
         startJob?.cancel()
         startJob = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+        engineErrorJob?.cancel()
+        engineErrorJob = null
         stopProgressPolling()
         engine.release()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Released)
@@ -160,6 +184,70 @@ class DefaultVivicastPlayerController(
         }
     }
 
+    private fun handlePlaybackError(error: Throwable) {
+        if (released) return
+        val current = mutableState.value
+        val request = current.request ?: return
+        if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) return
+
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch(dispatcher) {
+            reconnectWithRetries(request, error, current.positionMillis)
+        }
+    }
+
+    private suspend fun reconnectWithRetries(
+        request: PlaybackRequest,
+        lastError: Throwable,
+        lastPositionMillis: Long,
+    ) {
+        stopProgressPolling()
+        var retryCount = 0
+        while (retryCount < maxReconnectAttempts) {
+            retryCount += 1
+            mutableState.value = VivicastPlayerState(
+                status = PlaybackStatus.Starting,
+                request = request,
+                positionMillis = lastPositionMillis,
+                durationMillis = mutableState.value.durationMillis,
+            )
+            if (retryDelayMillis > 0L) {
+                delay(retryDelayMillis)
+            }
+            try {
+                engine.stop()
+                val reconnectRequest = request.copy(
+                    startPositionMillis = if (request.seekable) lastPositionMillis.coerceAtLeast(0L) else 0L,
+                )
+                engine.start(reconnectRequest)
+                mutableState.value = VivicastPlayerState(
+                    status = PlaybackStatus.Playing,
+                    request = reconnectRequest,
+                    positionMillis = engine.currentPositionMillis,
+                    durationMillis = engine.durationMillis,
+                )
+                startProgressPolling()
+                return
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                // Try again until the PRD retry budget is exhausted.
+            }
+        }
+
+        mutableState.value = VivicastPlayerState(
+            status = PlaybackStatus.Error,
+            request = request,
+            positionMillis = lastPositionMillis,
+            durationMillis = mutableState.value.durationMillis,
+            error = PlaybackError(
+                playbackId = request.playbackId,
+                retryCount = maxReconnectAttempts,
+                message = lastError.message ?: "Playback connection lost.",
+            ),
+        )
+    }
+
     private fun startProgressPolling() {
         stopProgressPolling()
         progressJob = scope.launch(dispatcher) {
@@ -184,12 +272,16 @@ class DefaultVivicastPlayerController(
 
     companion object {
         const val DEFAULT_MAX_START_RETRIES = 5
+        const val DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
         const val DEFAULT_RETRY_DELAY_MILLIS = 500L
         private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
     }
 }
 
 interface PlaybackEngine {
+    val playbackErrors: Flow<Throwable>
+        get() = emptyFlow()
+
     val currentPositionMillis: Long
 
     val durationMillis: Long
@@ -212,6 +304,19 @@ class Media3PlaybackEngine(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : PlaybackEngine {
     private val player = ExoPlayer.Builder(context.applicationContext).build()
+    private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
+
+    init {
+        player.addListener(
+            object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    playbackErrorEvents.tryEmit(error)
+                }
+            },
+        )
+    }
+
+    override val playbackErrors: Flow<Throwable> = playbackErrorEvents
 
     override val currentPositionMillis: Long
         get() = player.currentPosition.coerceAtLeast(0L)

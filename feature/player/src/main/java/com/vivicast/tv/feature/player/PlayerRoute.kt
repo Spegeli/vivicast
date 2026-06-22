@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,7 @@ fun PlayerRoute(
     onClose: () -> Unit = {},
     onChannelUp: () -> Unit = {},
     onChannelDown: () -> Unit = {},
+    onChooseAnotherChannel: () -> Unit = {},
 ) {
     var overlayVisible by remember { mutableStateOf(true) }
     var demoPlaying by remember { mutableStateOf(true) }
@@ -57,6 +59,7 @@ fun PlayerRoute(
     var focusedTimeline by remember { mutableStateOf(false) }
     val timelineFocusRequester = remember { FocusRequester() }
     val hiddenOverlayFocusRequester = remember { FocusRequester() }
+    val errorRetryFocusRequester = remember { FocusRequester() }
     val demoPlayerState = DemoCatalog.playerStates.first()
     val controllerState by playerController?.state?.collectAsState() ?: remember { mutableStateOf(null) }
     val request = controllerState?.request
@@ -83,6 +86,12 @@ fun PlayerRoute(
             timelineFocusRequester.requestFocus()
         } else {
             hiddenOverlayFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(controllerState?.status) {
+        if (controllerState?.status == PlaybackStatus.Error) {
+            errorRetryFocusRequester.requestFocus()
         }
     }
 
@@ -201,12 +210,74 @@ fun PlayerRoute(
                 )
             }
         }
+
+        if (controllerState?.status == PlaybackStatus.Error) {
+            PlaybackErrorDialog(
+                message = controllerState?.error?.message ?: "Wiedergabe konnte nicht gestartet werden.",
+                retryFocusRequester = errorRetryFocusRequester,
+                onRetry = {
+                    request?.let { playerController?.play(it) }
+                },
+                onChooseAnotherChannel = {
+                    playerController?.stop()
+                    onChooseAnotherChannel()
+                },
+                onClose = {
+                    playerController?.stop()
+                    onClose()
+                },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(48.dp)
+                    .testTag(playerErrorDialogTag()),
+            )
+        }
     }
 }
 
 fun playerOverlayTag(): String = "player-overlay"
 fun playerHiddenOverlayTag(): String = "player-hidden-overlay"
 fun playerHiddenOverlayActionTag(): String = "player-hidden-overlay-action"
+fun playerErrorDialogTag(): String = "player-error-dialog"
+fun playerErrorRetryTag(): String = "player-error-retry"
+fun playerErrorChooseAnotherTag(): String = "player-error-choose-another"
+fun playerErrorCloseTag(): String = "player-error-close"
+
+@Composable
+private fun PlaybackErrorDialog(
+    message: String,
+    retryFocusRequester: FocusRequester,
+    onRetry: () -> Unit,
+    onChooseAnotherChannel: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    VivicastContentCard(modifier = modifier.fillMaxWidth(0.45f), contentPadding = 22.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+            SectionTitle("Playback-Fehler")
+            BodyText(message, maxLines = 2)
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                ActionPill(
+                    label = "Erneut",
+                    modifier = Modifier
+                        .focusRequester(retryFocusRequester)
+                        .testTag(playerErrorRetryTag()),
+                    onClick = onRetry,
+                )
+                ActionPill(
+                    label = "Anderer Sender",
+                    modifier = Modifier.testTag(playerErrorChooseAnotherTag()),
+                    onClick = onChooseAnotherChannel,
+                )
+                ActionPill(
+                    label = "Schliessen",
+                    modifier = Modifier.testTag(playerErrorCloseTag()),
+                    onClick = onClose,
+                )
+            }
+        }
+    }
+}
 
 private const val SEEK_STEP_MILLIS = 30_000L
 

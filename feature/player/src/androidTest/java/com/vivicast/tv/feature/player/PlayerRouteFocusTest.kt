@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import com.vivicast.tv.core.player.PlaybackMediaType
+import com.vivicast.tv.core.player.PlaybackError
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.VivicastPlayerController
@@ -158,6 +159,26 @@ class PlayerRouteFocusTest {
         }
     }
 
+    @Test
+    fun errorDialogFocusesRetryAndRetriesRequest() {
+        val controller = ErrorPlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        compose.onNodeWithTag(playerErrorDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(playerErrorRetryTag()).assertIsFocused()
+        compose.onNodeWithTag(playerErrorRetryTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+
+        compose.runOnIdle {
+            assertEquals(1, controller.playCount)
+            assertEquals("movie-1", controller.lastRequest?.mediaId)
+        }
+    }
+
     private fun pressBack() {
         compose.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
@@ -209,6 +230,45 @@ class PlayerRouteFocusTest {
             mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
         }
 
+        override fun release() = Unit
+    }
+
+    private class ErrorPlayerController : VivicastPlayerController {
+        private val failedRequest = PlaybackRequest(
+            playbackId = "playback-1",
+            providerId = "provider-1",
+            mediaId = "movie-1",
+            mediaType = PlaybackMediaType.Movie,
+            title = "Controller Movie",
+            streamUrl = "https://stream.example/movie.mp4",
+            seekable = true,
+        )
+        private val mutableState = MutableStateFlow(
+            VivicastPlayerState(
+                status = PlaybackStatus.Error,
+                request = failedRequest,
+                error = PlaybackError(
+                    playbackId = failedRequest.playbackId,
+                    retryCount = 5,
+                    message = "start failed",
+                ),
+            ),
+        )
+        var playCount = 0
+        var lastRequest: PlaybackRequest? = null
+
+        override val state: StateFlow<VivicastPlayerState> = mutableState
+
+        override fun play(request: PlaybackRequest) {
+            playCount += 1
+            lastRequest = request
+            mutableState.value = mutableState.value.copy(status = PlaybackStatus.Starting)
+        }
+
+        override fun pause() = Unit
+        override fun resume() = Unit
+        override fun seekBy(deltaMillis: Long) = Unit
+        override fun stop() = Unit
         override fun release() = Unit
     }
 }

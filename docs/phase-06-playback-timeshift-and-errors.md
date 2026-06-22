@@ -77,12 +77,16 @@ Implemented and validated:
 - `RoomPlaybackRepository` now maps the existing Room `playback_progress` and `channel_history` tables to domain models for continue-watching and recent-channel use.
 - The Media3 controller now publishes current position and duration, and app wiring persists/restores movie and episode progress with a fixed 90 percent completed threshold.
 - Fullscreen Player CH+/CH- now zaps through the current Live-TV channel list with wrap-around and starts only the selected next/previous channel through the shared controller path.
+- Media3 playback errors now flow into `DefaultVivicastPlayerController`, which performs up to 5 reconnect attempts for stream aborts before entering `PlaybackStatus.Error`.
+- The fullscreen player now shows a focused error dialog with retry, choose another channel, and close actions.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
+- Controller unit coverage verifies stream-abort reconnect success and reconnect exhaustion.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
 - Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
 - Player instrumentation coverage verifies CH+/CH- callback routing.
+- Player instrumentation coverage verifies error dialog focus and retry action routing.
 - Playback repository instrumentation coverage verifies progress scoping, continue-watching ordering, recent-channel limits, and provider cleanup.
 
 Validated with:
@@ -99,12 +103,13 @@ Validated with:
 - `.\gradlew.bat :data:playback:connectedDebugAndroidTest`
 - `.\gradlew.bat :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat :feature:live-tv:compileDebugKotlin :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :core:player:testDebugUnitTest :feature:player:compileDebugKotlin :feature:player:compileDebugAndroidTestKotlin :app:compileDebugKotlin :feature:player:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - M3U playback stream reference handling without storing final stream URLs in Room.
-- Reconnect, timeshift, catch-up, and error dialogs.
+- Timeshift and catch-up entry handling.
 - Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done

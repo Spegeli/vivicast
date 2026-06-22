@@ -7,6 +7,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -89,6 +91,44 @@ class DefaultVivicastPlayerControllerTest {
         assertEquals(120_000L, controller.state.value.durationMillis)
     }
 
+    @Test
+    fun playbackErrorReconnectsRunningRequest() = runBlocking {
+        val engine = ReconnectPlaybackEngine()
+        val controller = testController(engine)
+
+        controller.play(TEST_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        engine.emitPlaybackError()
+
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing && engine.startAttempts >= 2 }
+        }
+        assertEquals(2, engine.startAttempts)
+        assertEquals(PlaybackStatus.Playing, controller.state.value.status)
+    }
+
+    @Test
+    fun playbackErrorExhaustsReconnectAttemptsBeforeError() = runBlocking {
+        val engine = ReconnectPlaybackEngine(failReconnects = true)
+        val controller = testController(engine)
+
+        controller.play(TEST_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        engine.emitPlaybackError()
+
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Error }
+        }
+        assertEquals(6, engine.startAttempts)
+        assertEquals(5, controller.state.value.error?.retryCount)
+    }
+
     private fun testController(engine: PlaybackEngine): DefaultVivicastPlayerController =
         DefaultVivicastPlayerController(
             engine = engine,
@@ -148,6 +188,33 @@ private class AlwaysFailingPlaybackEngine : PlaybackEngine {
     override suspend fun start(request: PlaybackRequest) {
         startAttempts += 1
         error("start failed")
+    }
+
+    override fun pause() = Unit
+    override fun resume() = Unit
+    override fun seekBy(deltaMillis: Long) = Unit
+    override fun stop() = Unit
+    override fun release() = Unit
+}
+
+private class ReconnectPlaybackEngine(
+    private val failReconnects: Boolean = false,
+) : PlaybackEngine {
+    private val mutablePlaybackErrors = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
+    var startAttempts = 0
+    override var currentPositionMillis = 15_000L
+    override var durationMillis = 120_000L
+    override val playbackErrors: Flow<Throwable> = mutablePlaybackErrors
+
+    override suspend fun start(request: PlaybackRequest) {
+        startAttempts += 1
+        if (failReconnects && startAttempts > 1) {
+            error("reconnect failed")
+        }
+    }
+
+    fun emitPlaybackError() {
+        mutablePlaybackErrors.tryEmit(IllegalStateException("stream aborted"))
     }
 
     override fun pause() = Unit

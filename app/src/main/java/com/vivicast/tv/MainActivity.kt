@@ -260,6 +260,10 @@ private fun VivicastApp(appContainer: AppContainer) {
             onClose = { playerVisible = false },
             onChannelUp = { zapChannel(1) },
             onChannelDown = { zapChannel(-1) },
+            onChooseAnotherChannel = {
+                selectedRoute = "live-tv"
+                playerVisible = false
+            },
         )
     }
 }
