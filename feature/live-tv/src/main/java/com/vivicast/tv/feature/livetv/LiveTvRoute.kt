@@ -77,6 +77,7 @@ fun LiveTvRoute(
     onExpandedProviderIdsChanged: (Set<String>) -> Unit = {},
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: (Channel) -> Unit = {},
+    onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
 ) {
     if (providerRepository == null || mediaRepository == null || epgRepository == null || favoritesRepository == null) {
         DemoLiveTvRoute()
@@ -90,6 +91,7 @@ fun LiveTvRoute(
             onExpandedProviderIdsChanged = onExpandedProviderIdsChanged,
             resolveChannelLogoModel = resolveChannelLogoModel,
             onOpenPlayer = onOpenPlayer,
+            onPlayableChannelsChanged = onPlayableChannelsChanged,
         )
     }
 }
@@ -104,6 +106,7 @@ private fun RoomLiveTvRoute(
     onExpandedProviderIdsChanged: (Set<String>) -> Unit,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: (Channel) -> Unit,
+    onPlayableChannelsChanged: (List<Channel>) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -157,6 +160,10 @@ private fun RoomLiveTvRoute(
         } else {
             observedChannels
         }
+    }
+
+    LaunchedEffect(channels) {
+        onPlayableChannelsChanged(channels)
     }
 
     LaunchedEffect(channels) {

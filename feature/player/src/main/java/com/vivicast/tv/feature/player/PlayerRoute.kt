@@ -48,6 +48,8 @@ import com.vivicast.tv.data.media.DemoCatalog
 fun PlayerRoute(
     playerController: VivicastPlayerController? = null,
     onClose: () -> Unit = {},
+    onChannelUp: () -> Unit = {},
+    onChannelDown: () -> Unit = {},
 ) {
     var overlayVisible by remember { mutableStateOf(true) }
     var demoPlaying by remember { mutableStateOf(true) }
@@ -98,11 +100,21 @@ fun PlayerRoute(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF02060C), Color(0xFF071A2A), Color(0xFF05080B))))
             .onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && !overlayVisible) {
-                    overlayVisible = true
-                    true
-                } else {
-                    false
+                if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    it.key == Key.ChannelUp -> {
+                        onChannelUp()
+                        true
+                    }
+                    it.key == Key.ChannelDown -> {
+                        onChannelDown()
+                        true
+                    }
+                    it.key == Key.Enter && !overlayVisible -> {
+                        overlayVisible = true
+                        true
+                    }
+                    else -> false
                 }
             },
     ) {

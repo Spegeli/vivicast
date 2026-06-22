@@ -67,6 +67,7 @@ private fun VivicastApp(appContainer: AppContainer) {
     var playerVisible by remember { mutableStateOf(false) }
     var selectedRoute by remember { mutableStateOf("live-tv") }
     var cacheStats by remember { mutableStateOf(MediaCacheStats(totalSizeBytes = 0L, fileCount = 0)) }
+    var livePlaybackChannels by remember { mutableStateOf(emptyList<Channel>()) }
     val preferences by appContainer.userPreferencesStore.values.collectAsState(initial = UserPreferences())
     val scope = rememberCoroutineScope()
 
@@ -76,6 +77,20 @@ private fun VivicastApp(appContainer: AppContainer) {
                 playerVisible = true
             }
         }
+    }
+
+    fun zapChannel(direction: Int) {
+        if (direction == 0 || livePlaybackChannels.isEmpty()) return
+        val currentRequest = appContainer.playerController.state.value.request
+        if (currentRequest?.mediaType != PlaybackMediaType.Channel) return
+
+        val currentIndex = livePlaybackChannels.indexOfFirst { it.id == currentRequest.mediaId }
+        val nextIndex = if (currentIndex < 0) {
+            0
+        } else {
+            (currentIndex + direction).floorMod(livePlaybackChannels.size)
+        }
+        openChannel(livePlaybackChannels[nextIndex])
     }
 
     fun openMovie(movie: Movie) {
@@ -127,6 +142,7 @@ private fun VivicastApp(appContainer: AppContainer) {
                 },
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = ::openChannel,
+                onPlayableChannelsChanged = { channels -> livePlaybackChannels = channels },
             )
         },
         AppDestination("Filme", "movies") {
@@ -242,6 +258,8 @@ private fun VivicastApp(appContainer: AppContainer) {
         PlayerRoute(
             playerController = appContainer.playerController,
             onClose = { playerVisible = false },
+            onChannelUp = { zapChannel(1) },
+            onChannelDown = { zapChannel(-1) },
         )
     }
 }
@@ -421,5 +439,8 @@ private fun progressPercent(positionMillis: Long, durationMillis: Long): Int {
     if (durationMillis <= 0L) return 0
     return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
 }
+
+private fun Int.floorMod(modulus: Int): Int =
+    ((this % modulus) + modulus) % modulus
 
 private const val COMPLETED_THRESHOLD_PERCENT = 90

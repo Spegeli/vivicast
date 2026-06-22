@@ -135,6 +135,29 @@ class PlayerRouteFocusTest {
         }
     }
 
+    @Test
+    fun channelKeysTriggerZappingCallbacks() {
+        var channelUpCount = 0
+        var channelDownCount = 0
+
+        compose.setContent {
+            PlayerRoute(
+                onChannelUp = { channelUpCount += 1 },
+                onChannelDown = { channelDownCount += 1 },
+            )
+        }
+
+        compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
+            pressKey(Key.ChannelUp)
+            pressKey(Key.ChannelDown)
+        }
+
+        compose.runOnIdle {
+            assertEquals(1, channelUpCount)
+            assertEquals(1, channelDownCount)
+        }
+    }
+
     private fun pressBack() {
         compose.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
