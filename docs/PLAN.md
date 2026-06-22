@@ -75,6 +75,7 @@ Done:
   - Live-TV provider-tree and provider/category transition coverage now has Compose Android instrumentation tests
   - Search now has Compose Android instrumentation coverage for initial focus, debounce/local results, scrollable result groups, and history actions
   - Settings destructive Provider/EPG delete dialogs now request Cancel focus, handle Back dismissal, and have Compose Android instrumentation coverage
+  - Top navigation now has Compose Android instrumentation coverage for focus-driven main-area selection
 
 Still important:
 
@@ -109,7 +110,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by tightening remaining cross-screen focus restore coverage.
+1. Continue Phase 05 by reviewing whether any remaining Phase 05 focus-restore gaps need app-shell or player-overlay coverage before moving to Media3 playback.
 2. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

@@ -42,6 +42,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -881,6 +882,7 @@ fun VivicastTopNavigation(
                 VivicastTopNavItem(
                     label = label,
                     selected = index == selectedIndex,
+                    modifier = Modifier.testTag(topNavItemTag(label)),
                     minWidth = if (label.length > 8) 150.dp else VivicastCardSizes.TopTabMinWidth,
                     onSelected = { onSelected(index) },
                     onFocused = { onFocused(index) },
@@ -890,6 +892,8 @@ fun VivicastTopNavigation(
         Spacer(Modifier.weight(1f))
     }
 }
+
+fun topNavItemTag(label: String): String = "top-nav-item-$label"
 
 @Composable
 fun VivicastTopNavItem(
