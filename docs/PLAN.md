@@ -116,7 +116,8 @@ Done:
 - Phase 07 VOD/history work has started:
   - Movies now expose a `Fortsetzen` category when non-completed movie playback progress exists
   - Movie cards show stored progress percent for continue-watching items
-  - Movie hero action switches from `Abspielen` to `Fortsetzen` when open progress exists
+  - Movie hero actions now expose both `Fortsetzen` and `Von Anfang an` when open progress exists; the restart path ignores stored progress
+  - TV action pills now keep bounded widths so multiple hero actions stay visible in one row
   - Movies continue-watching UI has Compose Android instrumentation coverage
 
 Still important:
@@ -152,7 +153,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Add the Movie detail surface with PRD actions: continue, play from beginning, trailer, favorite, and watched state.
+1. Add the Movie detail surface with PRD actions: trailer, favorite, watched state, and detail-level playback controls.
 2. Add Series continue-watching from episode progress, including exact season/episode/position metadata.
 
 ## Last Updated

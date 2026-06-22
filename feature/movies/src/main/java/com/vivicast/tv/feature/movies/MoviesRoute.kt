@@ -54,7 +54,7 @@ fun MoviesRoute(
     playbackRepository: PlaybackRepository? = null,
     resolveMoviePosterModel: suspend (Movie) -> Any? = { null },
     resolveMovieBackdropModel: suspend (Movie) -> Any? = { null },
-    onOpenPlayer: (Movie) -> Unit = {},
+    onOpenPlayer: (Movie, Boolean) -> Unit = { _, _ -> },
 ) {
     if (providerRepository == null || mediaRepository == null || favoritesRepository == null || playbackRepository == null) {
         DemoMoviesRoute()
@@ -79,7 +79,7 @@ private fun RoomMoviesRoute(
     playbackRepository: PlaybackRepository,
     resolveMoviePosterModel: suspend (Movie) -> Any?,
     resolveMovieBackdropModel: suspend (Movie) -> Any?,
-    onOpenPlayer: (Movie) -> Unit,
+    onOpenPlayer: (Movie, Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -184,7 +184,7 @@ private fun RoomMoviesRoute(
                 backdropModel = backdropModel,
                 isFavorite = selectedMovie?.id in favoriteMovieIds,
                 progress = selectedProgress,
-                onOpenPlayer = { selectedMovie?.let(onOpenPlayer) },
+                onOpenPlayer = { resumeProgress -> selectedMovie?.let { onOpenPlayer(it, resumeProgress) } },
                 onToggleFavorite = {
                     val providerId = selectedProviderId
                     val movieId = selectedMovie?.id
@@ -250,7 +250,7 @@ private fun MovieHero(
     backdropModel: Any?,
     isFavorite: Boolean,
     progress: PlaybackProgress?,
-    onOpenPlayer: () -> Unit,
+    onOpenPlayer: (Boolean) -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
     HeroPanel(
@@ -261,7 +261,12 @@ private fun MovieHero(
         backdropModel = backdropModel,
         action = {
             if (movie != null) {
-                ActionPill(if (progress != null) "Fortsetzen" else "Abspielen", onClick = onOpenPlayer)
+                if (progress != null) {
+                    ActionPill("Fortsetzen", onClick = { onOpenPlayer(true) })
+                    ActionPill("Von Anfang an", onClick = { onOpenPlayer(false) })
+                } else {
+                    ActionPill("Abspielen", onClick = { onOpenPlayer(false) })
+                }
                 ActionPill(if (isFavorite) "Favorit" else "Merken", selected = isFavorite, onClick = onToggleFavorite)
             }
         },

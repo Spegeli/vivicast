@@ -50,6 +50,7 @@ class MoviesRouteContinueTest {
 
         compose.onAllNodesWithText("Fortsetzen").assertCountEquals(2)
         compose.onAllNodesWithText("Continue Movie").assertCountEquals(2)
+        compose.onNodeWithText("Von Anfang an").assertIsDisplayed()
         compose.onNodeWithText("42 %").assertIsDisplayed()
     }
 }

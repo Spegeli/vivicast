@@ -171,7 +171,7 @@ object VivicastCardSizes {
     val SearchPosterHeight = 150.dp
     val SearchWideWidth = 320.dp
     val SearchWideHeight = 88.dp
-    val HeroHeight = 128.dp
+    val HeroHeight = 220.dp
     val PlayerOverlayHeight = 246.dp
     val PlayerTimelineHeight = 50.dp
     val SettingsNavItemHeight = 62.dp

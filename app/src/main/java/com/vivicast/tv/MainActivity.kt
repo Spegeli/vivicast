@@ -99,9 +99,9 @@ private fun VivicastApp(appContainer: AppContainer) {
         openChannel(livePlaybackChannels[nextIndex])
     }
 
-    fun openMovie(movie: Movie) {
+    fun openMovie(movie: Movie, resumeProgress: Boolean) {
         scope.launch {
-            appContainer.openMoviePlayback(movie) {
+            appContainer.openMoviePlayback(movie, resumeProgress) {
                 playerVisible = true
             }
         }
@@ -381,7 +381,7 @@ private suspend fun AppContainer.openChannelPlayback(
     onStarted()
 }
 
-private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -> Unit) {
+private suspend fun AppContainer.openMoviePlayback(movie: Movie, resumeProgress: Boolean, onStarted: () -> Unit) {
     val stream = playbackStreamResolver.resolve(
         PlaybackStreamRequest(
             providerId = movie.providerId,
@@ -391,8 +391,12 @@ private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -
             containerExtension = movie.containerExtension,
         ),
     ).resolvedStreamOrNull() ?: return
-    val progress = playbackRepository.getProgress(movie.providerId, MediaType.Movie, movie.id)
-        ?.takeUnless { it.isCompleted }
+    val progress = if (resumeProgress) {
+        playbackRepository.getProgress(movie.providerId, MediaType.Movie, movie.id)
+            ?.takeUnless { it.isCompleted }
+    } else {
+        null
+    }
 
     playerController.play(
         PlaybackRequest(

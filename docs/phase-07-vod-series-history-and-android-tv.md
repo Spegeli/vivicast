@@ -72,7 +72,8 @@ Implemented and validated:
 - Movies already render provider-owned Room categories, cached poster/backdrop images, and provider-scoped favorites with a demo fallback.
 - Movies now observe `PlaybackRepository.observeContinueWatching` and add the optional `Fortsetzen` category when non-completed movie progress exists.
 - Movies sort `Fortsetzen` items by most recent playback progress and show stored progress percent on the card metadata.
-- The Movies hero primary action now displays `Fortsetzen` instead of `Abspielen` for movies with open progress; playback already resumes from stored movie progress through the app player path.
+- The Movies hero now displays `Fortsetzen` and `Von Anfang an` for movies with open progress; playback resumes from stored movie progress only on the continue path.
+- TV action pills now have bounded row widths so multiple hero actions remain visible together.
 - Movies continue-watching UI has Compose Android instrumentation coverage with fake repositories.
 
 Validated with:
@@ -84,7 +85,7 @@ Validated with:
 
 Still open:
 
-- Movie detail screen with continue, play from beginning, trailer, favorite, and watched-state actions.
+- Movie detail screen with trailer, favorite, watched-state actions, and detail-level playback controls.
 - Series continue-watching from episode progress, including exact season/episode/position metadata.
 - History clear actions and Android TV integrations from ADR-008.
 

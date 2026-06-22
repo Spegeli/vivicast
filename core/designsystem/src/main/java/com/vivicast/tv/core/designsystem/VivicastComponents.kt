@@ -248,7 +248,7 @@ fun ActionPill(
     onClick: () -> Unit = {},
 ) {
     VivicastFocusSurface(
-        modifier = modifier.widthIn(min = 96.dp).height(VivicastCardSizes.ActionPillHeight),
+        modifier = modifier.widthIn(min = 96.dp, max = 220.dp).height(VivicastCardSizes.ActionPillHeight),
         selected = selected,
         onClick = onClick,
         contentPadding = VivicastSpacing.Space3,
