@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -142,17 +145,20 @@ private fun SearchContent(
     onVoiceClick: () -> Unit,
 ) {
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        ) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
                 SearchField(
                     query = query,
                     onQueryChanged = onQueryChanged,
                     modifier = Modifier.weight(1f).height(96.dp),
                 )
-                ActionPill("Voice", modifier = Modifier.width(118.dp).height(96.dp), onClick = onVoiceClick)
+                ActionPill("Voice", modifier = Modifier.width(118.dp).height(96.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
             }
 
-            if (history.isNotEmpty()) {
+            if (history.isNotEmpty() && debouncedQuery.isBlank()) {
                 SearchHistoryRow(
                     history = history,
                     onHistorySelected = onHistorySelected,
@@ -191,13 +197,16 @@ private fun SearchField(
     modifier: Modifier = Modifier,
 ) {
     val textFocusRequester = remember { FocusRequester() }
-    FocusPanel(modifier = modifier, onClick = { textFocusRequester.requestFocus() }, contentPadding = 18.dp) {
+    LaunchedEffect(Unit) {
+        textFocusRequester.requestFocus()
+    }
+    FocusPanel(modifier = modifier.testTag(searchFieldPanelTag()), onClick = { textFocusRequester.requestFocus() }, contentPadding = 18.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             BodyText("Suche / lokale Ergebnisse")
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChanged,
-                modifier = Modifier.fillMaxWidth().focusRequester(textFocusRequester),
+                modifier = Modifier.fillMaxWidth().focusRequester(textFocusRequester).testTag(searchInputTag()),
                 singleLine = true,
                 cursorBrush = SolidColor(VivicastColors.FocusRing),
                 textStyle = TextStyle(
@@ -235,7 +244,7 @@ private fun SearchHistoryRow(
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.width(260.dp)) {
                 FocusPanel(
                     contentPadding = VivicastSpacing.Space3,
-                    modifier = Modifier.weight(1f).height(62.dp),
+                    modifier = Modifier.weight(1f).height(62.dp).testTag(searchHistoryTermTag(term)),
                     onClick = { onHistorySelected(term) },
                 ) {
                     BasicText(
@@ -244,18 +253,18 @@ private fun SearchHistoryRow(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                ActionPill("x", modifier = Modifier.width(62.dp), onClick = { onHistoryDeleted(term) })
+                ActionPill("x", modifier = Modifier.width(62.dp).testTag(searchHistoryDeleteTag(term)), onClick = { onHistoryDeleted(term) })
             }
         }
         item(key = "__clear_history__") {
-            ActionPill("Leeren", modifier = Modifier.width(130.dp), onClick = onClearHistory)
+            ActionPill("Leeren", modifier = Modifier.width(130.dp).testTag(searchClearHistoryTag()), onClick = onClearHistory)
         }
     }
 }
 
 @Composable
 private fun SearchGroup(title: String, rows: List<SearchItem>) {
-    VivicastContentRow(title = title, horizontalGap = VivicastSpacing.Space4) {
+    VivicastContentRow(title = title, modifier = Modifier.testTag(searchGroupTag(title)), horizontalGap = VivicastSpacing.Space4) {
         items(rows) { item ->
             VivicastSearchResultCard(
                 title = item.title,
@@ -263,6 +272,7 @@ private fun SearchGroup(title: String, rows: List<SearchItem>) {
                 rating = item.rating,
                 posterLike = item.posterLike,
                 imageResId = item.imageResId,
+                modifier = Modifier.testTag(searchResultTag(title, item.title)),
             )
         }
     }
@@ -342,3 +352,19 @@ private fun demoImageFor(title: String): Int? = when (title) {
     "Dune: Prophecy", "Dune: The Sisterhood" -> MediaR.drawable.demo_poster_prophecy
     else -> null
 }
+
+internal fun searchFieldPanelTag(): String = "search-field-panel"
+internal fun searchInputTag(): String = "search-input"
+internal fun searchVoiceTag(): String = "search-voice"
+internal fun searchHistoryTermTag(term: String): String = "search-history-${term.searchTagToken()}"
+internal fun searchHistoryDeleteTag(term: String): String = "search-history-delete-${term.searchTagToken()}"
+internal fun searchClearHistoryTag(): String = "search-history-clear"
+internal fun searchGroupTag(groupTitle: String): String = "search-group-${groupTitle.searchTagToken()}"
+internal fun searchResultTag(groupTitle: String, title: String): String =
+    "search-result-${groupTitle.searchTagToken()}-${title.searchTagToken()}"
+
+private fun String.searchTagToken(): String =
+    trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')

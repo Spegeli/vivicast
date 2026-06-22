@@ -70,6 +70,8 @@ Implemented and validated:
 - Live-TV provider rows now support expanded/collapsed tree state persisted through DataStore.
 - Live-TV categories are nested under the active expanded provider, matching the PRD provider tree model.
 - Live-TV provider tree and provider/category transitions now have Compose Android instrumentation coverage for collapsed/expanded state, category filtering, preview non-autostart, and channel EPG column opening.
+- Search now requests initial focus on the text field, hides history during active result display, and keeps result groups vertically scrollable so all local result types remain reachable.
+- Search focus and history behavior now has Compose Android instrumentation coverage for initial focus, debounce/local results, EPG group scrolling, history selection, single delete, and clear-all.
 
 Validated with:
 
@@ -92,10 +94,12 @@ Validated with:
 - Android TV emulator Live-TV provider-tree empty-state visual smoke check
 - Screenshot: `docs/phase-05-provider-tree-empty-smoke.png`
 - `.\gradlew.bat :feature:live-tv:compileDebugAndroidTestKotlin :feature:live-tv:connectedDebugAndroidTest`
+- `.\gradlew.bat :feature:search:compileDebugKotlin :feature:search:compileDebugAndroidTestKotlin :feature:search:connectedDebugAndroidTest`
+- `.\gradlew.bat :app:compileDebugKotlin`
 
 Still open:
 
-- D-Pad and focus-restore tests can still be expanded for Search, dialogs, Back behavior, and remaining cross-screen focus restore.
+- D-Pad and focus-restore tests can still be expanded for dialogs, Back behavior, and remaining cross-screen focus restore.
 
 ## Definition of Done
 
