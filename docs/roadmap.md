@@ -65,7 +65,7 @@ Still stubbed or missing:
 - Provider configuration is persisted locally with credentials stored outside Room.
 - EPG, media, favorites, and playback repositories are still contracts or minimal implementations; `:data:media` now includes Room-backed M3U live and Xtream catalog import paths, and `:data:epg` now includes a Room-backed XMLTV import path.
 - M3U and XMLTV modules include parser implementations; Xtream has a request/transport client foundation and response parser.
-- Player now has a Media3-backed controller path, runtime stream resolution, retry/reconnect behavior, progress persistence, and ADR-006 timeshift state wiring in progress.
+- Player now has a Media3-backed controller path, runtime stream resolution for Xtream and M3U reference-backed streams, retry/reconnect behavior, progress persistence, and ADR-006 timeshift state wiring.
 - Worker contains job-name constants, concrete WorkManager refresh wrappers, request scheduling, network-backed refresh runner wiring, a testable refresh orchestrator, diagnostics redaction foundation, and media image cache refresh for logos, posters, backdrops, season images, and episode thumbnails.
 - `:core:cache` contains the file-backed media cache foundation for logo/poster/backdrop/image storage, local file lookup, stats, clear, and size cleanup.
 - Settings exposes refresh controls, EPG source/provider priority management, manual EPG channel mapping, and cache maintenance hooks for local cache stats, size limits, logo refresh, cleanup, and clearing.
@@ -80,8 +80,8 @@ Still stubbed or missing:
 | 03 | `docs/phase-03-provider-security-and-configuration.md` | Complete | Add provider management and encrypted credential storage. |
 | 04 | `docs/phase-04-ingest-refresh-and-epg.md` | Complete | Add M3U, Xtream, XMLTV ingest, refresh scheduling, and EPG storage. |
 | 05 | `docs/phase-05-live-tv-favorites-and-search.md` | Complete | Connect Live-TV, favorites, and local search to persisted data. |
-| 06 | `docs/phase-06-playback-timeshift-and-errors.md` | Active | Add Media3 playback, timeline behavior, retries, reconnect, and timeshift. |
-| 07 | `docs/phase-07-vod-series-history-and-android-tv.md` | Planned | Complete movies, series, history, Continue Watching, and Android TV integration. |
+| 06 | `docs/phase-06-playback-timeshift-and-errors.md` | Complete | Add Media3 playback, timeline behavior, retries, reconnect, and timeshift. |
+| 07 | `docs/phase-07-vod-series-history-and-android-tv.md` | Active | Complete movies, series, history, Continue Watching, and Android TV integration. |
 | 08 | `docs/phase-08-backup-privacy-polish-and-release.md` | Planned | Add backup/restore, diagnostics, privacy hardening, performance polish, and release readiness. |
 
 ## Working Rules

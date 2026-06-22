@@ -8,7 +8,7 @@ Use `docs/roadmap.md` as the detailed implementation roadmap. Use the active `do
 
 ## Current Phase
 
-Phase 06 - Playback, Timeshift, and Errors
+Phase 07 - VOD, Series, History, and Android TV
 
 ## Current Status
 
@@ -109,11 +109,15 @@ Done:
   - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, CH+/CH- callback routing, error retry focus/action, timeshift live-edge action presence, and stop-on-close
   - playback repository instrumentation tests cover continue-watching, recent-channel history, media scoping, and provider cleanup
   - instrumentation-tested modules now target SDK 36 for test APKs to avoid older-Android warning dialogs during emulator QA
+- Phase 06 is complete:
+  - M3U channels resolve playback streams from the private stream-reference store without Room final URLs
+  - a real public M3U live playback/timeshift smoke passes on the Android TV emulator
+  - `assembleDebug` passes
 
 Still important:
 
 - Manual EPG mapping currently uses explicit external XMLTV channel ID entry; a persisted XMLTV channel candidate picker can be added later if operator comfort becomes a priority.
-- Media3 playback is the active next implementation area.
+- Phase 07 VOD, series, history, and Android TV integration is the active next implementation area.
 - The complete `external-docs/codex/` folder and all links to it are ignored as binding sources.
 
 ## Working Rules
@@ -143,7 +147,8 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Run a real M3U live playback/timeshift smoke against a safe public stream source without storing final URLs in Room, logs, docs, screenshots, or demo data.
+1. Start Phase 07 by auditing current Movies/Series data wiring against PRD v1 and the design wireframes.
+2. Implement the next smallest Movies/Series persisted-data gap with focused tests.
 
 ## Last Updated
 

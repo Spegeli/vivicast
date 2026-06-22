@@ -68,14 +68,14 @@ Implemented and validated:
 - `DefaultVivicastPlayerController` exposes state, playback start, pause/resume, seek, stop, and release operations.
 - `Media3PlaybackEngine` wraps ExoPlayer for dynamic runtime media item playback without storing final stream URLs in Room.
 - `DefaultPlaybackStreamResolver` resolves Xtream live, movie, and episode playback URLs from secure provider credentials plus local media metadata at runtime.
-- M3U playback resolution remains blocked until per-channel stream references can be provided outside Room; M3U final stream URLs are still not persisted.
+- M3U playback resolves per-channel stream references from a private file-backed store outside Room; M3U final stream URLs are still not persisted.
 - `AppContainer` now provides a lazy Media3-backed `VivicastPlayerController`.
 - `PlayerRoute` can render controller state, toggle pause/resume, seek through the controller, and stop playback when the player closes while keeping the existing timeline-centered overlay behavior.
 - App wiring now passes the shared `VivicastPlayerController` into the fullscreen player route.
 - Live-TV channel, movie, and series episode actions now resolve runtime streams and start `VivicastPlayerController` playback requests before opening the fullscreen player.
 - Series now exposes a compact season/episode selector for imported episodes so playback starts from an actual episode item, not a series container.
 - `RoomPlaybackRepository` now maps the existing Room `playback_progress` and `channel_history` tables to domain models for continue-watching and recent-channel use.
-- The Media3 controller now publishes current position and duration, and app wiring persists/restores movie and episode progress with a fixed 90 percent completed threshold.
+- The Media3 controller now publishes current position and duration, and app wiring persists/restores movie and episode progress with the configured watched/completed threshold.
 - Fullscreen Player CH+/CH- now zaps through the current Live-TV channel list with wrap-around and starts only the selected next/previous channel through the shared controller path.
 - Media3 playback errors now flow into `DefaultVivicastPlayerController`, which performs up to 5 reconnect attempts for stream aborts before entering `PlaybackStatus.Error`.
 - The fullscreen player now shows a focused error dialog with retry, choose another channel, and close actions.
@@ -99,6 +99,7 @@ Implemented and validated:
 - Player instrumentation coverage verifies error dialog focus and retry action routing.
 - Player instrumentation coverage verifies that a behind-live timeshift state exposes the fullscreen Live action.
 - Playback repository instrumentation coverage verifies progress scoping, continue-watching ordering, recent-channel limits, and provider cleanup.
+- App instrumentation coverage verifies a real public M3U import can resolve a sampled live channel stream from the private reference store and start Media3 playback with timeshift state enabled without storing final stream URLs in Room, logs, docs, screenshots, or demo data.
 
 Validated with:
 
@@ -125,12 +126,12 @@ Validated with:
 - `.\gradlew.bat :feature:settings:compileDebugKotlin :feature:settings:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :feature:search:compileDebugKotlin :feature:search:compileDebugAndroidTestKotlin :feature:settings:compileDebugKotlin :feature:settings:compileDebugAndroidTestKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :feature:search:connectedDebugAndroidTest :feature:settings:connectedDebugAndroidTest`
+- `.\gradlew.bat :app:compileDebugAndroidTestKotlin`
+- `.\gradlew.bat :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=com.vivicast.tv.M3uPlaybackSmokeTest"`
 - `.\gradlew.bat assembleDebug`
 - Android TV emulator smoke verified D-Pad top navigation can reach Settings after Search and the Settings Wiedergabe panel shows the watched threshold controls. Screenshot: `docs/phase-06-settings-playback-threshold-smoke.png`
 
-Still open:
-
-- Real M3U live playback/timeshift smoke coverage against a safe public stream source without storing final URLs in Room, logs, docs, screenshots, or demo data.
+Phase 06 is complete.
 
 ## Definition of Done
 

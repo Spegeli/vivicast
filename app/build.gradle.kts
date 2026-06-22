@@ -14,6 +14,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -62,6 +63,11 @@ dependencies {
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.okhttp)
+
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
