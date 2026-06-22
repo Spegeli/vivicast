@@ -74,6 +74,7 @@ Done:
   - Live-TV provider rows now support persisted expanded/collapsed tree state with categories nested under the active expanded provider
   - Live-TV provider-tree and provider/category transition coverage now has Compose Android instrumentation tests
   - Search now has Compose Android instrumentation coverage for initial focus, debounce/local results, scrollable result groups, and history actions
+  - Settings destructive Provider/EPG delete dialogs now request Cancel focus, handle Back dismissal, and have Compose Android instrumentation coverage
 
 Still important:
 
@@ -108,7 +109,7 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Continue Phase 05 by tightening D-Pad/focus-restore coverage for dialogs, Back behavior, and remaining cross-screen focus restore.
+1. Continue Phase 05 by tightening remaining cross-screen focus restore coverage.
 2. Keep provider/security boundaries intact: no plaintext credentials in Room, logs, screenshots, docs, or demo data.
 
 ## Last Updated

@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -1111,13 +1112,32 @@ private fun EpgSourceEditor(
 }
 
 @Composable
-private fun DeleteEpgSourceDialog(
+fun DeleteEpgSourceDialog(
     source: EpgSource,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val cancelFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        cancelFocusRequester.requestFocus()
+    }
+
     Dialog(onDismissRequest = onCancel) {
-        GlassPanel(modifier = Modifier.widthIn(min = 560.dp, max = 680.dp), contentPadding = VivicastSpacing.Space5) {
+        GlassPanel(
+            modifier = Modifier
+                .widthIn(min = 560.dp, max = 680.dp)
+                .onPreviewKeyEvent {
+                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
+                        onCancel()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .testTag(deleteEpgSourceDialogTag(source.id)),
+            contentPadding = VivicastSpacing.Space5,
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                 InfoPanel(
                     title = "EPG Quelle wirklich loeschen?",
@@ -1126,8 +1146,22 @@ private fun DeleteEpgSourceDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), selected = true, onClick = onCancel)
-                    ActionPill("Loeschen", modifier = Modifier.width(140.dp), onClick = onDelete)
+                    ActionPill(
+                        "Abbrechen",
+                        modifier = Modifier
+                            .focusRequester(cancelFocusRequester)
+                            .width(150.dp)
+                            .testTag(deleteEpgSourceCancelTag(source.id)),
+                        selected = true,
+                        onClick = onCancel,
+                    )
+                    ActionPill(
+                        "Loeschen",
+                        modifier = Modifier
+                            .width(140.dp)
+                            .testTag(deleteEpgSourceConfirmTag(source.id)),
+                        onClick = onDelete,
+                    )
                 }
             }
         }
@@ -1578,13 +1612,32 @@ private fun ProviderTextField(
 }
 
 @Composable
-private fun DeleteProviderDialog(
+fun DeleteProviderDialog(
     provider: Provider,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val cancelFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        cancelFocusRequester.requestFocus()
+    }
+
     Dialog(onDismissRequest = onCancel) {
-        GlassPanel(modifier = Modifier.widthIn(min = 560.dp, max = 680.dp), contentPadding = VivicastSpacing.Space5) {
+        GlassPanel(
+            modifier = Modifier
+                .widthIn(min = 560.dp, max = 680.dp)
+                .onPreviewKeyEvent {
+                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
+                        onCancel()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .testTag(deleteProviderDialogTag(provider.id)),
+            contentPadding = VivicastSpacing.Space5,
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                 InfoPanel(
                     title = "Provider wirklich löschen?",
@@ -1593,8 +1646,22 @@ private fun DeleteProviderDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), selected = true, onClick = onCancel)
-                    ActionPill("Löschen", modifier = Modifier.width(140.dp), onClick = onDelete)
+                    ActionPill(
+                        "Abbrechen",
+                        modifier = Modifier
+                            .focusRequester(cancelFocusRequester)
+                            .width(150.dp)
+                            .testTag(deleteProviderCancelTag(provider.id)),
+                        selected = true,
+                        onClick = onCancel,
+                    )
+                    ActionPill(
+                        "Löschen",
+                        modifier = Modifier
+                            .width(140.dp)
+                            .testTag(deleteProviderConfirmTag(provider.id)),
+                        onClick = onDelete,
+                    )
                 }
             }
         }
@@ -1747,6 +1814,13 @@ private fun DemoStates(showConfirm: () -> Unit) {
         ActionPill("Bestätigen", modifier = Modifier.width(150.dp), onClick = showConfirm)
     }
 }
+
+fun deleteProviderDialogTag(providerId: String): String = "settings-delete-provider-dialog-$providerId"
+fun deleteProviderCancelTag(providerId: String): String = "settings-delete-provider-cancel-$providerId"
+fun deleteProviderConfirmTag(providerId: String): String = "settings-delete-provider-confirm-$providerId"
+fun deleteEpgSourceDialogTag(sourceId: String): String = "settings-delete-epg-source-dialog-$sourceId"
+fun deleteEpgSourceCancelTag(sourceId: String): String = "settings-delete-epg-source-cancel-$sourceId"
+fun deleteEpgSourceConfirmTag(sourceId: String): String = "settings-delete-epg-source-confirm-$sourceId"
 
 private data class ProviderEditorState(
     val providerId: String?,

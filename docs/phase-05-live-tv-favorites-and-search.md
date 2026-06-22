@@ -72,6 +72,7 @@ Implemented and validated:
 - Live-TV provider tree and provider/category transitions now have Compose Android instrumentation coverage for collapsed/expanded state, category filtering, preview non-autostart, and channel EPG column opening.
 - Search now requests initial focus on the text field, hides history during active result display, and keeps result groups vertically scrollable so all local result types remain reachable.
 - Search focus and history behavior now has Compose Android instrumentation coverage for initial focus, debounce/local results, EPG group scrolling, history selection, single delete, and clear-all.
+- Settings destructive Provider and EPG source delete dialogs now request focus on "Abbrechen", handle TV Back key dismissal, expose stable test tags, and use AndroidTest target SDK 36 to avoid emulator old-target warnings.
 
 Validated with:
 
@@ -96,10 +97,12 @@ Validated with:
 - `.\gradlew.bat :feature:live-tv:compileDebugAndroidTestKotlin :feature:live-tv:connectedDebugAndroidTest`
 - `.\gradlew.bat :feature:search:compileDebugKotlin :feature:search:compileDebugAndroidTestKotlin :feature:search:connectedDebugAndroidTest`
 - `.\gradlew.bat :app:compileDebugKotlin`
+- `.\gradlew.bat :feature:settings:compileDebugKotlin :feature:settings:compileDebugAndroidTestKotlin :feature:settings:connectedDebugAndroidTest`
+- `.\gradlew.bat :app:compileDebugKotlin`
 
 Still open:
 
-- D-Pad and focus-restore tests can still be expanded for dialogs, Back behavior, and remaining cross-screen focus restore.
+- D-Pad and focus-restore tests can still be expanded for remaining cross-screen focus restore.
 
 ## Definition of Done
 
