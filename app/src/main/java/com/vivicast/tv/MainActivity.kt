@@ -28,6 +28,8 @@ import com.vivicast.tv.core.designsystem.VivicastTheme
 import com.vivicast.tv.core.designsystem.VivicastTopNavigation
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackRequest
+import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
 import com.vivicast.tv.feature.livetv.LiveTvRoute
@@ -43,7 +45,9 @@ import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
+import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -99,6 +103,12 @@ private fun VivicastApp(appContainer: AppContainer) {
     LaunchedEffect(selectedRoute) {
         if (selectedRoute == "settings") {
             cacheStats = appContainer.mediaCacheStore.stats()
+        }
+    }
+
+    LaunchedEffect(appContainer) {
+        appContainer.playerController.state.collectLatest { state ->
+            appContainer.savePlaybackProgress(state)
         }
     }
 
@@ -318,6 +328,8 @@ private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -
             containerExtension = movie.containerExtension,
         ),
     ).resolvedStreamOrNull() ?: return
+    val progress = playbackRepository.getProgress(movie.providerId, MediaType.Movie, movie.id)
+        ?.takeUnless { it.isCompleted }
 
     playerController.play(
         PlaybackRequest(
@@ -328,6 +340,7 @@ private suspend fun AppContainer.openMoviePlayback(movie: Movie, onStarted: () -
             title = movie.name,
             streamUrl = stream.url,
             seekable = true,
+            startPositionMillis = progress?.positionMillis ?: 0L,
         ),
     )
     onStarted()
@@ -343,6 +356,8 @@ private suspend fun AppContainer.openEpisodePlayback(episode: Episode, onStarted
             containerExtension = episode.containerExtension,
         ),
     ).resolvedStreamOrNull() ?: return
+    val progress = playbackRepository.getProgress(episode.providerId, MediaType.Episode, episode.id)
+        ?.takeUnless { it.isCompleted }
 
     playerController.play(
         PlaybackRequest(
@@ -353,9 +368,36 @@ private suspend fun AppContainer.openEpisodePlayback(episode: Episode, onStarted
             title = episode.name,
             streamUrl = stream.url,
             seekable = true,
+            startPositionMillis = progress?.positionMillis ?: 0L,
         ),
     )
     onStarted()
+}
+
+private suspend fun AppContainer.savePlaybackProgress(state: VivicastPlayerState) {
+    val request = state.request ?: return
+    val mediaType = request.mediaType.toDomainProgressMediaType() ?: return
+    if (state.status != PlaybackStatus.Playing && state.status != PlaybackStatus.Paused) return
+    if (state.positionMillis <= 0L) return
+
+    val now = System.currentTimeMillis()
+    val progressPercent = progressPercent(state.positionMillis, state.durationMillis)
+    val existing = playbackRepository.getProgress(request.providerId, mediaType, request.mediaId)
+    playbackRepository.saveProgress(
+        PlaybackProgress(
+            id = existing?.id ?: playbackProgressId(request.providerId, mediaType, request.mediaId),
+            providerId = request.providerId,
+            mediaType = mediaType,
+            mediaId = request.mediaId,
+            positionMillis = state.positionMillis,
+            durationMillis = state.durationMillis,
+            progressPercent = progressPercent,
+            isCompleted = progressPercent >= COMPLETED_THRESHOLD_PERCENT,
+            lastWatchedAt = now,
+            createdAt = existing?.createdAt ?: now,
+            updatedAt = now,
+        ),
+    )
 }
 
 private fun PlaybackStreamResult.resolvedStreamOrNull() =
@@ -363,3 +405,21 @@ private fun PlaybackStreamResult.resolvedStreamOrNull() =
 
 private fun playbackId(providerId: String, mediaType: MediaType, mediaId: String): String =
     "$providerId:${mediaType.name.lowercase()}:$mediaId:${System.currentTimeMillis()}"
+
+private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
+    "$providerId:progress:${mediaType.name.lowercase()}:$mediaId"
+
+private fun PlaybackMediaType.toDomainProgressMediaType(): MediaType? =
+    when (this) {
+        PlaybackMediaType.Movie -> MediaType.Movie
+        PlaybackMediaType.Episode -> MediaType.Episode
+        PlaybackMediaType.Channel,
+        PlaybackMediaType.CatchUp -> null
+    }
+
+private fun progressPercent(positionMillis: Long, durationMillis: Long): Int {
+    if (durationMillis <= 0L) return 0
+    return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
+}
+
+private const val COMPLETED_THRESHOLD_PERCENT = 90

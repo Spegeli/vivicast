@@ -74,11 +74,14 @@ Implemented and validated:
 - App wiring now passes the shared `VivicastPlayerController` into the fullscreen player route.
 - Live-TV channel, movie, and series episode actions now resolve runtime streams and start `VivicastPlayerController` playback requests before opening the fullscreen player.
 - Series now exposes a compact season/episode selector for imported episodes so playback starts from an actual episode item, not a series container.
+- `RoomPlaybackRepository` now maps the existing Room `playback_progress` and `channel_history` tables to domain models for continue-watching and recent-channel use.
+- The Media3 controller now publishes current position and duration, and app wiring persists/restores movie and episode progress with a fixed 90 percent completed threshold.
 - AndroidTest APK target SDKs are set to 36 across instrumentation-tested modules to avoid emulator "built for an older Android version" dialogs during local QA.
 - Player timeline OK handling now toggles once through the focus-surface click path; Left/Right remain direct seek keys.
 - Controller unit coverage verifies stale start cancellation, 5-retry exhaustion, and release lifecycle behavior.
 - Stream resolver unit coverage verifies Xtream URL generation, inactive provider blocking, missing VOD extension handling, and the M3U no-Room-URL boundary.
 - Player instrumentation coverage verifies overlay focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close.
+- Playback repository instrumentation coverage verifies progress scoping, continue-watching ordering, recent-channel limits, and provider cleanup.
 
 Validated with:
 
@@ -90,13 +93,15 @@ Validated with:
 - `.\gradlew.bat :data:provider:compileDebugAndroidTestKotlin :data:media:compileDebugAndroidTestKotlin :data:epg:compileDebugAndroidTestKotlin :data:favorites:compileDebugAndroidTestKotlin :feature:live-tv:compileDebugAndroidTestKotlin :feature:search:compileDebugAndroidTestKotlin :iptv:xtream:compileDebugAndroidTestKotlin`
 - `.\gradlew.bat :feature:live-tv:compileDebugKotlin :feature:live-tv:compileDebugAndroidTestKotlin :feature:movies:compileDebugKotlin :app:compileDebugKotlin`
 - `.\gradlew.bat :feature:series:compileDebugKotlin :app:compileDebugKotlin`
+- `.\gradlew.bat :data:playback:testDebugUnitTest :data:playback:compileDebugAndroidTestKotlin :core:player:testDebugUnitTest :app:compileDebugKotlin`
+- `.\gradlew.bat :data:playback:connectedDebugAndroidTest`
 - `.\gradlew.bat assembleDebug`
 
 Still open:
 
 - M3U playback stream reference handling without storing final stream URLs in Room.
-- Playback progress persistence for movies and episodes.
 - Channel zapping, reconnect, timeshift, and error dialogs.
+- Configurable completed-threshold settings beyond the current fixed 90 percent threshold.
 
 ## Definition of Done
 

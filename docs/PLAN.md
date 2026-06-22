@@ -94,8 +94,11 @@ Done:
   - `PlayerRoute` renders controller state and forwards timeline pause/resume/seek/close actions to `VivicastPlayerController`
   - Live-TV channel, movie, and series episode actions resolve runtime streams and start controller playback requests before opening fullscreen player
   - Series exposes a compact season/episode selector for imported episodes
+  - movies and episodes now restore and persist playback progress through the Room playback repository
+  - the Media3 controller now reports playback position and duration for UI/progress persistence
   - timeline OK handling no longer double-toggles playback
   - player instrumentation tests cover focus restore, Back behavior, controller pause/resume, controller seek, and stop-on-close
+  - playback repository instrumentation tests cover continue-watching, recent-channel history, media scoping, and provider cleanup
   - instrumentation-tested modules now target SDK 36 for test APKs to avoid older-Android warning dialogs during emulator QA
 
 Still important:
@@ -131,9 +134,9 @@ No Xtream Codes test credentials are available yet. Ask the user only when Xtrea
 
 ## Next Steps
 
-1. Add playback progress persistence for movies and episodes.
-2. Add channel zapping/reconnect/timeshift/error-dialog behavior.
-3. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
+1. Add channel zapping/reconnect/timeshift/error-dialog behavior.
+2. Keep final stream URLs out of Room, logs, docs, screenshots, and demo data; solve M3U stream references outside Room before enabling M3U playback.
+3. Add configurable completed-threshold settings if the fixed 90 percent threshold is not enough for the first playback slice.
 
 ## Last Updated
 

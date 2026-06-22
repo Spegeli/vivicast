@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.player
 
 import android.content.Context
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineDispatcher
@@ -70,6 +71,7 @@ class DefaultVivicastPlayerController(
 ) : VivicastPlayerController {
     private val mutableState = MutableStateFlow(VivicastPlayerState())
     private var startJob: Job? = null
+    private var progressJob: Job? = null
     private var released = false
 
     override val state: StateFlow<VivicastPlayerState> = mutableState.asStateFlow()
@@ -77,6 +79,7 @@ class DefaultVivicastPlayerController(
     override fun play(request: PlaybackRequest) {
         if (released) return
         startJob?.cancel()
+        stopProgressPolling()
         engine.stop()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Starting, request = request)
         startJob = scope.launch(dispatcher) {
@@ -105,6 +108,7 @@ class DefaultVivicastPlayerController(
         if (released) return
         startJob?.cancel()
         startJob = null
+        stopProgressPolling()
         engine.stop()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
     }
@@ -114,6 +118,7 @@ class DefaultVivicastPlayerController(
         released = true
         startJob?.cancel()
         startJob = null
+        stopProgressPolling()
         engine.release()
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Released)
     }
@@ -123,12 +128,19 @@ class DefaultVivicastPlayerController(
         while (true) {
             try {
                 engine.start(request)
-                mutableState.value = VivicastPlayerState(status = PlaybackStatus.Playing, request = request)
+                mutableState.value = VivicastPlayerState(
+                    status = PlaybackStatus.Playing,
+                    request = request,
+                    positionMillis = engine.currentPositionMillis,
+                    durationMillis = engine.durationMillis,
+                )
+                startProgressPolling()
                 return
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
                 if (retryCount >= maxStartRetries) {
+                    stopProgressPolling()
                     mutableState.value = VivicastPlayerState(
                         status = PlaybackStatus.Error,
                         request = request,
@@ -148,13 +160,40 @@ class DefaultVivicastPlayerController(
         }
     }
 
+    private fun startProgressPolling() {
+        stopProgressPolling()
+        progressJob = scope.launch(dispatcher) {
+            while (true) {
+                delay(PROGRESS_POLL_INTERVAL_MILLIS)
+                val current = mutableState.value
+                if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) {
+                    return@launch
+                }
+                mutableState.value = current.copy(
+                    positionMillis = engine.currentPositionMillis,
+                    durationMillis = engine.durationMillis,
+                )
+            }
+        }
+    }
+
+    private fun stopProgressPolling() {
+        progressJob?.cancel()
+        progressJob = null
+    }
+
     companion object {
         const val DEFAULT_MAX_START_RETRIES = 5
         const val DEFAULT_RETRY_DELAY_MILLIS = 500L
+        private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
     }
 }
 
 interface PlaybackEngine {
+    val currentPositionMillis: Long
+
+    val durationMillis: Long
+
     suspend fun start(request: PlaybackRequest)
 
     fun pause()
@@ -173,6 +212,12 @@ class Media3PlaybackEngine(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : PlaybackEngine {
     private val player = ExoPlayer.Builder(context.applicationContext).build()
+
+    override val currentPositionMillis: Long
+        get() = player.currentPosition.coerceAtLeast(0L)
+
+    override val durationMillis: Long
+        get() = player.duration.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
 
     override suspend fun start(request: PlaybackRequest) {
         withContext(dispatcher) {

@@ -70,6 +70,25 @@ class DefaultVivicastPlayerControllerTest {
         assertEquals(listOf("first"), engine.startedIds)
     }
 
+    @Test
+    fun startPublishesInitialPositionAndDuration() = runBlocking {
+        val engine = BlockingPlaybackEngine().apply {
+            currentPositionMillis = 12_000L
+            durationMillis = 120_000L
+        }
+        val controller = testController(engine)
+
+        controller.play(TEST_REQUEST)
+        withTimeout(5_000) { engine.awaitStarted("first") }
+        engine.complete("first")
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        assertEquals(12_000L, controller.state.value.positionMillis)
+        assertEquals(120_000L, controller.state.value.durationMillis)
+    }
+
     private fun testController(engine: PlaybackEngine): DefaultVivicastPlayerController =
         DefaultVivicastPlayerController(
             engine = engine,
@@ -85,6 +104,8 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     private val completions = mutableMapOf<String, CompletableDeferred<Unit>>()
     val startedIds = mutableListOf<String>()
     var released = false
+    override var currentPositionMillis = 0L
+    override var durationMillis = 0L
 
     override suspend fun start(request: PlaybackRequest) {
         startedIds += request.playbackId
@@ -121,6 +142,8 @@ private class BlockingPlaybackEngine : PlaybackEngine {
 
 private class AlwaysFailingPlaybackEngine : PlaybackEngine {
     var startAttempts = 0
+    override val currentPositionMillis = 0L
+    override val durationMillis = 0L
 
     override suspend fun start(request: PlaybackRequest) {
         startAttempts += 1

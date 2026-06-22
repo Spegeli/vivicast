@@ -25,7 +25,9 @@ import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
 import com.vivicast.tv.data.media.RoomMediaRepository
 import com.vivicast.tv.data.playback.DefaultPlaybackStreamResolver
+import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
+import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.RoomProviderRepository
 import com.vivicast.tv.iptv.m3u.DefaultM3uParser
@@ -119,6 +121,10 @@ class AppContainer(
 
     val playbackStreamResolver: PlaybackStreamResolver by lazy {
         DefaultPlaybackStreamResolver(providerRepository = providerRepository)
+    }
+
+    val playbackRepository: PlaybackRepository by lazy {
+        RoomPlaybackRepository(database = database)
     }
 
     val playerController: VivicastPlayerController by lazy {
