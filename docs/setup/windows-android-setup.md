@@ -81,7 +81,7 @@ Useful app install checkpoint with a running emulator:
 
 Official Android skills from `android/skills` are installed only for this repository under `.agents/skills`.
 
-Use them selectively for Android implementation, migration, testing, profiling, Compose, navigation, and build-tooling work. They complement the local docs here; they do not replace `docs/PLAN.md` as the project source of truth.
+Use them selectively for Android implementation, migration, testing, profiling, Compose, navigation, and build-tooling work. They complement this setup guide and the active Vivicast documentation in `Spegeli/vivicast-docs`; they do not replace PRD, ADR, design, test strategy, or Codex working rules.
 
 ## 4. Configure Windows Environment
 
@@ -116,7 +116,19 @@ C:\Users\Andreas\AppData\Local\Android\Sdk\platform-tools\adb.exe version
 
 ## 5. Android TV Device over Wi-Fi
 
-Use the Android TV as the main real-device test target.
+Use a physical Android TV only when the Owner explicitly requests real-device testing. Normal development, installs, and smoke tests should use the Android TV emulator.
+
+Private device-specific connection details are intentionally not stored in this public setup guide.
+
+If local private device notes exist, use:
+
+```text
+docs/setup/local-device-notes.md
+```
+
+That file should stay local-only and must be ignored by Git. It may contain the actual TV IP address, device model, ADB target, and device-specific commands.
+
+Generic connection flow:
 
 On Android TV:
 
@@ -138,14 +150,6 @@ Or use:
 .\scripts\connect-android-tv.ps1 -HostAddress <tv-ip>:5555
 ```
 
-Current physical TV connection:
-
-- IP: `192.168.178.40`
-- Device: `Xiaomi Mi Smart TV 4S`
-- Model: `MiTV-MSSp3`
-- OS: Android 9
-- ADB state: `device` when connected.
-
 On newer Android TV versions, Wireless debugging may require a pairing code:
 
 ```powershell
@@ -156,7 +160,7 @@ adb devices
 
 Use the physical remote for acceptance testing. Keyboard arrows in an emulator are helpful, but they do not replace real D-pad testing.
 
-Important workflow rule: Codex should install APKs on the physical Android TV only when the user explicitly asks for it. Normal development installs and smoke tests should use the Android TV emulator.
+Important workflow rule: Codex should install APKs on the physical Android TV only when the Owner explicitly asks for it. Normal development installs and smoke tests should use the Android TV emulator.
 
 ## 6. Emulator Setup
 
@@ -217,7 +221,4 @@ Current baseline:
 - Android Studio detects the SDK.
 - Gradle JDK uses the bundled Android Studio JDK.
 - Android TV emulator starts: `ViviCast_AndroidTV_API36`.
-- Physical Android TV appears in `adb devices`: `192.168.178.40:5555`.
-- Debug APK can be installed on the emulator.
-- The Phase 1 placeholder shell launches on the emulator and supports basic D-pad focus.
-- Install on the physical Android TV only when explicitly requested.
+- Optional physical Android TV connection is documented only in local private notes and checked only when explicitly requested.

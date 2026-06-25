@@ -12,6 +12,7 @@ build/
 
 # Local config
 local.properties
+docs/setup/local-device-notes.md
 
 # Generated and local artifacts
 captures/
