@@ -1,28 +1,47 @@
-# ViviCast
+# Vivicast
 
-ViviCast is an Android TV IPTV client for package `com.vivicast.tv`.
+Vivicast is an Android TV IPTV client for package `com.vivicast.tv`.
 
-Status: The accepted Android TV foundation and Phase 2/2C local UI demo exist. The app has a TV-oriented Compose UI, reusable design-system components, and local demo catalog data. Real provider integrations, parser implementations, persistent PRD data flows, and Media3 playback are not complete yet.
+This repository contains the app implementation. The product, architecture, design, interaction, test-strategy, and Codex reference documentation lives in the separate repository:
+
+```text
+Spegeli/vivicast-docs
+```
 
 ## Source of Truth
 
-- Short startup pointer: [docs/PLAN.md](docs/PLAN.md)
-- Long-form implementation roadmap: [docs/roadmap.md](docs/roadmap.md)
-- Phase details: `docs/phase-XX-*.md`
-- Local Windows/Android setup: [docs/setup/windows-android-setup.md](docs/setup/windows-android-setup.md)
+For app implementation, use `Spegeli/vivicast-docs` as the source of truth.
 
-The local read-only documentation clone lives in `external-docs/` and is ignored by Git.
+Codex startup order:
 
-Binding documentation sources:
+1. `Spegeli/vivicast/AGENTS.md`
+2. `Spegeli/vivicast/README.md`
+3. `Spegeli/vivicast-docs/codex/README.md`
+4. `Spegeli/vivicast-docs/DOCS-GOVERNANCE.md`
+5. `Spegeli/vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`
+6. `Spegeli/vivicast-docs/codex/coding-rules.md`
+7. affected PRD, ADR, design, interaction, component, and test-strategy files from `Spegeli/vivicast-docs`
 
-- `external-docs/prd/PRD-v1/`
-- `external-docs/architecture/decisions/`
-- `external-docs/architecture/diagrams/`
-- `external-docs/design/`
+Do not use these old app-repo paths as active planning sources:
 
-Ignore `external-docs/codex/` and every link pointing to `codex/`.
+```text
+docs/PLAN.md
+docs/roadmap.md
+docs/phase-XX-*.md
+external-docs/
+```
+
+If those paths still exist locally, treat them as legacy/pre-final remnants. They must not override the final docs repository.
 
 ## Development Quick Start
+
+Detailed Windows/Android setup notes are available at:
+
+```text
+docs/setup/windows-android-setup.md
+```
+
+Use that file only for local environment, Android SDK, Android Studio, emulator, or device setup. It is not a product, architecture, design, or implementation source of truth.
 
 Check the local environment:
 
@@ -42,7 +61,7 @@ Open Android Studio:
 .\scripts\open-android-studio.ps1
 ```
 
-Start the default Android TV emulator:
+Start the Android TV emulator:
 
 ```powershell
 .\scripts\start-tv-emulator.ps1
@@ -54,24 +73,50 @@ Build all debug modules:
 .\gradlew.bat assembleDebug
 ```
 
-## Current State
+## Current App State
 
-Active Gradle modules are defined in `settings.gradle.kts` and follow the PRD v1 multi-module Android TV structure.
+The existing app repository should be treated as a partially implemented foundation, not as a finished product and not as a source of product truth.
 
-Implemented or partially implemented:
+Likely reusable foundation:
 
-- Android TV Leanback entry point and package/application ID `com.vivicast.tv`
-- Compose for TV screens for Live-TV, Movies, Series, Search, Settings, and Player Overlay
-- Reusable `:core:designsystem` TV components and tokens
-- Local demo catalog data and bundled demo assets in `:data:media`
-- Emulator-oriented scripts for environment checks, Android Studio, and Android TV startup
+- Android TV Leanback launcher entry
+- package/application ID `com.vivicast.tv`
+- multi-module Gradle structure
+- Kotlin and Jetpack Compose for TV foundation
+- reusable `:core:designsystem` components and tokens
+- partial Room/DataStore/security/cache/parser/worker foundations
+- demo UI for Live-TV, Filme, Serien, Suche, Einstellungen, and Player Overlay
 
-Still stubbed or missing:
+Known re-alignment areas:
 
-- Dependency injection wiring
-- Room entities, DAOs, migrations, and real data repositories
-- DataStore implementation
-- Android Keystore-backed secure value storage
-- M3U, Xtream, and XMLTV implementations
-- WorkManager refresh jobs
-- Real Media3 playback and timeshift
+- root app instructions had older planning assumptions and have been replaced by `AGENTS.md`
+- old app-local planning files are superseded by `Spegeli/vivicast-docs`
+- `Home` must exist as a fixed main area and default start area
+- demo-backed UI paths must be replaced by persisted/local app data according to PRD and ADRs
+- Search, VOD, Player, Backup/Restore, PIN, diagnostics, and final Android-TV integration must follow the final docs repository
+
+## App-Repo Working Plans
+
+Codex should create app-specific technical plans under:
+
+```text
+codex/plans/
+```
+
+These plans may describe implementation details for this repository, but they must not override:
+
+- PRD files
+- ADRs
+- design files
+- interaction specs
+- component specs
+- test strategy
+- `DOCS-GOVERNANCE.md`
+- Codex working rules in `Spegeli/vivicast-docs`
+
+## Repository Rules
+
+- Do not modify `Spegeli/vivicast-docs` during app implementation unless the Owner explicitly requests a documentation change.
+- Do not recreate or depend on `external-docs/` inside this repository.
+- Do not commit provider credentials, tokens, private playlist URLs, private screenshots, or other sensitive data.
+- Do not push, create remote branches, open pull requests, or publish commits without explicit Owner approval for that exact action.
