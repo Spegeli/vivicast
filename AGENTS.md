@@ -78,6 +78,32 @@ Each technical plan must include:
 
 Technical plans are implementation aids only. They do not replace PRD, ADRs, design sources, test strategy, Codex rules, or Governance.
 
+## Plan Status Maintenance
+
+The currently active technical plan file is the app-repo working memory for long-running implementation work.
+
+Codex must keep the active technical plan file current:
+
+- after every completed implementation substep
+- after every meaningful validation step
+- when a task becomes blocked
+- when scope, risks, assumptions, or next steps change
+- before context compaction, context handoff, or ending a session
+
+The active technical plan must clearly document:
+
+- completed work
+- still-open work
+- blocked items
+- known risks and assumptions
+- last validation command or manual check and its result
+- next concrete step
+- open Owner questions, if any
+
+After a context reset, context compaction, or new session, Codex must not rely on chat memory. It must re-read `AGENTS.md`, `README.md`, the required `Spegeli/vivicast-docs` startup sources, and the active plan file under `codex/plans/` before continuing.
+
+The active technical plan may summarize current implementation state and next steps, but it must not override PRD, ADRs, design sources, test strategy, Codex rules, or Governance.
+
 ## Autonomous Execution
 
 Codex should work autonomously inside the active documentation boundaries.
