@@ -7,20 +7,57 @@
 - The docs repository is read-only during app implementation unless the Owner explicitly requests a documentation change.
 - App code, app-specific technical plans, tests, implementation status, and local architecture decisions belong in this repository.
 
+## Docs Repository Location
+
+Codex runs with `Spegeli/vivicast` as the app repository root.
+
+The Vivicast docs repository must be available as a local sibling directory of the app repository.
+
+Expected local layout:
+
+```text
+<parent-directory>/
+  vivicast/
+  vivicast-docs/
+```
+
+From the app repository root, Codex must read the docs repository from:
+
+```text
+../vivicast-docs
+```
+
+Windows equivalent:
+
+```text
+..\vivicast-docs
+```
+
+Codex must read Vivicast documentation only from this sibling path or another explicit read-only path provided by the Owner.
+
+Codex must not clone, copy, or recreate `vivicast-docs` inside this app repository and must not recreate `external-docs/`.
+
+If `../vivicast-docs` is missing or unreadable, Codex must stop before implementation and ask the Owner for the correct docs repository path. Codex must not continue from memory and must not guess requirements.
+
+Codex may check the docs repository status locally. Codex may update the docs repository with `git pull --ff-only` only when the Owner explicitly asks for updating the local docs checkout. Codex must never push changes to `Spegeli/vivicast-docs` unless the Owner explicitly requests that exact GitHub action.
+
 ## Startup Routine
 
 At the start of every new Codex session in this repository:
 
 1. Read this `AGENTS.md`.
 2. Read root `README.md`.
-3. Read these files in `Spegeli/vivicast-docs`:
+3. Confirm that the docs repository is readable at `../vivicast-docs` or at another explicit read-only path provided by the Owner.
+4. Read these files from the docs repository:
    - `codex/README.md`
    - `DOCS-GOVERNANCE.md`
    - `codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`
    - `codex/coding-rules.md`
-4. For the current task, re-check the affected PRD, ADR, design, interaction, component, and test-strategy files from `Spegeli/vivicast-docs`.
-5. Inspect the affected app-repo modules and existing implementation before planning changes.
-6. Before larger implementation work, create or update a technical working plan in this repository under `codex/plans/`.
+5. Read `codex/plans/APP-IMPLEMENTATION-PLAN.md` if it exists.
+6. If `codex/plans/APP-IMPLEMENTATION-PLAN.md` does not exist and the Owner asked to start or continue implementation, create it as the first write step of Package 0.
+7. For the current task, re-check the affected PRD, ADR, design, interaction, component, and test-strategy files from the docs repository.
+8. Inspect the affected app-repo modules and existing implementation before planning changes.
+9. Before larger implementation work, create or update the technical working plan in this repository under `codex/plans/`.
 
 Do not rely on memory, old chat context, or stale app-repo planning files when the active docs can be checked.
 
@@ -37,11 +74,11 @@ Do not use these paths as active sources of truth:
 
 If any of these paths still exist temporarily, treat them as legacy/pre-final remnants. They must not override `Spegeli/vivicast-docs`, `DOCS-GOVERNANCE.md`, or the implementation masterplan.
 
-Do not recreate an `external-docs/` clone inside this repository. If a local read-only copy of `Spegeli/vivicast-docs` is needed for tooling, keep it outside the app repository or ensure it is ignored and never committed.
+Do not recreate an `external-docs/` clone inside this repository.
 
 ## Source Priority
 
-Conflicts are resolved by `Spegeli/vivicast-docs/DOCS-GOVERNANCE.md`.
+Conflicts are resolved by `../vivicast-docs/DOCS-GOVERNANCE.md`.
 
 Short rule:
 
@@ -80,9 +117,15 @@ Technical plans are implementation aids only. They do not replace PRD, ADRs, des
 
 ## Plan Status Maintenance
 
-The currently active technical plan file is the app-repo working memory for long-running implementation work.
+The main app-repo implementation status file is:
 
-Codex must keep the active technical plan file current:
+```text
+codex/plans/APP-IMPLEMENTATION-PLAN.md
+```
+
+This file is the working memory for long-running implementation work.
+
+Codex must keep the active technical plan current:
 
 - after every completed implementation substep
 - after every meaningful validation step
@@ -90,7 +133,21 @@ Codex must keep the active technical plan file current:
 - when scope, risks, assumptions, or next steps change
 - before context compaction, context handoff, or ending a session
 
-The active technical plan must clearly document:
+The top of `APP-IMPLEMENTATION-PLAN.md` must contain:
+
+```md
+## Status
+
+- Active package:
+- State: not started | in progress | blocked | done
+- Last completed step:
+- Last validated state:
+- Next concrete step:
+- Open blockers:
+- Open Owner questions:
+```
+
+The active technical plan must also clearly document:
 
 - completed work
 - still-open work
@@ -100,9 +157,26 @@ The active technical plan must clearly document:
 - next concrete step
 - open Owner questions, if any
 
-After a context reset, context compaction, or new session, Codex must not rely on chat memory. It must re-read `AGENTS.md`, `README.md`, the required `Spegeli/vivicast-docs` startup sources, and the active plan file under `codex/plans/` before continuing.
+After a context reset, context compaction, or new session, Codex must not rely on chat memory. It must re-read `AGENTS.md`, `README.md`, the required `../vivicast-docs` startup sources, and `codex/plans/APP-IMPLEMENTATION-PLAN.md` before continuing.
 
 The active technical plan may summarize current implementation state and next steps, but it must not override PRD, ADRs, design sources, test strategy, Codex rules, or Governance.
+
+## Existing Code Re-Alignment
+
+This repository is an existing, partially implemented app foundation. It is not a greenfield rewrite.
+
+Codex must inspect existing implementation before replacing it.
+
+Codex should reuse existing code when it does not conflict with `../vivicast-docs`.
+
+Codex must refactor, replace, or remove existing code when it conflicts with PRD, ADRs, design sources, interaction specs, component specs, test strategy, Codex working rules, or Governance.
+
+Every larger replacement of existing app code must be documented in the active technical plan with:
+
+- reason for replacement
+- affected source from `../vivicast-docs`
+- affected app modules/files
+- validation performed
 
 ## Autonomous Execution
 
@@ -117,6 +191,10 @@ Codex may independently:
 - update app-repo technical plans
 - continue with the next sensible task inside the active package after validation
 
+If the Owner asks to start or continue implementation without naming a specific package, Codex must read `codex/plans/APP-IMPLEMENTATION-PLAN.md` if it exists, determine the next open masterplan package, and continue there.
+
+If no app implementation plan exists yet, Codex must start with Package 0 from `../vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`.
+
 Codex must stop and ask the Owner when:
 
 - current active sources contradict each other
@@ -126,6 +204,8 @@ Codex must stop and ask the Owner when:
 - a workaround could violate a product rule
 - implementation appears to require changing the docs repository
 - archived, legacy, or old app-repo information seems relevant but is not confirmed by current docs
+
+Codex must not ask Owner questions for decisions already clearly covered by active docs. If the active docs define the behavior, Codex should implement it and document the source. Ask only when active docs are missing, contradictory, or implementation would require changing product behavior, visible UI, navigation, architecture, data model, persistence, security, backup/restore, PIN, or playback rules.
 
 Owner questions must be bundled and include the affected source, affected app component, problem, Codex recommendation, and concrete decision options.
 

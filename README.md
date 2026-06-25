@@ -12,6 +12,12 @@ Spegeli/vivicast-docs
 
 For app implementation, use `Spegeli/vivicast-docs` as the source of truth.
 
+For local Codex work, keep `Spegeli/vivicast-docs` available as a sibling repository at:
+
+```text
+../vivicast-docs
+```
+
 Codex startup order:
 
 1. `Spegeli/vivicast/AGENTS.md`
@@ -101,6 +107,12 @@ Codex should create app-specific technical plans under:
 
 ```text
 codex/plans/
+```
+
+The main status anchor should be:
+
+```text
+codex/plans/APP-IMPLEMENTATION-PLAN.md
 ```
 
 These plans may describe implementation details for this repository, but they must not override:
