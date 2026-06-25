@@ -12,7 +12,6 @@ build/
 
 # Local config
 local.properties
-external-docs/
 
 # Generated and local artifacts
 captures/
@@ -23,14 +22,6 @@ archive/
 .cxx/
 *.apk
 *.aab
-emulator-*.png
-new-android-tv-home.png
-vivicast-tv-*.png
-vivicast-nav-*.png
-vivicast-m3u-*.png
-vivicast-xtream-*.png
-vivicast-*.png
-vivicast-*.sqlite
 
 # OS
 .DS_Store
