@@ -12,13 +12,16 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import com.vivicast.tv.domain.model.EpgSource
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -101,13 +104,79 @@ class SettingsDialogFocusTest {
         compose.onAllNodesWithTag(deleteEpgSourceDialogTag(TEST_EPG_SOURCE.id)).assertCountEquals(0)
         assertFalse(deleted)
     }
+
+    @Test
+    fun pinSetDialogSubmitsMatchingPin() {
+        var savedPin: String? = null
+
+        compose.setContent {
+            ParentalControlSettingsPanel(
+                state = ParentalControlSettingsState(hasPin = false),
+                onSetPin = {
+                    savedPin = it
+                    null
+                },
+                onChangePin = { _, _ -> null },
+                onDisablePin = { null },
+            )
+        }
+
+        compose.onNodeWithText("PIN setzen").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(pinDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(pinNewFieldTag()).performTextInput("1234")
+        compose.onNodeWithTag(pinRepeatFieldTag()).performTextInput("1234")
+        compose.onNodeWithTag(pinConfirmTag()).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.waitUntil(timeoutMillis = 5_000) { savedPin == "1234" }
+    }
+
+    @Test
+    fun protectionAreaRowSubmitsAreaAndEnabledState() {
+        var submitted: Pair<ParentalProtectionArea, Boolean>? = null
+
+        compose.setContent {
+            ParentalControlSettingsPanel(
+                state = ParentalControlSettingsState(hasPin = true),
+                onSetPin = { null },
+                onChangePin = { _, _ -> null },
+                onDisablePin = { null },
+                onProtectionChanged = { area, enabled ->
+                    submitted = area to enabled
+                    null
+                },
+            )
+        }
+
+        compose.onNodeWithText("Filme schützen").performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.waitUntil(timeoutMillis = 5_000) { submitted != null }
+        assertEquals(ParentalProtectionArea.Movies to true, submitted)
+    }
+
+    @Test
+    fun fullBackupPassphraseDialogSubmitsExportPassphrase() {
+        var submitted: String? = null
+
+        compose.setContent {
+            BackupSettingsPanel(
+                onExportEncryptedFullBackup = { submitted = it },
+            )
+        }
+
+        compose.onNodeWithText("Vollbackup exportieren").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(fullBackupPassphraseDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(fullBackupPassphraseFieldTag()).performTextInput("secret-pass")
+        compose.onNodeWithTag(fullBackupPassphraseConfirmTag()).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.waitUntil(timeoutMillis = 5_000) { submitted == "secret-pass" }
+    }
 }
 
 private val TEST_PROVIDER = Provider(
     id = "provider-a",
     name = "Provider A",
     type = ProviderType.M3u,
-    credentialsKey = "provider-a-key",
+    sourceConfigKey = "provider-a-key",
     isActive = true,
     status = ProviderStatus.Active,
     includeLiveTv = true,
@@ -122,7 +191,7 @@ private val TEST_PROVIDER = Provider(
 private val TEST_EPG_SOURCE = EpgSource(
     id = "epg-a",
     name = "EPG A",
-    urlKey = "epg-a-key",
+    sourceConfigKey = "epg-a-key",
     timeShiftMinutes = 0,
     isActive = true,
 )

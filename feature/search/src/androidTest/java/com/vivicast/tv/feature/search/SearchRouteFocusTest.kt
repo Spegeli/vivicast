@@ -4,20 +4,13 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
-import com.vivicast.tv.core.datastore.AppearancePreferences
-import com.vivicast.tv.core.datastore.CachePreferences
-import com.vivicast.tv.core.datastore.GeneralPreferences
-import com.vivicast.tv.core.datastore.HistoryPreferences
-import com.vivicast.tv.core.datastore.ParentalControlPreferences
-import com.vivicast.tv.core.datastore.PlaybackPreferences
-import com.vivicast.tv.core.datastore.UserPreferences
-import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
@@ -43,32 +36,31 @@ class SearchRouteFocusTest {
         compose.setContent {
             SearchRoute(
                 mediaRepository = FakeMediaRepository(),
-                userPreferencesStore = FakeUserPreferencesStore(),
             )
         }
 
         compose.onNodeWithTag(searchInputTag()).assertIsFocused()
+        compose.onNodeWithTag(searchVoiceTag()).assertTextEquals("Mikrofon")
     }
 
     @Test
     fun typingDebouncesLocalSearchAndPersistsHistory() {
         val mediaRepository = FakeMediaRepository()
-        val preferencesStore = FakeUserPreferencesStore()
 
         compose.setContent {
             SearchRoute(
                 mediaRepository = mediaRepository,
-                userPreferencesStore = preferencesStore,
             )
         }
 
         compose.onNodeWithTag(searchInputTag()).performTextInput("dune")
 
         compose.waitUntil(timeoutMillis = 5_000) {
-            "dune" in mediaRepository.queries && "dune" in preferencesStore.current.searchHistory
+            "dune" in mediaRepository.queries && "dune" in mediaRepository.currentHistory
         }
-        compose.onNodeWithTag(searchResultTag("Kanaele", "Dune TV")).assertIsDisplayed()
+        compose.onNodeWithTag(searchResultTag("Kanäle", "Dune TV")).assertIsDisplayed()
         compose.onNodeWithTag(searchResultTag("Filme", "Dune")).assertIsDisplayed()
+        compose.onNodeWithTag(searchGroupTag("Serien")).performScrollTo()
         compose.onNodeWithTag(searchResultTag("Serien", "Dune: Prophecy")).assertIsDisplayed()
         compose.onNodeWithTag(searchGroupTag("EPG")).performScrollTo()
         compose.onNodeWithTag(searchResultTag("EPG", "Dune Special")).performScrollTo().assertIsDisplayed()
@@ -76,13 +68,11 @@ class SearchRouteFocusTest {
 
     @Test
     fun historySelectionRunsSearch() {
-        val mediaRepository = FakeMediaRepository()
-        val preferencesStore = FakeUserPreferencesStore(searchHistory = listOf("ARD", "Dune"))
+        val mediaRepository = FakeMediaRepository(searchHistory = listOf("ARD", "Dune"))
 
         compose.setContent {
             SearchRoute(
                 mediaRepository = mediaRepository,
-                userPreferencesStore = preferencesStore,
             )
         }
 
@@ -93,69 +83,48 @@ class SearchRouteFocusTest {
 
     @Test
     fun historyDeleteAndClearUpdatePreferences() {
-        val preferencesStore = FakeUserPreferencesStore(searchHistory = listOf("ARD", "Dune"))
+        val mediaRepository = FakeMediaRepository(searchHistory = listOf("ARD", "Dune"))
 
         compose.setContent {
             SearchRoute(
-                mediaRepository = FakeMediaRepository(),
-                userPreferencesStore = preferencesStore,
+                mediaRepository = mediaRepository,
             )
         }
 
         compose.onNodeWithTag(searchHistoryDeleteTag("Dune")).performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitUntil(timeoutMillis = 5_000) { "Dune" !in preferencesStore.current.searchHistory }
+        compose.waitUntil(timeoutMillis = 5_000) { "Dune" !in mediaRepository.currentHistory }
         compose.onAllNodesWithTag(searchHistoryTermTag("Dune")).assertCountEquals(0)
 
         compose.onNodeWithTag(searchClearHistoryTag()).performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitUntil(timeoutMillis = 5_000) { preferencesStore.current.searchHistory.isEmpty() }
+        compose.waitUntil(timeoutMillis = 5_000) { mediaRepository.currentHistory.isEmpty() }
         compose.onAllNodesWithTag(searchHistoryTermTag("ARD")).assertCountEquals(0)
     }
-}
 
-private class FakeUserPreferencesStore(searchHistory: List<String> = emptyList()) : UserPreferencesStore {
-    private val state = MutableStateFlow(UserPreferences(searchHistory = searchHistory))
-    override val values: Flow<UserPreferences> = state
-    val current: UserPreferences get() = state.value
+    @Test
+    fun resultClickCallsTypedAction() {
+        val mediaRepository = FakeMediaRepository()
+        var openedProgramId: String? = null
 
-    override suspend fun updateSelectedProviderId(providerId: String?) {
-        state.value = state.value.copy(selectedProviderId = providerId)
-    }
+        compose.setContent {
+            SearchRoute(
+                mediaRepository = mediaRepository,
+                onOpenEpgProgram = { openedProgramId = it.id },
+            )
+        }
 
-    override suspend fun updateGeneral(general: GeneralPreferences) {
-        state.value = state.value.copy(general = general)
-    }
+        compose.onNodeWithTag(searchInputTag()).performTextInput("dune")
+        compose.waitUntil(timeoutMillis = 5_000) { "dune" in mediaRepository.queries }
+        compose.onNodeWithTag(searchGroupTag("EPG")).performScrollTo()
+        compose.onNodeWithTag(searchResultTag("EPG", "Dune Special")).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
 
-    override suspend fun updateAppearance(appearance: AppearancePreferences) {
-        state.value = state.value.copy(appearance = appearance)
-    }
-
-    override suspend fun updatePlayback(playback: PlaybackPreferences) {
-        state.value = state.value.copy(playback = playback)
-    }
-
-    override suspend fun updateHistory(history: HistoryPreferences) {
-        state.value = state.value.copy(history = history)
-    }
-
-    override suspend fun updateSearchHistory(searchHistory: List<String>) {
-        state.value = state.value.copy(searchHistory = searchHistory)
-    }
-
-    override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) {
-        state.value = state.value.copy(expandedLiveTvProviderIds = providerIds)
-    }
-
-    override suspend fun updateCache(cache: CachePreferences) {
-        state.value = state.value.copy(cache = cache)
-    }
-
-    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
-        state.value = state.value.copy(parentalControl = parentalControl)
+        compose.runOnIdle { check(openedProgramId == "program-dune") }
     }
 }
 
-private class FakeMediaRepository : MediaRepository {
+private class FakeMediaRepository(searchHistory: List<String> = emptyList()) : MediaRepository {
     val queries = mutableListOf<String>()
+    private val history = MutableStateFlow(searchHistory)
+    val currentHistory: List<String> get() = history.value
 
     override fun observeCategories(providerId: String, type: CategoryType): Flow<List<Category>> = flowOf(emptyList())
     override fun observeChannels(providerId: String, categoryId: String?): Flow<List<Channel>> = flowOf(emptyList())
@@ -163,10 +132,30 @@ private class FakeMediaRepository : MediaRepository {
     override fun observeSeries(providerId: String, categoryId: String?): Flow<List<Series>> = flowOf(emptyList())
     override fun observeSeasons(providerId: String, seriesId: String): Flow<List<Season>> = flowOf(emptyList())
     override fun observeEpisodes(providerId: String, seasonId: String): Flow<List<Episode>> = flowOf(emptyList())
+    override suspend fun getChannel(providerId: String, channelId: String): Channel? = null
+    override suspend fun getMovie(providerId: String, movieId: String): Movie? = null
+    override suspend fun getEpisode(providerId: String, episodeId: String): Episode? = null
 
     override suspend fun search(query: String, limitPerType: Int): SearchResults {
         queries += query
         return if (query.equals("dune", ignoreCase = true)) TEST_RESULTS else SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
+    }
+
+    override fun observeSearchHistory(limit: Int): Flow<List<String>> = history
+
+    override suspend fun addSearchHistory(query: String) {
+        history.value = (listOf(query.trim()) + history.value)
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .take(20)
+    }
+
+    override suspend fun deleteSearchHistory(query: String) {
+        history.value = history.value.filterNot { it.equals(query, ignoreCase = true) }
+    }
+
+    override suspend fun clearSearchHistory() {
+        history.value = emptyList()
     }
 }
 
@@ -231,7 +220,7 @@ private val TEST_RESULTS = SearchResults(
             providerId = "provider-a",
             channelId = "channel-dune-tv",
             epgSourceId = "epg-a",
-            externalChannelId = "dune-tv",
+            epgChannelId = "dune-tv",
             title = "Dune Special",
             subtitle = "Heute 22:15",
             description = null,

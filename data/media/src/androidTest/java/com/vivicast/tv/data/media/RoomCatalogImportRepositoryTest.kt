@@ -1,10 +1,12 @@
 package com.vivicast.tv.data.media
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
@@ -25,9 +27,11 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.system.measureTimeMillis
 
 @RunWith(AndroidJUnit4::class)
 class RoomCatalogImportRepositoryTest {
@@ -66,16 +70,17 @@ class RoomCatalogImportRepositoryTest {
 
         assertEquals(listOf("News", "Sport"), categories.map { it.name }.sorted())
         assertEquals(listOf("ARD HD", "Sport 1"), channels.map { it.name }.sorted())
-        assertEquals("https://logos.example/ard.png", channels.first { it.remoteId == "ard.de" }.logoUrl)
-        assertEquals("1", channels.first { it.remoteId == "ard.de" }.channelNumber)
-        assertEquals(7, channels.first { it.remoteId == "ard.de" }.catchupDays)
-        assertEquals("https://streams.example/ard.m3u8", streamReferenceStore.getStreamUrl(PROVIDER_ID, "ard.de"))
+        assertEquals("https://logos.example/ard.png", channels.first { it.remoteId == ARD_REMOTE_ID }.logoUrl)
+        assertEquals("1", channels.first { it.remoteId == ARD_REMOTE_ID }.channelNumber)
+        assertEquals(7, channels.first { it.remoteId == ARD_REMOTE_ID }.catchupDays)
+        assertEquals("https://streams.example/ard.m3u8", streamReferenceStore.getStreamUrl(PROVIDER_ID, ARD_REMOTE_ID))
+        assertEquals("default", streamReferenceStore.getReference(PROVIDER_ID, ARD_REMOTE_ID)?.catchupMode)
     }
 
     @Test
     fun secondImportUpdatesChannelsAndDeletesRemovedChannelSideEffects() = kotlinx.coroutines.runBlocking {
         repository.importM3uLiveChannels(PROVIDER_ID, firstPlaylist())
-        val sportChannel = database.catalogDao().getChannels(PROVIDER_ID).first { it.remoteId == "sport1.de" }
+        val sportChannel = database.catalogDao().getChannels(PROVIDER_ID).first { it.remoteId == SPORT_REMOTE_ID }
         seedSideEffects(sportChannel.id)
 
         now = 2_000L
@@ -98,6 +103,41 @@ class RoomCatalogImportRepositoryTest {
         assertEquals(0, countForProvider("epg_programs", PROVIDER_ID))
         assertEquals(0, countForProvider("epg_channel_mappings", PROVIDER_ID))
         assertEquals(1, countAll("epg_sources"))
+    }
+
+    @Test
+    fun largeFixtureM3uParseAndCommitStaysWithinPrd13Budget() = kotlinx.coroutines.runBlocking {
+        lateinit var result: CatalogImportResult
+        lateinit var playlist: com.vivicast.tv.iptv.m3u.M3uPlaylist
+        val content = largeM3uFixture(M3U_CHANNEL_COUNT)
+
+        val parseMs = measureTimeMillis {
+            playlist = parser.parse(content)
+        }
+        val importMs = measureTimeMillis {
+            result = repository.importM3uLiveChannels(PROVIDER_ID, playlist)
+        }
+        val totalMs = parseMs + importMs
+
+        val channelCount = countForProvider("channels", PROVIDER_ID)
+        val categoryCount = countForProvider("categories", PROVIDER_ID)
+        Log.i(
+            BENCHMARK_LOG_TAG,
+            "largeFixtureM3u parseMs=${parseMs} importMs=${importMs} totalMs=${totalMs} " +
+                "channels=${channelCount} categories=${categoryCount}",
+        )
+
+        assertEquals(M3U_CHANNEL_COUNT, playlist.channels.size)
+        assertEquals(0, playlist.skippedEntries)
+        assertEquals(M3U_CHANNEL_COUNT, result.channelsAdded)
+        assertEquals(0, result.channelsRemoved)
+        assertEquals(M3U_CATEGORY_COUNT, result.categoriesAdded)
+        assertEquals(M3U_CHANNEL_COUNT, channelCount)
+        assertEquals(M3U_CATEGORY_COUNT, categoryCount)
+        assertTrue(
+            "M3U parse plus Room commit should stay within the PRD 13 10,000-channel import budget",
+            totalMs <= M3U_IMPORT_BUDGET_MS,
+        )
     }
 
     @Test
@@ -128,6 +168,44 @@ class RoomCatalogImportRepositoryTest {
         assertEquals(listOf("Series One", "Series Two"), series.map { it.name }.sorted())
         assertEquals(listOf(1, 1, 2), seasons.map { it.seasonNumber }.sorted())
         assertEquals(listOf("Episode One", "Episode Two", "Pilot"), episodes.map { it.name }.sorted())
+    }
+
+    @Test
+    fun largeFixtureXtreamMetadataCommitStaysWithinPrd13Budget() = kotlinx.coroutines.runBlocking {
+        lateinit var result: XtreamCatalogImportResult
+        val catalog = largeXtreamCatalog()
+
+        val importMs = measureTimeMillis {
+            result = repository.importXtreamCatalog(PROVIDER_ID, catalog)
+        }
+
+        val channelCount = countForProvider("channels", PROVIDER_ID)
+        val movieCount = countForProvider("movies", PROVIDER_ID)
+        val seriesCount = countForProvider("series", PROVIDER_ID)
+        val categoryCount = countForProvider("categories", PROVIDER_ID)
+        Log.i(
+            BENCHMARK_LOG_TAG,
+            "largeFixtureXtream importMs=${importMs} live=${channelCount} movies=${movieCount} " +
+                "series=${seriesCount} categories=${categoryCount}",
+        )
+
+        assertEquals(XTREAM_LIVE_COUNT, result.channels.added)
+        assertEquals(XTREAM_MOVIE_COUNT, result.movies.added)
+        assertEquals(XTREAM_SERIES_COUNT, result.series.added)
+        assertEquals(XTREAM_LIVE_CATEGORY_COUNT, result.liveCategories.added)
+        assertEquals(XTREAM_MOVIE_CATEGORY_COUNT, result.movieCategories.added)
+        assertEquals(XTREAM_SERIES_CATEGORY_COUNT, result.seriesCategories.added)
+        assertEquals(XTREAM_LIVE_COUNT, channelCount)
+        assertEquals(XTREAM_MOVIE_COUNT, movieCount)
+        assertEquals(XTREAM_SERIES_COUNT, seriesCount)
+        assertEquals(
+            XTREAM_LIVE_CATEGORY_COUNT + XTREAM_MOVIE_CATEGORY_COUNT + XTREAM_SERIES_CATEGORY_COUNT,
+            categoryCount,
+        )
+        assertTrue(
+            "Xtream metadata Room commit should stay within the PRD 13 15-minute import budget",
+            importMs <= XTREAM_IMPORT_BUDGET_MS,
+        )
     }
 
     @Test
@@ -168,7 +246,7 @@ class RoomCatalogImportRepositoryTest {
     private fun firstPlaylist() = parser.parse(
         """
         #EXTM3U
-        #EXTINF:-1 tvg-id="ard.de" tvg-name="ARD HD" tvg-logo="https://logos.example/ard.png" group-title="News" tvg-chno="1" catchup="default" catchup-days="7",ARD
+        #EXTINF:-1 tvg-id="ard.de" tvg-name="ARD HD" tvg-logo="https://logos.example/ard.png" group-title="News" tvg-chno="1" catchup="default" catchup-days="7" catchup-source="https://archive.example/ard?start={start}",ARD
         https://streams.example/ard.m3u8
         #EXTINF:-1 tvg-id="sport1.de" tvg-name="Sport 1" group-title="Sport",Sport 1
         https://streams.example/sport1.m3u8
@@ -182,6 +260,21 @@ class RoomCatalogImportRepositoryTest {
         https://streams.example/ard.m3u8
         """.trimIndent(),
     )
+
+    private fun largeM3uFixture(channelCount: Int): String = buildString {
+        appendLine("#EXTM3U")
+        repeat(channelCount) { index ->
+            val channelNumber = index + 1
+            val suffix = channelNumber.toString().padStart(5, '0')
+            val group = "Gruppe ${(index % M3U_CATEGORY_COUNT) + 1}"
+            appendLine(
+                "#EXTINF:-1 tvg-id=\"channel-$suffix\" tvg-name=\"Kanal $suffix\" " +
+                    "tvg-logo=\"https://logos.example/$suffix.png\" group-title=\"$group\" " +
+                    "tvg-chno=\"$channelNumber\",Kanal $suffix",
+            )
+            appendLine("https://streams.example/$suffix.m3u8")
+        }
+    }
 
     private fun firstXtreamCatalog() = XtreamCatalog(
         liveCategories = listOf(
@@ -345,10 +438,72 @@ class RoomCatalogImportRepositoryTest {
         seriesInfos = listOf(
             firstXtreamCatalog().seriesInfos.first().copy(
                 seasons = listOf(XtreamSeason(seasonNumber = 1, name = "Season 1", posterUrl = "https://posters.example/season-1.jpg")),
-                episodes = listOf(firstXtreamCatalog().seriesInfos.first().episodes.first().copy(name = "Episode One Updated")),
+        episodes = listOf(firstXtreamCatalog().seriesInfos.first().episodes.first().copy(name = "Episode One Updated")),
             ),
         ),
     )
+
+    private fun largeXtreamCatalog() = XtreamCatalog(
+        liveCategories = largeCategories("live-cat", "Live", XTREAM_LIVE_CATEGORY_COUNT),
+        liveStreams = List(XTREAM_LIVE_COUNT) { index ->
+            val number = index + 1
+            val suffix = number.toString().padStart(5, '0')
+            XtreamLiveStream(
+                remoteId = "live-$suffix",
+                name = "Live $suffix",
+                categoryRemoteId = "live-cat-${index % XTREAM_LIVE_CATEGORY_COUNT}",
+                channelNumber = number.toString(),
+                logoUrl = null,
+                epgChannelId = "channel-$suffix",
+                isCatchupAvailable = false,
+                catchupDays = 0,
+            )
+        },
+        vodCategories = largeCategories("movie-cat", "Filme", XTREAM_MOVIE_CATEGORY_COUNT),
+        vodItems = List(XTREAM_MOVIE_COUNT) { index ->
+            val number = index + 1
+            val suffix = number.toString().padStart(5, '0')
+            XtreamVodItem(
+                remoteId = "movie-$suffix",
+                name = "Film $suffix",
+                categoryRemoteId = "movie-cat-${index % XTREAM_MOVIE_CATEGORY_COUNT}",
+                containerExtension = "mp4",
+                posterUrl = null,
+                backdropUrl = null,
+                rating = null,
+                year = null,
+                genre = null,
+                durationSeconds = null,
+                director = null,
+                cast = null,
+                plot = null,
+                trailerUrl = null,
+                addedAtSeconds = null,
+            )
+        },
+        seriesCategories = largeCategories("series-cat", "Serien", XTREAM_SERIES_CATEGORY_COUNT),
+        seriesItems = List(XTREAM_SERIES_COUNT) { index ->
+            val number = index + 1
+            val suffix = number.toString().padStart(5, '0')
+            XtreamSeriesItem(
+                remoteId = "series-$suffix",
+                name = "Serie $suffix",
+                categoryRemoteId = "series-cat-${index % XTREAM_SERIES_CATEGORY_COUNT}",
+                posterUrl = null,
+                backdropUrl = null,
+                rating = null,
+                year = null,
+                genre = null,
+                director = null,
+                cast = null,
+                plot = null,
+                addedAtSeconds = null,
+            )
+        },
+    )
+
+    private fun largeCategories(prefix: String, label: String, count: Int): List<XtreamCategory> =
+        List(count) { index -> XtreamCategory(remoteId = "$prefix-$index", name = "$label ${index + 1}") }
 
     private suspend fun seedSideEffects(channelId: String) {
         assertNotNull(database.catalogDao().getChannels(PROVIDER_ID).firstOrNull { it.id == channelId })
@@ -357,7 +512,7 @@ class RoomCatalogImportRepositoryTest {
                 EpgSourceEntity(
                     id = "epg-source-1",
                     name = "Public EPG",
-                    urlKey = "secure:public-epg",
+                    sourceConfigKey = "secure:public-epg",
                     timeShiftMinutes = 0,
                     isActive = true,
                     createdAt = now,
@@ -372,7 +527,7 @@ class RoomCatalogImportRepositoryTest {
                     providerId = PROVIDER_ID,
                     channelId = channelId,
                     epgSourceId = "epg-source-1",
-                    externalChannelId = "sport1.de",
+                    epgChannelId = "sport1.de",
                     title = "Sport News",
                     subtitle = null,
                     description = null,
@@ -483,19 +638,32 @@ class RoomCatalogImportRepositoryTest {
 
     private companion object {
         const val PROVIDER_ID = "provider-1"
+        const val ARD_REMOTE_ID = "channel:tvg-id:ard.de"
+        const val SPORT_REMOTE_ID = "channel:tvg-id:sport1.de"
+        const val BENCHMARK_LOG_TAG = "VivicastBenchmark"
+        const val M3U_CHANNEL_COUNT = 10_000
+        const val M3U_CATEGORY_COUNT = 20
+        const val M3U_IMPORT_BUDGET_MS = 120_000L
+        const val XTREAM_LIVE_COUNT = 10_000
+        const val XTREAM_MOVIE_COUNT = 50_000
+        const val XTREAM_SERIES_COUNT = 20_000
+        const val XTREAM_LIVE_CATEGORY_COUNT = 20
+        const val XTREAM_MOVIE_CATEGORY_COUNT = 50
+        const val XTREAM_SERIES_CATEGORY_COUNT = 20
+        const val XTREAM_IMPORT_BUDGET_MS = 900_000L
     }
 
     private class FakeM3uStreamReferenceStore : M3uStreamReferenceStore {
-        private val references = mutableMapOf<String, MutableMap<String, String>>()
+        private val references = mutableMapOf<String, MutableMap<String, M3uStreamReference>>()
 
-        override fun replaceProviderReferences(providerId: String, references: Map<String, String>) {
+        override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) {
             this.references[providerId] = references.toMutableMap()
         }
 
-        override fun getStreamUrl(providerId: String, remoteId: String): String? =
+        override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? =
             references[providerId]?.get(remoteId)
 
-        override fun deleteProviderReferences(providerId: String) {
+        override suspend fun deleteProviderReferences(providerId: String) {
             references.remove(providerId)
         }
     }

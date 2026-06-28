@@ -35,6 +35,7 @@ dependencies {
     implementation(project(":data:playback"))
     implementation(project(":data:provider"))
     implementation(project(":domain"))
+    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.runtime)

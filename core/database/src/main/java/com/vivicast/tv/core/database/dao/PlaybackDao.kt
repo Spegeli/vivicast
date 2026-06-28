@@ -21,10 +21,27 @@ interface PlaybackDao {
     @Query(
         """
         SELECT * FROM playback_progress
+        WHERE isCompleted = 0 AND mediaType IN ('MOVIE', 'EPISODE')
+        ORDER BY lastWatchedAt DESC
+        """,
+    )
+    fun observeAllContinueWatching(): Flow<List<PlaybackProgressEntity>>
+
+    @Query(
+        """
+        SELECT * FROM playback_progress
         WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId = :mediaId
         """,
     )
     suspend fun getProgress(providerId: String, mediaType: String, mediaId: String): PlaybackProgressEntity?
+
+    @Query(
+        """
+        SELECT * FROM playback_progress
+        ORDER BY providerId, mediaType, lastWatchedAt DESC
+        """,
+    )
+    suspend fun getPlaybackProgress(): List<PlaybackProgressEntity>
 
     @Query(
         """
@@ -35,6 +52,23 @@ interface PlaybackDao {
         """,
     )
     fun observeRecentChannels(providerId: String, limit: Int): Flow<List<ChannelHistoryEntity>>
+
+    @Query(
+        """
+        SELECT * FROM channel_history
+        ORDER BY watchedAt DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeAllRecentChannels(limit: Int): Flow<List<ChannelHistoryEntity>>
+
+    @Query(
+        """
+        SELECT * FROM channel_history
+        ORDER BY providerId, watchedAt DESC
+        """,
+    )
+    suspend fun getChannelHistory(): List<ChannelHistoryEntity>
 
     @Upsert
     suspend fun upsertProgress(progress: PlaybackProgressEntity)
@@ -47,6 +81,15 @@ interface PlaybackDao {
 
     @Query("DELETE FROM channel_history WHERE providerId = :providerId")
     suspend fun deleteHistoryForProvider(providerId: String)
+
+    @Query("DELETE FROM channel_history")
+    suspend fun deleteAllChannelHistory()
+
+    @Query("DELETE FROM playback_progress WHERE mediaType = :mediaType")
+    suspend fun deleteProgressForMediaType(mediaType: String)
+
+    @Query("DELETE FROM playback_progress WHERE mediaType IN (:mediaTypes)")
+    suspend fun deleteProgressForMediaTypes(mediaTypes: List<String>)
 
     @Query("DELETE FROM playback_progress WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId IN (:mediaIds)")
     suspend fun deleteProgressForMediaIds(providerId: String, mediaType: String, mediaIds: List<String>)

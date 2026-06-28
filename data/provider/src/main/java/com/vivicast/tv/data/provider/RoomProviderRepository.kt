@@ -22,6 +22,7 @@ class RoomProviderRepository(
     private val epgDao = database.epgDao()
     private val favoritesDao = database.favoritesDao()
     private val playbackDao = database.playbackDao()
+    private val androidTvSearchDao = database.androidTvSearchDao()
 
     override fun observeProviders(): Flow<List<Provider>> =
         providerDao.observeProviders().map { providers -> providers.map { it.toDomain() } }
@@ -53,18 +54,20 @@ class RoomProviderRepository(
     override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult {
         validateProviderOptions(request.includeLiveTv, request.includeMovies, request.includeSeries)
         val providerId = UUID.randomUUID().toString()
-        val credentialsKey = credentialsKeyFor(providerId)
+        val sourceConfigKey = sourceConfigKeyFor(providerId)
         val now = clock()
         val name = request.name.trim()
         require(name.isNotEmpty()) { "Provider name must not be blank." }
+        require(!hasDuplicateName(name = name, excludeProviderId = null)) { "Provider name must be unique." }
 
-        writeCredentialsForCreate(credentialsKey, request)
+        writeCredentialsForCreate(sourceConfigKey, request)
 
         val provider = Provider(
             id = providerId,
+            stableKey = providerId,
             name = name,
             type = request.type,
-            credentialsKey = credentialsKey,
+            sourceConfigKey = sourceConfigKey,
             isActive = true,
             status = ProviderStatus.Active,
             includeLiveTv = request.includeLiveTv,
@@ -75,9 +78,11 @@ class RoomProviderRepository(
             createdAt = now,
             updatedAt = now,
         )
-        val hasDuplicateName = hasDuplicateName(name = name, excludeProviderId = null)
-        providerDao.upsertProvider(provider.toEntity())
-        return ProviderSaveResult(provider = provider, hasDuplicateName = hasDuplicateName)
+        database.withTransaction {
+            providerDao.upsertProvider(provider.toEntity())
+            androidTvSearchDao.rebuildEntries()
+        }
+        return ProviderSaveResult(provider = provider, hasDuplicateName = false)
     }
 
     override suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult {
@@ -86,8 +91,9 @@ class RoomProviderRepository(
             ?: error("Provider not found: ${request.providerId}")
         val name = request.name.trim()
         require(name.isNotEmpty()) { "Provider name must not be blank." }
+        require(!hasDuplicateName(name = name, excludeProviderId = existing.id)) { "Provider name must be unique." }
 
-        writeCredentialsForUpdate(existing.credentialsKey, existing.type, request)
+        writeCredentialsForUpdate(existing.sourceConfigKey, existing.type, request)
 
         val updated = existing.copy(
             name = name,
@@ -97,21 +103,32 @@ class RoomProviderRepository(
             refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
             updatedAt = clock(),
         )
-        val hasDuplicateName = hasDuplicateName(name = name, excludeProviderId = existing.id)
-        providerDao.upsertProvider(updated.toEntity())
-        return ProviderSaveResult(provider = updated, hasDuplicateName = hasDuplicateName)
+        database.withTransaction {
+            providerDao.upsertProvider(updated.toEntity())
+            androidTvSearchDao.rebuildEntries()
+        }
+        return ProviderSaveResult(provider = updated, hasDuplicateName = false)
     }
 
     override suspend fun saveProvider(provider: Provider) {
-        providerDao.upsertProvider(provider.toEntity())
+        database.withTransaction {
+            providerDao.upsertProvider(provider.toEntity())
+            androidTvSearchDao.rebuildEntries()
+        }
     }
 
     override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) {
-        providerDao.setProviderStatus(providerId, status.storageValue, clock())
+        database.withTransaction {
+            providerDao.setProviderStatus(providerId, status.storageValue, clock())
+            androidTvSearchDao.rebuildEntries()
+        }
     }
 
     override suspend fun setProviderActive(providerId: String, isActive: Boolean) {
-        providerDao.setProviderActive(providerId, isActive, clock())
+        database.withTransaction {
+            providerDao.setProviderActive(providerId, isActive, clock())
+            androidTvSearchDao.rebuildEntries()
+        }
     }
 
     override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) {
@@ -123,6 +140,7 @@ class RoomProviderRepository(
                 status = if (isEnabled) ProviderStatus.Active.storageValue else ProviderStatus.Disabled.storageValue,
                 updatedAt = now,
             )
+            androidTvSearchDao.rebuildEntries()
         }
     }
 
@@ -137,8 +155,9 @@ class RoomProviderRepository(
             playbackDao.deleteProgressForProvider(providerId)
             playbackDao.deleteHistoryForProvider(providerId)
             providerDao.deleteProvider(providerId)
+            androidTvSearchDao.rebuildEntries()
         }
-        existing?.credentialsKey?.let { deleteCredentials(it) }
+        existing?.sourceConfigKey?.let { deleteCredentials(it) }
     }
 
     private suspend fun hasDuplicateName(name: String, excludeProviderId: String?): Boolean =
@@ -146,55 +165,55 @@ class RoomProviderRepository(
             provider.id != excludeProviderId && provider.name.equals(name, ignoreCase = true)
         }
 
-    private suspend fun writeCredentialsForCreate(credentialsKey: String, request: ProviderCreateRequest) {
+    private suspend fun writeCredentialsForCreate(sourceConfigKey: String, request: ProviderCreateRequest) {
         when (request.type) {
             ProviderType.M3u -> {
                 val url = request.m3uUrl.requireSecret("M3U URL")
-                secureValueStore.write(credentialsKey.secureKey(FIELD_M3U_URL), url)
-                deleteXtreamCredentials(credentialsKey)
+                secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_URL), url)
+                deleteXtreamCredentials(sourceConfigKey)
             }
 
             ProviderType.Xtream -> {
-                secureValueStore.write(credentialsKey.secureKey(FIELD_XTREAM_SERVER_URL), request.xtreamServerUrl.requireSecret("Xtream server URL"))
-                secureValueStore.write(credentialsKey.secureKey(FIELD_XTREAM_USERNAME), request.xtreamUsername.requireSecret("Xtream username"))
-                secureValueStore.write(credentialsKey.secureKey(FIELD_XTREAM_PASSWORD), request.xtreamPassword.requireSecret("Xtream password"))
-                secureValueStore.delete(credentialsKey.secureKey(FIELD_M3U_URL))
+                secureValueStore.write(sourceConfigKey.secureKey(FIELD_XTREAM_SERVER_URL), request.xtreamServerUrl.requireSecret("Xtream server URL"))
+                secureValueStore.write(sourceConfigKey.secureKey(FIELD_XTREAM_USERNAME), request.xtreamUsername.requireSecret("Xtream username"))
+                secureValueStore.write(sourceConfigKey.secureKey(FIELD_XTREAM_PASSWORD), request.xtreamPassword.requireSecret("Xtream password"))
+                secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
             }
         }
     }
 
     private suspend fun writeCredentialsForUpdate(
-        credentialsKey: String,
+        sourceConfigKey: String,
         type: ProviderType,
         request: ProviderUpdateRequest,
     ) {
         when (type) {
             ProviderType.M3u -> {
-                request.m3uUrl.writeIfPresent(credentialsKey, FIELD_M3U_URL)
+                request.m3uUrl.writeIfPresent(sourceConfigKey, FIELD_M3U_URL)
             }
 
             ProviderType.Xtream -> {
-                request.xtreamServerUrl.writeIfPresent(credentialsKey, FIELD_XTREAM_SERVER_URL)
-                request.xtreamUsername.writeIfPresent(credentialsKey, FIELD_XTREAM_USERNAME)
-                request.xtreamPassword.writeIfPresent(credentialsKey, FIELD_XTREAM_PASSWORD)
+                request.xtreamServerUrl.writeIfPresent(sourceConfigKey, FIELD_XTREAM_SERVER_URL)
+                request.xtreamUsername.writeIfPresent(sourceConfigKey, FIELD_XTREAM_USERNAME)
+                request.xtreamPassword.writeIfPresent(sourceConfigKey, FIELD_XTREAM_PASSWORD)
             }
         }
     }
 
-    private suspend fun String?.writeIfPresent(credentialsKey: String, field: String) {
+    private suspend fun String?.writeIfPresent(sourceConfigKey: String, field: String) {
         val secret = this?.takeIf { it.isNotBlank() } ?: return
-        secureValueStore.write(credentialsKey.secureKey(field), secret.trim())
+        secureValueStore.write(sourceConfigKey.secureKey(field), secret.trim())
     }
 
-    private suspend fun deleteCredentials(credentialsKey: String) {
-        secureValueStore.delete(credentialsKey.secureKey(FIELD_M3U_URL))
-        deleteXtreamCredentials(credentialsKey)
+    private suspend fun deleteCredentials(sourceConfigKey: String) {
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
+        deleteXtreamCredentials(sourceConfigKey)
     }
 
-    private suspend fun deleteXtreamCredentials(credentialsKey: String) {
-        secureValueStore.delete(credentialsKey.secureKey(FIELD_XTREAM_SERVER_URL))
-        secureValueStore.delete(credentialsKey.secureKey(FIELD_XTREAM_USERNAME))
-        secureValueStore.delete(credentialsKey.secureKey(FIELD_XTREAM_PASSWORD))
+    private suspend fun deleteXtreamCredentials(sourceConfigKey: String) {
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_XTREAM_SERVER_URL))
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_XTREAM_USERNAME))
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_XTREAM_PASSWORD))
     }
 
     private fun validateProviderOptions(includeLiveTv: Boolean, includeMovies: Boolean, includeSeries: Boolean) {
@@ -205,9 +224,10 @@ class RoomProviderRepository(
 private fun ProviderEntity.toDomain(): Provider =
     Provider(
         id = id,
+        stableKey = stableKey,
         name = name,
         type = type.toProviderType(),
-        credentialsKey = credentialsKey,
+        sourceConfigKey = sourceConfigKey,
         isActive = isActive,
         status = status.toProviderStatus(),
         includeLiveTv = includeLiveTv,
@@ -222,9 +242,10 @@ private fun ProviderEntity.toDomain(): Provider =
 private fun Provider.toEntity(): ProviderEntity =
     ProviderEntity(
         id = id,
+        stableKey = stableKey,
         name = name,
         type = type.storageValue,
-        credentialsKey = credentialsKey,
+        sourceConfigKey = sourceConfigKey,
         isActive = isActive,
         status = status.storageValue,
         includeLiveTv = includeLiveTv,
@@ -252,26 +273,30 @@ private fun String.toProviderType(): ProviderType =
 private val ProviderStatus.storageValue: String
     get() = when (this) {
         ProviderStatus.Active -> "ACTIVE"
+        ProviderStatus.ActiveWithPartialErrors -> "ACTIVE_WITH_PARTIAL_ERRORS"
         ProviderStatus.Refreshing -> "REFRESHING"
         ProviderStatus.ConnectionError -> "CONNECTION_ERROR"
         ProviderStatus.InvalidCredentials -> "INVALID_CREDENTIALS"
         ProviderStatus.Expired -> "EXPIRED"
         ProviderStatus.Disabled -> "DISABLED"
+        ProviderStatus.CredentialsRequired -> "CREDENTIALS_REQUIRED"
     }
 
 private fun String.toProviderStatus(): ProviderStatus =
     when (this) {
         "ACTIVE" -> ProviderStatus.Active
+        "ACTIVE_WITH_PARTIAL_ERRORS" -> ProviderStatus.ActiveWithPartialErrors
         "REFRESHING" -> ProviderStatus.Refreshing
         "CONNECTION_ERROR" -> ProviderStatus.ConnectionError
         "INVALID_CREDENTIALS" -> ProviderStatus.InvalidCredentials
         "EXPIRED" -> ProviderStatus.Expired
         "DISABLED" -> ProviderStatus.Disabled
+        "CREDENTIALS_REQUIRED" -> ProviderStatus.CredentialsRequired
         else -> ProviderStatus.Disabled
     }
 
 private fun ProviderEntity.secureKey(field: String): SecureKey =
-    credentialsKey.secureKey(field)
+    sourceConfigKey.secureKey(field)
 
 private fun String.secureKey(field: String): SecureKey =
     SecureKey("$this:$field")
@@ -282,10 +307,10 @@ private fun String?.requireSecret(label: String): String {
     return value
 }
 
-private fun credentialsKeyFor(providerId: String): String =
-    "$CREDENTIALS_KEY_PREFIX$providerId:credentials"
+private fun sourceConfigKeyFor(providerId: String): String =
+    "$SOURCE_CONFIG_KEY_PREFIX$providerId:credentials"
 
-private const val CREDENTIALS_KEY_PREFIX = "provider:"
+private const val SOURCE_CONFIG_KEY_PREFIX = "provider:"
 private const val FIELD_M3U_URL = "m3u_url"
 private const val FIELD_XTREAM_SERVER_URL = "xtream_server_url"
 private const val FIELD_XTREAM_USERNAME = "xtream_username"

@@ -20,10 +20,27 @@ interface FavoritesDao {
     @Query(
         """
         SELECT * FROM favorites
+        WHERE mediaType = :mediaType
+        ORDER BY sortOrder, createdAt DESC
+        """,
+    )
+    fun observeFavorites(mediaType: String): Flow<List<FavoriteEntity>>
+
+    @Query(
+        """
+        SELECT * FROM favorites
         WHERE providerId = :providerId AND mediaType = :mediaType AND mediaId = :mediaId
         """,
     )
     suspend fun getFavorite(providerId: String, mediaType: String, mediaId: String): FavoriteEntity?
+
+    @Query(
+        """
+        SELECT * FROM favorites
+        ORDER BY providerId, mediaType, sortOrder, createdAt DESC
+        """,
+    )
+    suspend fun getFavorites(): List<FavoriteEntity>
 
     @Upsert
     suspend fun upsertFavorite(favorite: FavoriteEntity)

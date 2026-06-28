@@ -1,0 +1,2 @@
+﻿--------- beginning of main
+06-22 22:53:48.708  9739  9755 I VivicastBenchmark: largeFixtureXtream importMs=15839 live=10000 movies=50000 series=20000 categories=90

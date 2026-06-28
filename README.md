@@ -24,20 +24,17 @@ Codex startup order:
 2. `Spegeli/vivicast/README.md`
 3. `Spegeli/vivicast-docs/codex/README.md`
 4. `Spegeli/vivicast-docs/DOCS-GOVERNANCE.md`
-5. `Spegeli/vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`
+5. `Spegeli/vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v2.md`
 6. `Spegeli/vivicast-docs/codex/coding-rules.md`
 7. affected PRD, ADR, design, interaction, component, and test-strategy files from `Spegeli/vivicast-docs`
 
-Do not use these old app-repo paths as active planning sources:
+Do not use archived Codex working files as active planning sources:
 
 ```text
-docs/PLAN.md
-docs/roadmap.md
-docs/phase-XX-*.md
-external-docs/
+codex/archiv/
 ```
 
-If those paths still exist locally, treat them as legacy/pre-final remnants. They must not override the final docs repository.
+Files under `codex/archiv/` are retained only for historical lookup when explicitly requested by the Owner. They are read-only reference material and must not be used as templates, requirements, status memory, or implementation plans.
 
 ## Development Quick Start
 
@@ -81,7 +78,7 @@ Build all debug modules:
 
 ## Current App State
 
-The existing app repository should be treated as a partially implemented foundation, not as a finished product and not as a source of product truth.
+The existing app repository should be treated as an implemented app foundation, not as a source of product truth.
 
 Likely reusable foundation:
 
@@ -90,29 +87,19 @@ Likely reusable foundation:
 - multi-module Gradle structure
 - Kotlin and Jetpack Compose for TV foundation
 - reusable `:core:designsystem` components and tokens
-- partial Room/DataStore/security/cache/parser/worker foundations
-- demo UI for Live-TV, Filme, Serien, Suche, Einstellungen, and Player Overlay
+- Room/DataStore/security/cache/parser/worker foundations
 
 Known re-alignment areas:
 
-- root app instructions had older planning assumptions and have been replaced by `AGENTS.md`
-- old app-local planning files are superseded by `Spegeli/vivicast-docs`
-- `Home` must exist as a fixed main area and default start area
-- demo-backed UI paths must be replaced by persisted/local app data according to PRD and ADRs
-- Search, VOD, Player, Backup/Restore, PIN, diagnostics, and final Android-TV integration must follow the final docs repository
+- the completed `APP-IMPLEMENTATION-PLAN.md` cycle is archived under `codex/archiv/`
+- future implementation cycles should follow `Spegeli/vivicast-docs` and the active non-archived app-repo plans
 
 ## App-Repo Working Plans
 
-Codex should create app-specific technical plans under:
+Codex should create future app-specific technical plans under:
 
 ```text
 codex/plans/
-```
-
-The main status anchor should be:
-
-```text
-codex/plans/APP-IMPLEMENTATION-PLAN.md
 ```
 
 These plans may describe implementation details for this repository, but they must not override:

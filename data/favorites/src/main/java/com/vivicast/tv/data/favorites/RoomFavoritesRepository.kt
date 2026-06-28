@@ -19,6 +19,11 @@ class RoomFavoritesRepository(
             favorites.map { it.toDomain() }
         }
 
+    override fun observeFavorites(mediaType: MediaType): Flow<List<Favorite>> =
+        favoritesDao.observeFavorites(mediaType.storageValue).map { favorites ->
+            favorites.map { it.toDomain() }
+        }
+
     override suspend fun isFavorite(providerId: String, mediaType: MediaType, mediaId: String): Boolean =
         favoritesDao.getFavorite(providerId, mediaType.storageValue, mediaId) != null
 
@@ -44,6 +49,8 @@ class RoomFavoritesRepository(
                 providerId = providerId,
                 mediaType = mediaType.storageValue,
                 mediaId = mediaId,
+                mediaStableKey = mediaStableKey(mediaId),
+                isPending = false,
                 sortOrder = now.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
                 createdAt = now,
                 updatedAt = now,
@@ -59,6 +66,8 @@ private fun FavoriteEntity.toDomain(): Favorite =
         providerId = providerId,
         mediaType = mediaType.toMediaType(),
         mediaId = mediaId,
+        mediaStableKey = mediaStableKey,
+        isPending = isPending,
         sortOrder = sortOrder,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -70,6 +79,8 @@ private fun Favorite.toEntity(): FavoriteEntity =
         providerId = providerId,
         mediaType = mediaType.storageValue,
         mediaId = mediaId,
+        mediaStableKey = mediaStableKey,
+        isPending = isPending,
         sortOrder = sortOrder,
         createdAt = createdAt,
         updatedAt = updatedAt,
@@ -94,6 +105,9 @@ private fun String.toMediaType(): MediaType =
 
 private fun favoriteId(providerId: String, mediaType: MediaType, mediaId: String): String =
     "$providerId:favorite:${mediaType.storageValue.lowercase()}:${stableHash(mediaId)}"
+
+private fun mediaStableKey(mediaId: String): String =
+    mediaId.substringAfterLast(':').ifBlank { stableHash(mediaId) }
 
 private fun stableHash(value: String): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))

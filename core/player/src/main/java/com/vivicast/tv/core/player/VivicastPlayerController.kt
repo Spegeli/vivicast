@@ -7,6 +7,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 interface VivicastPlayerController {
     val state: StateFlow<VivicastPlayerState>
@@ -44,6 +46,12 @@ interface VivicastPlayerController {
 
     fun seekToLiveEdge()
 
+    fun selectAudio(option: PlaybackAudioOption) = Unit
+
+    fun selectSubtitle(option: PlaybackSubtitleOption) = Unit
+
+    fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
+
     fun stop()
 
     fun release()
@@ -54,14 +62,23 @@ data class PlaybackRequest(
     val providerId: String,
     val mediaId: String,
     val mediaType: PlaybackMediaType,
+    val providerStableKey: String = providerId,
+    val mediaStableKey: String = mediaId,
+    val origin: PlaybackOrigin = PlaybackOrigin.Unknown,
+    val returnTarget: PlaybackReturnTarget = PlaybackReturnTarget.Unknown,
     val title: String,
     val streamUrl: String,
     val seekable: Boolean,
     val startPositionMillis: Long = 0L,
+    val epgProgramStableKey: String? = null,
     val timeshift: PlaybackTimeshiftConfig? = null,
 )
 
 enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
+
+enum class PlaybackOrigin { Home, LiveTv, MovieDetail, SeriesDetail, Search, AndroidTv, Unknown }
+
+enum class PlaybackReturnTarget { Home, LiveTv, MovieDetail, SeriesDetail, Unknown }
 
 data class PlaybackTimeshiftConfig(
     val storage: PlaybackTimeshiftStorage,
@@ -73,6 +90,12 @@ data class PlaybackTimeshiftConfig(
 
 enum class PlaybackTimeshiftStorage { Automatic, Ram, InternalStorage }
 
+enum class PlaybackAudioOption { SystemDefault, German, English, Original }
+
+enum class PlaybackSubtitleOption { Off, SystemDefault, German, English }
+
+enum class PlaybackAspectRatioMode { Fit, Fill, Zoom }
+
 private const val LIVE_EDGE_TOLERANCE_MILLIS = 2_000L
 
 data class VivicastPlayerState(
@@ -83,6 +106,10 @@ data class VivicastPlayerState(
     val liveEdgeOffsetMillis: Long = 0L,
     val timeshiftWindowMillis: Long = 0L,
     val timeshiftStorage: PlaybackTimeshiftStorage? = null,
+    val audioOption: PlaybackAudioOption = PlaybackAudioOption.SystemDefault,
+    val subtitleOption: PlaybackSubtitleOption = PlaybackSubtitleOption.Off,
+    val aspectRatioMode: PlaybackAspectRatioMode = PlaybackAspectRatioMode.Fit,
+    val isReconnecting: Boolean = false,
     val error: PlaybackError? = null,
 ) {
     val isTimeshiftEnabled: Boolean
@@ -92,7 +119,7 @@ data class VivicastPlayerState(
         get() = !isTimeshiftEnabled || liveEdgeOffsetMillis <= LIVE_EDGE_TOLERANCE_MILLIS
 }
 
-enum class PlaybackStatus { Idle, Starting, Playing, Paused, Error, Released }
+enum class PlaybackStatus { Idle, Starting, Playing, Paused, Ended, Error, Released }
 
 data class PlaybackError(
     val playbackId: String,
@@ -104,15 +131,16 @@ class DefaultVivicastPlayerController(
     private val engine: PlaybackEngine,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-    private val maxStartRetries: Int = DEFAULT_MAX_START_RETRIES,
+    private val maxStartAttempts: Int = DEFAULT_MAX_START_ATTEMPTS,
     private val maxReconnectAttempts: Int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
-    private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MILLIS,
+    private val retryDelaysMillis: List<Long> = DEFAULT_RETRY_DELAYS_MILLIS,
 ) : VivicastPlayerController {
     private val mutableState = MutableStateFlow(VivicastPlayerState())
     private var startJob: Job? = null
     private var progressJob: Job? = null
     private var reconnectJob: Job? = null
     private var engineErrorJob: Job? = null
+    private var engineEndedJob: Job? = null
     private var liveEdgeOffsetMillis = 0L
     private var released = false
 
@@ -122,6 +150,11 @@ class DefaultVivicastPlayerController(
         engineErrorJob = scope.launch(dispatcher) {
             engine.playbackErrors.collect { error ->
                 handlePlaybackError(error)
+            }
+        }
+        engineEndedJob = scope.launch(dispatcher) {
+            engine.playbackEnded.collect { playbackId ->
+                handlePlaybackEnded(playbackId)
             }
         }
     }
@@ -174,6 +207,24 @@ class DefaultVivicastPlayerController(
         )
     }
 
+    override fun selectAudio(option: PlaybackAudioOption) {
+        if (released) return
+        engine.selectAudio(option)
+        mutableState.value = mutableState.value.copy(audioOption = option)
+    }
+
+    override fun selectSubtitle(option: PlaybackSubtitleOption) {
+        if (released) return
+        engine.selectSubtitle(option)
+        mutableState.value = mutableState.value.copy(subtitleOption = option)
+    }
+
+    override fun selectAspectRatio(mode: PlaybackAspectRatioMode) {
+        if (released) return
+        engine.selectAspectRatio(mode)
+        mutableState.value = mutableState.value.copy(aspectRatioMode = mode)
+    }
+
     override fun stop() {
         if (released) return
         startJob?.cancel()
@@ -195,6 +246,8 @@ class DefaultVivicastPlayerController(
         reconnectJob = null
         engineErrorJob?.cancel()
         engineErrorJob = null
+        engineEndedJob?.cancel()
+        engineEndedJob = null
         stopProgressPolling()
         engine.release()
         liveEdgeOffsetMillis = 0L
@@ -202,33 +255,39 @@ class DefaultVivicastPlayerController(
     }
 
     private suspend fun startWithRetries(request: PlaybackRequest) {
-        var retryCount = 0
-        while (true) {
+        var attempt = 1
+        var activeRequest = request
+        while (attempt <= maxStartAttempts) {
             try {
-                engine.start(request)
-                mutableState.value = playingState(request)
+                engine.start(activeRequest)
+                mutableState.value = playingState(activeRequest)
                 startProgressPolling()
                 return
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                if (retryCount >= maxStartRetries) {
+                activeRequest.timeshiftFallbackRequest()?.let { fallbackRequest ->
+                    activeRequest = fallbackRequest
+                    continue
+                }
+                if (attempt >= maxStartAttempts) {
                     stopProgressPolling()
                     mutableState.value = VivicastPlayerState(
                         status = PlaybackStatus.Error,
-                        request = request,
+                        request = activeRequest,
                         error = PlaybackError(
-                            playbackId = request.playbackId,
-                            retryCount = retryCount,
+                            playbackId = activeRequest.playbackId,
+                            retryCount = attempt,
                             message = error.message ?: "Playback start failed.",
                         ),
                     )
                     return
                 }
-                retryCount += 1
+                val retryDelayMillis = retryDelaysMillis.retryDelayAfterFailedAttempt(attempt)
                 if (retryDelayMillis > 0L) {
                     delay(retryDelayMillis)
                 }
+                attempt += 1
             }
         }
     }
@@ -245,21 +304,40 @@ class DefaultVivicastPlayerController(
         }
     }
 
+    private fun handlePlaybackEnded(playbackId: String) {
+        if (released) return
+        val current = mutableState.value
+        val request = current.request ?: return
+        if (request.playbackId != playbackId) return
+        if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) return
+
+        stopProgressPolling()
+        val durationMillis = maxOf(current.durationMillis, engine.durationMillis).coerceAtLeast(0L)
+        val positionMillis = maxOf(current.positionMillis, engine.currentPositionMillis, durationMillis)
+            .coerceAtLeast(0L)
+        mutableState.value = current.copy(
+            status = PlaybackStatus.Ended,
+            positionMillis = positionMillis,
+            durationMillis = durationMillis,
+        )
+    }
+
     private suspend fun reconnectWithRetries(
         request: PlaybackRequest,
         lastError: Throwable,
         lastPositionMillis: Long,
     ) {
         stopProgressPolling()
-        var retryCount = 0
-        while (retryCount < maxReconnectAttempts) {
-            retryCount += 1
+        var attempt = 1
+        while (attempt <= maxReconnectAttempts) {
             mutableState.value = VivicastPlayerState(
                 status = PlaybackStatus.Starting,
                 request = request,
                 positionMillis = lastPositionMillis,
                 durationMillis = mutableState.value.durationMillis,
+                isReconnecting = true,
             )
+            val retryDelayMillis = retryDelaysMillis.retryDelayAfterFailedAttempt(attempt - 1)
             if (retryDelayMillis > 0L) {
                 delay(retryDelayMillis)
             }
@@ -281,6 +359,7 @@ class DefaultVivicastPlayerController(
             } catch (_: Throwable) {
                 // Try again until the PRD retry budget is exhausted.
             }
+            attempt += 1
         }
 
         mutableState.value = VivicastPlayerState(
@@ -355,6 +434,9 @@ class DefaultVivicastPlayerController(
     private fun PlaybackRequest.isLiveTimeshift(): Boolean =
         mediaType == PlaybackMediaType.Channel && timeshift?.enabled == true
 
+    private fun PlaybackRequest.timeshiftFallbackRequest(): PlaybackRequest? =
+        takeIf { it.isLiveTimeshift() }?.copy(seekable = false, timeshift = null)
+
     private fun seekTimeshiftBy(deltaMillis: Long, current: VivicastPlayerState) {
         val windowMillis = current.timeshiftWindowMillis
         val targetOffset = (liveEdgeOffsetMillis - deltaMillis).coerceIn(0L, windowMillis)
@@ -381,15 +463,21 @@ class DefaultVivicastPlayerController(
     }
 
     companion object {
-        const val DEFAULT_MAX_START_RETRIES = 5
+        const val DEFAULT_MAX_START_ATTEMPTS = 5
         const val DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
-        const val DEFAULT_RETRY_DELAY_MILLIS = 500L
+        val DEFAULT_RETRY_DELAYS_MILLIS = listOf(500L, 1_000L, 2_000L, 4_000L)
         private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
     }
 }
 
+internal fun List<Long>.retryDelayAfterFailedAttempt(failedAttempt: Int): Long =
+    getOrNull(failedAttempt - 1)?.coerceAtLeast(0L) ?: 0L
+
 interface PlaybackEngine {
     val playbackErrors: Flow<Throwable>
+        get() = emptyFlow()
+
+    val playbackEnded: Flow<String>
         get() = emptyFlow()
 
     val currentPositionMillis: Long
@@ -404,6 +492,12 @@ interface PlaybackEngine {
 
     fun seekBy(deltaMillis: Long)
 
+    fun selectAudio(option: PlaybackAudioOption) = Unit
+
+    fun selectSubtitle(option: PlaybackSubtitleOption) = Unit
+
+    fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
+
     fun stop()
 
     fun release()
@@ -412,29 +506,24 @@ interface PlaybackEngine {
 class Media3PlaybackEngine(
     context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val userAgentProvider: () -> String = { DEFAULT_USER_AGENT },
 ) : PlaybackEngine {
     private val appContext = context.applicationContext
-    private val defaultDataSourceFactory = DefaultDataSource.Factory(appContext)
     private val timeshiftCache = SimpleCache(
         File(appContext.cacheDir, TIMESHIFT_CACHE_DIR_NAME),
         LeastRecentlyUsedCacheEvictor(TIMESHIFT_CACHE_MAX_BYTES),
         StandaloneDatabaseProvider(appContext),
     )
-    private val cachedDataSourceFactory = CacheDataSource.Factory()
-        .setCache(timeshiftCache)
-        .setUpstreamDataSourceFactory(defaultDataSourceFactory)
-        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-    private val defaultMediaSourceFactory = DefaultMediaSourceFactory(defaultDataSourceFactory)
-    private val cachedMediaSourceFactory = DefaultMediaSourceFactory(cachedDataSourceFactory)
     private val player = ExoPlayer.Builder(appContext)
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBackBuffer(TIMESHIFT_BACK_BUFFER_MILLIS, true)
                 .build(),
         )
-        .setMediaSourceFactory(defaultMediaSourceFactory)
         .build()
     private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
+    private val playbackEndedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private var activePlaybackId: String? = null
 
     init {
         player.addListener(
@@ -442,11 +531,18 @@ class Media3PlaybackEngine(
                 override fun onPlayerError(error: PlaybackException) {
                     playbackErrorEvents.tryEmit(error)
                 }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
+                    }
+                }
             },
         )
     }
 
     override val playbackErrors: Flow<Throwable> = playbackErrorEvents
+    override val playbackEnded: Flow<String> = playbackEndedEvents
 
     override val currentPositionMillis: Long
         get() = player.currentPosition.coerceAtLeast(0L)
@@ -456,11 +552,18 @@ class Media3PlaybackEngine(
 
     override suspend fun start(request: PlaybackRequest) {
         withContext(dispatcher) {
+            activePlaybackId = request.playbackId
             val mediaItem = MediaItem.fromUri(request.streamUrl)
+            val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory())
             val mediaSourceFactory = if (request.timeshift?.storage == PlaybackTimeshiftStorage.InternalStorage) {
-                cachedMediaSourceFactory
+                DefaultMediaSourceFactory(
+                    CacheDataSource.Factory()
+                        .setCache(timeshiftCache)
+                        .setUpstreamDataSourceFactory(defaultDataSourceFactory)
+                        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+                )
             } else {
-                defaultMediaSourceFactory
+                DefaultMediaSourceFactory(defaultDataSourceFactory)
             }
             player.setMediaSource(
                 mediaSourceFactory.createMediaSource(mediaItem),
@@ -483,12 +586,39 @@ class Media3PlaybackEngine(
         player.seekTo((player.currentPosition + deltaMillis).coerceAtLeast(0L))
     }
 
+    override fun selectAudio(option: PlaybackAudioOption) {
+        val languages = option.preferredLanguageCodes()
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setPreferredAudioLanguages(*languages.toTypedArray())
+            .build()
+    }
+
+    override fun selectSubtitle(option: PlaybackSubtitleOption) {
+        val languages = option.preferredLanguageCodes()
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, option == PlaybackSubtitleOption.Off)
+            .setPreferredTextLanguages(*languages.toTypedArray())
+            .build()
+    }
+
+    override fun selectAspectRatio(mode: PlaybackAspectRatioMode) {
+        player.videoScalingMode = when (mode) {
+            PlaybackAspectRatioMode.Fit -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            PlaybackAspectRatioMode.Fill,
+            PlaybackAspectRatioMode.Zoom -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+    }
+
     override fun stop() {
+        activePlaybackId = null
         player.stop()
         player.clearMediaItems()
     }
 
     override fun release() {
+        activePlaybackId = null
         player.release()
         timeshiftCache.release()
     }
@@ -497,5 +627,31 @@ class Media3PlaybackEngine(
         const val TIMESHIFT_CACHE_DIR_NAME = "playback-timeshift"
         const val TIMESHIFT_BACK_BUFFER_MILLIS = 120 * 60 * 1_000
         const val TIMESHIFT_CACHE_MAX_BYTES = 512L * 1024L * 1024L
+        const val DEFAULT_USER_AGENT = "Vivicast/1.0"
     }
+
+    private fun httpDataSourceFactory(): DefaultHttpDataSource.Factory =
+        DefaultHttpDataSource.Factory().setUserAgent(userAgentProvider().normalizedUserAgent())
 }
+
+private fun String.normalizedUserAgent(): String =
+    trim().takeIf { it.isNotBlank() } ?: "Vivicast/1.0"
+
+private fun PlaybackAudioOption.preferredLanguageCodes(): List<String> =
+    when (this) {
+        PlaybackAudioOption.SystemDefault -> systemLanguageCodes()
+        PlaybackAudioOption.German -> listOf("de", "deu", "ger")
+        PlaybackAudioOption.English -> listOf("en", "eng")
+        PlaybackAudioOption.Original -> emptyList()
+    }
+
+private fun PlaybackSubtitleOption.preferredLanguageCodes(): List<String> =
+    when (this) {
+        PlaybackSubtitleOption.Off -> emptyList()
+        PlaybackSubtitleOption.SystemDefault -> systemLanguageCodes()
+        PlaybackSubtitleOption.German -> listOf("de", "deu", "ger")
+        PlaybackSubtitleOption.English -> listOf("en", "eng")
+    }
+
+private fun systemLanguageCodes(): List<String> =
+    Locale.getDefault().language.takeIf { it.isNotBlank() }?.let(::listOf) ?: emptyList()

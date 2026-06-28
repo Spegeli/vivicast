@@ -2,20 +2,25 @@ package com.vivicast.tv.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.vivicast.tv.backup.StandardBackupExporter
+import com.vivicast.tv.backup.StandardBackupRestorer
+import com.vivicast.tv.diagnostics.DiagnosticsStore
 import com.vivicast.tv.core.cache.FileMediaCacheStore
-import com.vivicast.tv.core.cache.FileM3uStreamReferenceStore
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.VivicastDatabaseFactory
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
+import com.vivicast.tv.core.datastore.DEFAULT_GLOBAL_USER_AGENT
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.network.NetworkClientFactory
 import com.vivicast.tv.core.player.DefaultVivicastPlayerController
 import com.vivicast.tv.core.player.Media3PlaybackEngine
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
+import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureValueStore
+import com.vivicast.tv.core.security.SecureValuePinSecurityStateStore
 import com.vivicast.tv.data.epg.EpgImportRepository
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.RoomEpgRepository
@@ -31,12 +36,20 @@ import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.RoomProviderRepository
+import com.vivicast.tv.system.AndroidTvWatchNextPublisher
+import com.vivicast.tv.system.SystemIntegrationPlaybackRepository
+import com.vivicast.tv.system.SystemIntegrationProviderRepository
+import com.vivicast.tv.system.WatchNextSynchronizer
 import com.vivicast.tv.iptv.m3u.DefaultM3uParser
 import com.vivicast.tv.iptv.xtream.DefaultXtreamClient
 import com.vivicast.tv.iptv.xtream.DefaultXtreamParser
 import com.vivicast.tv.iptv.xtream.OkHttpXtreamTransport
+import com.vivicast.tv.iptv.xtream.XtreamCredentials
+import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
+import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.worker.ActiveProviderPlaylistSource
 import com.vivicast.tv.worker.DefaultCacheCleaner
 import com.vivicast.tv.worker.DefaultEpgRefresher
@@ -49,14 +62,15 @@ import com.vivicast.tv.worker.NoOpEpgMappingApplier
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
+import com.vivicast.tv.worker.RefreshHttpException
 import com.vivicast.tv.worker.RefreshWorkScheduler
 import com.vivicast.tv.worker.RefreshWorkerRegistry
 import com.vivicast.tv.worker.RefreshWorkerRunner
 import com.vivicast.tv.worker.RoomEpgSourceReader
 import com.vivicast.tv.worker.RoomMediaImageRefreshSource
 import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
-import kotlinx.coroutines.flow.first
 import java.io.File
+import kotlinx.coroutines.flow.first
 
 class AppContainer(
     context: Context,
@@ -71,19 +85,54 @@ class AppContainer(
         DataStoreUserPreferencesStore(appContext)
     }
 
+    val diagnosticsStore: DiagnosticsStore by lazy {
+        DiagnosticsStore(appContext)
+    }
+
+    private val userAgentPolicy = RuntimeUserAgentPolicy()
+
     val secureValueStore: SecureValueStore by lazy {
         AndroidKeystoreSecureValueStore(appContext)
     }
 
-    val providerRepository: ProviderRepository by lazy {
+    val pinSecurityStateStore: PinSecurityStateStore by lazy {
+        SecureValuePinSecurityStateStore(secureValueStore)
+    }
+
+    val standardBackupExporter: StandardBackupExporter by lazy {
+        StandardBackupExporter(
+            database = database,
+            userPreferencesStore = userPreferencesStore,
+            secureValueStore = secureValueStore,
+            pinSecurityStateStore = pinSecurityStateStore,
+        )
+    }
+
+    val standardBackupRestorer: StandardBackupRestorer by lazy {
+        StandardBackupRestorer(
+            database = database,
+            userPreferencesStore = userPreferencesStore,
+            secureValueStore = secureValueStore,
+            pinSecurityStateStore = pinSecurityStateStore,
+            createInternalSafetyBackup = { createStandardRestoreSafetyBackup() },
+        )
+    }
+
+    private val rawProviderRepository: ProviderRepository by lazy {
         RoomProviderRepository(
             database = database,
             secureValueStore = secureValueStore,
         )
     }
 
+    val providerRepository: ProviderRepository by lazy {
+        SystemIntegrationProviderRepository(rawProviderRepository) {
+            syncWatchNext()
+        }
+    }
+
     private val okHttpClient by lazy {
-        NetworkClientFactory().createOkHttpClient()
+        NetworkClientFactory().createOkHttpClient(userAgentPolicy::current)
     }
 
     val catalogImportRepository: CatalogImportRepository by lazy {
@@ -125,7 +174,7 @@ class AppContainer(
     }
 
     private val m3uStreamReferenceStore: M3uStreamReferenceStore by lazy {
-        FileM3uStreamReferenceStore(File(appContext.filesDir, "m3u-streams"))
+        SecureM3uStreamReferenceStore(secureValueStore)
     }
 
     val playbackStreamResolver: PlaybackStreamResolver by lazy {
@@ -135,13 +184,32 @@ class AppContainer(
         )
     }
 
-    val playbackRepository: PlaybackRepository by lazy {
+    private val rawPlaybackRepository: PlaybackRepository by lazy {
         RoomPlaybackRepository(database = database)
+    }
+
+    val playbackRepository: PlaybackRepository by lazy {
+        SystemIntegrationPlaybackRepository(rawPlaybackRepository) {
+            syncWatchNext()
+        }
+    }
+
+    val watchNextSynchronizer: WatchNextSynchronizer by lazy {
+        WatchNextSynchronizer(
+            providerRepository = rawProviderRepository,
+            mediaRepository = mediaRepository,
+            playbackRepository = rawPlaybackRepository,
+            pinSecurityStateStore = pinSecurityStateStore,
+            publisher = AndroidTvWatchNextPublisher(appContext),
+        )
     }
 
     val playerController: VivicastPlayerController by lazy {
         DefaultVivicastPlayerController(
-            engine = Media3PlaybackEngine(appContext),
+            engine = Media3PlaybackEngine(
+                context = appContext,
+                userAgentProvider = userAgentPolicy::current,
+            ),
         )
     }
 
@@ -167,6 +235,8 @@ class AppContainer(
             textFetcher = textFetcher,
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = epgImportRepository,
+            epgPastRetentionDaysProvider = { userPreferencesStore.values.first().epg.pastRetentionDays },
+            epgFutureRetentionDaysProvider = { userPreferencesStore.values.first().epg.futureRetentionDays },
         )
         val logoRefresher = DefaultLogoRefresher(
             mediaImageRefreshSource = RoomMediaImageRefreshSource(database),
@@ -174,8 +244,7 @@ class AppContainer(
             binaryFetcher = binaryFetcher,
         )
         val cacheCleaner = DefaultCacheCleaner(mediaCacheStore) {
-            val maxSizeMb = userPreferencesStore.values.first().cache.maxCacheSizeMb
-            if (maxSizeMb <= 0) -1L else maxSizeMb * BYTES_PER_MEGABYTE
+            DEFAULT_MEDIA_CACHE_SIZE_BYTES
         }
         val orchestrator = GlobalRefreshOrchestrator(
             playlistSource = ActiveProviderPlaylistSource(providerRepository),
@@ -200,7 +269,98 @@ class AppContainer(
         RefreshWorkerRegistry.install(refreshWorkerRunner)
     }
 
+    fun updateGlobalUserAgent(userAgent: String) {
+        userAgentPolicy.update(userAgent)
+    }
+
+    suspend fun syncWatchNext() {
+        watchNextSynchronizer.sync()
+    }
+
+    private suspend fun createStandardRestoreSafetyBackup(): Boolean =
+        runCatching {
+            val directory = File(appContext.filesDir, "restore-safety-backups")
+            if (!directory.exists() && !directory.mkdirs()) {
+                false
+            } else {
+                val file = File(directory, "standard-${System.currentTimeMillis()}.json")
+                file.writeText(standardBackupExporter.exportJson(indentSpaces = 0), Charsets.UTF_8)
+                true
+            }
+        }.getOrDefault(false)
+
+    suspend fun testProviderConnection(request: ProviderCreateRequest): String? =
+        runCatching {
+            when (request.type) {
+                ProviderType.M3u -> testM3uConnection(request)
+                ProviderType.Xtream -> testXtreamConnection(request)
+            }
+        }.fold(
+            onSuccess = { null },
+            onFailure = { it.toProviderConnectionMessage() },
+        )
+
+    private suspend fun testM3uConnection(request: ProviderCreateRequest) {
+        val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException()
+        val playlist = DefaultM3uParser().parse(OkHttpTextFetcher(okHttpClient).fetch(url))
+        if (playlist.channels.isEmpty()) {
+            throw ProviderConnectionResponseException()
+        }
+    }
+
+    private suspend fun testXtreamConnection(request: ProviderCreateRequest) {
+        val credentials = XtreamCredentials(
+            serverUrl = request.xtreamServerUrl?.trim()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException(),
+            username = request.xtreamUsername?.trim()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException(),
+            password = request.xtreamPassword?.trim()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException(),
+        )
+        val client = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient))
+        val response = when {
+            request.includeLiveTv -> client.getLiveCategories(credentials)
+            request.includeMovies -> client.getVodCategories(credentials)
+            request.includeSeries -> client.getSeriesCategories(credentials)
+            else -> throw IllegalArgumentException()
+        }
+        if (!response.trimStart().startsWith("[")) {
+            throw ProviderConnectionResponseException()
+        }
+    }
+
     private companion object {
-        const val BYTES_PER_MEGABYTE = 1024L * 1024L
+        const val DEFAULT_MEDIA_CACHE_SIZE_BYTES = 500L * 1024L * 1024L
     }
 }
+
+private class ProviderConnectionResponseException : RuntimeException()
+
+private class RuntimeUserAgentPolicy {
+    @Volatile
+    private var value: String = DEFAULT_GLOBAL_USER_AGENT
+
+    fun current(): String = value
+
+    fun update(userAgent: String) {
+        value = userAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
+    }
+}
+
+private fun Throwable.toProviderConnectionMessage(): String =
+    when (this) {
+        is RefreshHttpException -> if (statusCode == 401 || statusCode == 403) {
+            "Zugangsdaten ungültig."
+        } else {
+            "Quelle nicht erreichbar."
+        }
+        is XtreamHttpException -> if (statusCode == 401 || statusCode == 403) {
+            "Zugangsdaten ungültig."
+        } else {
+            "Quelle nicht erreichbar."
+        }
+        is ProviderConnectionResponseException -> "Antwortformat nicht nutzbar."
+        is IllegalArgumentException -> "Adresse oder Zugangsdaten sind ungültig."
+        else -> "Quelle nicht erreichbar."
+    }

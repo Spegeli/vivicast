@@ -45,19 +45,19 @@ class SecureEpgSourceRepository(
     override suspend fun saveSource(request: EpgSourceEditRequest): EpgSource {
         val sourceId = request.sourceId ?: UUID.randomUUID().toString()
         val existing = request.sourceId?.let { database.epgDao().getEpgSource(it) }
-        val urlKey = existing?.urlKey ?: urlKeyFor(sourceId)
+        val sourceConfigKey = existing?.sourceConfigKey ?: sourceConfigKeyFor(sourceId)
         val url = request.url?.trim().orEmpty()
 
         if (existing == null || url.isNotBlank()) {
             require(url.isNotBlank()) { "EPG URL must not be blank." }
-            secureValueStore.write(SecureKey(urlKey), url)
+            secureValueStore.write(SecureKey(sourceConfigKey), url)
         }
 
         return delegate.saveEpgSource(
             EpgSourceSaveRequest(
                 sourceId = sourceId,
                 name = request.name,
-                urlKey = urlKey,
+                sourceConfigKey = sourceConfigKey,
                 timeShiftMinutes = request.timeShiftMinutes,
                 isActive = request.isActive,
             ),
@@ -72,7 +72,7 @@ class SecureEpgSourceRepository(
             database.epgDao().deleteProgramsForSource(sourceId)
             database.epgDao().deleteEpgSource(sourceId)
         }
-        source?.urlKey?.let { secureValueStore.delete(SecureKey(it)) }
+        source?.sourceConfigKey?.let { secureValueStore.delete(SecureKey(it)) }
     }
 
     override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) {
@@ -133,7 +133,7 @@ class SecureEpgSourceRepository(
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
         delegate.observeMappingsForChannel(providerId, channelId)
 
-    private fun urlKeyFor(sourceId: String): String =
+    private fun sourceConfigKeyFor(sourceId: String): String =
         "$EPG_SOURCE_KEY_PREFIX$sourceId:url"
 
     private suspend fun rewritePriorities(links: List<ProviderEpgSourceEntity>) {

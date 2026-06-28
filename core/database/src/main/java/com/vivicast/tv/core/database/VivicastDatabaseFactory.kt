@@ -11,6 +11,14 @@ object VivicastDatabaseFactory {
             context.applicationContext,
             VivicastDatabase::class.java,
             DATABASE_NAME,
-        ).build()
+        )
+            .addCallback(VivicastDatabaseCallbacks.SearchFtsCallback)
+            .addMigrations(
+                VivicastMigrations.Migration1To2,
+                VivicastMigrations.Migration2To3,
+                VivicastMigrations.Migration3To4,
+                VivicastMigrations.Migration4To5,
+                VivicastMigrations.Migration5To6,
+            )
+            .build()
 }
-

@@ -37,6 +37,7 @@ data class PlaybackStream(
     val providerId: String,
     val mediaId: String,
     val mediaType: MediaType,
+    val providerStableKey: String = providerId,
     val url: String,
 )
 
@@ -50,6 +51,7 @@ enum class PlaybackStreamFailureReason {
     MissingRemoteId,
     MissingStreamReference,
     MissingContainerExtension,
+    InvalidCatchupWindow,
     InvalidServerUrl,
 }
 
@@ -73,20 +75,20 @@ class DefaultPlaybackStreamResolver(
                 if (credentials !is ProviderCredentials.Xtream) {
                     PlaybackStreamResult.Failed(PlaybackStreamFailureReason.CredentialTypeMismatch)
                 } else {
-                    resolveXtream(request, credentials)
+                    resolveXtream(request, credentials, provider.stableKey)
                 }
             }
             ProviderType.M3u -> {
                 if (credentials !is ProviderCredentials.M3u) {
                     PlaybackStreamResult.Failed(PlaybackStreamFailureReason.CredentialTypeMismatch)
                 } else {
-                    resolveM3u(request)
+                    resolveM3u(request, provider.stableKey)
                 }
             }
         }
     }
 
-    private fun resolveM3u(request: PlaybackStreamRequest): PlaybackStreamResult {
+    private suspend fun resolveM3u(request: PlaybackStreamRequest, providerStableKey: String): PlaybackStreamResult {
         if (request.mediaType != MediaType.Channel) {
             return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.UnsupportedMediaType)
         }
@@ -94,14 +96,24 @@ class DefaultPlaybackStreamResolver(
         if (remoteId.isBlank()) {
             return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingRemoteId)
         }
-        val streamUrl = m3uStreamReferenceStore.getStreamUrl(request.providerId, remoteId)
+        val reference = m3uStreamReferenceStore.getReference(request.providerId, remoteId)
             ?: return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingStreamReference)
+        val streamUrl = if (request.isCatchupRequest) {
+            request.resolveM3uCatchupUrl(reference.streamUrl, reference.catchupMode, reference.catchupSource)
+                ?: return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.MissingStreamReference)
+        } else {
+            reference.streamUrl
+        }
+        if (!streamUrl.isHttpUrl()) {
+            return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.InvalidServerUrl)
+        }
 
         return PlaybackStreamResult.Resolved(
             PlaybackStream(
                 providerId = request.providerId,
                 mediaId = request.mediaId,
                 mediaType = request.mediaType,
+                providerStableKey = providerStableKey,
                 url = streamUrl,
             ),
         )
@@ -110,6 +122,7 @@ class DefaultPlaybackStreamResolver(
     private fun resolveXtream(
         request: PlaybackStreamRequest,
         credentials: ProviderCredentials.Xtream,
+        providerStableKey: String,
     ): PlaybackStreamResult {
         val serverUrl = credentials.serverUrl.trim().trimEnd('/')
         if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
@@ -127,10 +140,15 @@ class DefaultPlaybackStreamResolver(
 
         val url = when (request.mediaType) {
             MediaType.Channel -> {
-                if (request.catchupStartMillis != null && request.catchupEndMillis != null) {
-                    val durationMinutes = ((request.catchupEndMillis - request.catchupStartMillis) / MILLIS_PER_MINUTE)
+                if (request.isCatchupRequest) {
+                    val startMillis = request.catchupStartMillis
+                    val endMillis = request.catchupEndMillis
+                    if (startMillis == null || endMillis == null || endMillis <= startMillis) {
+                        return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.InvalidCatchupWindow)
+                    }
+                    val durationMinutes = ((endMillis - startMillis) / MILLIS_PER_MINUTE)
                         .coerceAtLeast(1L)
-                    val start = request.catchupStartMillis.toXtreamCatchupStart().pathSegment()
+                    val start = startMillis.toXtreamCatchupStart().pathSegment()
                     "$serverUrl/timeshift/$username/$password/$durationMinutes/$start/$encodedRemoteId.ts"
                 } else {
                     "$serverUrl/live/$username/$password/$encodedRemoteId.ts"
@@ -154,6 +172,7 @@ class DefaultPlaybackStreamResolver(
                 providerId = request.providerId,
                 mediaId = request.mediaId,
                 mediaType = request.mediaType,
+                providerStableKey = providerStableKey,
                 url = url,
             ),
         )
@@ -162,7 +181,11 @@ class DefaultPlaybackStreamResolver(
     private fun ProviderStatus.blocksPlayback(): Boolean =
         this == ProviderStatus.Disabled ||
             this == ProviderStatus.InvalidCredentials ||
+            this == ProviderStatus.CredentialsRequired ||
             this == ProviderStatus.Expired
+
+    private val PlaybackStreamRequest.isCatchupRequest: Boolean
+        get() = catchupStartMillis != null || catchupEndMillis != null
 
     private fun String.pathSegment(): String =
         URLEncoder.encode(this, StandardCharsets.UTF_8.toString())
@@ -173,6 +196,46 @@ class DefaultPlaybackStreamResolver(
         if (extension.isBlank() || extension.any { it == '/' || it == '\\' }) return null
         return extension
     }
+
+    private fun PlaybackStreamRequest.resolveM3uCatchupUrl(
+        liveUrl: String,
+        catchupMode: String?,
+        catchupSource: String?,
+    ): String? {
+        val startMillis = catchupStartMillis
+        val endMillis = catchupEndMillis
+        if (startMillis == null || endMillis == null || endMillis <= startMillis) return null
+        val rendered = catchupSource
+            ?.takeIf { it.isNotBlank() }
+            ?.replaceM3uCatchupPlaceholders(startMillis, endMillis)
+            ?: return null
+        return when (catchupMode?.lowercase(Locale.US)) {
+            "default" -> rendered
+            "append" -> liveUrl + rendered
+            else -> null
+        }
+    }
+
+    private fun String.replaceM3uCatchupPlaceholders(startMillis: Long, endMillis: Long): String {
+        val startSeconds = startMillis / 1_000L
+        val endSeconds = endMillis / 1_000L
+        val durationSeconds = ((endMillis - startMillis) / 1_000L).coerceAtLeast(1L)
+        val durationMinutes = (durationSeconds / 60L).coerceAtLeast(1L)
+        return mapOf(
+            "start" to startSeconds,
+            "utc" to startSeconds,
+            "end" to endSeconds,
+            "timestamp" to endSeconds,
+            "lutc" to endSeconds,
+            "duration" to durationSeconds,
+            "duration_minutes" to durationMinutes,
+        ).entries.fold(this) { text, (key, value) ->
+            text.replace("\${$key}", value.toString()).replace("{$key}", value.toString())
+        }
+    }
+
+    private fun String.isHttpUrl(): Boolean =
+        startsWith("http://") || startsWith("https://")
 
     private fun Long.toXtreamCatchupStart(): String =
         XtreamCatchupDateFormat.get()!!.format(Date(this))

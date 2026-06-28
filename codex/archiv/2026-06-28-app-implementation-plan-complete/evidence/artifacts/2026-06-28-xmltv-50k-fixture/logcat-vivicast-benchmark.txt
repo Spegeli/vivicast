@@ -1,0 +1,2 @@
+﻿--------- beginning of main
+06-27 23:50:34.138 13842 13856 I VivicastBenchmark: largeFixtureXmltv importMs=6787 cleanupMs=115 totalMs=6902 imported=50000 deleted=30700 remaining=19300

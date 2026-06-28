@@ -1,6 +1,7 @@
 package com.vivicast.tv.data.playback
 
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -45,6 +46,7 @@ class DefaultPlaybackStreamResolverTest {
         val stream = (result as PlaybackStreamResult.Resolved).stream
         assertEquals("https://provider.example/live/demo%20user/demo%2Fpass/100.ts", stream.url)
         assertEquals("channel-local-id", stream.mediaId)
+        assertEquals(PROVIDER_STABLE_KEY, stream.providerStableKey)
     }
 
     @Test
@@ -103,11 +105,32 @@ class DefaultPlaybackStreamResolverTest {
     }
 
     @Test
+    fun rejectsXtreamCatchupWithoutValidEpgWindow() = runBlocking {
+        val resolver = xtreamResolver()
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "channel-local-id",
+                mediaType = MediaType.Channel,
+                remoteId = "100",
+                catchupStartMillis = Instant.parse("2026-01-02T03:34:00Z").toEpochMilli(),
+                catchupEndMillis = Instant.parse("2026-01-02T03:04:00Z").toEpochMilli(),
+            ),
+        )
+
+        assertEquals(
+            PlaybackStreamFailureReason.InvalidCatchupWindow,
+            (result as PlaybackStreamResult.Failed).reason,
+        )
+    }
+
+    @Test
     fun resolvesM3uChannelUrlFromExternalStreamReferenceStore() = runBlocking {
         val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
             replaceProviderReferences(
                 PROVIDER_ID,
-                mapOf("ard.de" to "https://streams.example/ard.m3u8"),
+                mapOf("ard.de" to M3uStreamReference(streamUrl = "https://streams.example/ard.m3u8")),
             )
         }
         val resolver = DefaultPlaybackStreamResolver(
@@ -130,6 +153,87 @@ class DefaultPlaybackStreamResolverTest {
         val stream = (result as PlaybackStreamResult.Resolved).stream
         assertEquals("https://streams.example/ard.m3u8", stream.url)
         assertEquals("channel-local-id", stream.mediaId)
+        assertEquals(PROVIDER_STABLE_KEY, stream.providerStableKey)
+    }
+
+    @Test
+    fun resolvesM3uCatchupFromTemplate() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf(
+                    "ard.de" to M3uStreamReference(
+                        streamUrl = "https://streams.example/ard.m3u8",
+                        catchupMode = "default",
+                        catchupSource = "https://archive.example/ard?start={start}&end={end}&duration={duration}",
+                    ),
+                ),
+            )
+        }
+        val resolver = DefaultPlaybackStreamResolver(
+            providerRepository = FakeProviderRepository(
+                provider = provider(type = ProviderType.M3u),
+                credentials = ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
+            ),
+            m3uStreamReferenceStore = streamReferenceStore,
+        )
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "channel-local-id",
+                mediaType = MediaType.Channel,
+                remoteId = "ard.de",
+                catchupStartMillis = Instant.parse("2026-01-02T03:04:00Z").toEpochMilli(),
+                catchupEndMillis = Instant.parse("2026-01-02T03:34:00Z").toEpochMilli(),
+            ),
+        )
+
+        val stream = (result as PlaybackStreamResult.Resolved).stream
+        assertEquals(
+            "https://archive.example/ard?start=1767323040&end=1767324840&duration=1800",
+            stream.url,
+        )
+    }
+
+    @Test
+    fun resolvesM3uAppendCatchupFromTemplate() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf(
+                    "ard.de" to M3uStreamReference(
+                        streamUrl = "https://streams.example/ard.m3u8",
+                        catchupMode = "append",
+                        catchupSource = "?utc=\${start}&lutc=\${timestamp}&dur=\${duration_minutes}",
+                    ),
+                ),
+            )
+        }
+        val resolver = DefaultPlaybackStreamResolver(
+            providerRepository = FakeProviderRepository(
+                provider = provider(type = ProviderType.M3u),
+                credentials = ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
+            ),
+            m3uStreamReferenceStore = streamReferenceStore,
+        )
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "channel-local-id",
+                mediaType = MediaType.Channel,
+                remoteId = "ard.de",
+                catchupStartMillis = Instant.parse("2026-01-02T03:04:00Z").toEpochMilli(),
+                catchupEndMillis = Instant.parse("2026-01-02T03:34:00Z").toEpochMilli(),
+            ),
+        )
+
+        val stream = (result as PlaybackStreamResult.Resolved).stream
+        assertEquals(
+            "https://streams.example/ard.m3u8?utc=1767323040&lutc=1767324840&dur=30",
+            stream.url,
+        )
     }
 
     @Test
@@ -243,22 +347,23 @@ class DefaultPlaybackStreamResolverTest {
     }
 
     private class FakeM3uStreamReferenceStore : M3uStreamReferenceStore {
-        private val references = mutableMapOf<String, MutableMap<String, String>>()
+        private val references = mutableMapOf<String, MutableMap<String, M3uStreamReference>>()
 
-        override fun replaceProviderReferences(providerId: String, references: Map<String, String>) {
+        override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) {
             this.references[providerId] = references.toMutableMap()
         }
 
-        override fun getStreamUrl(providerId: String, remoteId: String): String? =
+        override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? =
             references[providerId]?.get(remoteId)
 
-        override fun deleteProviderReferences(providerId: String) {
+        override suspend fun deleteProviderReferences(providerId: String) {
             references.remove(providerId)
         }
     }
 
     private companion object {
         const val PROVIDER_ID = "provider-1"
+        const val PROVIDER_STABLE_KEY = "provider-stable-1"
 
         fun provider(
             type: ProviderType,
@@ -269,7 +374,7 @@ class DefaultPlaybackStreamResolverTest {
                 id = PROVIDER_ID,
                 name = "Provider",
                 type = type,
-                credentialsKey = "provider-1-credentials",
+                sourceConfigKey = "provider-1-credentials",
                 isActive = isActive,
                 status = status,
                 includeLiveTv = true,
@@ -279,6 +384,7 @@ class DefaultPlaybackStreamResolverTest {
                 logoPriority = "provider",
                 createdAt = 1L,
                 updatedAt = 1L,
+                stableKey = PROVIDER_STABLE_KEY,
             )
     }
 }

@@ -52,26 +52,41 @@ class DefaultXmltvParser : XmltvParser {
         }
 
         var skippedPrograms = 0
-        val programs = root.children("programme").mapNotNull { element ->
+        val parsedPrograms = root.children("programme").mapNotNull { element ->
             val channelId = element.attribute("channel")
             val start = element.attribute("start")?.let(::parseXmltvTime)
-            val stop = element.attribute("stop")?.let(::parseXmltvTime)
+            val stopAttribute = element.attribute("stop")
+            val stop = stopAttribute?.let(::parseXmltvTime)
             val title = element.firstChildElement("title")?.textValue()
-            if (channelId == null || start == null || stop == null || title == null) {
+            if (channelId == null || start == null || stopAttribute != null && stop == null) {
                 skippedPrograms += 1
                 null
             } else {
-                XmltvProgram(
+                PendingXmltvProgram(
                     channelId = channelId,
                     startTimeMillis = start,
-                    endTimeMillis = stop,
-                    title = title,
+                    explicitEndTimeMillis = stop,
+                    title = title ?: FALLBACK_TITLE,
                     subtitle = element.firstChildElement("sub-title")?.textValue(),
                     description = element.firstChildElement("desc")?.textValue(),
                     category = element.firstChildElement("category")?.textValue(),
                     iconUrl = element.firstChildElement("icon")?.attribute("src"),
                     isCatchupAvailable = false,
                 )
+            }
+        }
+        val programs = parsedPrograms.mapNotNull { program ->
+            val derivedEndTimeMillis = program.explicitEndTimeMillis
+                ?: parsedPrograms
+                    .asSequence()
+                    .filter { it.channelId == program.channelId && it.startTimeMillis > program.startTimeMillis }
+                    .minByOrNull { it.startTimeMillis }
+                    ?.startTimeMillis
+            if (derivedEndTimeMillis == null) {
+                skippedPrograms += 1
+                null
+            } else {
+                program.toProgram(derivedEndTimeMillis)
             }
         }
 
@@ -91,7 +106,33 @@ class DefaultXmltvParser : XmltvParser {
         }
     }
 
+    private data class PendingXmltvProgram(
+        val channelId: String,
+        val startTimeMillis: Long,
+        val explicitEndTimeMillis: Long?,
+        val title: String,
+        val subtitle: String?,
+        val description: String?,
+        val category: String?,
+        val iconUrl: String?,
+        val isCatchupAvailable: Boolean,
+    ) {
+        fun toProgram(derivedEndTimeMillis: Long): XmltvProgram =
+            XmltvProgram(
+                channelId = channelId,
+                startTimeMillis = startTimeMillis,
+                endTimeMillis = derivedEndTimeMillis,
+                title = title,
+                subtitle = subtitle,
+                description = description,
+                category = category,
+                iconUrl = iconUrl,
+                isCatchupAvailable = isCatchupAvailable,
+            )
+    }
+
     private companion object {
+        const val FALLBACK_TITLE = "Ohne Titel"
         val documentBuilderFactory: DocumentBuilderFactory = DocumentBuilderFactory.newInstance().apply {
             isIgnoringComments = true
             isNamespaceAware = false

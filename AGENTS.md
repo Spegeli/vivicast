@@ -51,30 +51,20 @@ At the start of every new Codex session in this repository:
 4. Read these files from the docs repository:
    - `codex/README.md`
    - `DOCS-GOVERNANCE.md`
-   - `codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`
+   - `codex/plans/IMPLEMENTATION-MASTERPLAN-v2.md`
    - `codex/coding-rules.md`
-5. Read `codex/plans/APP-IMPLEMENTATION-PLAN.md` if it exists.
-6. If `codex/plans/APP-IMPLEMENTATION-PLAN.md` does not exist and the Owner asked to start or continue implementation, create it as the first write step of Package 0.
-7. For the current task, re-check the affected PRD, ADR, design, interaction, component, and test-strategy files from the docs repository.
-8. Inspect the affected app-repo modules and existing implementation before planning changes.
-9. Before larger implementation work, create or update the technical working plan in this repository under `codex/plans/`.
+5. Read an active app-repo technical plan under `codex/plans/` only if such a non-archived plan exists.
+6. For the current task, re-check the affected PRD, ADR, design, interaction, component, and test-strategy files from the docs repository.
+7. Inspect the affected app-repo modules and existing implementation before planning changes.
+8. Before larger implementation work, create or update the technical working plan in this repository under `codex/plans/`.
 
 Do not rely on memory, old chat context, or stale app-repo planning files when the active docs can be checked.
 
-## Superseded Local Planning Files
+## Codex Archive
 
-The previous app-repo planning model has been superseded by `Spegeli/vivicast-docs`.
+Files under `codex/archiv/` are completed historical working files. They are not active plans, templates, requirements, implementation sources, or status memory.
 
-Do not use these paths as active sources of truth:
-
-- `docs/PLAN.md`
-- `docs/roadmap.md`
-- `docs/phase-XX-*.md`
-- `external-docs/`
-
-If any of these paths still exist temporarily, treat them as legacy/pre-final remnants. They must not override `Spegeli/vivicast-docs`, `DOCS-GOVERNANCE.md`, or the implementation masterplan.
-
-Do not recreate an `external-docs/` clone inside this repository.
+Do not inspect `codex/archiv/` unless the Owner explicitly asks for archived material. If the Owner asks to inspect archived material, treat it as read-only and do not edit archived files.
 
 ## Source Priority
 
@@ -87,7 +77,7 @@ Short rule:
 3. Design system, screen specs, wireframes, interaction specs, component specs, and UI direction decisions define UI, focus, navigation, and visual direction.
 4. `prd/PRD-v1/13-test-strategy.md` defines tests, fixtures, performance budgets, and DoD evidence.
 5. Codex files define working rules.
-6. `codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md` defines implementation order and package boundaries.
+6. `codex/plans/IMPLEMENTATION-MASTERPLAN-v2.md` defines implementation order and package boundaries.
 7. App-repo technical plans may concretize implementation details, but must not override the docs repository.
 
 ## Technical Working Plans
@@ -96,9 +86,8 @@ Codex must create and maintain technical implementation plans inside this app re
 
 ```text
 codex/plans/
-  APP-IMPLEMENTATION-PLAN.md
-  P00-preflight-plan.md
-  P01-app-skeleton-plan.md
+  ACTIVE-IMPLEMENTATION-PLAN.md
+  P00-package-plan.md
 ```
 
 Each technical plan must include:
@@ -117,13 +106,7 @@ Technical plans are implementation aids only. They do not replace PRD, ADRs, des
 
 ## Plan Status Maintenance
 
-The main app-repo implementation status file is:
-
-```text
-codex/plans/APP-IMPLEMENTATION-PLAN.md
-```
-
-This file is the working memory for long-running implementation work.
+Active non-archived files under `codex/plans/` are the working memory for long-running implementation work.
 
 Codex must keep the active technical plan current:
 
@@ -133,7 +116,9 @@ Codex must keep the active technical plan current:
 - when scope, risks, assumptions, or next steps change
 - before context compaction, context handoff, or ending a session
 
-The top of `APP-IMPLEMENTATION-PLAN.md` must contain:
+When a masterplan package is completed, Codex must mark that package as done in its package-specific plan file and update the active non-archived status plan in the same step.
+
+The top of an active status plan should contain:
 
 ```md
 ## Status
@@ -157,13 +142,13 @@ The active technical plan must also clearly document:
 - next concrete step
 - open Owner questions, if any
 
-After a context reset, context compaction, or new session, Codex must not rely on chat memory. It must re-read `AGENTS.md`, `README.md`, the required `../vivicast-docs` startup sources, and `codex/plans/APP-IMPLEMENTATION-PLAN.md` before continuing.
+After a context reset, context compaction, or new session, Codex must not rely on chat memory. It must re-read `AGENTS.md`, `README.md`, the required `../vivicast-docs` startup sources, and any active non-archived plan under `codex/plans/` before continuing.
 
 The active technical plan may summarize current implementation state and next steps, but it must not override PRD, ADRs, design sources, test strategy, Codex rules, or Governance.
 
 ## Existing Code Re-Alignment
 
-This repository is an existing, partially implemented app foundation. It is not a greenfield rewrite.
+This repository is an existing implemented app foundation. It is not a greenfield rewrite.
 
 Codex must inspect existing implementation before replacing it.
 
@@ -191,9 +176,9 @@ Codex may independently:
 - update app-repo technical plans
 - continue with the next sensible task inside the active package after validation
 
-If the Owner asks to start or continue implementation without naming a specific package, Codex must read `codex/plans/APP-IMPLEMENTATION-PLAN.md` if it exists, determine the next open masterplan package, and continue there.
+If the Owner asks to start or continue implementation without naming a specific package, Codex must read active non-archived plans under `codex/plans/` if they exist, determine the next open masterplan package, and continue there.
 
-If no app implementation plan exists yet, Codex must start with Package 0 from `../vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v1.md`.
+If no app implementation plan exists yet, Codex must start with Package 0 from `../vivicast-docs/codex/plans/IMPLEMENTATION-MASTERPLAN-v2.md`.
 
 Codex must stop and ask the Owner when:
 

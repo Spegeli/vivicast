@@ -61,8 +61,9 @@ class RoomEpgRepository(
 
         val now = clock()
         val mapping = database.withTransaction {
-            require(epgDao.getEpgSource(epgSourceId) != null) { "EPG source not found: $epgSourceId" }
-            require(catalogDao.getChannels(providerId).any { it.id == channelId }) {
+            val source = epgDao.getEpgSource(epgSourceId) ?: error("EPG source not found: $epgSourceId")
+            val channel = catalogDao.getChannels(providerId).firstOrNull { it.id == channelId }
+            require(channel != null) {
                 "Channel not found for provider: $channelId"
             }
 
@@ -75,10 +76,15 @@ class RoomEpgRepository(
                 id = existing?.id ?: epgMappingId(providerId, epgSourceId, channelId),
                 providerId = providerId,
                 channelId = channelId,
+                channelStableKey = channel.stableKey,
                 epgSourceId = epgSourceId,
+                epgSourceStableKey = source.stableKey,
                 epgChannelId = epgChannelId,
+                epgChannelStableKey = epgChannelStableKey(epgChannelId),
                 isManual = true,
+                confidence = 1f,
                 createdAt = existing?.createdAt ?: now,
+                updatedAt = now,
             )
             epgDao.upsertMappings(listOf(manualMapping))
             epgDao.deleteProgramsForChannelAndSource(providerId, channelId, epgSourceId)
@@ -118,16 +124,18 @@ class RoomEpgRepository(
 
     override suspend fun saveEpgSource(request: EpgSourceSaveRequest): EpgSource {
         val name = request.name.trim()
-        val urlKey = request.urlKey.trim()
+        val sourceConfigKey = request.sourceConfigKey.trim()
         require(name.isNotBlank()) { "EPG source name must not be blank." }
-        require(urlKey.isNotBlank()) { "EPG source URL key must not be blank." }
+        require(sourceConfigKey.isNotBlank()) { "EPG source URL key must not be blank." }
 
         val now = clock()
         val existing = request.sourceId?.let { epgDao.getEpgSource(it) }
+        val sourceId = existing?.id ?: request.sourceId ?: UUID.randomUUID().toString()
         val source = EpgSourceEntity(
-            id = existing?.id ?: request.sourceId ?: UUID.randomUUID().toString(),
+            id = sourceId,
+            stableKey = existing?.stableKey ?: sourceId,
             name = name,
-            urlKey = urlKey,
+            sourceConfigKey = sourceConfigKey,
             timeShiftMinutes = request.timeShiftMinutes,
             isActive = request.isActive,
             createdAt = existing?.createdAt ?: now,
@@ -176,6 +184,7 @@ class RoomEpgRepository(
                 xmltvChannels = document.channels,
                 existingMappings = existingMappings,
                 ignoredChannelIds = manualMappedChannelIds,
+                epgSourceStableKey = source.stableKey,
                 now = now,
             )
 
@@ -184,29 +193,45 @@ class RoomEpgRepository(
             }
 
             val channelById = channels.associateBy { it.id }
+            val sourceStableKey = source.stableKey
             val externalChannelToLocal = (manualMappings + autoMappings)
                 .associateBy { it.epgChannelId }
                 .mapValues { (_, mapping) -> mapping.channelId }
-            val programs = document.programs.mapNotNull { program ->
-                val channelId = externalChannelToLocal[program.channelId] ?: return@mapNotNull null
-                val channel = channelById[channelId] ?: return@mapNotNull null
-                program.toEntity(
-                    providerId = providerId,
-                    epgSourceId = epgSourceId,
-                    localChannel = channel,
-                    now = now,
-                    timeShiftMillis = timeShiftMillis,
-                )
+            epgDao.deleteProgramsForProviderAndSource(providerId, epgSourceId)
+            var importedPrograms = 0
+            var skippedUnmappedPrograms = 0
+            val programBuffer = ArrayList<EpgProgramEntity>(EPG_IMPORT_CHUNK_SIZE)
+            suspend fun flushPrograms() {
+                if (programBuffer.isEmpty()) return
+                epgDao.insertPrograms(programBuffer)
+                importedPrograms += programBuffer.size
+                programBuffer.clear()
             }
 
-            epgDao.deleteProgramsForProviderAndSource(providerId, epgSourceId)
-            if (programs.isNotEmpty()) {
-                epgDao.upsertPrograms(programs)
+            document.programs.forEach { program ->
+                val channelId = externalChannelToLocal[program.channelId]
+                val channel = channelId?.let(channelById::get)
+                if (channel == null) {
+                    skippedUnmappedPrograms += 1
+                } else {
+                    programBuffer += program.toEntity(
+                        providerId = providerId,
+                        epgSourceId = epgSourceId,
+                        localChannel = channel,
+                        sourceStableKey = sourceStableKey,
+                        now = now,
+                        timeShiftMillis = timeShiftMillis,
+                    )
+                }
+                if (programBuffer.size >= EPG_IMPORT_CHUNK_SIZE) {
+                    flushPrograms()
+                }
             }
+            flushPrograms()
 
             EpgImportResult(
-                programsImported = programs.size,
-                programsSkipped = document.skippedPrograms + (document.programs.size - programs.size),
+                programsImported = importedPrograms,
+                programsSkipped = document.skippedPrograms + skippedUnmappedPrograms,
                 mappingsAdded = autoMappings.count { mapping ->
                     existingMappings.none { it.channelId == mapping.channelId && it.epgSourceId == mapping.epgSourceId }
                 },
@@ -220,6 +245,16 @@ class RoomEpgRepository(
         }
     }
 
+    override suspend fun cleanupProgramsOutsideRetention(
+        nowMillis: Long,
+        pastDays: Int,
+        futureDays: Int,
+    ): Int {
+        val fromMillis = nowMillis - pastDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
+        val toMillis = nowMillis + futureDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
+        return epgDao.deleteProgramsOutsideWindow(fromMillis, toMillis)
+    }
+
     private fun buildAutomaticMappings(
         providerId: String,
         epgSourceId: String,
@@ -227,13 +262,13 @@ class RoomEpgRepository(
         xmltvChannels: List<XmltvChannel>,
         existingMappings: List<EpgChannelMappingEntity>,
         ignoredChannelIds: Set<String>,
+        epgSourceStableKey: String,
         now: Long,
     ): List<EpgChannelMappingEntity> {
         val xmlById = xmltvChannels.associateBy { it.id.normalize() }
         val xmlByName = xmltvChannels.flatMap { xmlChannel ->
             xmlChannel.displayNames.map { displayName -> displayName.normalize() to xmlChannel }
         }.toMap()
-
         return channels.mapNotNull { channel ->
             if (channel.id in ignoredChannelIds) return@mapNotNull null
             val match = xmlById[channel.remoteId.normalize()]
@@ -244,10 +279,15 @@ class RoomEpgRepository(
                 id = existing?.id ?: epgMappingId(providerId, epgSourceId, channel.id),
                 providerId = providerId,
                 channelId = channel.id,
+                channelStableKey = channel.stableKey,
                 epgSourceId = epgSourceId,
+                epgSourceStableKey = epgSourceStableKey,
                 epgChannelId = match.id,
+                epgChannelStableKey = epgChannelStableKey(match.id),
                 isManual = false,
+                confidence = 0.8f,
                 createdAt = existing?.createdAt ?: now,
+                updatedAt = now,
             )
         }
     }
@@ -256,6 +296,7 @@ class RoomEpgRepository(
         providerId: String,
         epgSourceId: String,
         localChannel: ChannelEntity,
+        sourceStableKey: String,
         now: Long,
         timeShiftMillis: Long,
     ): EpgProgramEntity {
@@ -266,8 +307,10 @@ class RoomEpgRepository(
             providerId = providerId,
             channelId = localChannel.id,
             epgSourceId = epgSourceId,
-            externalChannelId = channelId,
+            stableKey = epgProgramStableKey(sourceStableKey, channelId, shiftedStart, shiftedEnd, title),
+            epgChannelId = channelId,
             title = title,
+            normalizedTitle = title.normalize(),
             subtitle = subtitle,
             description = description,
             startTime = shiftedStart,
@@ -282,6 +325,11 @@ class RoomEpgRepository(
 
     private companion object {
         const val MILLIS_PER_MINUTE = 60_000L
+        const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
+        const val MIN_RETENTION_DAYS = 1
+        const val MAX_RETENTION_DAYS = 14
+        const val EPG_IMPORT_CHUNK_SIZE = 20_000
+        val SHA256: ThreadLocal<MessageDigest> = ThreadLocal.withInitial { MessageDigest.getInstance("SHA-256") }
 
         fun providerEpgSourceId(providerId: String, epgSourceId: String): String =
             "$providerId:provider-epg-source:${stableHash(epgSourceId)}"
@@ -292,18 +340,31 @@ class RoomEpgRepository(
         fun epgProgramId(
             providerId: String,
             epgSourceId: String,
-            externalChannelId: String,
+            epgChannelId: String,
             startTime: Long,
             endTime: Long,
             title: String,
         ): String =
-            "$providerId:epg-program:${stableHash("$epgSourceId:$externalChannelId:$startTime:$endTime:$title")}"
+            "$providerId:epg-program:${stableHash("$epgSourceId:$epgChannelId:$startTime:$endTime:$title")}"
+
+        fun epgProgramStableKey(
+            epgSourceStableKey: String,
+            epgChannelId: String,
+            startTime: Long,
+            endTime: Long,
+            title: String,
+        ): String =
+            stableHash("$epgSourceStableKey:$epgChannelId:$startTime:$endTime:$title")
+
+        fun epgChannelStableKey(epgChannelId: String): String =
+            stableHash(epgChannelId)
 
         fun String.normalize(): String =
             trim().lowercase(Locale.ROOT)
 
         fun stableHash(value: String): String {
-            val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+            val messageDigest = requireNotNull(SHA256.get()).apply { reset() }
+            val digest = messageDigest.digest(value.toByteArray(Charsets.UTF_8))
             return digest.take(16).joinToString(separator = "") { byte -> "%02x".format(byte) }
         }
     }
@@ -312,10 +373,13 @@ class RoomEpgRepository(
 private fun EpgSourceEntity.toDomain(): EpgSource =
     EpgSource(
         id = id,
+        stableKey = stableKey,
         name = name,
-        urlKey = urlKey,
+        sourceConfigKey = sourceConfigKey,
         timeShiftMinutes = timeShiftMinutes,
         isActive = isActive,
+        lastRefreshAt = lastRefreshAt,
+        lastProgramCount = lastProgramCount,
     )
 
 private fun ProviderEpgSourceEntity.toDomain(): ProviderEpgSource =
@@ -332,8 +396,10 @@ private fun EpgProgramEntity.toDomain(): EpgProgram =
         providerId = providerId,
         channelId = channelId,
         epgSourceId = epgSourceId,
-        externalChannelId = externalChannelId,
+        stableKey = stableKey,
+        epgChannelId = epgChannelId,
         title = title,
+        normalizedTitle = normalizedTitle,
         subtitle = subtitle,
         description = description,
         startTime = startTime,
@@ -348,9 +414,13 @@ private fun EpgChannelMappingEntity.toDomain(): EpgChannelMapping =
         id = id,
         providerId = providerId,
         channelId = channelId,
+        channelStableKey = channelStableKey,
         epgSourceId = epgSourceId,
+        epgSourceStableKey = epgSourceStableKey,
         epgChannelId = epgChannelId,
+        epgChannelStableKey = epgChannelStableKey,
         isManual = isManual,
+        confidence = confidence,
     )
 
 private fun ChannelEntity.toDomain(): Channel =
@@ -358,6 +428,7 @@ private fun ChannelEntity.toDomain(): Channel =
         id = id,
         providerId = providerId,
         categoryId = categoryId,
+        stableKey = stableKey,
         remoteId = remoteId,
         channelNumber = channelNumber,
         name = name,

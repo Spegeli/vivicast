@@ -70,10 +70,83 @@ class RoomProviderRepositoryTest {
         assertEquals("Living Room", result.provider.name)
         assertEquals(ProviderStatus.Active, result.provider.status)
         assertEquals(ProviderCredentials.M3u("https://example.invalid/list.m3u"), repository.getCredentials(result.provider.id))
-        assertEquals(result.provider.credentialsKey, provider?.credentialsKey)
-        assertFalse(provider?.credentialsKey.orEmpty().contains("example.invalid"))
+        assertEquals(result.provider.sourceConfigKey, provider?.sourceConfigKey)
+        assertFalse(provider?.sourceConfigKey.orEmpty().contains("example.invalid"))
         assertFalse(provider?.name.orEmpty().contains("example.invalid"))
         assertTrue(secureValueStore.values.values.contains("https://example.invalid/list.m3u"))
+    }
+
+    @Test
+    fun duplicateProviderNameIsNotSavedAndDoesNotWriteNewSecrets() = runBlocking {
+        repository.createProvider(
+            ProviderCreateRequest(
+                name = "Provider",
+                type = ProviderType.M3u,
+                m3uUrl = "https://example.invalid/first.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+
+        val result = runCatching {
+            repository.createProvider(
+                ProviderCreateRequest(
+                    name = " provider ",
+                    type = ProviderType.M3u,
+                    m3uUrl = "https://example.invalid/duplicate.m3u",
+                    includeLiveTv = true,
+                    includeMovies = false,
+                    includeSeries = false,
+                ),
+            )
+        }
+
+        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(1, database.providerDao().getProviders().size)
+        assertFalse(secureValueStore.values.values.contains("https://example.invalid/duplicate.m3u"))
+    }
+
+    @Test
+    fun duplicateProviderRenameIsNotSavedAndKeepsExistingSecrets() = runBlocking {
+        val first = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Provider A",
+                type = ProviderType.M3u,
+                m3uUrl = "https://example.invalid/a.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        ).provider
+        val second = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Provider B",
+                type = ProviderType.M3u,
+                m3uUrl = "https://example.invalid/b.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        ).provider
+
+        val result = runCatching {
+            repository.updateProvider(
+                ProviderUpdateRequest(
+                    providerId = second.id,
+                    name = "provider a",
+                    m3uUrl = "https://example.invalid/changed.m3u",
+                    includeLiveTv = true,
+                    includeMovies = false,
+                    includeSeries = false,
+                ),
+            )
+        }
+
+        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+        assertEquals("Provider B", requireNotNull(repository.getProvider(second.id)).name)
+        assertEquals(ProviderCredentials.M3u("https://example.invalid/b.m3u"), repository.getCredentials(second.id))
+        assertEquals(ProviderCredentials.M3u("https://example.invalid/a.m3u"), repository.getCredentials(first.id))
     }
 
     @Test
@@ -104,7 +177,7 @@ class RoomProviderRepositoryTest {
         ).provider
 
         assertEquals(created.id, updated.id)
-        assertEquals(created.credentialsKey, updated.credentialsKey)
+        assertEquals(created.sourceConfigKey, updated.sourceConfigKey)
         assertEquals("Renamed Provider", updated.name)
         assertEquals(ProviderCredentials.M3u("https://example.invalid/new.m3u"), repository.getCredentials(created.id))
 
@@ -119,7 +192,7 @@ class RoomProviderRepositoryTest {
 
         assertNull(repository.getProvider(created.id))
         assertNull(repository.getCredentials(created.id))
-        assertFalse(secureValueStore.values.keys.any { it.startsWith(created.credentialsKey) })
+        assertFalse(secureValueStore.values.keys.any { it.startsWith(created.sourceConfigKey) })
         assertEquals(0, countForProvider("categories", created.id))
         assertEquals(0, countForProvider("channels", created.id))
         assertEquals(0, countForProvider("favorites", created.id))
@@ -170,7 +243,7 @@ class RoomProviderRepositoryTest {
                 EpgSourceEntity(
                     id = "epg-source-1",
                     name = "Independent EPG",
-                    urlKey = "secure:epg-source-1",
+                    sourceConfigKey = "secure:epg-source-1",
                     timeShiftMinutes = 0,
                     isActive = true,
                     createdAt = now,
@@ -196,7 +269,7 @@ class RoomProviderRepositoryTest {
                     providerId = providerId,
                     channelId = "channel-1",
                     epgSourceId = "epg-source-1",
-                    externalChannelId = "external-channel-1",
+                    epgChannelId = "external-channel-1",
                     title = "Program",
                     subtitle = null,
                     description = null,

@@ -3,10 +3,12 @@ package com.vivicast.tv.core.database.model
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 @Entity(
     tableName = "providers",
     indices = [
+        Index(value = ["stableKey"], unique = true),
         Index(value = ["type"]),
         Index(value = ["name"]),
         Index(value = ["status"]),
@@ -14,9 +16,10 @@ import androidx.room.PrimaryKey
 )
 data class ProviderEntity(
     @PrimaryKey val id: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val name: String,
     val type: String,
-    val credentialsKey: String,
+    val sourceConfigKey: String,
     val isActive: Boolean,
     val status: String,
     val includeLiveTv: Boolean,
@@ -32,6 +35,7 @@ data class ProviderEntity(
     tableName = "categories",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "type"]),
         Index(value = ["providerId", "type", "name"]),
         Index(value = ["providerId", "type", "remoteId"], unique = true),
@@ -40,6 +44,7 @@ data class ProviderEntity(
 data class CategoryEntity(
     @PrimaryKey val id: String,
     val providerId: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val type: String,
     val remoteId: String,
     val name: String,
@@ -53,6 +58,7 @@ data class CategoryEntity(
     tableName = "channels",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "categoryId"]),
         Index(value = ["providerId", "name"]),
         Index(value = ["providerId", "remoteId"], unique = true),
@@ -62,6 +68,7 @@ data class ChannelEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val categoryId: String?,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val remoteId: String,
     val channelNumber: String?,
     val name: String,
@@ -76,6 +83,7 @@ data class ChannelEntity(
     tableName = "movies",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "categoryId"]),
         Index(value = ["providerId", "name"]),
         Index(value = ["providerId", "remoteId"], unique = true),
@@ -85,6 +93,7 @@ data class MovieEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val categoryId: String?,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val remoteId: String,
     val name: String,
     val originalName: String?,
@@ -100,6 +109,8 @@ data class MovieEntity(
     val plot: String?,
     val trailerUrl: String?,
     val addedAt: Long?,
+    val ageRating: String? = null,
+    @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -108,6 +119,7 @@ data class MovieEntity(
     tableName = "series",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "categoryId"]),
         Index(value = ["providerId", "name"]),
         Index(value = ["providerId", "remoteId"], unique = true),
@@ -117,6 +129,7 @@ data class SeriesEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val categoryId: String?,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val remoteId: String,
     val name: String,
     val originalName: String?,
@@ -129,6 +142,8 @@ data class SeriesEntity(
     val cast: String?,
     val plot: String?,
     val addedAt: Long?,
+    val ageRating: String? = null,
+    @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -137,6 +152,7 @@ data class SeriesEntity(
     tableName = "seasons",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "seriesId"]),
         Index(value = ["providerId", "seriesId", "seasonNumber"], unique = true),
     ],
@@ -145,6 +161,7 @@ data class SeasonEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val seriesId: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val seasonNumber: Int,
     val name: String,
     val posterUrl: String?,
@@ -156,6 +173,7 @@ data class SeasonEntity(
     tableName = "episodes",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["providerId", "stableKey"], unique = true),
         Index(value = ["providerId", "seriesId"]),
         Index(value = ["providerId", "seasonId"]),
         Index(value = ["providerId", "remoteId"], unique = true),
@@ -166,6 +184,7 @@ data class EpisodeEntity(
     val providerId: String,
     val seriesId: String,
     val seasonId: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val remoteId: String,
     val episodeNumber: Int,
     val seasonNumber: Int,
@@ -175,6 +194,8 @@ data class EpisodeEntity(
     val containerExtension: String?,
     val duration: Long?,
     val airDate: String?,
+    val ageRating: String? = null,
+    @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -182,16 +203,39 @@ data class EpisodeEntity(
 @Entity(
     tableName = "epg_sources",
     indices = [
+        Index(value = ["stableKey"], unique = true),
         Index(value = ["name"]),
-        Index(value = ["urlKey"], unique = true),
+        Index(value = ["sourceConfigKey"], unique = true),
     ],
 )
 data class EpgSourceEntity(
     @PrimaryKey val id: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
     val name: String,
-    val urlKey: String,
+    val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    val lastRefreshAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val lastProgramCount: Int = 0,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Entity(
+    tableName = "epg_channels",
+    indices = [
+        Index(value = ["epgSourceId"]),
+        Index(value = ["epgSourceId", "stableKey"], unique = true),
+        Index(value = ["epgSourceId", "remoteId"], unique = true),
+    ],
+)
+data class EpgChannelEntity(
+    @PrimaryKey val id: String,
+    val epgSourceId: String,
+    val stableKey: String,
+    val remoteId: String,
+    val displayName: String,
+    val iconUrl: String?,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -217,8 +261,10 @@ data class ProviderEpgSourceEntity(
     tableName = "epg_programs",
     indices = [
         Index(value = ["providerId"]),
+        Index(value = ["epgSourceId", "epgChannelId", "stableKey"], unique = true),
         Index(value = ["channelId"]),
         Index(value = ["epgSourceId"]),
+        Index(value = ["epgSourceId", "epgChannelId", "startTime", "endTime"]),
         Index(value = ["channelId", "startTime", "endTime"]),
         Index(value = ["providerId", "title"]),
     ],
@@ -228,8 +274,10 @@ data class EpgProgramEntity(
     val providerId: String,
     val channelId: String,
     val epgSourceId: String,
-    val externalChannelId: String,
+    @ColumnInfo(defaultValue = "''") val stableKey: String = id,
+    val epgChannelId: String,
     val title: String,
+    @ColumnInfo(defaultValue = "''") val normalizedTitle: String = title,
     val subtitle: String?,
     val description: String?,
     val startTime: Long,
@@ -253,10 +301,15 @@ data class EpgChannelMappingEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val channelId: String,
+    @ColumnInfo(defaultValue = "''") val channelStableKey: String = channelId,
     val epgSourceId: String,
+    @ColumnInfo(defaultValue = "''") val epgSourceStableKey: String = epgSourceId,
     val epgChannelId: String,
+    @ColumnInfo(defaultValue = "''") val epgChannelStableKey: String = epgChannelId,
     val isManual: Boolean,
+    @ColumnInfo(defaultValue = "0.0") val confidence: Float = 0f,
     val createdAt: Long,
+    @ColumnInfo(defaultValue = "0") val updatedAt: Long = createdAt,
 )
 
 @Entity(
@@ -272,6 +325,8 @@ data class FavoriteEntity(
     val providerId: String,
     val mediaType: String,
     val mediaId: String,
+    @ColumnInfo(defaultValue = "''") val mediaStableKey: String = mediaId,
+    @ColumnInfo(defaultValue = "0") val isPending: Boolean = false,
     val sortOrder: Int,
     val createdAt: Long,
     val updatedAt: Long,
@@ -291,6 +346,8 @@ data class PlaybackProgressEntity(
     val providerId: String,
     val mediaType: String,
     val mediaId: String,
+    @ColumnInfo(defaultValue = "''") val mediaStableKey: String = mediaId,
+    @ColumnInfo(defaultValue = "0") val isPending: Boolean = false,
     val positionMillis: Long,
     val durationMillis: Long,
     val progressPercent: Int,
@@ -312,8 +369,25 @@ data class ChannelHistoryEntity(
     @PrimaryKey val id: String,
     val providerId: String,
     val channelId: String,
+    @ColumnInfo(defaultValue = "''") val channelStableKey: String = channelId,
+    @ColumnInfo(defaultValue = "0") val isPending: Boolean = false,
     val watchedAt: Long,
     val durationWatchedMillis: Long,
     val updatedAt: Long,
 )
 
+@Entity(
+    tableName = "search_history",
+    indices = [
+        Index(value = ["normalizedQuery"], unique = true),
+        Index(value = ["lastUsedAt"]),
+    ],
+)
+data class SearchHistoryEntity(
+    @PrimaryKey val id: String,
+    val query: String,
+    @ColumnInfo(defaultValue = "''") val normalizedQuery: String = query.lowercase(),
+    @ColumnInfo(defaultValue = "0") val lastUsedAt: Long = 0L,
+    val createdAt: Long,
+    val updatedAt: Long,
+)

@@ -2,6 +2,7 @@ package com.vivicast.tv.feature.player
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -9,11 +10,15 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import com.vivicast.tv.core.player.PlaybackAspectRatioMode
+import com.vivicast.tv.core.player.PlaybackAudioOption
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackError
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
+import com.vivicast.tv.core.player.PlaybackSubtitleOption
 import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
 import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerController
@@ -31,26 +36,34 @@ class PlayerRouteFocusTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun overlayStartsWithTimelineFocusBackHidesAndOkRestores() {
+    fun overlayStartsHiddenOkOpensBackHidesAndOkRestores() {
         var closed = false
 
         compose.setContent {
             PlayerRoute(onClose = { closed = true })
         }
 
-        compose.onNodeWithTag(playerOverlayTag()).assertIsDisplayed()
+        compose.onAllNodesWithTag(playerOverlayTag()).assertCountEquals(0)
+        compose.onAllNodesWithTag(playerHiddenOverlayTag()).assertCountEquals(0)
+
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag(playerTimelineTag()).assertIsFocused()
 
         pressBack()
 
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithTag(playerHiddenOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isEmpty()
         }
-        compose.onAllNodesWithTag(playerOverlayTag()).assertCountEquals(0)
-        compose.onNodeWithTag(playerHiddenOverlayActionTag()).assertIsFocused()
+        compose.onAllNodesWithTag(playerHiddenOverlayTag()).assertCountEquals(0)
         assertFalse(closed)
 
-        compose.onNodeWithTag(playerHiddenOverlayActionTag()).performKeyInput {
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
             pressKey(Key.Enter)
         }
 
@@ -68,9 +81,15 @@ class PlayerRouteFocusTest {
             PlayerRoute(onClose = { closed = true })
         }
 
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+        }
         pressBack()
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithTag(playerHiddenOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isEmpty()
         }
 
         pressBack()
@@ -86,6 +105,7 @@ class PlayerRouteFocusTest {
             PlayerRoute(playerController = controller)
         }
 
+        openOverlay()
         compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
             pressKey(Key.Enter)
         }
@@ -111,6 +131,7 @@ class PlayerRouteFocusTest {
             PlayerRoute(playerController = controller)
         }
 
+        openOverlay()
         compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
             pressKey(Key.DirectionLeft)
             pressKey(Key.DirectionRight)
@@ -122,17 +143,55 @@ class PlayerRouteFocusTest {
     }
 
     @Test
-    fun closingPlayerStopsController() {
+    fun overlayActionsSelectSessionPlaybackOptions() {
         val controller = FakePlayerController()
 
         compose.setContent {
             PlayerRoute(playerController = controller)
         }
 
+        openOverlay()
+        compose.onNodeWithTag(playerAudioActionTag()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(playerOptionTag("audio-de")).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.onNodeWithTag(playerSubtitleActionTag()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(playerOptionTag("subtitle-en")).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.onNodeWithTag(playerAspectActionTag()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
+        compose.onNodeWithTag(playerOptionTag("aspect-fill")).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.runOnIdle {
+            assertEquals(listOf(PlaybackAudioOption.German), controller.audioSelections)
+            assertEquals(listOf(PlaybackSubtitleOption.English), controller.subtitleSelections)
+            assertEquals(listOf(PlaybackAspectRatioMode.Fill), controller.aspectRatioSelections)
+            assertEquals(PlaybackAudioOption.German, controller.state.value.audioOption)
+            assertEquals(PlaybackSubtitleOption.English, controller.state.value.subtitleOption)
+            assertEquals(PlaybackAspectRatioMode.Fill, controller.state.value.aspectRatioMode)
+        }
+    }
+
+    @Test
+    fun closingPlayerStopsController() {
+        val controller = FakePlayerController()
+        var stateBeforeStop: VivicastPlayerState? = null
+
+        compose.setContent {
+            PlayerRoute(
+                playerController = controller,
+                onBeforeStop = { stateBeforeStop = it },
+            )
+        }
+
+        openOverlay()
         pressBack()
         pressBack()
 
         compose.runOnIdle {
+            assertEquals(PlaybackStatus.Playing, stateBeforeStop?.status)
+            assertEquals("movie-1", stateBeforeStop?.request?.mediaId)
             assertEquals(1, controller.stopCount)
             assertEquals(PlaybackStatus.Idle, controller.state.value.status)
         }
@@ -150,7 +209,7 @@ class PlayerRouteFocusTest {
             )
         }
 
-        compose.onNodeWithTag(playerTimelineTag()).performKeyInput {
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
             pressKey(Key.ChannelUp)
             pressKey(Key.ChannelDown)
         }
@@ -182,6 +241,53 @@ class PlayerRouteFocusTest {
     }
 
     @Test
+    fun reconnectHintIsVisibleWithoutErrorDialog() {
+        val controller = ReconnectingPlayerController()
+
+        compose.setContent {
+            PlayerRoute(playerController = controller)
+        }
+
+        compose.onNodeWithTag(playerReconnectHintTag()).assertIsDisplayed()
+        compose.onAllNodesWithTag(playerErrorDialogTag()).assertCountEquals(0)
+    }
+
+    @Test
+    fun endedEpisodeShowsManualAutoNextPanel() {
+        val controller = EndedEpisodePlayerController()
+
+        compose.setContent {
+            PlayerRoute(
+                playerController = controller,
+                autoNextEnabled = false,
+                nextEpisodeTitle = "Folge 2",
+            )
+        }
+
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag(playerAutoNextPanelTag()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(playerAutoNextPlayTag()).assertIsFocused()
+    }
+
+    @Test
+    fun endedEpisodeAutoNextStartsNextWhenEnabled() {
+        val controller = EndedEpisodePlayerController()
+        var playNextCount = 0
+
+        compose.setContent {
+            PlayerRoute(
+                playerController = controller,
+                autoNextEnabled = true,
+                nextEpisodeTitle = "Folge 2",
+                onPlayNextEpisode = { playNextCount += 1 },
+            )
+        }
+
+        compose.waitUntil(timeoutMillis = 5_000) { playNextCount == 1 }
+    }
+
+    @Test
     fun timeshiftShowsLiveEdgeActionWhenBehindLive() {
         val controller = TimeshiftPlayerController()
 
@@ -189,12 +295,51 @@ class PlayerRouteFocusTest {
             PlayerRoute(playerController = controller)
         }
 
+        openOverlay()
         compose.onNodeWithTag(playerLiveEdgeTag()).assertIsDisplayed()
+    }
+
+    @Test
+    fun overlayAutoHidesAfterFiveSecondsOfInactivity() {
+        compose.setContent {
+            PlayerRoute()
+        }
+
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(5_100L)
+        compose.waitForIdle()
+
+        compose.onAllNodesWithTag(playerOverlayTag()).assertCountEquals(0)
+        compose.mainClock.autoAdvance = true
     }
 
     private fun pressBack() {
         compose.activityRule.scenario.onActivity { activity ->
             activity.onBackPressedDispatcher.onBackPressed()
+        }
+    }
+
+    private fun openOverlay() {
+        compose.onNodeWithTag(playerRootTag()).performKeyInput {
+            pressKey(Key.Enter)
+        }
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag(playerOverlayTag()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(timeoutMillis = 5_000) {
+            try {
+                compose.onNodeWithTag(playerTimelineTag()).assertIsFocused()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
         }
     }
 
@@ -219,6 +364,9 @@ class PlayerRouteFocusTest {
         var resumeCount = 0
         var stopCount = 0
         val seekDeltas = mutableListOf<Long>()
+        val audioSelections = mutableListOf<PlaybackAudioOption>()
+        val subtitleSelections = mutableListOf<PlaybackSubtitleOption>()
+        val aspectRatioSelections = mutableListOf<PlaybackAspectRatioMode>()
 
         override val state: StateFlow<VivicastPlayerState> = mutableState
 
@@ -239,6 +387,21 @@ class PlayerRouteFocusTest {
         }
 
         override fun seekToLiveEdge() = Unit
+
+        override fun selectAudio(option: PlaybackAudioOption) {
+            audioSelections += option
+            mutableState.value = mutableState.value.copy(audioOption = option)
+        }
+
+        override fun selectSubtitle(option: PlaybackSubtitleOption) {
+            subtitleSelections += option
+            mutableState.value = mutableState.value.copy(subtitleOption = option)
+        }
+
+        override fun selectAspectRatio(mode: PlaybackAspectRatioMode) {
+            aspectRatioSelections += mode
+            mutableState.value = mutableState.value.copy(aspectRatioMode = mode)
+        }
 
         override fun stop() {
             stopCount += 1
@@ -327,6 +490,63 @@ class PlayerRouteFocusTest {
                 liveEdgeOffsetMillis = 0L,
             )
         }
+        override fun stop() = Unit
+        override fun release() = Unit
+    }
+
+    private class ReconnectingPlayerController : VivicastPlayerController {
+        private val mutableState = MutableStateFlow(
+            VivicastPlayerState(
+                status = PlaybackStatus.Starting,
+                request = PlaybackRequest(
+                    playbackId = "playback-1",
+                    providerId = "provider-1",
+                    mediaId = "channel-1",
+                    mediaType = PlaybackMediaType.Channel,
+                    title = "Controller Channel",
+                    streamUrl = "https://stream.example/channel.m3u8",
+                    seekable = false,
+                ),
+                isReconnecting = true,
+            ),
+        )
+
+        override val state: StateFlow<VivicastPlayerState> = mutableState
+
+        override fun play(request: PlaybackRequest) = Unit
+        override fun pause() = Unit
+        override fun resume() = Unit
+        override fun seekBy(deltaMillis: Long) = Unit
+        override fun seekToLiveEdge() = Unit
+        override fun stop() = Unit
+        override fun release() = Unit
+    }
+
+    private class EndedEpisodePlayerController : VivicastPlayerController {
+        private val mutableState = MutableStateFlow(
+            VivicastPlayerState(
+                status = PlaybackStatus.Ended,
+                request = PlaybackRequest(
+                    playbackId = "episode-playback-1",
+                    providerId = "provider-1",
+                    mediaId = "episode-1",
+                    mediaType = PlaybackMediaType.Episode,
+                    title = "Folge 1",
+                    streamUrl = "https://stream.example/episode-1.mp4",
+                    seekable = true,
+                ),
+                positionMillis = 120_000L,
+                durationMillis = 120_000L,
+            ),
+        )
+
+        override val state: StateFlow<VivicastPlayerState> = mutableState
+
+        override fun play(request: PlaybackRequest) = Unit
+        override fun pause() = Unit
+        override fun resume() = Unit
+        override fun seekBy(deltaMillis: Long) = Unit
+        override fun seekToLiveEdge() = Unit
         override fun stop() = Unit
         override fun release() = Unit
     }

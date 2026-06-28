@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RefreshExecutionTest {
@@ -104,6 +106,58 @@ class RefreshExecutionTest {
     }
 
     @Test
+    fun playlistRefreshMarksSuccessfulM3uImportWithSkippedEntriesAsPartialError() = runBlocking {
+        val provider = provider(type = ProviderType.M3u)
+        val providerRepository = FakeProviderRepository(
+            providers = listOf(provider),
+            credentials = mapOf(provider.id to ProviderCredentials.M3u(url = "https://playlist.example/list.m3u")),
+        )
+        val catalogRepository = FakeCatalogImportRepository()
+        val refresher = DefaultPlaylistRefresher(
+            providerRepository = providerRepository,
+            catalogImportRepository = catalogRepository,
+            m3uParser = DefaultM3uParser(),
+            textFetcher = FakeTextFetcher(
+                "https://playlist.example/list.m3u" to """
+                    #EXTM3U
+                    https://stream.example/orphan.m3u8
+                    #EXTINF:-1 tvg-id="ard.de" tvg-name="ARD" group-title="News",ARD
+                    https://stream.example/ard.m3u8
+                """.trimIndent(),
+            ),
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = EmptyXtreamParser,
+            epgSourceReader = FakeEpgSourceReader(),
+        )
+
+        refresher.refresh(PlaylistRefreshTarget(provider.id))
+
+        assertEquals(listOf(ProviderStatus.Refreshing, ProviderStatus.ActiveWithPartialErrors), providerRepository.statuses)
+        assertEquals(1, catalogRepository.m3uPlaylist?.skippedEntries)
+    }
+
+    @Test
+    fun playlistRefreshMarksMissingCredentialsAsRequiredWithoutImporting() = runBlocking {
+        val provider = provider(type = ProviderType.M3u)
+        val providerRepository = FakeProviderRepository(providers = listOf(provider))
+        val catalogRepository = FakeCatalogImportRepository()
+        val refresher = DefaultPlaylistRefresher(
+            providerRepository = providerRepository,
+            catalogImportRepository = catalogRepository,
+            m3uParser = DefaultM3uParser(),
+            textFetcher = FakeTextFetcher(),
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = EmptyXtreamParser,
+            epgSourceReader = FakeEpgSourceReader(),
+        )
+
+        runCatching { refresher.refresh(PlaylistRefreshTarget(provider.id)) }
+
+        assertEquals(listOf(ProviderStatus.Refreshing, ProviderStatus.CredentialsRequired), providerRepository.statuses)
+        assertEquals(null, catalogRepository.m3uPlaylist)
+    }
+
+    @Test
     fun epgRefreshParsesOnceAndImportsForActiveLinkedProviders() = runBlocking {
         val activeProvider = provider(id = "provider-active")
         val disabledProvider = provider(id = "provider-disabled", isActive = false)
@@ -129,6 +183,8 @@ class RefreshExecutionTest {
             ),
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = importRepository,
+            epgPastRetentionDaysProvider = { 2 },
+            epgFutureRetentionDaysProvider = { 9 },
         )
 
         val outcome = refresher.refresh(EpgRefreshTarget("epg-1"))
@@ -136,6 +192,37 @@ class RefreshExecutionTest {
         assertEquals(EpgRefreshOutcome("epg-1", success = true), outcome)
         assertEquals(listOf(activeProvider.id), importRepository.providerIds)
         assertEquals("Morning News", importRepository.documents.single().programs.single().title)
+        assertEquals(listOf(2 to 9), importRepository.retentionRequests)
+    }
+
+    @Test
+    fun epgRefreshFailsBeforeImportWhenXmltvHasNoPrograms() = runBlocking {
+        val provider = provider(id = "provider-active")
+        val importRepository = FakeEpgImportRepository()
+        val refresher = DefaultEpgRefresher(
+            epgSourceReader = FakeEpgSourceReader(
+                resolved = ResolvedEpgSource(
+                    id = "epg-1",
+                    url = "https://epg.example/file.xml",
+                    providerIds = listOf(provider.id),
+                ),
+            ),
+            providerRepository = FakeProviderRepository(listOf(provider)),
+            textFetcher = FakeTextFetcher(
+                "https://epg.example/file.xml" to """
+                    <tv>
+                      <channel id="ard.de"><display-name>ARD</display-name></channel>
+                    </tv>
+                """.trimIndent(),
+            ),
+            xmltvParser = DefaultXmltvParser(),
+            epgImportRepository = importRepository,
+        )
+
+        runCatching { refresher.refresh(EpgRefreshTarget("epg-1")) }
+
+        assertEquals(emptyList<String>(), importRepository.providerIds)
+        assertEquals(emptyList<Pair<Int, Int>>(), importRepository.retentionRequests)
     }
 
     @Test
@@ -199,6 +286,16 @@ class RefreshExecutionTest {
         assertEquals(listOf(250L * 1024L * 1024L), cacheStore.cleanupLimits)
     }
 
+    @Test
+    fun refreshRunGuardRejectsDuplicateKeyUntilExit() {
+        val guard = RefreshRunGuard()
+
+        assertTrue(guard.tryEnter("provider-1"))
+        assertFalse(guard.tryEnter("provider-1"))
+        guard.exit("provider-1")
+        assertTrue(guard.tryEnter("provider-1"))
+    }
+
     private fun provider(
         id: String = "provider-1",
         type: ProviderType = ProviderType.M3u,
@@ -208,7 +305,7 @@ class RefreshExecutionTest {
             id = id,
             name = "Provider",
             type = type,
-            credentialsKey = "provider:$id:credentials",
+            sourceConfigKey = "provider:$id:credentials",
             isActive = isActive,
             status = if (isActive) ProviderStatus.Active else ProviderStatus.Disabled,
             includeLiveTv = true,
@@ -287,6 +384,7 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
 private class FakeEpgImportRepository : EpgImportRepository {
     val providerIds = mutableListOf<String>()
     val documents = mutableListOf<XmltvDocument>()
+    val retentionRequests = mutableListOf<Pair<Int, Int>>()
 
     override suspend fun saveEpgSource(request: EpgSourceSaveRequest): EpgSource =
         error("Not used.")
@@ -302,6 +400,11 @@ private class FakeEpgImportRepository : EpgImportRepository {
             mappingsAdded = 0,
             mappingsUpdated = 0,
         )
+    }
+
+    override suspend fun cleanupProgramsOutsideRetention(nowMillis: Long, pastDays: Int, futureDays: Int): Int {
+        retentionRequests += pastDays to futureDays
+        return 0
     }
 }
 

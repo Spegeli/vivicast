@@ -1,5 +1,6 @@
 package com.vivicast.tv.feature.livetv
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -27,8 +29,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,11 +56,7 @@ import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.data.epg.EpgRepository
 import com.vivicast.tv.data.favorites.FavoritesRepository
-import com.vivicast.tv.data.media.AssetState
-import com.vivicast.tv.data.media.DemoCatalog
-import com.vivicast.tv.data.media.DemoChannel
 import com.vivicast.tv.data.media.MediaRepository
-import com.vivicast.tv.data.media.ProviderStatus as DemoProviderStatus
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
@@ -66,36 +72,45 @@ import java.util.Date
 import java.util.Locale
 
 private enum class LiveColumnMode { Category, Channel }
+private enum class LiveFocusArea { Provider, ChannelList, Epg, Preview }
 
 @Composable
 fun LiveTvRoute(
-    providerRepository: ProviderRepository? = null,
-    mediaRepository: MediaRepository? = null,
-    epgRepository: EpgRepository? = null,
-    favoritesRepository: FavoritesRepository? = null,
+    providerRepository: ProviderRepository,
+    mediaRepository: MediaRepository,
+    epgRepository: EpgRepository,
+    favoritesRepository: FavoritesRepository,
     expandedProviderIds: Set<String> = emptySet(),
     onExpandedProviderIdsChanged: (Set<String>) -> Unit = {},
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: (Channel) -> Unit = {},
     onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
     onOpenCatchUp: (Channel, EpgProgram) -> Unit = { _, _ -> },
+    targetProviderId: String? = null,
+    targetCategoryId: String? = null,
+    targetChannelId: String? = null,
+    targetEpgProgramId: String? = null,
+    targetEpgStartTime: Long? = null,
+    onTargetConsumed: () -> Unit = {},
 ) {
-    if (providerRepository == null || mediaRepository == null || epgRepository == null || favoritesRepository == null) {
-        DemoLiveTvRoute()
-    } else {
-        RoomLiveTvRoute(
-            providerRepository = providerRepository,
-            mediaRepository = mediaRepository,
-            epgRepository = epgRepository,
-            favoritesRepository = favoritesRepository,
-            expandedProviderIds = expandedProviderIds,
-            onExpandedProviderIdsChanged = onExpandedProviderIdsChanged,
-            resolveChannelLogoModel = resolveChannelLogoModel,
-            onOpenPlayer = onOpenPlayer,
-            onPlayableChannelsChanged = onPlayableChannelsChanged,
-            onOpenCatchUp = onOpenCatchUp,
-        )
-    }
+    RoomLiveTvRoute(
+        providerRepository = providerRepository,
+        mediaRepository = mediaRepository,
+        epgRepository = epgRepository,
+        favoritesRepository = favoritesRepository,
+        expandedProviderIds = expandedProviderIds,
+        onExpandedProviderIdsChanged = onExpandedProviderIdsChanged,
+        resolveChannelLogoModel = resolveChannelLogoModel,
+        onOpenPlayer = onOpenPlayer,
+        onPlayableChannelsChanged = onPlayableChannelsChanged,
+        onOpenCatchUp = onOpenCatchUp,
+        targetProviderId = targetProviderId,
+        targetCategoryId = targetCategoryId,
+        targetChannelId = targetChannelId,
+        targetEpgProgramId = targetEpgProgramId,
+        targetEpgStartTime = targetEpgStartTime,
+        onTargetConsumed = onTargetConsumed,
+    )
 }
 
 @Composable
@@ -110,6 +125,12 @@ private fun RoomLiveTvRoute(
     onOpenPlayer: (Channel) -> Unit,
     onPlayableChannelsChanged: (List<Channel>) -> Unit,
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
+    targetProviderId: String?,
+    targetCategoryId: String?,
+    targetChannelId: String?,
+    targetEpgProgramId: String?,
+    targetEpgStartTime: Long?,
+    onTargetConsumed: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -117,11 +138,58 @@ private fun RoomLiveTvRoute(
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
     var selectedChannelId by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf(LiveColumnMode.Category) }
+    var focusedArea by remember { mutableStateOf(LiveFocusArea.Provider) }
+    var selectedCategoryFocusRequest by remember { mutableStateOf(0) }
+    var selectedChannelFocusRequest by remember { mutableStateOf(0) }
+    var epgFocusRequest by remember { mutableStateOf(0) }
     var previewStarted by remember { mutableStateOf(false) }
+    var firstProviderExpansionApplied by remember { mutableStateOf(false) }
+    var channelPageCount by remember { mutableStateOf(1) }
+
+    BackHandler(enabled = focusedArea != LiveFocusArea.Provider) {
+        when (focusedArea) {
+            LiveFocusArea.Epg,
+            LiveFocusArea.Preview,
+            -> {
+                focusedArea = LiveFocusArea.ChannelList
+                selectedChannelFocusRequest += 1
+            }
+            LiveFocusArea.ChannelList -> {
+                mode = LiveColumnMode.Category
+                previewStarted = false
+                focusedArea = LiveFocusArea.Provider
+                selectedCategoryFocusRequest += 1
+            }
+            LiveFocusArea.Provider -> Unit
+        }
+    }
 
     LaunchedEffect(providers) {
         if (selectedProviderId == null || providers.none { it.id == selectedProviderId }) {
             selectedProviderId = providers.firstOrNull { it.isActive }?.id ?: providers.firstOrNull()?.id
+        }
+    }
+    LaunchedEffect(targetProviderId, targetCategoryId, targetChannelId, targetEpgProgramId) {
+        val providerId = targetProviderId ?: return@LaunchedEffect
+        selectedProviderId = providerId
+        selectedCategoryId = targetCategoryId
+        selectedChannelId = targetChannelId
+        if (providerId !in expandedProviderIds) {
+            onExpandedProviderIdsChanged(expandedProviderIds + providerId)
+        }
+        if (targetChannelId != null) {
+            mode = LiveColumnMode.Channel
+            focusedArea = LiveFocusArea.Epg
+            epgFocusRequest += 1
+            previewStarted = true
+        }
+        if (targetEpgProgramId == null) onTargetConsumed()
+    }
+    LaunchedEffect(providers) {
+        val firstProvider = providers.firstOrNull { it.isActive } ?: providers.firstOrNull()
+        if (!firstProviderExpansionApplied && firstProvider != null && expandedProviderIds.isEmpty()) {
+            onExpandedProviderIdsChanged(setOf(firstProvider.id))
+            firstProviderExpansionApplied = true
         }
     }
 
@@ -129,37 +197,47 @@ private fun RoomLiveTvRoute(
         selectedProviderId?.let { mediaRepository.observeCategories(it, CategoryType.LiveTv) } ?: flowOf(emptyList())
     }
     val categories by categoriesFlow.collectAsState(initial = emptyList())
-    val favoritesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { favoritesRepository.observeFavorites(it, MediaType.Channel) } ?: flowOf(emptyList())
-    }
+    val favoritesFlow = remember(favoritesRepository) { favoritesRepository.observeFavorites(MediaType.Channel) }
     val favorites by favoritesFlow.collectAsState(initial = emptyList())
     val favoriteChannelIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
+    val favoriteChannels by produceState(initialValue = emptyList(), mediaRepository, favorites) {
+        value = favorites.mapNotNull { favorite ->
+            mediaRepository.getChannel(favorite.providerId, favorite.mediaId)
+        }
+    }
     val selectedProviderExpanded = selectedProviderId in expandedProviderIds
-    val categoriesWithFavorites = remember(selectedProviderId, categories) {
-        selectedProviderId?.let { listOf(favoriteCategory(it)) + categories } ?: categories
+
+    LaunchedEffect(selectedProviderId, selectedCategoryId) {
+        channelPageCount = 1
     }
 
-    LaunchedEffect(selectedProviderId, selectedProviderExpanded, categoriesWithFavorites, favoriteChannelIds) {
+    LaunchedEffect(selectedProviderId, selectedProviderExpanded, categories, selectedCategoryId) {
+        if (selectedCategoryId == FAVORITES_CATEGORY_ID) return@LaunchedEffect
         if (!selectedProviderExpanded) {
             selectedCategoryId = null
-        } else if (selectedCategoryId == null || categoriesWithFavorites.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = when {
-                favoriteChannelIds.isNotEmpty() -> FAVORITES_CATEGORY_ID
-                else -> categories.firstOrNull()?.id ?: categoriesWithFavorites.firstOrNull()?.id
-            }
+        } else if (selectedCategoryId == null || categories.none { it.id == selectedCategoryId }) {
+            selectedCategoryId = categories.firstOrNull()?.id
         }
     }
 
-    val channelsFlow = remember(selectedProviderId, selectedCategoryId) {
-        selectedProviderId?.let { providerId ->
+    val channelsFlow = remember(selectedProviderId, selectedCategoryId, channelPageCount) {
+        if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
+            flowOf(emptyList())
+        } else {
+            selectedProviderId?.let { providerId ->
             val categoryId = selectedCategoryId?.takeUnless { it == FAVORITES_CATEGORY_ID }
-            mediaRepository.observeChannels(providerId, categoryId)
-        } ?: flowOf(emptyList())
+            mediaRepository.observeChannelsPage(
+                providerId = providerId,
+                categoryId = categoryId,
+                limit = channelPageCount * LIVE_TV_PAGE_SIZE,
+            )
+            } ?: flowOf(emptyList())
+        }
     }
     val observedChannels by channelsFlow.collectAsState(initial = emptyList())
-    val channels = remember(observedChannels, selectedCategoryId, favoriteChannelIds) {
+    val channels = remember(observedChannels, selectedCategoryId, favoriteChannels) {
         if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
-            observedChannels.filter { it.id in favoriteChannelIds }.sortedBy { it.name.lowercase(Locale.getDefault()) }
+            favoriteChannels.sortedBy { it.name.lowercase(Locale.getDefault()) }
         } else {
             observedChannels
         }
@@ -177,16 +255,25 @@ private fun RoomLiveTvRoute(
     }
 
     val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categoriesWithFavorites.firstOrNull { it.id == selectedCategoryId }
-    val selectedChannel = channels.firstOrNull { it.id == selectedChannelId }
-    val nowMillis = remember(selectedChannel?.id) { System.currentTimeMillis() }
+    val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId }
+    val targetChannel by produceState<Channel?>(initialValue = null, mediaRepository, targetProviderId, targetChannelId) {
+        value = if (targetProviderId != null && targetChannelId != null) {
+            mediaRepository.getChannel(targetProviderId, targetChannelId)
+        } else {
+            null
+        }
+    }
+    val selectedChannel = channels.firstOrNull { it.id == selectedChannelId } ?: targetChannel?.takeIf { it.id == selectedChannelId }
+    val channelProvider = selectedChannel?.let { channel -> providers.firstOrNull { it.id == channel.providerId } } ?: selectedProvider
+    val canLoadMoreChannels = selectedCategoryId != FAVORITES_CATEGORY_ID &&
+        observedChannels.size >= channelPageCount * LIVE_TV_PAGE_SIZE
+    val nowMillis = remember(selectedChannel?.id, targetEpgStartTime) { targetEpgStartTime ?: System.currentTimeMillis() }
     val programsFlow = remember(selectedProviderId, selectedChannel?.id, nowMillis) {
-        val providerId = selectedProviderId
-        if (providerId == null || selectedChannel == null) {
+        if (selectedChannel == null) {
             flowOf(emptyList())
         } else {
             epgRepository.observeProgramsForChannel(
-                providerId = providerId,
+                providerId = selectedChannel.providerId,
                 channelId = selectedChannel.id,
                 fromMillis = nowMillis - EPG_PAST_WINDOW_MILLIS,
                 toMillis = nowMillis + EPG_FUTURE_WINDOW_MILLIS,
@@ -197,19 +284,50 @@ private fun RoomLiveTvRoute(
     val currentProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.currentAt(nowMillis) }
     val nextProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.nextAfter(nowMillis) }
 
-    VivicastScreen(modifier = Modifier.fillMaxSize()) {
+    fun moveBrowserChannel(key: Key): Boolean {
+        if (focusedArea != LiveFocusArea.ChannelList || channels.isEmpty()) return false
+        val selectedIndex = channels.indexOfFirst { it.id == selectedChannelId }.takeUnless { it < 0 } ?: 0
+        val nextIndex = when (key) {
+            Key.ChannelUp -> (selectedIndex - 1).coerceAtLeast(0)
+            Key.ChannelDown -> (selectedIndex + 1).coerceAtMost(channels.lastIndex)
+            else -> return false
+        }
+        selectedChannelId = channels[nextIndex].id
+        previewStarted = false
+        selectedChannelFocusRequest += 1
+        return true
+    }
+
+    VivicastScreen(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                event.type == KeyEventType.KeyDown && moveBrowserChannel(event.key)
+            },
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
             if (mode == LiveColumnMode.Category) {
                 RoomProviderCategoryColumn(
                     providers = providers,
                     selectedProviderId = selectedProviderId,
                     expandedProviderIds = expandedProviderIds,
-                    categories = categoriesWithFavorites,
+                    categories = categories,
                     selectedCategoryId = selectedCategoryId,
+                    favoriteSelected = selectedCategoryId == FAVORITES_CATEGORY_ID,
+                    favoriteCount = favoriteChannels.size,
+                    requestSelectedFocusSignal = selectedCategoryFocusRequest,
+                    onGlobalFavoritesFocused = {
+                        selectedCategoryId = FAVORITES_CATEGORY_ID
+                        selectedChannelId = null
+                        mode = LiveColumnMode.Category
+                        focusedArea = LiveFocusArea.Provider
+                        previewStarted = false
+                    },
                     onProviderFocused = {
                         selectedProviderId = it.id
                         if (it.id !in expandedProviderIds) selectedCategoryId = null
                         selectedChannelId = null
+                        focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
                     onProviderToggle = { provider ->
@@ -223,11 +341,13 @@ private fun RoomLiveTvRoute(
                         selectedProviderId = provider.id
                         if (wasExpanded) selectedCategoryId = null
                         selectedChannelId = null
+                        focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
                     onCategoryFocused = {
                         selectedCategoryId = it.id
                         selectedChannelId = null
+                        focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
                     modifier = Modifier.weight(0.25f),
@@ -242,16 +362,21 @@ private fun RoomLiveTvRoute(
                 nowMillis = nowMillis,
                 selectedCurrentProgram = currentProgram,
                 favoriteChannelIds = favoriteChannelIds,
+                canLoadMore = canLoadMoreChannels,
+                requestSelectedFocusSignal = selectedChannelFocusRequest,
                 onChannelFocused = {
                     selectedChannelId = it.id
-                    mode = LiveColumnMode.Channel
+                    focusedArea = LiveFocusArea.ChannelList
                     previewStarted = false
                 },
                 onChannelClick = {
                     selectedChannelId = it.id
                     mode = LiveColumnMode.Channel
+                    focusedArea = LiveFocusArea.Epg
+                    epgFocusRequest += 1
                     previewStarted = true
                 },
+                onLoadMore = { channelPageCount += 1 },
                 modifier = Modifier.weight(if (mode == LiveColumnMode.Category) 0.33f else 0.32f),
             )
 
@@ -260,6 +385,11 @@ private fun RoomLiveTvRoute(
                     channel = selectedChannel,
                     programs = selectedPrograms,
                     nowMillis = nowMillis,
+                    requestInitialFocusSignal = epgFocusRequest,
+                    targetProgramId = targetEpgProgramId,
+                    onTargetConsumed = onTargetConsumed,
+                    onEpgFocused = { focusedArea = LiveFocusArea.Epg },
+                    onOpenPlayer = onOpenPlayer,
                     onOpenCatchUp = onOpenCatchUp,
                     modifier = Modifier.weight(0.31f),
                 )
@@ -268,16 +398,22 @@ private fun RoomLiveTvRoute(
             RoomPreviewColumn(
                 channel = selectedChannel,
                 previewStarted = previewStarted,
-                provider = selectedProvider,
+                provider = channelProvider,
                 currentProgram = currentProgram,
                 nextProgram = nextProgram,
                 isFavorite = selectedChannel?.id in favoriteChannelIds,
-                onStartPreview = { if (selectedChannel != null) previewStarted = true },
+                onPreviewFocused = { focusedArea = LiveFocusArea.Preview },
+                onStartPreview = {
+                    if (selectedChannel != null) {
+                        focusedArea = LiveFocusArea.Preview
+                        previewStarted = true
+                    }
+                },
                 onOpenPlayer = { selectedChannel?.let(onOpenPlayer) },
                 onShowCategoryMode = { mode = LiveColumnMode.Category },
                 onToggleFavorite = {
-                    val providerId = selectedProviderId
                     val channelId = selectedChannel?.id
+                    val providerId = selectedChannel?.providerId
                     if (providerId != null && channelId != null) {
                         scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Channel, channelId) }
                     }
@@ -287,7 +423,6 @@ private fun RoomLiveTvRoute(
         }
     }
 }
-
 @Composable
 private fun RoomProviderCategoryColumn(
     providers: List<Provider>,
@@ -295,13 +430,39 @@ private fun RoomProviderCategoryColumn(
     expandedProviderIds: Set<String>,
     categories: List<Category>,
     selectedCategoryId: String?,
+    favoriteSelected: Boolean,
+    favoriteCount: Int,
+    requestSelectedFocusSignal: Int,
+    onGlobalFavoritesFocused: () -> Unit,
     onProviderFocused: (Provider) -> Unit,
     onProviderToggle: (Provider) -> Unit,
     onCategoryFocused: (Category) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(requestSelectedFocusSignal, favoriteSelected, selectedProviderId, selectedCategoryId, categories, expandedProviderIds) {
+        if (requestSelectedFocusSignal > 0) selectedFocusRequester.requestFocus()
+    }
+
     GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 20.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle("Favoriten")
+            FocusPanel(
+                selected = favoriteSelected,
+                onClick = onGlobalFavoritesFocused,
+                onFocused = onGlobalFavoritesFocused,
+                contentPadding = 14.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (favoriteSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                    .testTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)),
+            ) {
+                BasicText(
+                    text = "Live-TV Favoriten ($favoriteCount)",
+                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                )
+            }
             SectionTitle("Provider")
             if (providers.isEmpty()) {
                 InfoPanel("Keine Listen", "Lege in den Einstellungen zuerst einen Provider an.", badge = "Leer")
@@ -310,12 +471,17 @@ private fun RoomProviderCategoryColumn(
                 items(providers, key = { it.id }) { provider ->
                     val selected = provider.id == selectedProviderId
                     val expanded = provider.id in expandedProviderIds
+                    val selectedProviderFocusTarget = selected && selectedCategoryId == null && !favoriteSelected
                     FocusPanel(
                         selected = selected,
                         onClick = { onProviderToggle(provider) },
                         onFocused = { onProviderFocused(provider) },
                         contentPadding = 10.dp,
-                        modifier = Modifier.fillMaxWidth().height(74.dp).testTag(providerTreeProviderTag(provider.id)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(74.dp)
+                            .then(if (selectedProviderFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                            .testTag(providerTreeProviderTag(provider.id)),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             BasicText(
@@ -336,12 +502,17 @@ private fun RoomProviderCategoryColumn(
                             )
                         } else {
                             categories.forEach { category ->
+                                val selectedCategoryFocusTarget = category.id == selectedCategoryId
                                 FocusPanel(
-                                    selected = category.id == selectedCategoryId,
+                                    selected = selectedCategoryFocusTarget,
                                     onClick = { onCategoryFocused(category) },
                                     onFocused = { onCategoryFocused(category) },
                                     contentPadding = 14.dp,
-                                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp).testTag(providerTreeCategoryTag(category.id)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 14.dp)
+                                        .then(if (selectedCategoryFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                                        .testTag(providerTreeCategoryTag(category.id)),
                                 ) {
                                     BasicText(
                                         text = category.displayName,
@@ -370,11 +541,45 @@ private fun RoomChannelColumn(
     nowMillis: Long,
     selectedCurrentProgram: EpgProgram?,
     favoriteChannelIds: Set<String>,
+    canLoadMore: Boolean,
+    requestSelectedFocusSignal: Int,
     onChannelFocused: (Channel) -> Unit,
     onChannelClick: (Channel) -> Unit,
+    onLoadMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
+    val selectedFocusRequester = remember { FocusRequester() }
+    var channelKeyFocusRequest by remember { mutableStateOf(0) }
+
+    LaunchedEffect(requestSelectedFocusSignal, channelKeyFocusRequest, selectedChannelId, channels) {
+        if ((requestSelectedFocusSignal > 0 || channelKeyFocusRequest > 0) && selectedChannelId != null && channels.any { it.id == selectedChannelId }) {
+            selectedFocusRequester.requestFocus()
+        }
+    }
+
+    fun moveChannelFocus(key: Key): Boolean {
+        if (channels.isEmpty()) return false
+        val selectedIndex = channels.indexOfFirst { it.id == selectedChannelId }.takeUnless { it < 0 } ?: 0
+        val nextIndex = when (key) {
+            Key.ChannelUp -> (selectedIndex - 1).coerceAtLeast(0)
+            Key.ChannelDown -> (selectedIndex + 1).coerceAtMost(channels.lastIndex)
+            else -> return false
+        }
+        if (nextIndex != selectedIndex) {
+            onChannelFocused(channels[nextIndex])
+            channelKeyFocusRequest += 1
+        }
+        return true
+    }
+
+    GlassPanel(
+        modifier = modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
+            },
+        contentPadding = 18.dp,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle("Senderliste")
             if (channels.isEmpty()) {
@@ -399,8 +604,21 @@ private fun RoomChannelColumn(
                         favorite = channel.id in favoriteChannelIds,
                         catchUp = channel.isCatchupAvailable && isSelected && selectedCurrentProgram != null,
                         logoModel = logoModel,
-                        modifier = Modifier.testTag(channelRowTag(channel.id)),
+                        modifier = Modifier
+                            .then(if (isSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                            .onPreviewKeyEvent { event ->
+                                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
+                            }
+                            .onKeyEvent { event ->
+                                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
+                            }
+                            .testTag(channelRowTag(channel.id)),
                     )
+                }
+                if (canLoadMore) {
+                    item(key = "load-more-channels") {
+                        ActionPill("Mehr laden", modifier = Modifier.fillMaxWidth(), onClick = onLoadMore)
+                    }
                 }
             }
         }
@@ -412,9 +630,27 @@ private fun RoomEpgColumn(
     channel: Channel?,
     programs: List<EpgProgram>,
     nowMillis: Long,
+    requestInitialFocusSignal: Int,
+    targetProgramId: String?,
+    onTargetConsumed: () -> Unit,
+    onEpgFocused: () -> Unit,
+    onOpenPlayer: (Channel) -> Unit,
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val initialFocusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+    val currentProgramId = remember(programs, nowMillis) { programs.firstOrNull { it.isCurrentAt(nowMillis) }?.id }
+    val focusProgramId = targetProgramId ?: currentProgramId
+    val showNoCurrentProgramPlaceholder = channel != null && currentProgramId == null
+
+    LaunchedEffect(requestInitialFocusSignal, channel?.id, focusProgramId, programs) {
+        val targetIndex = programs.indexOfFirst { it.id == focusProgramId }
+        if (targetIndex >= 0) listState.scrollToItem(targetIndex)
+        if (requestInitialFocusSignal > 0 && channel != null) initialFocusRequester.requestFocus()
+        if (targetProgramId != null && targetIndex >= 0) onTargetConsumed()
+    }
+
     GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle("Sender-EPG")
@@ -422,23 +658,52 @@ private fun RoomEpgColumn(
                 channel == null -> {
                     InfoPanel("Kein Sender ausgewaehlt", "Waehle einen Sender aus, um dessen EPG zu sehen.", badge = "EPG")
                 }
-                programs.isEmpty() -> {
-                    InfoPanel("Keine Programminformationen", "${channel.name} hat aktuell keine lokalen EPG-Daten.", badge = "Ohne EPG")
+                showNoCurrentProgramPlaceholder -> {
+                    FocusPanel(
+                        selected = true,
+                        onClick = { onOpenPlayer(channel) },
+                        onFocused = onEpgFocused,
+                        contentPadding = 14.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(initialFocusRequester)
+                            .testTag(noEpgPlaceholderTag(channel.id)),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            BasicText(
+                                text = "Keine Programminformationen verfÃ¼gbar",
+                                style = TextStyle(
+                                    color = VivicastColors.TextPrimary,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                            )
+                            BodyText("${channel.name} hat aktuell keine lokalen EPG-Daten.")
+                            StatusBadge("Ohne EPG")
+                        }
+                    }
                 }
                 else -> {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
                         items(programs, key = { it.id }) { program ->
                             val current = program.isCurrentAt(nowMillis)
+                            val target = program.id == targetProgramId
                             val catchUpReady = program.isCatchupAvailable && program.endTime <= nowMillis
                             FocusPanel(
-                                selected = current,
+                                selected = current || target,
                                 onClick = {
-                                    if (catchUpReady) {
+                                    if (current) {
+                                        onOpenPlayer(channel)
+                                    } else if (catchUpReady) {
                                         onOpenCatchUp(channel, program)
                                     }
                                 },
+                                onFocused = onEpgFocused,
                                 contentPadding = 14.dp,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(if (program.id == focusProgramId) Modifier.focusRequester(initialFocusRequester) else Modifier)
+                                    .testTag(epgProgramRowTag(program.id)),
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
@@ -477,6 +742,7 @@ private fun RoomPreviewColumn(
     currentProgram: EpgProgram?,
     nextProgram: EpgProgram?,
     isFavorite: Boolean,
+    onPreviewFocused: () -> Unit,
     onStartPreview: () -> Unit,
     onOpenPlayer: () -> Unit,
     onShowCategoryMode: () -> Unit,
@@ -488,16 +754,17 @@ private fun RoomPreviewColumn(
             SectionTitle("Vorschau")
             FocusPanel(
                 onClick = onStartPreview,
+                onFocused = onPreviewFocused,
                 contentPadding = 0.dp,
                 modifier = Modifier.fillMaxWidth().height(144.dp),
             ) {
-                PreviewBox(if (previewStarted) "Vorschau läuft" else "OK startet Vorschau")
+                PreviewBox(if (previewStarted) "Vorschau lÃ¤uft" else "OK startet Vorschau")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 ActionPill("Live", modifier = Modifier.weight(1f), onClick = onOpenPlayer)
                 ActionPill("Kat.", modifier = Modifier.weight(1f), onClick = onShowCategoryMode)
                 ActionPill(
-                    if (isFavorite) "★" else "☆",
+                    if (isFavorite) "â˜…" else "â˜†",
                     modifier = Modifier.weight(1f),
                     selected = isFavorite,
                     onClick = onToggleFavorite,
@@ -511,10 +778,14 @@ private fun RoomPreviewColumn(
                         append("\nJetzt: ${currentProgram?.title ?: "Keine Programminformationen"}")
                         nextProgram?.let { next -> append("\nDanach: ${next.startTime.hhMm()} ${next.title}") }
                     }
-                } ?: "Wähle links einen Provider und Sender aus.",
+                } ?: "WÃ¤hle links einen Provider und Sender aus.",
                 badge = if (previewStarted) "Live" else "Details",
             )
-            if (provider?.status == ProviderStatus.ConnectionError || provider?.status == ProviderStatus.InvalidCredentials) {
+            if (
+                provider?.status == ProviderStatus.ConnectionError ||
+                provider?.status == ProviderStatus.InvalidCredentials ||
+                provider?.status == ProviderStatus.CredentialsRequired
+            ) {
                 InfoPanel("Provider-Fehler", provider.status.label, badge = "Error")
             }
         }
@@ -525,20 +796,9 @@ private fun emptyChannelMessage(provider: Provider?, category: Category?): Strin
     when {
         provider == null -> "Lege in den Einstellungen zuerst eine Wiedergabeliste an."
         category?.id == FAVORITES_CATEGORY_ID -> "Noch keine Live-TV-Favoriten gespeichert."
-        category == null -> "Dieser Provider enthält keine importierten Live-TV-Sender."
-        else -> "Diese Kategorie enthält keine importierten Live-TV-Sender."
+        category == null -> "Dieser Provider enthÃ¤lt keine importierten Live-TV-Sender."
+        else -> "Diese Kategorie enthÃ¤lt keine importierten Live-TV-Sender."
     }
-
-private fun favoriteCategory(providerId: String): Category =
-    Category(
-        id = FAVORITES_CATEGORY_ID,
-        providerId = providerId,
-        type = CategoryType.LiveTv,
-        remoteId = FAVORITES_CATEGORY_ID,
-        name = "Favoriten",
-        sortOrder = Int.MIN_VALUE,
-        isHidden = false,
-    )
 
 private fun List<EpgProgram>.currentAt(nowMillis: Long): EpgProgram? =
     firstOrNull { it.isCurrentAt(nowMillis) }
@@ -561,29 +821,36 @@ private val Category.displayName: String
     get() = if (remoteId == "__UNCATEGORIZED__") "Nicht kategorisiert" else name
 
 private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
+private const val LIVE_TV_PAGE_SIZE = 80
 private const val EPG_PAST_WINDOW_MILLIS = 4L * 60L * 60L * 1000L
 private const val EPG_FUTURE_WINDOW_MILLIS = 8L * 60L * 60L * 1000L
 internal fun providerTreeProviderTag(providerId: String): String = "live-tv-provider-$providerId"
 internal fun providerTreeCategoryTag(categoryId: String): String = "live-tv-category-$categoryId"
 internal fun channelRowTag(channelId: String): String = "live-tv-channel-$channelId"
+internal fun epgProgramRowTag(programId: String): String = "live-tv-epg-program-$programId"
+internal fun noEpgPlaceholderTag(channelId: String): String = "live-tv-no-epg-$channelId"
 
 private val ProviderStatus.label: String
     get() = when (this) {
         ProviderStatus.Active -> "Aktiv"
-        ProviderStatus.Refreshing -> "Aktualisierung läuft"
+        ProviderStatus.ActiveWithPartialErrors -> "Aktiv mit Teilfehlern"
+        ProviderStatus.Refreshing -> "Aktualisierung lÃ¤uft"
         ProviderStatus.ConnectionError -> "Verbindungsfehler"
-        ProviderStatus.InvalidCredentials -> "Anmeldedaten ungültig"
+        ProviderStatus.InvalidCredentials -> "Anmeldedaten ungÃ¼ltig"
         ProviderStatus.Expired -> "Abgelaufen"
         ProviderStatus.Disabled -> "Deaktiviert"
+        ProviderStatus.CredentialsRequired -> "Zugangsdaten erforderlich"
     }
 
 private val ProviderStatus.color: Color
     get() = when (this) {
         ProviderStatus.Active -> VivicastColors.TextTertiary
+        ProviderStatus.ActiveWithPartialErrors -> Color(0xFFFFD166)
         ProviderStatus.Refreshing -> Color(0xFF93C5FD)
         ProviderStatus.ConnectionError,
         ProviderStatus.InvalidCredentials,
         ProviderStatus.Expired,
+        ProviderStatus.CredentialsRequired,
         -> Color(0xFFFFB4A8)
         ProviderStatus.Disabled -> Color(0xFF9CA3AF)
     }
@@ -602,221 +869,5 @@ private fun PreviewBox(text: String) {
             text = text,
             style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
         )
-    }
-}
-
-@Composable
-private fun DemoLiveTvRoute(onOpenPlayer: () -> Unit = {}) {
-    var selectedCategory by remember { mutableStateOf("Favoriten") }
-    var selectedChannel by remember { mutableStateOf(DemoCatalog.channels.first()) }
-    var mode by remember { mutableStateOf(LiveColumnMode.Category) }
-    var previewStarted by remember { mutableStateOf(false) }
-    val channels = remember(selectedCategory) {
-        if (selectedCategory == "Leer") emptyList() else DemoCatalog.channels.filter { selectedCategory in it.categories }
-    }
-
-    VivicastScreen(modifier = Modifier.fillMaxSize()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
-            if (mode == LiveColumnMode.Category) {
-                DemoProviderCategoryColumn(
-                    selectedCategory = selectedCategory,
-                    onCategoryFocused = {
-                        mode = LiveColumnMode.Category
-                        selectedCategory = it
-                        DemoCatalog.channels.firstOrNull { channel -> it in channel.categories }?.let { channel ->
-                            selectedChannel = channel
-                        }
-                    },
-                    modifier = Modifier.weight(0.25f),
-                )
-            }
-
-            DemoChannelColumn(
-                channels = channels,
-                selectedChannel = selectedChannel,
-                emptyCategory = selectedCategory == "Leer",
-                onChannelFocused = {
-                    selectedChannel = it
-                    mode = LiveColumnMode.Channel
-                },
-                onChannelClick = {
-                    selectedChannel = it
-                    mode = LiveColumnMode.Channel
-                    previewStarted = true
-                },
-                modifier = Modifier.weight(if (mode == LiveColumnMode.Category) 0.33f else 0.32f),
-            )
-
-            if (mode == LiveColumnMode.Channel) {
-                DemoEpgColumn(channel = selectedChannel, modifier = Modifier.weight(0.31f))
-            }
-
-            DemoPreviewColumn(
-                channel = selectedChannel,
-                previewStarted = previewStarted,
-                providerErrorVisible = mode == LiveColumnMode.Category,
-                onStartPreview = { previewStarted = true },
-                onOpenPlayer = onOpenPlayer,
-                onShowCategoryMode = { mode = LiveColumnMode.Category },
-                modifier = Modifier.weight(0.42f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DemoProviderCategoryColumn(
-    selectedCategory: String,
-    onCategoryFocused: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 20.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Provider")
-            DemoCatalog.providers.forEach { provider ->
-                FocusPanel(
-                    selected = provider.status == DemoProviderStatus.Active,
-                    onClick = {},
-                    contentPadding = 10.dp,
-                    modifier = Modifier.fillMaxWidth().height(74.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        BasicText(
-                            text = provider.name,
-                            style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                        BodyText(
-                            provider.statusText,
-                            color = if (provider.status == DemoProviderStatus.Error) Color(0xFFFFB4A8) else VivicastColors.TextTertiary,
-                        )
-                    }
-                }
-            }
-
-            SectionTitle("Kategorien")
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(DemoCatalog.categories) { category ->
-                    FocusPanel(
-                        selected = category == selectedCategory,
-                        onClick = { onCategoryFocused(category) },
-                        onFocused = { onCategoryFocused(category) },
-                        contentPadding = 14.dp,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        BasicText(
-                            text = category,
-                            style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DemoChannelColumn(
-    channels: List<DemoChannel>,
-    selectedChannel: DemoChannel,
-    emptyCategory: Boolean,
-    onChannelFocused: (DemoChannel) -> Unit,
-    onChannelClick: (DemoChannel) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionTitle("Senderliste")
-            if (channels.isEmpty() && emptyCategory) {
-                InfoPanel("Keine Sender", "Diese Kategorie enthält keine Sender.", badge = "Leer")
-            }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-                items(channels) { channel ->
-                    VivicastChannelCard(
-                        channelName = channel.name,
-                        program = channel.program,
-                        logoText = channel.name,
-                        logoMissing = channel.logoState == AssetState.Missing,
-                        selected = channel == selectedChannel,
-                        onFocused = { onChannelFocused(channel) },
-                        onClick = { onChannelClick(channel) },
-                        progressPercent = if (channel.hasEpg) 55 else 0,
-                        favorite = channel.favorite,
-                        catchUp = channel.catchUp,
-                        logoResId = channel.logoResId,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DemoEpgColumn(channel: DemoChannel, modifier: Modifier = Modifier) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionTitle("Sender-EPG")
-            if (!channel.hasEpg) {
-                InfoPanel("Keine Programminformationen", "${channel.name} zeigt derzeit kein EPG.", badge = "Ohne EPG")
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-                    items(channel.epg) { item ->
-                        FocusPanel(selected = item.current, contentPadding = 14.dp, modifier = Modifier.fillMaxWidth()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                BodyText("${item.start} - ${item.end}")
-                                BasicText(
-                                    text = item.title,
-                                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                                )
-                                if (item.current || item.catchUp) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (item.current) StatusBadge("Aktuell")
-                                        if (item.catchUp) StatusBadge("Catch-Up")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DemoPreviewColumn(
-    channel: DemoChannel,
-    previewStarted: Boolean,
-    providerErrorVisible: Boolean,
-    onStartPreview: () -> Unit,
-    onOpenPlayer: () -> Unit,
-    onShowCategoryMode: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 16.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionTitle("Vorschau")
-            FocusPanel(
-                onClick = onStartPreview,
-                contentPadding = 0.dp,
-                modifier = Modifier.fillMaxWidth().height(144.dp),
-            ) {
-                PreviewBox(if (previewStarted) "Vorschau läuft" else "OK startet Vorschau")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ActionPill("Ansehen", modifier = Modifier.width(160.dp), onClick = onOpenPlayer)
-                ActionPill("Kategorien", modifier = Modifier.width(190.dp), onClick = onShowCategoryMode)
-            }
-            InfoPanel(
-                title = channel.name,
-                body = channel.description.ifBlank { "Keine Beschreibung vorhanden." },
-                badge = if (previewStarted) "Live" else "Details",
-            )
-            if (!channel.hasEpg) {
-                InfoPanel("Keine EPG-Daten", "Für diesen Sender sind keine Programminformationen vorhanden.", badge = "Ohne EPG")
-            }
-            if (providerErrorVisible) {
-                InfoPanel("Provider-Fehler", "Provider B: Anmeldung fehlgeschlagen.", badge = "Error")
-            }
-        }
     }
 }

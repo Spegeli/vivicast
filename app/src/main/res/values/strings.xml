@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Vivicast</string>
+    <string name="search_hint">Vivicast durchsuchen</string>
 </resources>

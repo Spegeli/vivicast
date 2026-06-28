@@ -29,8 +29,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.vivicast.tv.core.datastore.UserPreferences
-import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
@@ -40,10 +38,12 @@ import com.vivicast.tv.core.designsystem.VivicastContentRow
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSearchResultCard
 import com.vivicast.tv.core.designsystem.VivicastSpacing
-import com.vivicast.tv.data.media.DemoCatalog
 import com.vivicast.tv.data.media.MediaRepository
-import com.vivicast.tv.data.media.R as MediaR
+import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgProgram
+import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.SearchResults
+import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -54,16 +54,22 @@ private const val MAX_SEARCH_HISTORY = 20
 @Composable
 fun SearchRoute(
     mediaRepository: MediaRepository? = null,
-    userPreferencesStore: UserPreferencesStore? = null,
     autoFocusField: Boolean = true,
+    onOpenChannel: (Channel) -> Unit = {},
+    onOpenMovie: (Movie) -> Unit = {},
+    onOpenSeries: (Series) -> Unit = {},
+    onOpenEpgProgram: (EpgProgram) -> Unit = {},
 ) {
-    if (mediaRepository == null || userPreferencesStore == null) {
-        DemoSearchRoute(autoFocusField = autoFocusField)
+    if (mediaRepository == null) {
+        SearchUnavailableState()
     } else {
         RoomSearchRoute(
             mediaRepository = mediaRepository,
-            userPreferencesStore = userPreferencesStore,
             autoFocusField = autoFocusField,
+            onOpenChannel = onOpenChannel,
+            onOpenMovie = onOpenMovie,
+            onOpenSeries = onOpenSeries,
+            onOpenEpgProgram = onOpenEpgProgram,
         )
     }
 }
@@ -71,13 +77,16 @@ fun SearchRoute(
 @Composable
 private fun RoomSearchRoute(
     mediaRepository: MediaRepository,
-    userPreferencesStore: UserPreferencesStore,
     autoFocusField: Boolean,
+    onOpenChannel: (Channel) -> Unit,
+    onOpenMovie: (Movie) -> Unit,
+    onOpenSeries: (Series) -> Unit,
+    onOpenEpgProgram: (EpgProgram) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList(), emptyList())) }
     var debouncedQuery by remember { mutableStateOf("") }
-    val preferences by userPreferencesStore.values.collectAsState(initial = UserPreferences())
+    val history by mediaRepository.observeSearchHistory(MAX_SEARCH_HISTORY).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(query) {
@@ -86,55 +95,43 @@ private fun RoomSearchRoute(
         debouncedQuery = trimmed
         results = mediaRepository.search(trimmed, SEARCH_LIMIT_PER_TYPE)
         if (trimmed.length >= 2) {
-            userPreferencesStore.updateSearchHistory((listOf(trimmed) + preferences.searchHistory).cleanHistory())
+            mediaRepository.addSearchHistory(trimmed)
         }
     }
 
     SearchContent(
         query = query,
         onQueryChanged = { query = it },
-        history = preferences.searchHistory,
-        results = results.toSearchGroups(),
+        history = history,
+        results = results.toSearchGroups(
+            onOpenChannel = onOpenChannel,
+            onOpenMovie = onOpenMovie,
+            onOpenSeries = onOpenSeries,
+            onOpenEpgProgram = onOpenEpgProgram,
+        ),
         debouncedQuery = debouncedQuery,
         autoFocusField = autoFocusField,
         onHistorySelected = { query = it },
         onHistoryDeleted = { term ->
-            scope.launch { userPreferencesStore.updateSearchHistory(preferences.searchHistory.filterNot { it.equals(term, ignoreCase = true) }) }
+            scope.launch { mediaRepository.deleteSearchHistory(term) }
         },
         onClearHistory = {
-            scope.launch { userPreferencesStore.updateSearchHistory(emptyList()) }
+            scope.launch { mediaRepository.clearSearchHistory() }
         },
         onVoiceClick = {},
     )
 }
 
 @Composable
-private fun DemoSearchRoute(autoFocusField: Boolean) {
-    var query by remember { mutableStateOf("dune") }
-    val hasResults = query.equals("dune", ignoreCase = true)
-    val results = if (hasResults) {
-        listOf(
-            SearchGroupData("Kanaele", DemoCatalog.searchResults.channels.map { SearchItem(it, "HD", null, false) }),
-            SearchGroupData("Filme", DemoCatalog.searchResults.movies.map { SearchItem(it.title, "Film", it.rating, true, demoImageFor(it.title)) }),
-            SearchGroupData("Serien", DemoCatalog.searchResults.series.map { SearchItem(it.title, "Serie", it.rating, true, demoImageFor(it.title)) }),
-            SearchGroupData("EPG", DemoCatalog.searchResults.epg.map { SearchItem(it, "Programmtreffer", null, false) }),
+private fun SearchUnavailableState() {
+    VivicastScreen(modifier = Modifier.fillMaxSize()) {
+        InfoPanel(
+            title = "Suche nicht verfuegbar",
+            body = "Die Suche wird angezeigt, sobald lokale Mediendaten geladen sind.",
+            badge = "Leer",
+            modifier = Modifier.fillMaxWidth(),
         )
-    } else {
-        emptyList()
     }
-
-    SearchContent(
-        query = query,
-        onQueryChanged = { query = it },
-        history = listOf("Dune", "ARD", "Tatort"),
-        results = results,
-        debouncedQuery = query,
-        autoFocusField = autoFocusField,
-        onHistorySelected = { query = it },
-        onHistoryDeleted = {},
-        onClearHistory = {},
-        onVoiceClick = { query = "dune" },
-    )
 }
 
 @Composable
@@ -162,10 +159,10 @@ private fun SearchContent(
                     autoFocus = autoFocusField,
                     modifier = Modifier.weight(1f).height(96.dp),
                 )
-                ActionPill("Voice", modifier = Modifier.width(118.dp).height(96.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
+                ActionPill("Mikrofon", modifier = Modifier.width(132.dp).height(96.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
             }
 
-            if (history.isNotEmpty() && debouncedQuery.isBlank()) {
+            if (history.isNotEmpty()) {
                 SearchHistoryRow(
                     history = history,
                     onHistorySelected = onHistorySelected,
@@ -188,7 +185,7 @@ private fun SearchContent(
             } else {
                 InfoPanel(
                     title = "Keine Treffer",
-                    body = "Versuche eine andere Schreibweise, einen kuerzeren Suchbegriff oder Teil des Titels.",
+                    body = "Versuche eine andere Schreibweise, einen kürzeren Suchbegriff oder Teil des Titels.",
                     badge = "Leer",
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -283,6 +280,7 @@ private fun SearchGroup(title: String, rows: List<SearchItem>) {
                 posterLike = item.posterLike,
                 imageResId = item.imageResId,
                 modifier = Modifier.testTag(searchResultTag(title, item.title)),
+                onClick = item.onClick,
             )
         }
     }
@@ -299,18 +297,25 @@ private data class SearchItem(
     val rating: String?,
     val posterLike: Boolean,
     val imageResId: Int? = null,
+    val onClick: () -> Unit = {},
 )
 
-private fun SearchResults.toSearchGroups(): List<SearchGroupData> =
+private fun SearchResults.toSearchGroups(
+    onOpenChannel: (Channel) -> Unit,
+    onOpenMovie: (Movie) -> Unit,
+    onOpenSeries: (Series) -> Unit,
+    onOpenEpgProgram: (EpgProgram) -> Unit,
+): List<SearchGroupData> =
     listOf(
         SearchGroupData(
-            title = "Kanaele",
+            title = "Kanäle",
             rows = channels.map { channel ->
                 SearchItem(
                     title = channel.name,
                     subtitle = channel.channelNumber?.let { "Kanal $it" } ?: "Live-TV",
                     rating = null,
                     posterLike = false,
+                    onClick = { onOpenChannel(channel) },
                 )
             },
         ),
@@ -322,6 +327,7 @@ private fun SearchResults.toSearchGroups(): List<SearchGroupData> =
                     subtitle = movie.year?.let { "Film $it" } ?: "Film",
                     rating = movie.rating,
                     posterLike = true,
+                    onClick = { onOpenMovie(movie) },
                 )
             },
         ),
@@ -333,6 +339,7 @@ private fun SearchResults.toSearchGroups(): List<SearchGroupData> =
                     subtitle = series.year?.let { "Serie $it" } ?: "Serie",
                     rating = series.rating,
                     posterLike = true,
+                    onClick = { onOpenSeries(series) },
                 )
             },
         ),
@@ -344,24 +351,11 @@ private fun SearchResults.toSearchGroups(): List<SearchGroupData> =
                     subtitle = program.subtitle ?: "Programmtreffer",
                     rating = null,
                     posterLike = false,
+                    onClick = { onOpenEpgProgram(program) },
                 )
             },
         ),
     )
-
-private fun List<String>.cleanHistory(): List<String> =
-    asSequence()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinctBy { it.lowercase() }
-        .take(MAX_SEARCH_HISTORY)
-        .toList()
-
-private fun demoImageFor(title: String): Int? = when (title) {
-    "Dune", "Dune: Part Two" -> MediaR.drawable.demo_poster_dune
-    "Dune: Prophecy", "Dune: The Sisterhood" -> MediaR.drawable.demo_poster_prophecy
-    else -> null
-}
 
 internal fun searchFieldPanelTag(): String = "search-field-panel"
 internal fun searchInputTag(): String = "search-input"

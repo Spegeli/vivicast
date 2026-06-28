@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.BasicText
@@ -42,8 +42,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -66,8 +68,6 @@ import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
-import com.vivicast.tv.data.media.DemoCatalog
-import com.vivicast.tv.data.media.DemoSetting
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
@@ -86,16 +86,100 @@ data class GeneralSettingsState(
     val launchOnBoot: Boolean = false,
     val backgroundRefreshEnabled: Boolean = true,
     val rememberSorting: Boolean = true,
+    val startDestination: SettingsStartDestination = SettingsStartDestination.Home,
 )
 
+enum class SettingsStartDestination {
+    Home,
+    LiveTv,
+    Movies,
+    Series,
+}
+
 data class CacheSettingsState(
-    val maxCacheSizeMb: Int = 500,
     val totalSizeBytes: Long = 0L,
     val fileCount: Int = 0,
 )
 
+data class EpgSettingsState(
+    val pastRetentionDays: Int = 1,
+    val futureRetentionDays: Int = 7,
+    val refreshIntervalHours: Int = 24,
+    val refreshOnAppStartEnabled: Boolean = true,
+    val refreshOnPlaylistChangeEnabled: Boolean = true,
+)
+
 data class PlaybackSettingsState(
-    val watchedThresholdPercent: Int = 95,
+    val externalPlayer: PlaybackExternalPlayerMode = PlaybackExternalPlayerMode.Internal,
+    val timeshiftEnabled: Boolean = true,
+    val timeshiftMinutes: Int = 30,
+    val timeshiftStorage: PlaybackTimeshiftStorageMode = PlaybackTimeshiftStorageMode.Automatic,
+    val autoNextEnabled: Boolean = false,
+    val autoNextCountdownSeconds: Int = 10,
+)
+
+data class ParentalControlSettingsState(
+    val hasPin: Boolean = false,
+    val lockedUntilMillis: Long = 0L,
+    val protectSettings: Boolean = false,
+    val protectMovies: Boolean = false,
+    val protectSeries: Boolean = false,
+    val protectAdultContent: Boolean = false,
+)
+
+enum class ParentalProtectionArea {
+    Settings,
+    Movies,
+    Series,
+    AdultContent,
+}
+
+enum class PlaybackExternalPlayerMode {
+    Internal,
+    External,
+    AskEveryTime,
+}
+
+enum class PlaybackTimeshiftStorageMode {
+    Automatic,
+    Ram,
+    InternalStorage,
+}
+
+data class AboutAppState(
+    val appVersion: String = "Unbekannt",
+    val packageName: String = "com.vivicast.tv",
+    val databaseVersion: Int = 0,
+    val androidVersion: String = "Unbekannt",
+    val deviceModel: String = "Unbekannt",
+    val languageTag: String = "Unbekannt",
+    val timeZoneId: String = "Unbekannt",
+    val supportInformationText: String = "",
+)
+
+data class DiagnosticsSettingsState(
+    val diagnosticsLoggingEnabled: Boolean = false,
+    val retentionDays: Int = 1,
+)
+
+enum class HistoryClearTarget {
+    LiveTv,
+    Movies,
+    Series,
+    Search,
+    All,
+}
+
+private val SettingsSections = listOf(
+    "Allgemein",
+    "Wiedergabelisten",
+    "EPG",
+    "Optik",
+    "Wiedergabe",
+    "Kindersicherung",
+    "Speicher & Verlauf",
+    "Backup",
+    "\u00dcber die App",
 )
 
 @Composable
@@ -103,26 +187,39 @@ fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
     generalSettingsState: GeneralSettingsState,
-    cacheSettingsState: CacheSettingsState,
+    epgSettingsState: EpgSettingsState,
     playbackSettingsState: PlaybackSettingsState,
+    parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
+    cacheSettingsState: CacheSettingsState,
+    aboutAppState: AboutAppState,
+    diagnosticsSettingsState: DiagnosticsSettingsState = DiagnosticsSettingsState(),
+    onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
+    onProviderSaved: (String) -> Unit,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onRememberSortingChanged: (Boolean) -> Unit,
-    onWatchedThresholdChanged: (Int) -> Unit,
+    onStartDestinationChanged: (SettingsStartDestination) -> Unit,
+    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
+    onPlaybackPreferencesChanged: (PlaybackSettingsState) -> Unit,
+    onSetPin: (String) -> String? = { null },
+    onChangePin: (String, String) -> String? = { _, _ -> null },
+    onDisablePin: (String) -> String? = { null },
+    onProtectionChanged: (ParentalProtectionArea, Boolean) -> String? = { _, _ -> null },
+    onExportStandardBackup: () -> Unit = {},
+    onImportStandardBackup: () -> Unit = {},
+    onExportEncryptedFullBackup: (String) -> Unit = {},
+    onImportEncryptedFullBackup: (String) -> Unit = {},
+    onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
+    onExportDiagnostics: () -> Unit = {},
+    onCopySupportInformation: () -> Unit = {},
     onRunGlobalRefresh: () -> Unit,
-    onCacheSizeChanged: (Int) -> Unit,
-    onRunLogoRefresh: () -> Unit,
-    onRunCacheCleanup: () -> Unit,
     onClearCache: () -> Unit,
+    onClearHistory: (HistoryClearTarget) -> Unit,
     onReloadCacheStats: () -> Unit,
 ) {
     var selectedSection by remember { mutableStateOf("Allgemein") }
-    var showConfirm by remember { mutableStateOf(false) }
     val detailFocusRequester = remember { FocusRequester() }
-    val settingsSections = remember { DemoCatalog.settingsSections }
-    val maintenanceSection = remember { settingsSections.last() }
-    val sectionsWithDetailFocus = remember(maintenanceSection) {
-        setOf("Allgemein", "Wiedergabelisten", "EPG", "Optik", "Wiedergabe", maintenanceSection)
-    }
+    val settingsSections = remember { SettingsSections }
+    val sectionsWithDetailFocus = remember { SettingsSections.toSet() }
 
     LaunchedEffect(Unit) {
         onReloadCacheStats()
@@ -183,34 +280,60 @@ fun SettingsRoute(
                             state = generalSettingsState,
                             onBackgroundRefreshChanged = onBackgroundRefreshChanged,
                             onRememberSortingChanged = onRememberSortingChanged,
+                            onStartDestinationChanged = onStartDestinationChanged,
                             onRunGlobalRefresh = onRunGlobalRefresh,
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
                         "Wiedergabelisten" -> ProviderSettingsPanel(
                             providerRepository = providerRepository,
+                            onTestProviderConnection = onTestProviderConnection,
+                            onProviderSaved = onProviderSaved,
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
                         "EPG" -> EpgSettingsPanel(
                             providerRepository = providerRepository,
                             epgSourceRepository = epgSourceRepository,
+                            state = epgSettingsState,
+                            onEpgPreferencesChanged = onEpgPreferencesChanged,
+                            onRunGlobalRefresh = onRunGlobalRefresh,
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
-                        "Optik" -> SettingsOptions(
-                            showConfirm = { showConfirm = true },
+                        "Optik" -> AppearanceSettingsPanel(
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
                         "Wiedergabe" -> PlaybackSettingsPanel(
                             state = playbackSettingsState,
-                            onWatchedThresholdChanged = onWatchedThresholdChanged,
+                            onPlaybackPreferencesChanged = onPlaybackPreferencesChanged,
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
-                        maintenanceSection -> MaintenanceSettingsPanel(
+                        "Kindersicherung" -> ParentalControlSettingsPanel(
+                            state = parentalControlSettingsState,
+                            onSetPin = onSetPin,
+                            onChangePin = onChangePin,
+                            onDisablePin = onDisablePin,
+                            onProtectionChanged = onProtectionChanged,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
+                        "Speicher & Verlauf" -> MaintenanceSettingsPanel(
                             cacheSettingsState = cacheSettingsState,
-                            onCacheSizeChanged = onCacheSizeChanged,
-                            onRunLogoRefresh = onRunLogoRefresh,
-                            onRunCacheCleanup = onRunCacheCleanup,
                             onClearCache = onClearCache,
+                            onClearHistory = onClearHistory,
                             onReloadCacheStats = onReloadCacheStats,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
+                        "Backup" -> BackupSettingsPanel(
+                            onExportStandardBackup = onExportStandardBackup,
+                            onImportStandardBackup = onImportStandardBackup,
+                            onExportEncryptedFullBackup = onExportEncryptedFullBackup,
+                            onImportEncryptedFullBackup = onImportEncryptedFullBackup,
+                            firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
+                        )
+                        "\u00dcber die App" -> AboutSettingsPanel(
+                            state = aboutAppState,
+                            diagnosticsSettingsState = diagnosticsSettingsState,
+                            onDiagnosticsSettingsChanged = onDiagnosticsSettingsChanged,
+                            onExportDiagnostics = onExportDiagnostics,
+                            onCopySupportInformation = onCopySupportInformation,
                             firstFocusModifier = Modifier.focusRequester(detailFocusRequester),
                         )
                         else -> InfoPanel(
@@ -224,103 +347,120 @@ fun SettingsRoute(
         }
     }
 
-    if (showConfirm) {
-        Dialog(onDismissRequest = { showConfirm = false }) {
-            GlassPanel(modifier = Modifier.width(560.dp), contentPadding = VivicastSpacing.Space5) {
-                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                    InfoPanel(
-                        title = "Änderung bestätigen",
-                        body = "Diese lokale UI-Aktion speichert keine sensiblen Providerdaten.",
-                        badge = "Lokal",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                        ActionPill("Schließen", modifier = Modifier.width(150.dp), onClick = { showConfirm = false })
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
 fun PlaybackSettingsPanel(
-    state: PlaybackSettingsState,
-    onWatchedThresholdChanged: (Int) -> Unit,
+    state: PlaybackSettingsState = PlaybackSettingsState(),
+    onPlaybackPreferencesChanged: (PlaybackSettingsState) -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    var message by remember { mutableStateOf<String?>(null) }
-    val threshold = state.watchedThresholdPercent.coerceIn(
-        WATCHED_THRESHOLD_MIN_PERCENT,
-        WATCHED_THRESHOLD_MAX_PERCENT,
-    )
-    val updateThreshold = { value: Int ->
-        val next = value.coerceIn(WATCHED_THRESHOLD_MIN_PERCENT, WATCHED_THRESHOLD_MAX_PERCENT)
-        onWatchedThresholdChanged(next)
-        message = "Schwellwert fuer abgeschlossene Wiedergaben aktualisiert."
+    val cycleExternalPlayer = {
+        onPlaybackPreferencesChanged(state.copy(externalPlayer = state.externalPlayer.nextExternalPlayerPreference()))
+    }
+    val toggleTimeshift = {
+        onPlaybackPreferencesChanged(state.copy(timeshiftEnabled = !state.timeshiftEnabled))
+    }
+    val cycleTimeshiftMinutes = {
+        if (state.timeshiftEnabled) {
+            onPlaybackPreferencesChanged(state.copy(timeshiftMinutes = state.timeshiftMinutes.nextTimeshiftMinutes()))
+        }
+    }
+    val cycleTimeshiftStorage = {
+        if (state.timeshiftEnabled) {
+            onPlaybackPreferencesChanged(state.copy(timeshiftStorage = state.timeshiftStorage.nextTimeshiftStorage()))
+        }
+    }
+    val toggleAutoNext = {
+        onPlaybackPreferencesChanged(state.copy(autoNextEnabled = !state.autoNextEnabled))
+    }
+    val cycleCountdown = {
+        if (state.autoNextEnabled) {
+            onPlaybackPreferencesChanged(
+                state.copy(autoNextCountdownSeconds = state.autoNextCountdownSeconds.nextAutoNextCountdown()),
+            )
+        }
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
             InfoPanel(
                 title = "Wiedergabe",
-                body = "Lokale Wiedergabeoptionen fuer Fortschritt, Timeshift und Player-Verhalten.",
+                body = "Lokale Wiedergabeoptionen für Timeshift und Player-Verhalten.",
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
         item {
-            FocusPanel(
-                modifier = firstFocusModifier.fillMaxWidth().height(132.dp),
-                contentPadding = VivicastSpacing.Space4,
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
-                        BasicText("Gesehen ab", style = VivicastTypography.LabelLarge)
-                        BodyText("Markiert Filme und Episoden ab diesem Fortschritt als abgeschlossen.", maxLines = 2)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
-                        ActionPill(
-                            "-5",
-                            modifier = Modifier
-                                .width(82.dp)
-                                .testTag(settingsPlaybackThresholdMinusTag()),
-                            onClick = { updateThreshold(threshold - WATCHED_THRESHOLD_STEP_PERCENT) },
-                        )
-                        BasicText("$threshold %", style = VivicastTypography.LabelLarge)
-                        ActionPill(
-                            "+5",
-                            modifier = Modifier
-                                .width(82.dp)
-                                .testTag(settingsPlaybackThresholdPlusTag()),
-                            onClick = { updateThreshold(threshold + WATCHED_THRESHOLD_STEP_PERCENT) },
-                        )
-                    }
-                }
-            }
+            VivicastSettingsRow(
+                title = "Externer Player",
+                help = "Gilt nur fuer Filme und einzelne Episoden. Live-TV und Catch-Up bleiben intern.",
+                value = state.externalPlayer.label,
+                modifier = firstFocusModifier.onTvCenterClick(cycleExternalPlayer),
+                onClick = cycleExternalPlayer,
+            )
         }
 
         item {
-            InfoPanel(
+            VivicastSettingsRow(
                 title = "Timeshift",
-                body = "Speicherort und maximale Groesse folgen aktuell den gespeicherten ADR-006 Playback-Einstellungen.",
-                badge = "Aktiv",
-                modifier = Modifier.fillMaxWidth(),
+                help = "Erlaubt zeitversetztes Live-TV, sofern Sender und Stream es unterstuetzen.",
+                value = if (state.timeshiftEnabled) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(toggleTimeshift),
+                onClick = toggleTimeshift,
             )
         }
 
-        if (message != null) {
-            item {
-                InfoPanel(
-                    title = "Hinweis",
-                    body = message.orEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        item {
+            VivicastSettingsRow(
+                title = "Maximale Timeshift-Dauer",
+                help = if (state.timeshiftEnabled) {
+                    "Begrenzt den aktiven Timeshift-Puffer."
+                } else {
+                    "Bleibt gespeichert, ist bei deaktiviertem Timeshift nicht bedienbar."
+                },
+                value = "${state.timeshiftMinutes.validTimeshiftMinutes()} Minuten",
+                modifier = if (state.timeshiftEnabled) Modifier.onTvCenterClick(cycleTimeshiftMinutes) else Modifier,
+                onClick = cycleTimeshiftMinutes,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Timeshift-Speicher",
+                help = if (state.timeshiftEnabled) {
+                    "Waehlt den Speicher fuer den aktiven Timeshift-Puffer."
+                } else {
+                    "Bleibt sichtbar, ist bei deaktiviertem Timeshift nicht bedienbar."
+                },
+                value = state.timeshiftStorage.label,
+                modifier = if (state.timeshiftEnabled) Modifier.onTvCenterClick(cycleTimeshiftStorage) else Modifier,
+                onClick = cycleTimeshiftStorage,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Automatisch n\u00e4chste Folge",
+                help = "Gilt f\u00fcr Serienepisoden im internen Player.",
+                value = if (state.autoNextEnabled) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(toggleAutoNext),
+                onClick = toggleAutoNext,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Countdown n\u00e4chste Folge",
+                help = if (state.autoNextEnabled) {
+                    "Legt fest, wann das Auto-Next-Panel erscheint."
+                } else {
+                    "Bleibt gespeichert, ist bei deaktiviertem Auto-Next nicht bedienbar."
+                },
+                value = "${state.autoNextCountdownSeconds.validAutoNextCountdown()} Sekunden",
+                modifier = Modifier.onTvCenterClick(cycleCountdown),
+                onClick = cycleCountdown,
+            )
         }
     }
 }
@@ -330,6 +470,7 @@ private fun GeneralSettingsPanel(
     state: GeneralSettingsState,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onRememberSortingChanged: (Boolean) -> Unit,
+    onStartDestinationChanged: (SettingsStartDestination) -> Unit,
     onRunGlobalRefresh: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
@@ -349,6 +490,10 @@ private fun GeneralSettingsPanel(
     val toggleRememberSorting = {
         onRememberSortingChanged(!state.rememberSorting)
         message = "Sortierverhalten aktualisiert."
+    }
+    val cycleStartDestination = {
+        onStartDestinationChanged(state.startDestination.next())
+        message = "Startbereich gespeichert. Wirkt beim nächsten App-Start."
     }
     val runGlobalRefresh = {
         onRunGlobalRefresh()
@@ -373,6 +518,16 @@ private fun GeneralSettingsPanel(
                 value = if (state.launchOnBoot) "Ein" else "Aus",
                 modifier = Modifier.onTvCenterClick(showBootNotice),
                 onClick = showBootNotice,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Startbereich",
+                help = "Öffnet beim nächsten regulären App-Start diesen Bereich.",
+                value = state.startDestination.label,
+                modifier = Modifier.onTvCenterClick(cycleStartDestination),
+                onClick = cycleStartDestination,
             )
         }
 
@@ -408,6 +563,22 @@ private fun GeneralSettingsPanel(
     }
 }
 
+private val SettingsStartDestination.label: String
+    get() = when (this) {
+        SettingsStartDestination.Home -> "Home"
+        SettingsStartDestination.LiveTv -> "Live-TV"
+        SettingsStartDestination.Movies -> "Filme"
+        SettingsStartDestination.Series -> "Serien"
+    }
+
+private fun SettingsStartDestination.next(): SettingsStartDestination =
+    when (this) {
+        SettingsStartDestination.Home -> SettingsStartDestination.LiveTv
+        SettingsStartDestination.LiveTv -> SettingsStartDestination.Movies
+        SettingsStartDestination.Movies -> SettingsStartDestination.Series
+        SettingsStartDestination.Series -> SettingsStartDestination.Home
+    }
+
 private fun Modifier.onTvCenterClick(action: () -> Unit): Modifier =
     onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -420,10 +591,69 @@ private fun Modifier.onTvCenterClick(action: () -> Unit): Modifier =
         }
     }
 
+private fun Int.validAutoNextCountdown(): Int =
+    when (this) {
+        5, 10, 15, 30 -> this
+        else -> 10
+    }
+
+private fun Int.nextAutoNextCountdown(): Int =
+    when (validAutoNextCountdown()) {
+        5 -> 10
+        10 -> 15
+        15 -> 30
+        else -> 5
+    }
+
+private fun Int.validTimeshiftMinutes(): Int =
+    when (this) {
+        15, 30, 60, 120 -> this
+        else -> 30
+    }
+
+private fun Int.nextTimeshiftMinutes(): Int =
+    when (validTimeshiftMinutes()) {
+        15 -> 30
+        30 -> 60
+        60 -> 120
+        else -> 15
+    }
+
+private val PlaybackExternalPlayerMode.label: String
+    get() = when (this) {
+        PlaybackExternalPlayerMode.Internal -> "Intern"
+        PlaybackExternalPlayerMode.External -> "Extern"
+        PlaybackExternalPlayerMode.AskEveryTime -> "Immer fragen"
+    }
+
+private fun PlaybackExternalPlayerMode.nextExternalPlayerPreference(): PlaybackExternalPlayerMode =
+    when (this) {
+        PlaybackExternalPlayerMode.Internal -> PlaybackExternalPlayerMode.External
+        PlaybackExternalPlayerMode.External -> PlaybackExternalPlayerMode.AskEveryTime
+        PlaybackExternalPlayerMode.AskEveryTime -> PlaybackExternalPlayerMode.Internal
+    }
+
+private val PlaybackTimeshiftStorageMode.label: String
+    get() = when (this) {
+        PlaybackTimeshiftStorageMode.Automatic -> "Automatisch"
+        PlaybackTimeshiftStorageMode.Ram -> "RAM"
+        PlaybackTimeshiftStorageMode.InternalStorage -> "Festplatte"
+    }
+
+private fun PlaybackTimeshiftStorageMode.nextTimeshiftStorage(): PlaybackTimeshiftStorageMode =
+    when (this) {
+        PlaybackTimeshiftStorageMode.Automatic -> PlaybackTimeshiftStorageMode.Ram
+        PlaybackTimeshiftStorageMode.Ram -> PlaybackTimeshiftStorageMode.InternalStorage
+        PlaybackTimeshiftStorageMode.InternalStorage -> PlaybackTimeshiftStorageMode.Automatic
+    }
+
 @Composable
 private fun EpgSettingsPanel(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
+    state: EpgSettingsState,
+    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
+    onRunGlobalRefresh: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
     val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
@@ -455,10 +685,20 @@ private fun EpgSettingsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+        EpgGlobalSettings(
+            preferences = state,
+            onEpgPreferencesChanged = onEpgPreferencesChanged,
+            onRunGlobalRefresh = {
+                onRunGlobalRefresh()
+                message = "EPG Aktualisierung wurde eingeplant."
+            },
+            firstFocusModifier = firstFocusModifier,
+        )
+
         Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
             ActionPill(
                 label = "EPG Quelle hinzufügen",
-                modifier = firstFocusModifier.width(250.dp),
+                modifier = Modifier.width(250.dp),
                 selected = showEditor && !editor.isEditing,
                 onClick = {
                     selectedSourceId = null
@@ -604,6 +844,125 @@ private fun EpgSettingsPanel(
 }
 
 @Composable
+private fun EpgGlobalSettings(
+    preferences: EpgSettingsState,
+    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
+    onRunGlobalRefresh: () -> Unit,
+    firstFocusModifier: Modifier = Modifier,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        AdjustableSettingsRow(
+            title = "Globales EPG-Aktualisierungsintervall",
+            help = "Gilt nur fuer den automatischen Intervall-Refresh.",
+            value = "${preferences.refreshIntervalHours} Stunden",
+            onDecrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(refreshIntervalHours = (preferences.refreshIntervalHours - 1).coerceAtLeast(1)),
+                )
+            },
+            onIncrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(refreshIntervalHours = (preferences.refreshIntervalHours + 1).coerceAtMost(168)),
+                )
+            },
+            modifier = firstFocusModifier,
+        )
+        AdjustableSettingsRow(
+            title = "EPG-Vergangenheit behalten",
+            help = "Cleanup entfernt nur EPG-Programmdaten ausserhalb dieses Fensters.",
+            value = "${preferences.pastRetentionDays} Tag${if (preferences.pastRetentionDays == 1) "" else "e"}",
+            onDecrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(pastRetentionDays = (preferences.pastRetentionDays - 1).coerceAtLeast(1)),
+                )
+            },
+            onIncrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(pastRetentionDays = (preferences.pastRetentionDays + 1).coerceAtMost(14)),
+                )
+            },
+        )
+        AdjustableSettingsRow(
+            title = "EPG-Zukunft laden/behalten",
+            help = "Quellen, Provider-Zuordnungen und manuelle Mappings bleiben erhalten.",
+            value = "${preferences.futureRetentionDays} Tage",
+            onDecrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(futureRetentionDays = (preferences.futureRetentionDays - 1).coerceAtLeast(1)),
+                )
+            },
+            onIncrease = {
+                onEpgPreferencesChanged(
+                    preferences.copy(futureRetentionDays = (preferences.futureRetentionDays + 1).coerceAtMost(14)),
+                )
+            },
+        )
+        VivicastSettingsRow(
+            title = "EPG beim App-Start aktualisieren",
+            help = "Startet nur, wenn Hintergrundaktualisierung erlaubt ist.",
+            value = if (preferences.refreshOnAppStartEnabled) "Ein" else "Aus",
+            onClick = {
+                onEpgPreferencesChanged(
+                    preferences.copy(refreshOnAppStartEnabled = !preferences.refreshOnAppStartEnabled),
+                )
+            },
+        )
+        VivicastSettingsRow(
+            title = "EPG bei Playlist-Aenderung aktualisieren",
+            help = "Separater Ausloeser neben dem Intervall.",
+            value = if (preferences.refreshOnPlaylistChangeEnabled) "Ein" else "Aus",
+            onClick = {
+                onEpgPreferencesChanged(
+                    preferences.copy(refreshOnPlaylistChangeEnabled = !preferences.refreshOnPlaylistChangeEnabled),
+                )
+            },
+        )
+        VivicastSettingsRow(
+            title = "EPG jetzt aktualisieren",
+            help = "Plant eine Aktualisierung nach dem bestehenden Refresh-Plan ein.",
+            value = "Starten",
+            onClick = onRunGlobalRefresh,
+        )
+    }
+}
+
+@Composable
+private fun AdjustableSettingsRow(
+    title: String,
+    help: String,
+    value: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FocusPanel(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(VivicastCardSizes.SettingsRowHeight),
+        contentPadding = VivicastSpacing.Space4,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1),
+                modifier = Modifier.weight(1f),
+            ) {
+                BasicText(title, style = VivicastTypography.LabelLarge)
+                BodyText(help, maxLines = 1)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                ActionPill("-", modifier = Modifier.width(64.dp), onClick = onDecrease)
+                BasicText(value, style = VivicastTypography.LabelLarge)
+                ActionPill("+", modifier = Modifier.width(64.dp), onClick = onIncrease)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ManualEpgMappingPanel(
     providers: List<Provider>,
     sources: List<EpgSource>,
@@ -617,7 +976,7 @@ private fun ManualEpgMappingPanel(
 ) {
     var selectedChannelId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
     var selectedSourceId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
-    var externalChannelId by remember(selectedProviderId) { mutableStateOf("") }
+    var epgChannelId by remember(selectedProviderId) { mutableStateOf("") }
     val channels by (selectedProviderId?.let { repository.observeChannelsForProvider(it) } ?: flowOf(emptyList()))
         .collectAsState(initial = emptyList())
     val mappings by (
@@ -648,7 +1007,7 @@ private fun ManualEpgMappingPanel(
     }
 
     LaunchedEffect(selectedProviderId, selectedChannelId, selectedSourceId, selectedMapping?.epgChannelId) {
-        externalChannelId = selectedMapping?.epgChannelId.orEmpty()
+        epgChannelId = selectedMapping?.epgChannelId.orEmpty()
     }
 
     if (providers.isEmpty()) {
@@ -690,18 +1049,18 @@ private fun ManualEpgMappingPanel(
             selectedChannel = channels.firstOrNull { it.id == selectedChannelId },
             selectedSourceId = selectedSourceId,
             selectedMapping = selectedMapping,
-            externalChannelId = externalChannelId,
+            epgChannelId = epgChannelId,
             message = message,
             onSelectSource = {
                 selectedSourceId = it
                 onMessage(null)
             },
-            onExternalChannelIdChange = { externalChannelId = it },
+            onEpgChannelIdChange = { epgChannelId = it },
             onSave = {
                 val providerId = selectedProviderId
                 val channelId = selectedChannelId
                 val sourceId = selectedSourceId
-                val normalizedExternalId = externalChannelId.trim()
+                val normalizedExternalId = epgChannelId.trim()
                 if (providerId == null || channelId == null || sourceId == null || normalizedExternalId.isBlank()) {
                     onMessage("Provider, Sender, EPG Quelle und externe Kanal-ID muessen ausgewaehlt sein.")
                     return@ManualMappingDetail
@@ -734,7 +1093,7 @@ private fun ManualEpgMappingPanel(
                 scope.launch {
                     runCatching { repository.clearManualChannelMapping(providerId, channelId, sourceId) }
                         .onSuccess {
-                            externalChannelId = ""
+                            epgChannelId = ""
                             onMessage("Manuelle Zuordnung entfernt. Automatische Zuordnung kann beim naechsten Import greifen.")
                         }
                         .onFailure { error ->
@@ -842,10 +1201,10 @@ private fun ManualMappingDetail(
     selectedChannel: Channel?,
     selectedSourceId: String?,
     selectedMapping: EpgChannelMapping?,
-    externalChannelId: String,
+    epgChannelId: String,
     message: String?,
     onSelectSource: (String) -> Unit,
-    onExternalChannelIdChange: (String) -> Unit,
+    onEpgChannelIdChange: (String) -> Unit,
     onSave: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
@@ -920,9 +1279,9 @@ private fun ManualMappingDetail(
         item {
             ProviderTextField(
                 label = "Externe EPG-Kanal-ID",
-                value = externalChannelId,
+                value = epgChannelId,
                 placeholder = "z.B. ard.de",
-                onValueChange = onExternalChannelIdChange,
+                onValueChange = onEpgChannelIdChange,
             )
         }
 
@@ -1264,6 +1623,8 @@ fun DeleteEpgSourceDialog(
 @Composable
 private fun ProviderSettingsPanel(
     providerRepository: ProviderRepository,
+    onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
+    onProviderSaved: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
@@ -1330,11 +1691,38 @@ private fun ProviderSettingsPanel(
             if (showEditor) {
                 ProviderEditor(
                     editor = editor,
-                duplicateName = duplicateName,
-                message = message,
-                onEditorChange = { editor = it },
-                onSave = {
-                    val validationMessage = editor.validationMessage()
+                    duplicateName = duplicateName,
+                    message = message,
+                    onEditorChange = {
+                        editor = it
+                        message = null
+                    },
+                    onTestConnection = {
+                        val validationMessage = editor.connectionTestRequestMessage()
+                        when {
+                            duplicateName -> message = "Name existiert bereits."
+                            validationMessage != null -> message = validationMessage
+                            else -> {
+                                message = "Verbindung wird gepr\u00fcft."
+                                scope.launch {
+                                    val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
+                                    if (errorMessage == null) {
+                                        editor = editor.copy(connectionTestPassed = true)
+                                        message = "Verbindung erfolgreich."
+                                    } else {
+                                        editor = editor.copy(connectionTestPassed = false)
+                                        message = errorMessage
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onSave = {
+                    if (duplicateName) {
+                        message = "Name existiert bereits."
+                        return@ProviderEditor
+                    }
+                    val validationMessage = editor.validationMessage(requireConnectionTest = true)
                     if (validationMessage != null) {
                         message = validationMessage
                         return@ProviderEditor
@@ -1349,36 +1737,33 @@ private fun ProviderSettingsPanel(
                         }.onSuccess { result ->
                             selectedProviderId = result.provider.id
                             editor = ProviderEditorState.from(result.provider)
-                            message = if (result.hasDuplicateName) {
-                                "Provider gespeichert. Provider existiert bereits."
-                            } else {
-                                "Provider gespeichert. Zugangsdaten bleiben verborgen."
-                            }
+                            onProviderSaved(result.provider.id)
+                            message = "Wiedergabeliste gespeichert. Import wurde gestartet."
                         }.onFailure { error ->
                             message = "Speichern fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}"
                         }
                     }
-                },
-                onToggleEnabled = {
+                    },
+                    onToggleEnabled = {
                     val provider = providers.firstOrNull { it.id == editor.providerId } ?: return@ProviderEditor
                     scope.launch {
                         val enabled = !provider.isActive
                         runCatching { providerRepository.setProviderEnabled(provider.id, enabled) }
                             .onSuccess {
-                                message = if (enabled) "Provider aktiviert." else "Provider deaktiviert. Daten bleiben erhalten."
+                                message = if (enabled) "Wiedergabeliste aktiviert." else "Wiedergabeliste deaktiviert. Daten bleiben erhalten."
                             }
                             .onFailure { error -> message = "Statusänderung fehlgeschlagen: ${error.message ?: "unbekannter Fehler"}" }
                     }
-                },
-                onDelete = {
+                    },
+                    onDelete = {
                     pendingDelete = providers.firstOrNull { it.id == editor.providerId }
-                },
-                modifier = Modifier.weight(0.58f).fillMaxHeight(),
-            )
+                    },
+                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                )
             } else {
                 InfoPanel(
-                    title = "Provider Verwaltung",
-                    body = message ?: "Provider werden lokal konfiguriert. Zugangsdaten bleiben außerhalb der Datenbank gespeichert.",
+                    title = "Wiedergabelisten",
+                    body = message ?: "Wiedergabelisten werden lokal konfiguriert. Zugangsdaten bleiben außerhalb der Datenbank gespeichert.",
                     badge = "Sicher",
                     modifier = Modifier.weight(0.58f).fillMaxHeight(),
                 )
@@ -1398,7 +1783,7 @@ private fun ProviderSettingsPanel(
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
                             showEditor = false
-                            message = "Provider gelöscht. Providerbezogene Daten wurden entfernt."
+                            message = "Wiedergabeliste gelöscht. Zugehörige Daten wurden entfernt."
                         }
                         .onFailure { error ->
                             pendingDelete = null
@@ -1419,8 +1804,8 @@ private fun ProviderList(
 ) {
     if (providers.isEmpty()) {
         InfoPanel(
-            title = "Keine Provider",
-            body = "Noch keine lokale Konfiguration. Es wird nichts importiert.",
+            title = "Keine Wiedergabelisten",
+            body = "Noch keine Wiedergabeliste vorhanden. Es wird nichts importiert.",
             modifier = modifier,
         )
         return
@@ -1473,6 +1858,7 @@ private fun ProviderEditor(
     duplicateName: Boolean,
     message: String?,
     onEditorChange: (ProviderEditorState) -> Unit,
+    onTestConnection: () -> Unit,
     onSave: () -> Unit,
     onToggleEnabled: () -> Unit,
     onDelete: () -> Unit,
@@ -1484,11 +1870,11 @@ private fun ProviderEditor(
     ) {
         item {
             InfoPanel(
-                title = if (editor.isEditing) "Bearbeiten" else "Provider",
+                title = if (editor.isEditing) "Bearbeiten" else "Wiedergabeliste",
                 body = if (editor.isEditing) {
                     "Typ und ID bleiben stabil."
                 } else {
-                    "Verschlüsselt speichern. Kein Import."
+                    "Zugangsdaten werden geschützt gespeichert. Kein eigener User-Agent."
                 },
                 badge = editor.type.label,
                 modifier = Modifier.fillMaxWidth(),
@@ -1498,8 +1884,8 @@ private fun ProviderEditor(
         if (duplicateName) {
             item {
                 InfoPanel(
-                    title = "Provider existiert bereits.",
-                    body = "Der Name ist bereits lokal vorhanden. Speichern bleibt erlaubt.",
+                    title = "Name existiert bereits.",
+                    body = "Der Name ist bereits lokal vorhanden. Speichern ist blockiert.",
                     badge = "Warnung",
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1510,7 +1896,7 @@ private fun ProviderEditor(
             ProviderTextField(
                 label = "Name",
                 value = editor.name,
-                placeholder = "Provider Name",
+                placeholder = "Name der Wiedergabeliste",
                 onValueChange = { onEditorChange(editor.copy(name = it)) },
             )
         }
@@ -1541,7 +1927,7 @@ private fun ProviderEditor(
                         label = "M3U URL",
                         value = editor.m3uUrl,
                         placeholder = if (editor.isEditing) "Neu setzen oder leer lassen" else "https://...",
-                        onValueChange = { onEditorChange(editor.copy(m3uUrl = it)) },
+                        onValueChange = { onEditorChange(editor.copy(m3uUrl = it, connectionTestPassed = false)) },
                         secret = editor.isEditing,
                     )
                 }
@@ -1553,7 +1939,7 @@ private fun ProviderEditor(
                         label = "Server",
                         value = editor.xtreamServerUrl,
                         placeholder = if (editor.isEditing) "Neu setzen oder leer lassen" else "https://server.example",
-                        onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it)) },
+                        onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it, connectionTestPassed = false)) },
                         secret = editor.isEditing,
                     )
                 }
@@ -1562,7 +1948,7 @@ private fun ProviderEditor(
                         label = "Benutzername",
                         value = editor.xtreamUsername,
                         placeholder = if (editor.isEditing) "Neu setzen oder leer lassen" else "Benutzername",
-                        onValueChange = { onEditorChange(editor.copy(xtreamUsername = it)) },
+                        onValueChange = { onEditorChange(editor.copy(xtreamUsername = it, connectionTestPassed = false)) },
                         secret = editor.isEditing,
                     )
                 }
@@ -1571,35 +1957,37 @@ private fun ProviderEditor(
                         label = "Passwort",
                         value = editor.xtreamPassword,
                         placeholder = if (editor.isEditing) "Neu setzen oder leer lassen" else "Passwort",
-                        onValueChange = { onEditorChange(editor.copy(xtreamPassword = it)) },
+                        onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
                         secret = true,
                     )
                 }
             }
         }
 
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                BodyText("Inhalte", maxLines = 1)
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                    ActionPill(
-                        label = "Live-TV",
-                        modifier = Modifier.width(132.dp),
-                        selected = editor.includeLiveTv,
-                        onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv)) },
-                    )
-                    ActionPill(
-                        label = "Filme",
-                        modifier = Modifier.width(118.dp),
-                        selected = editor.includeMovies,
-                        onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies)) },
-                    )
-                    ActionPill(
-                        label = "Serien",
-                        modifier = Modifier.width(118.dp),
-                        selected = editor.includeSeries,
-                        onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries)) },
-                    )
+        if (editor.type == ProviderType.Xtream) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                    BodyText("Inhalte", maxLines = 1)
+                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                        ActionPill(
+                            label = "Live-TV",
+                            modifier = Modifier.width(132.dp),
+                            selected = editor.includeLiveTv,
+                            onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv)) },
+                        )
+                        ActionPill(
+                            label = "Filme",
+                            modifier = Modifier.width(118.dp),
+                            selected = editor.includeMovies,
+                            onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies)) },
+                        )
+                        ActionPill(
+                            label = "Serien",
+                            modifier = Modifier.width(118.dp),
+                            selected = editor.includeSeries,
+                            onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries)) },
+                        )
+                    }
                 }
             }
         }
@@ -1643,6 +2031,12 @@ private fun ProviderEditor(
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                ActionPill(
+                    label = "Verbindung testen",
+                    modifier = Modifier.width(210.dp),
+                    selected = editor.connectionTestPassed,
+                    onClick = onTestConnection,
+                )
                 ActionPill(label = "Speichern", modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
                 if (editor.isEditing) {
                     ActionPill(label = "Aktiv/Aus", modifier = Modifier.width(150.dp), onClick = onToggleEnabled)
@@ -1733,8 +2127,8 @@ fun DeleteProviderDialog(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                 InfoPanel(
-                    title = "Provider wirklich löschen?",
-                    body = "Diese Aktion kann nicht rückgängig gemacht werden. Providerbezogene Sender, Kategorien, Favoriten, Verlauf, Playback Progress und EPG-Zuordnungen werden gelöscht. EPG-Quellen bleiben erhalten.",
+                    title = "Wiedergabeliste wirklich löschen?",
+                    body = "Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Sender, Kategorien, Favoriten, Verlauf, Playback Progress und EPG-Zuordnungen werden gelöscht. EPG-Quellen bleiben erhalten.",
                     badge = provider.name,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1762,45 +2156,616 @@ fun DeleteProviderDialog(
 }
 
 @Composable
-private fun SettingsOptions(
-    showConfirm: () -> Unit,
+private fun AppearanceSettingsPanel(
     firstFocusModifier: Modifier = Modifier,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-        itemsIndexed(DemoCatalog.settings) { index, setting ->
-            SettingRow(
-                setting = setting,
-                modifier = if (index == 0) firstFocusModifier else Modifier,
+        item {
+            VivicastSettingsRow(
+                title = "Hintergrundthema",
+                help = "TV-taugliche dunkle Darstellung.",
+                value = "Standard dunkel",
+                modifier = firstFocusModifier,
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                ActionPill("Änderung prüfen", modifier = Modifier.width(210.dp), onClick = showConfirm)
+            VivicastSettingsRow(title = "Akzentfarbe", help = "Fokus- und Warnkontrast bleiben verbindlich.", value = "Vivicast Blau")
+        }
+        item {
+            VivicastSettingsRow(title = "Transparenz", help = "Panel- und Overlay-Lesbarkeit bleibt begrenzt.", value = "25 %")
+        }
+        item {
+            VivicastSettingsRow(title = "Schriftgröße", help = "Größere Stufen werden später über das Designsystem verdrahtet.", value = "Mittel")
+        }
+        item {
+            VivicastSettingsRow(title = "Animationen", help = "Fokuswechsel bleiben vorhersehbar.", value = "Normal")
+        }
+        item {
+            VivicastSettingsRow(title = "Globale Logo-Standardreihenfolge", help = "Provider können später abweichen.", value = "Playlist")
+        }
+        item {
+            VivicastSettingsRow(title = "Logos-Ordner", help = "Lokale Logo-Ordnerauswahl ist noch nicht aktiviert.", value = "Nicht gesetzt")
+        }
+        item {
+            VivicastSettingsRow(title = "EPG-Darstellung", help = "Detail-Toggles werden mit dem Live-TV-EPG umgesetzt.", value = "Öffnen")
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderSettingsPanel(
+    title: String,
+    body: String,
+    firstFocusModifier: Modifier = Modifier,
+) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(title = title, body = body, modifier = firstFocusModifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+fun ParentalControlSettingsPanel(
+    state: ParentalControlSettingsState,
+    onSetPin: (String) -> String?,
+    onChangePin: (String, String) -> String?,
+    onDisablePin: (String) -> String?,
+    onProtectionChanged: (ParentalProtectionArea, Boolean) -> String? = { _, _ -> null },
+    firstFocusModifier: Modifier = Modifier,
+) {
+    var dialog by remember { mutableStateOf<PinDialogMode?>(null) }
+    var inlineError by remember { mutableStateOf<String?>(null) }
+
+    fun changeProtection(area: ParentalProtectionArea, enabled: Boolean) {
+        inlineError = if (state.hasPin) {
+            onProtectionChanged(area, enabled)
+        } else {
+            "PIN zuerst setzen."
+        }
+    }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(
+                title = "Kindersicherung",
+                body = if (state.hasPin) {
+                    "PIN ist eingerichtet. Schutzbereiche können aktiviert werden."
+                } else {
+                    "PIN ist nicht gesetzt. Schutzbereiche können erst danach aktiviert werden."
+                },
+                modifier = firstFocusModifier.fillMaxWidth(),
+            )
+        }
+        inlineError?.let { message ->
+            item {
+                InfoPanel(
+                    title = "Hinweis",
+                    body = message,
+                )
+            }
+        }
+        item {
+            VivicastSettingsRow(
+                title = if (state.hasPin) "PIN ändern" else "PIN setzen",
+                help = "Vier Ziffern, verdeckte Eingabe über die Systemtastatur.",
+                value = if (state.hasPin) "Ändern" else "Setzen",
+                onClick = { dialog = if (state.hasPin) PinDialogMode.Change else PinDialogMode.Set },
+            )
+        }
+        if (state.hasPin) {
+            item {
+                VivicastSettingsRow(
+                    title = "Kindersicherung deaktivieren",
+                    help = "Erfordert aktuelle PIN und Bestätigung.",
+                    value = "Deaktivieren",
+                    onClick = { dialog = PinDialogMode.Disable },
+                )
+            }
+        }
+        protectionAreaItem(
+            title = "Einstellungen schützen",
+            help = "Schützt sensible Einstellungen mit PIN.",
+            enabled = state.protectSettings,
+            onClick = { changeProtection(ParentalProtectionArea.Settings, !state.protectSettings) },
+            hasPin = state.hasPin,
+        )
+        protectionAreaItem(
+            title = "Filme schützen",
+            help = "Öffnet Filme erst nach PIN-Freigabe.",
+            enabled = state.protectMovies,
+            onClick = { changeProtection(ParentalProtectionArea.Movies, !state.protectMovies) },
+            hasPin = state.hasPin,
+        )
+        protectionAreaItem(
+            title = "Serien schützen",
+            help = "Öffnet Serien erst nach PIN-Freigabe.",
+            enabled = state.protectSeries,
+            onClick = { changeProtection(ParentalProtectionArea.Series, !state.protectSeries) },
+            hasPin = state.hasPin,
+        )
+        protectionAreaItem(
+            title = "Inhalte ab 18 schützen",
+            help = "Blendet geschützte Erwachseneninhalte ohne Freigabe aus.",
+            enabled = state.protectAdultContent,
+            onClick = { changeProtection(ParentalProtectionArea.AdultContent, !state.protectAdultContent) },
+            hasPin = state.hasPin,
+        )
+        item {
+            VivicastSettingsRow(
+                title = "Sitzungsfreigabe sperren",
+                help = "Aktive Freigaben bleiben im Speicher und werden nicht gesichert.",
+                value = "Keine Freigabe",
+            )
+        }
+    }
+
+    dialog?.let { mode ->
+        PinDialog(
+            mode = mode,
+            onCancel = { dialog = null },
+            onConfirm = { currentPin, newPin ->
+                val error = when (mode) {
+                    PinDialogMode.Set -> onSetPin(newPin)
+                    PinDialogMode.Change -> onChangePin(currentPin, newPin)
+                    PinDialogMode.Disable -> onDisablePin(currentPin)
+                }
+                if (error == null) {
+                    dialog = null
+                }
+                error
+            },
+        )
+    }
+}
+
+private fun LazyListScope.protectionAreaItem(
+    title: String,
+    help: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    hasPin: Boolean,
+) {
+    item {
+        VivicastSettingsRow(
+            title = title,
+            help = help,
+            value = if (!hasPin) {
+                "PIN erforderlich"
+            } else if (enabled) {
+                "Ein"
+            } else {
+                "Aus"
+            },
+            onClick = onClick,
+        )
+    }
+}
+
+private enum class PinDialogMode { Set, Change, Disable }
+
+@Composable
+private fun PinDialog(
+    mode: PinDialogMode,
+    onCancel: () -> Unit,
+    onConfirm: (currentPin: String, newPin: String) -> String?,
+) {
+    val firstFocusRequester = remember { FocusRequester() }
+    var currentPin by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var repeatPin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val title = when (mode) {
+        PinDialogMode.Set -> "PIN setzen"
+        PinDialogMode.Change -> "PIN ändern"
+        PinDialogMode.Disable -> "Kindersicherung deaktivieren"
+    }
+
+    LaunchedEffect(Unit) {
+        firstFocusRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onCancel) {
+        GlassPanel(
+            modifier = Modifier
+                .widthIn(min = 560.dp, max = 680.dp)
+                .testTag(pinDialogTag()),
+            contentPadding = VivicastSpacing.Space5,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                SectionTitle(title)
+                if (mode != PinDialogMode.Set) {
+                    PinTextField(
+                        label = "Aktuelle PIN",
+                        value = currentPin,
+                        onValueChange = { currentPin = it.pinInput() },
+                        modifier = Modifier
+                            .focusRequester(firstFocusRequester)
+                            .testTag(pinCurrentFieldTag()),
+                    )
+                }
+                if (mode != PinDialogMode.Disable) {
+                    PinTextField(
+                        label = "Neue PIN",
+                        value = newPin,
+                        onValueChange = { newPin = it.pinInput() },
+                        modifier = Modifier
+                            .then(if (mode == PinDialogMode.Set) Modifier.focusRequester(firstFocusRequester) else Modifier)
+                            .testTag(pinNewFieldTag()),
+                    )
+                    PinTextField(
+                        label = "Neue PIN wiederholen",
+                        value = repeatPin,
+                        onValueChange = { repeatPin = it.pinInput() },
+                        modifier = Modifier.testTag(pinRepeatFieldTag()),
+                    )
+                }
+                error?.let { BodyText(it, color = VivicastColors.Error, maxLines = 2) }
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                    ActionPill(
+                        label = "Abbrechen",
+                        modifier = Modifier.testTag(pinCancelTag()),
+                        onClick = onCancel,
+                    )
+                    ActionPill(
+                        label = when (mode) {
+                            PinDialogMode.Set -> "Speichern"
+                            PinDialogMode.Change -> "Speichern"
+                            PinDialogMode.Disable -> "Deaktivieren"
+                        },
+                        selected = mode == PinDialogMode.Disable,
+                        modifier = Modifier.testTag(pinConfirmTag()),
+                        onClick = {
+                            error = validatePinDialog(mode, currentPin, newPin, repeatPin)
+                                ?: onConfirm(currentPin, newPin)
+                        },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SettingRow(
-    setting: DemoSetting,
+private fun PinTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    VivicastSettingsRow(title = setting.title, help = setting.help, value = setting.value, modifier = modifier)
+    var focused by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+        BasicText(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextSecondary),
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
+                .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
+                .border(
+                    width = if (focused) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                    color = if (focused) VivicastColors.FocusRing else Color(0x66344A62),
+                    shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
+                )
+                .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        BasicText(
+                            text = "4 Ziffern",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+        )
+    }
+}
+
+private fun validatePinDialog(
+    mode: PinDialogMode,
+    currentPin: String,
+    newPin: String,
+    repeatPin: String,
+): String? {
+    if (mode != PinDialogMode.Set && currentPin.length != PIN_LENGTH) {
+        return "Aktuelle PIN vollständig eingeben."
+    }
+    if (mode != PinDialogMode.Disable && newPin.length != PIN_LENGTH) {
+        return "Neue PIN muss vier Ziffern haben."
+    }
+    if (mode != PinDialogMode.Disable && newPin != repeatPin) {
+        return "Neue PIN stimmt nicht überein."
+    }
+    return null
+}
+
+private fun String.pinInput(): String =
+    filter(Char::isDigit).take(PIN_LENGTH)
+
+fun pinDialogTag(): String = "pin-dialog"
+fun pinCurrentFieldTag(): String = "pin-current"
+fun pinNewFieldTag(): String = "pin-new"
+fun pinRepeatFieldTag(): String = "pin-repeat"
+fun pinCancelTag(): String = "pin-cancel"
+fun pinConfirmTag(): String = "pin-confirm"
+
+private const val PIN_LENGTH = 4
+
+@Composable
+internal fun BackupSettingsPanel(
+    onExportStandardBackup: () -> Unit = {},
+    onImportStandardBackup: () -> Unit = {},
+    onExportEncryptedFullBackup: (String) -> Unit = {},
+    onImportEncryptedFullBackup: (String) -> Unit = {},
+    firstFocusModifier: Modifier = Modifier,
+) {
+    var pendingFullAction by remember { mutableStateOf<BackupFullAction?>(null) }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            InfoPanel(
+                title = "Backup",
+                body = "Standard-Backup speichert keine Zugangsdaten. Verschlüsselte Vollbackups enthalten Zugangsdaten nur mit Backup-Passphrase.",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Backup exportieren",
+                help = "Standard-Backup ohne geheime Zugangswerte.",
+                value = "Auswählen",
+                onClick = onExportStandardBackup,
+                modifier = firstFocusModifier,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Backup importieren",
+                help = "Restore ersetzt den Backup-Umfang nach Validierung und Bestätigung.",
+                value = "Auswählen",
+                onClick = onImportStandardBackup,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Vollbackup exportieren",
+                help = "Verschlüsselt mit Backup-Passphrase und enthält Quellen-Zugangsdaten.",
+                value = "Passphrase",
+                onClick = { pendingFullAction = BackupFullAction.Export },
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Vollbackup importieren",
+                help = "Restore erfordert die Backup-Passphrase und ersetzt den Backup-Umfang.",
+                value = "Passphrase",
+                onClick = { pendingFullAction = BackupFullAction.Import },
+            )
+        }
+        item {
+            VivicastSettingsRow(title = "Backup-Ziel", help = "SMB und Google Drive speichern keine Zugangswerte im Standard-Backup.", value = "Lokaler Speicher")
+        }
+        item {
+            VivicastSettingsRow(title = "Vorhandene Backups", help = "Verwaltung und Loeschen brauchen spaeter eine Bestaetigung.", value = "Vorbereitet")
+        }
+    }
+
+    pendingFullAction?.let { action ->
+        FullBackupPassphraseDialog(
+            action = action,
+            onCancel = { pendingFullAction = null },
+            onConfirm = { passphrase ->
+                pendingFullAction = null
+                when (action) {
+                    BackupFullAction.Export -> onExportEncryptedFullBackup(passphrase)
+                    BackupFullAction.Import -> onImportEncryptedFullBackup(passphrase)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun FullBackupPassphraseDialog(
+    action: BackupFullAction,
+    onCancel: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = onCancel) {
+        GlassPanel(
+            modifier = Modifier.fillMaxWidth().testTag(fullBackupPassphraseDialogTag()),
+            contentPadding = VivicastSpacing.Space5,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                InfoPanel(
+                    title = action.title,
+                    body = error ?: "Backup-Passphrase eingeben. Sie wird nicht gespeichert und schützt enthaltene Zugangsdaten.",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                BasicTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth().testTag(fullBackupPassphraseFieldTag()),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp).testTag(fullBackupPassphraseCancelTag()), onClick = onCancel)
+                    ActionPill(action.confirmLabel, modifier = Modifier.width(180.dp).testTag(fullBackupPassphraseConfirmTag()), selected = true) {
+                        val value = passphrase.trim()
+                        if (value.isBlank()) {
+                            error = "Passphrase fehlt."
+                        } else {
+                            onConfirm(value)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class BackupFullAction(
+    val title: String,
+    val confirmLabel: String,
+) {
+    Export("Vollbackup exportieren", "Exportieren"),
+    Import("Vollbackup importieren", "Importieren"),
+}
+
+fun fullBackupPassphraseDialogTag(): String = "full-backup-passphrase-dialog"
+fun fullBackupPassphraseFieldTag(): String = "full-backup-passphrase-field"
+fun fullBackupPassphraseCancelTag(): String = "full-backup-passphrase-cancel"
+fun fullBackupPassphraseConfirmTag(): String = "full-backup-passphrase-confirm"
+
+@Composable
+private fun AboutSettingsPanel(
+    state: AboutAppState,
+    diagnosticsSettingsState: DiagnosticsSettingsState,
+    onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
+    onExportDiagnostics: () -> Unit,
+    onCopySupportInformation: () -> Unit,
+    firstFocusModifier: Modifier = Modifier,
+) {
+    val toggleDiagnostics = {
+        onDiagnosticsSettingsChanged(
+            diagnosticsSettingsState.copy(
+                diagnosticsLoggingEnabled = !diagnosticsSettingsState.diagnosticsLoggingEnabled,
+            ),
+        )
+    }
+    val decreaseRetention = {
+        if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
+            onDiagnosticsSettingsChanged(
+                diagnosticsSettingsState.copy(retentionDays = (diagnosticsSettingsState.retentionDays - 1).coerceAtLeast(1)),
+            )
+        }
+    }
+    val increaseRetention = {
+        if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
+            onDiagnosticsSettingsChanged(
+                diagnosticsSettingsState.copy(retentionDays = (diagnosticsSettingsState.retentionDays + 1).coerceAtMost(7)),
+            )
+        }
+    }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        item {
+            VivicastSettingsRow(
+                title = "App-Informationen",
+                help = "App-Version, Paketname, Datenbank-Version und Gerätedaten.",
+                value = "Öffnen",
+                modifier = firstFocusModifier,
+            )
+        }
+        item {
+            VivicastSettingsRow(title = "Versionsinformationen kopieren", help = "Kopiert nur nicht-private technische Informationen.", value = "Kopieren")
+        }
+        item {
+            VivicastSettingsRow(title = "App-Version", help = "Installierte App-Version.", value = state.appVersion)
+        }
+        item {
+            VivicastSettingsRow(title = "Paketname", help = "Android Application ID.", value = state.packageName)
+        }
+        item {
+            VivicastSettingsRow(title = "Datenbank-Version", help = "Lokales Room-Schema.", value = state.databaseVersion.toString())
+        }
+        item {
+            VivicastSettingsRow(title = "Android-Version", help = "Systemversion des Geraets.", value = state.androidVersion)
+        }
+        item {
+            VivicastSettingsRow(title = "Geraetemodell", help = "Nicht-private technische Supportinformation.", value = state.deviceModel)
+        }
+        item {
+            InfoPanel(
+                title = "Diagnose und Support",
+                body = "Allgemeine Supportdaten duerfen kopiert werden. Loginhalt wird nicht angezeigt und nicht kopiert.",
+                badge = "Support",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Diagnoseprotokollierung",
+                help = "Schreibt nur bereinigte technische Ereignisse in privaten App-Speicher.",
+                value = if (diagnosticsSettingsState.diagnosticsLoggingEnabled) "Ein" else "Aus",
+                modifier = Modifier.onTvCenterClick(toggleDiagnostics),
+                onClick = toggleDiagnostics,
+            )
+        }
+        item {
+            AdjustableSettingsRow(
+                title = "Aufbewahrungsdauer",
+                help = if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
+                    "Begrenzt interne Diagnosesitzungen auf 1 bis 7 Tage."
+                } else {
+                    "Bleibt sichtbar, ist bei ausgeschalteter Diagnoseprotokollierung nicht aenderbar."
+                },
+                value = "${diagnosticsSettingsState.retentionDays.coerceIn(1, 7)} Tag${if (diagnosticsSettingsState.retentionDays == 1) "" else "e"}",
+                onDecrease = decreaseRetention,
+                onIncrease = increaseRetention,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Diagnoseprotokoll exportieren",
+                help = "Erstellt ein ZIP mit vivicast-diagnostics.log und diagnostics-metadata.json.",
+                value = "Exportieren",
+                modifier = Modifier.onTvCenterClick(onExportDiagnostics),
+                onClick = onExportDiagnostics,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = "Support-Informationen kopieren",
+                help = "Kopiert nur die sichtbaren nicht-privaten technischen Informationen.",
+                value = "Kopieren",
+                modifier = Modifier.onTvCenterClick(onCopySupportInformation),
+                onClick = onCopySupportInformation,
+            )
+        }
+        item {
+            VivicastSettingsRow(title = "Lizenzhinweise", help = "Lokale rechtliche Hinweise.", value = "Öffnen")
+        }
+        item {
+            VivicastSettingsRow(title = "Datenschutzinformationen", help = "Lokale Datenschutzinformationen.", value = "Öffnen")
+        }
+        item {
+            VivicastSettingsRow(title = "Drittanbieter-Lizenzen", help = "Per D-Pad lesbare Lizenzliste.", value = "Öffnen")
+        }
+    }
 }
 
 @Composable
 private fun MaintenanceSettingsPanel(
     cacheSettingsState: CacheSettingsState,
-    onCacheSizeChanged: (Int) -> Unit,
-    onRunLogoRefresh: () -> Unit,
-    onRunCacheCleanup: () -> Unit,
     onClearCache: () -> Unit,
+    onClearHistory: (HistoryClearTarget) -> Unit,
     onReloadCacheStats: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
     var message by remember { mutableStateOf<String?>(null) }
-    val cacheOptions = listOf(250, 500, 1024, 2048, 0)
+    var pendingAction by remember { mutableStateOf<MaintenanceAction?>(null) }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
@@ -1816,59 +2781,11 @@ private fun MaintenanceSettingsPanel(
             VivicastSettingsRow(
                 title = "Cache Informationen",
                 help = "${cacheSettingsState.fileCount} Dateien im lokalen Mediencache.",
-                value = "${formatCacheSize(cacheSettingsState.totalSizeBytes)} / ${formatCacheLimit(cacheSettingsState.maxCacheSizeMb)}",
+                value = formatCacheSize(cacheSettingsState.totalSizeBytes),
                 modifier = firstFocusModifier,
                 onClick = {
                     onReloadCacheStats()
                     message = "Cache Informationen wurden aktualisiert."
-                },
-            )
-        }
-
-        item {
-            FocusPanel(
-                modifier = Modifier.fillMaxWidth().height(128.dp),
-                contentPadding = VivicastSpacing.Space4,
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                    BasicText("Cache Größe", style = VivicastTypography.LabelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
-                        cacheOptions.forEach { sizeMb ->
-                            ActionPill(
-                                label = formatCacheLimit(sizeMb),
-                                modifier = Modifier.width(if (sizeMb == 0) 150.dp else 112.dp),
-                                selected = cacheSettingsState.maxCacheSizeMb == sizeMb,
-                                onClick = {
-                                    onCacheSizeChanged(sizeMb)
-                                    message = "Cache-Größe wurde aktualisiert."
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            VivicastSettingsRow(
-                title = "Medienbilder neu aufbauen",
-                help = "Senderlogos, Poster, Backdrops und Episodenbilder werden über den bestehenden Refresh-Worker aktualisiert.",
-                value = "Einplanen",
-                onClick = {
-                    onRunLogoRefresh()
-                    message = "Medienbild-Neuaufbau wurde eingeplant."
-                },
-            )
-        }
-
-        item {
-            VivicastSettingsRow(
-                title = "Cache Cleanup",
-                help = "Entfernt alte Dateien, bis das konfigurierte Größenlimit eingehalten wird.",
-                value = "Einplanen",
-                onClick = {
-                    onRunCacheCleanup()
-                    message = "Cache Cleanup wurde eingeplant."
                 },
             )
         }
@@ -1879,8 +2796,29 @@ private fun MaintenanceSettingsPanel(
                 help = "Entfernt lokal gespeicherte Medienbilder. Providerdaten bleiben erhalten.",
                 value = "Ausführen",
                 onClick = {
-                    onClearCache()
-                    message = "Cache wurde geleert."
+                    pendingAction = MaintenanceAction.ClearCache
+                },
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = "Verlauf l\u00f6schen",
+                help = "L\u00f6scht Live-TV-Verlauf, Filme, Serien und Suchverlauf.",
+                value = "Alles",
+                onClick = {
+                    pendingAction = MaintenanceAction.ClearAllHistory
+                },
+            )
+        }
+
+        items(MaintenanceAction.SelectiveHistoryActions) { action ->
+            VivicastSettingsRow(
+                title = action.rowTitle,
+                help = action.rowHelp,
+                value = "L\u00f6schen",
+                onClick = {
+                    pendingAction = action
                 },
             )
         }
@@ -1895,16 +2833,125 @@ private fun MaintenanceSettingsPanel(
             }
         }
     }
+
+    pendingAction?.let { action ->
+        MaintenanceConfirmDialog(
+            action = action,
+            onCancel = { pendingAction = null },
+            onConfirm = {
+                pendingAction = null
+                when (action) {
+                    MaintenanceAction.ClearCache -> {
+                        onClearCache()
+                        message = "Cache wurde geleert."
+                    }
+                    else -> {
+                        onClearHistory(requireNotNull(action.historyTarget))
+                        message = "Verlauf wurde gel\u00f6scht."
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun DemoStates(showConfirm: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-        InfoPanel("Ladezustand", "Lokaler Ladezustand ohne Netzwerkzugriff.", badge = "Laden")
-        InfoPanel("Leerer Zustand", "Leere Kategorie und keine Suchtreffer sind sichtbar testbar.", badge = "Leer")
-        InfoPanel("Fehlerzustand", "Provider kann lokal als fehlerhaft markiert werden, sobald Import existiert.", badge = "Fehler")
-        InfoPanel("Provider-Hinweis", "Providerstatus bleibt isoliert und ändert keine anderen Provider.", badge = "Provider")
-        ActionPill("Bestätigen", modifier = Modifier.width(150.dp), onClick = showConfirm)
+private fun MaintenanceConfirmDialog(
+    action: MaintenanceAction,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Dialog(onDismissRequest = onCancel) {
+        GlassPanel(
+            modifier = Modifier.fillMaxWidth().testTag(action.dialogTag),
+            contentPadding = VivicastSpacing.Space5,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                InfoPanel(
+                    title = action.confirmTitle,
+                    body = action.body,
+                    badge = "Best\u00e4tigung",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), onClick = onCancel)
+                    ActionPill(action.confirmLabel, modifier = Modifier.width(170.dp), onClick = onConfirm)
+                }
+            }
+        }
+    }
+}
+
+private enum class MaintenanceAction(
+    val rowTitle: String,
+    val rowHelp: String,
+    val confirmTitle: String,
+    val body: String,
+    val confirmLabel: String,
+    val dialogTag: String,
+    val historyTarget: HistoryClearTarget? = null,
+) {
+    ClearCache(
+        rowTitle = "Cache leeren",
+        rowHelp = "Entfernt lokal gespeicherte Medienbilder.",
+        confirmTitle = "Cache leeren?",
+        body = "Es werden nur lokal gespeicherte Medienbilder gel\u00f6scht. Providerdaten, Verlauf, Favoriten, EPG und Zugangsdaten bleiben erhalten.",
+        confirmLabel = "Cache leeren",
+        dialogTag = "settings-clear-cache-dialog",
+    ),
+    ClearLiveTvHistory(
+        rowTitle = "Live-TV-Verlauf l\u00f6schen",
+        rowHelp = "L\u00f6scht zuletzt gesehene Live-TV-Sender.",
+        confirmTitle = "Live-TV-Verlauf l\u00f6schen?",
+        body = "Der Live-TV-Verlauf wird gel\u00f6scht. Filme, Serien, Suche, Providerdaten und Favoriten bleiben erhalten.",
+        confirmLabel = "L\u00f6schen",
+        dialogTag = "settings-clear-live-tv-history-dialog",
+        historyTarget = HistoryClearTarget.LiveTv,
+    ),
+    ClearMovieHistory(
+        rowTitle = "Filmverlauf l\u00f6schen",
+        rowHelp = "L\u00f6scht Film-Wiedergabefortschritt.",
+        confirmTitle = "Filmverlauf l\u00f6schen?",
+        body = "Filmverlauf und Film-Wiedergabefortschritt werden gel\u00f6scht. Andere Verlaeufe bleiben erhalten.",
+        confirmLabel = "L\u00f6schen",
+        dialogTag = "settings-clear-movie-history-dialog",
+        historyTarget = HistoryClearTarget.Movies,
+    ),
+    ClearSeriesHistory(
+        rowTitle = "Serienverlauf l\u00f6schen",
+        rowHelp = "L\u00f6scht Serien- und Episoden-Wiedergabefortschritt.",
+        confirmTitle = "Serienverlauf l\u00f6schen?",
+        body = "Serienverlauf und Episoden-Wiedergabefortschritt werden gel\u00f6scht. Andere Verlaeufe bleiben erhalten.",
+        confirmLabel = "L\u00f6schen",
+        dialogTag = "settings-clear-series-history-dialog",
+        historyTarget = HistoryClearTarget.Series,
+    ),
+    ClearSearchHistory(
+        rowTitle = "Suchverlauf l\u00f6schen",
+        rowHelp = "L\u00f6scht lokale Suchbegriffe.",
+        confirmTitle = "Suchverlauf l\u00f6schen?",
+        body = "Der Suchverlauf wird gel\u00f6scht. Wiedergabeverlauf, Providerdaten und Favoriten bleiben erhalten.",
+        confirmLabel = "L\u00f6schen",
+        dialogTag = "settings-clear-search-history-dialog",
+        historyTarget = HistoryClearTarget.Search,
+    ),
+    ClearAllHistory(
+        rowTitle = "Gesamten Verlauf l\u00f6schen",
+        rowHelp = "L\u00f6scht Live-TV, Filme, Serien und Suche.",
+        confirmTitle = "Gesamten Verlauf l\u00f6schen?",
+        body = "Live-TV-Verlauf, Film- und Serienfortschritt sowie Suchverlauf werden gel\u00f6scht. Providerdaten und Favoriten bleiben erhalten.",
+        confirmLabel = "Alles l\u00f6schen",
+        dialogTag = "settings-clear-history-dialog",
+        historyTarget = HistoryClearTarget.All,
+    );
+
+    companion object {
+        val SelectiveHistoryActions = listOf(
+            ClearLiveTvHistory,
+            ClearMovieHistory,
+            ClearSeriesHistory,
+            ClearSearchHistory,
+        )
     }
 }
 
@@ -1914,8 +2961,6 @@ fun deleteProviderConfirmTag(providerId: String): String = "settings-delete-prov
 fun deleteEpgSourceDialogTag(sourceId: String): String = "settings-delete-epg-source-dialog-$sourceId"
 fun deleteEpgSourceCancelTag(sourceId: String): String = "settings-delete-epg-source-cancel-$sourceId"
 fun deleteEpgSourceConfirmTag(sourceId: String): String = "settings-delete-epg-source-confirm-$sourceId"
-fun settingsPlaybackThresholdMinusTag(): String = "settings-playback-threshold-minus"
-fun settingsPlaybackThresholdPlusTag(): String = "settings-playback-threshold-plus"
 
 private data class ProviderEditorState(
     val providerId: String?,
@@ -1929,12 +2974,15 @@ private data class ProviderEditorState(
     val includeMovies: Boolean,
     val includeSeries: Boolean,
     val refreshIntervalHours: Int,
+    val connectionTestPassed: Boolean,
 ) {
     val isEditing: Boolean get() = providerId != null
 
-    fun validationMessage(): String? {
+    fun validationMessage(requireConnectionTest: Boolean): String? {
         if (name.isBlank()) return "Name fehlt."
-        if (!includeLiveTv && !includeMovies && !includeSeries) return "Mindestens ein Inhaltstyp muss aktiv sein."
+        if (type == ProviderType.Xtream && !includeLiveTv && !includeMovies && !includeSeries) {
+            return "Mindestens ein Inhaltstyp muss aktiv sein."
+        }
         if (!isEditing) {
             when (type) {
                 ProviderType.M3u -> if (m3uUrl.isBlank()) return "M3U URL fehlt."
@@ -1945,8 +2993,36 @@ private data class ProviderEditorState(
                 }
             }
         }
+        if (requireConnectionTest && !connectionTestPassed) return "Verbindungstest fehlt."
         return null
     }
+
+    fun connectionTestRequestMessage(): String? {
+        validationMessage(requireConnectionTest = false)?.let { return it }
+        return when (type) {
+            ProviderType.M3u -> if (m3uUrl.isBlank()) "M3U URL fehlt." else null
+            ProviderType.Xtream -> when {
+                xtreamServerUrl.isBlank() -> "Xtream Server fehlt."
+                xtreamUsername.isBlank() -> "Xtream Benutzername fehlt."
+                xtreamPassword.isBlank() -> "Xtream Passwort fehlt."
+                else -> null
+            }
+        }
+    }
+
+    fun toConnectionTestRequest(): ProviderCreateRequest =
+        ProviderCreateRequest(
+            name = name,
+            type = type,
+            m3uUrl = m3uUrl,
+            xtreamServerUrl = xtreamServerUrl,
+            xtreamUsername = xtreamUsername,
+            xtreamPassword = xtreamPassword,
+            includeLiveTv = includeLiveTv,
+            includeMovies = includeMovies,
+            includeSeries = includeSeries,
+            refreshIntervalHours = refreshIntervalHours,
+        )
 
     fun toCreateRequest(): ProviderCreateRequest =
         ProviderCreateRequest(
@@ -1990,6 +3066,7 @@ private data class ProviderEditorState(
                 includeMovies = true,
                 includeSeries = true,
                 refreshIntervalHours = DEFAULT_REFRESH_INTERVAL_HOURS,
+                connectionTestPassed = false,
             )
 
         fun from(provider: Provider): ProviderEditorState =
@@ -2005,6 +3082,7 @@ private data class ProviderEditorState(
                 includeMovies = provider.includeMovies,
                 includeSeries = provider.includeSeries,
                 refreshIntervalHours = provider.refreshIntervalHours,
+                connectionTestPassed = true,
             )
     }
 }
@@ -2054,14 +3132,6 @@ private data class EpgSourceEditorState(
     }
 }
 
-private fun formatCacheLimit(sizeMb: Int): String =
-    when (sizeMb) {
-        0 -> "Unbegrenzt"
-        1024 -> "1 GB"
-        2048 -> "2 GB"
-        else -> "$sizeMb MB"
-    }
-
 private fun formatCacheSize(sizeBytes: Long): String {
     val megabytes = sizeBytes / (1024L * 1024L)
     if (megabytes < 1024L) return "$megabytes MB"
@@ -2083,21 +3153,25 @@ private val ProviderType.label: String
 private val ProviderStatus.label: String
     get() = when (this) {
         ProviderStatus.Active -> "Aktiv"
+        ProviderStatus.ActiveWithPartialErrors -> "Aktiv mit Teilfehlern"
         ProviderStatus.Refreshing -> "Aktualisierung"
         ProviderStatus.ConnectionError -> "Verbindungsfehler"
         ProviderStatus.InvalidCredentials -> "Ungültig"
         ProviderStatus.Expired -> "Abgelaufen"
         ProviderStatus.Disabled -> "Deaktiviert"
+        ProviderStatus.CredentialsRequired -> "Zugangsdaten erforderlich"
     }
 
 private val ProviderStatus.tone: Color
     get() = when (this) {
         ProviderStatus.Active -> VivicastColors.Success
+        ProviderStatus.ActiveWithPartialErrors -> VivicastColors.Warning
         ProviderStatus.Refreshing -> VivicastColors.Info
         ProviderStatus.ConnectionError -> VivicastColors.Warning
         ProviderStatus.InvalidCredentials -> VivicastColors.Error
         ProviderStatus.Expired -> VivicastColors.Warning
         ProviderStatus.Disabled -> VivicastColors.SurfaceHigh
+        ProviderStatus.CredentialsRequired -> VivicastColors.Error
     }
 
 private val Provider.importSummary: String
@@ -2106,7 +3180,3 @@ private val Provider.importSummary: String
         "Filme".takeIf { includeMovies },
         "Serien".takeIf { includeSeries },
     ).joinToString(" | ") + " | alle $refreshIntervalHours h"
-
-private const val WATCHED_THRESHOLD_MIN_PERCENT = 50
-private const val WATCHED_THRESHOLD_MAX_PERCENT = 100
-private const val WATCHED_THRESHOLD_STEP_PERCENT = 5

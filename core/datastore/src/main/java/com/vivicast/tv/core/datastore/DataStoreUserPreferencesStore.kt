@@ -28,6 +28,9 @@ class DataStoreUserPreferencesStore(
                     doubleBackToExit = preferences[Keys.DoubleBackToExit] ?: true,
                     backgroundRefreshEnabled = preferences[Keys.BackgroundRefreshEnabled] ?: true,
                     rememberSorting = preferences[Keys.RememberSorting] ?: true,
+                    startDestination = preferences.enumValue(Keys.StartDestination, StartDestinationPreference.Home),
+                    globalUserAgent = preferences[Keys.GlobalUserAgent]?.takeIf { it.isNotBlank() }
+                        ?: DEFAULT_GLOBAL_USER_AGENT,
                 ),
                 appearance = AppearancePreferences(
                     backgroundColor = preferences.enumValue(Keys.BackgroundColor, ThemeColor.Dark),
@@ -42,6 +45,7 @@ class DataStoreUserPreferencesStore(
                     audioDecoder = preferences.enumValue(Keys.AudioDecoder, DecoderPreference.Automatic),
                     videoDecoder = preferences.enumValue(Keys.VideoDecoder, DecoderPreference.Automatic),
                     afrEnabled = preferences[Keys.AfrEnabled] ?: false,
+                    timeshiftEnabled = preferences[Keys.TimeshiftEnabled] ?: true,
                     timeshiftStorage = preferences.enumValue(
                         Keys.TimeshiftStorage,
                         TimeshiftStoragePreference.Automatic,
@@ -50,23 +54,37 @@ class DataStoreUserPreferencesStore(
                     preferredAudioLanguage = preferences[Keys.PreferredAudioLanguage],
                     preferredSubtitleLanguage = preferences[Keys.PreferredSubtitleLanguage],
                     externalPlayer = preferences.enumValue(Keys.ExternalPlayer, ExternalPlayerPreference.Internal),
+                    autoNextEnabled = preferences[Keys.AutoNextEnabled] ?: false,
+                    autoNextCountdownSeconds = preferences[Keys.AutoNextCountdownSeconds].validAutoNextCountdown(),
                 ),
                 history = HistoryPreferences(
                     enabled = preferences[Keys.HistoryEnabled] ?: true,
-                    maxRecentChannels = preferences[Keys.MaxRecentChannels] ?: 50,
-                    watchedThresholdPercent = preferences[Keys.WatchedThresholdPercent] ?: 95,
+                    maxRecentChannels = 50,
+                    watchedThresholdPercent = 95,
                 ),
                 searchHistory = preferences[Keys.SearchHistory].toSearchHistory(),
                 expandedLiveTvProviderIds = preferences[Keys.ExpandedLiveTvProviderIds].toStoredIdSet(),
-                cache = CachePreferences(
-                    maxCacheSizeMb = preferences[Keys.MaxCacheSizeMb] ?: 500,
-                ),
+                cache = CachePreferences(),
                 parentalControl = ParentalControlPreferences(
                     pinEnabled = preferences[Keys.PinEnabled] ?: false,
                     protectSettings = preferences[Keys.ProtectSettings] ?: false,
                     protectMovies = preferences[Keys.ProtectMovies] ?: false,
                     protectSeries = preferences[Keys.ProtectSeries] ?: false,
                     protectAdultContent = preferences[Keys.ProtectAdultContent] ?: false,
+                ),
+                epg = EpgPreferences(
+                    pastRetentionDays = (preferences[Keys.EpgPastRetentionDays] ?: 1).coerceIn(1, 14),
+                    futureRetentionDays = (preferences[Keys.EpgFutureRetentionDays] ?: 7).coerceIn(1, 14),
+                    refreshIntervalHours = (preferences[Keys.EpgRefreshIntervalHours] ?: 24).coerceIn(1, 168),
+                    refreshOnAppStartEnabled = preferences[Keys.EpgRefreshOnAppStartEnabled] ?: true,
+                    refreshOnPlaylistChangeEnabled = preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] ?: true,
+                ),
+                diagnostics = DiagnosticsPreferences(
+                    diagnosticsLoggingEnabled = preferences[Keys.DiagnosticsLoggingEnabled]
+                        ?: preferences[Keys.LegacyDiagnosticsEnabled]
+                        ?: false,
+                    retentionDays = (preferences[Keys.DiagnosticsRetentionDays] ?: 1).coerceIn(1, 7),
+                    keepLastSessionSummary = preferences[Keys.KeepLastSessionSummary] ?: true,
                 ),
             )
         }
@@ -87,6 +105,8 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.DoubleBackToExit] = general.doubleBackToExit
             preferences[Keys.BackgroundRefreshEnabled] = general.backgroundRefreshEnabled
             preferences[Keys.RememberSorting] = general.rememberSorting
+            preferences[Keys.StartDestination] = general.startDestination.name
+            preferences[Keys.GlobalUserAgent] = general.globalUserAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
         }
     }
 
@@ -107,19 +127,20 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.AudioDecoder] = playback.audioDecoder.name
             preferences[Keys.VideoDecoder] = playback.videoDecoder.name
             preferences[Keys.AfrEnabled] = playback.afrEnabled
+            preferences[Keys.TimeshiftEnabled] = playback.timeshiftEnabled
             preferences[Keys.TimeshiftStorage] = playback.timeshiftStorage.name
             preferences[Keys.TimeshiftMinutes] = playback.timeshiftMinutes
             preferences.setNullable(Keys.PreferredAudioLanguage, playback.preferredAudioLanguage)
             preferences.setNullable(Keys.PreferredSubtitleLanguage, playback.preferredSubtitleLanguage)
             preferences[Keys.ExternalPlayer] = playback.externalPlayer.name
+            preferences[Keys.AutoNextEnabled] = playback.autoNextEnabled
+            preferences[Keys.AutoNextCountdownSeconds] = playback.autoNextCountdownSeconds.validAutoNextCountdown()
         }
     }
 
     override suspend fun updateHistory(history: HistoryPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.HistoryEnabled] = history.enabled
-            preferences[Keys.MaxRecentChannels] = history.maxRecentChannels
-            preferences[Keys.WatchedThresholdPercent] = history.watchedThresholdPercent
         }
     }
 
@@ -135,11 +156,7 @@ class DataStoreUserPreferencesStore(
         }
     }
 
-    override suspend fun updateCache(cache: CachePreferences) {
-        dataStore.edit { preferences ->
-            preferences[Keys.MaxCacheSizeMb] = cache.maxCacheSizeMb
-        }
-    }
+    override suspend fun updateCache(cache: CachePreferences) = Unit
 
     override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
         dataStore.edit { preferences ->
@@ -148,6 +165,25 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.ProtectMovies] = parentalControl.protectMovies
             preferences[Keys.ProtectSeries] = parentalControl.protectSeries
             preferences[Keys.ProtectAdultContent] = parentalControl.protectAdultContent
+        }
+    }
+
+    override suspend fun updateEpg(epg: EpgPreferences) {
+        dataStore.edit { preferences ->
+            preferences[Keys.EpgPastRetentionDays] = epg.pastRetentionDays.coerceIn(1, 14)
+            preferences[Keys.EpgFutureRetentionDays] = epg.futureRetentionDays.coerceIn(1, 14)
+            preferences[Keys.EpgRefreshIntervalHours] = epg.refreshIntervalHours.coerceIn(1, 168)
+            preferences[Keys.EpgRefreshOnAppStartEnabled] = epg.refreshOnAppStartEnabled
+            preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] = epg.refreshOnPlaylistChangeEnabled
+        }
+    }
+
+    override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) {
+        dataStore.edit { preferences ->
+            preferences[Keys.DiagnosticsLoggingEnabled] = diagnostics.diagnosticsLoggingEnabled
+            preferences[Keys.DiagnosticsRetentionDays] = diagnostics.retentionDays.coerceIn(1, 7)
+            preferences[Keys.KeepLastSessionSummary] = diagnostics.keepLastSessionSummary
+            preferences.remove(Keys.LegacyDiagnosticsEnabled)
         }
     }
 
@@ -166,6 +202,8 @@ class DataStoreUserPreferencesStore(
         val DoubleBackToExit = booleanPreferencesKey("double_back_to_exit")
         val BackgroundRefreshEnabled = booleanPreferencesKey("background_refresh_enabled")
         val RememberSorting = booleanPreferencesKey("remember_sorting")
+        val StartDestination = stringPreferencesKey("start_destination")
+        val GlobalUserAgent = stringPreferencesKey("global_user_agent")
 
         val BackgroundColor = stringPreferencesKey("background_color")
         val AccentColor = stringPreferencesKey("accent_color")
@@ -178,25 +216,34 @@ class DataStoreUserPreferencesStore(
         val AudioDecoder = stringPreferencesKey("audio_decoder")
         val VideoDecoder = stringPreferencesKey("video_decoder")
         val AfrEnabled = booleanPreferencesKey("afr_enabled")
+        val TimeshiftEnabled = booleanPreferencesKey("timeshift_enabled")
         val TimeshiftStorage = stringPreferencesKey("timeshift_storage")
         val TimeshiftMinutes = intPreferencesKey("timeshift_minutes")
         val PreferredAudioLanguage = stringPreferencesKey("preferred_audio_language")
         val PreferredSubtitleLanguage = stringPreferencesKey("preferred_subtitle_language")
         val ExternalPlayer = stringPreferencesKey("external_player")
+        val AutoNextEnabled = booleanPreferencesKey("auto_next_enabled")
+        val AutoNextCountdownSeconds = intPreferencesKey("auto_next_countdown_seconds")
 
         val HistoryEnabled = booleanPreferencesKey("history_enabled")
-        val MaxRecentChannels = intPreferencesKey("max_recent_channels")
-        val WatchedThresholdPercent = intPreferencesKey("watched_threshold_percent")
         val SearchHistory = stringPreferencesKey("search_history")
         val ExpandedLiveTvProviderIds = stringPreferencesKey("expanded_live_tv_provider_ids")
-
-        val MaxCacheSizeMb = intPreferencesKey("max_cache_size_mb")
 
         val PinEnabled = booleanPreferencesKey("pin_enabled")
         val ProtectSettings = booleanPreferencesKey("protect_settings")
         val ProtectMovies = booleanPreferencesKey("protect_movies")
         val ProtectSeries = booleanPreferencesKey("protect_series")
         val ProtectAdultContent = booleanPreferencesKey("protect_adult_content")
+
+        val EpgPastRetentionDays = intPreferencesKey("epg_past_retention_days")
+        val EpgFutureRetentionDays = intPreferencesKey("epg_future_retention_days")
+        val EpgRefreshIntervalHours = intPreferencesKey("epg_refresh_interval_hours")
+        val EpgRefreshOnAppStartEnabled = booleanPreferencesKey("epg_refresh_on_app_start_enabled")
+        val EpgRefreshOnPlaylistChangeEnabled = booleanPreferencesKey("epg_refresh_on_playlist_change_enabled")
+        val DiagnosticsLoggingEnabled = booleanPreferencesKey("diagnostics_logging_enabled")
+        val LegacyDiagnosticsEnabled = booleanPreferencesKey("diagnostics_enabled")
+        val DiagnosticsRetentionDays = intPreferencesKey("diagnostics_retention_days")
+        val KeepLastSessionSummary = booleanPreferencesKey("keep_last_session_summary")
     }
 }
 
@@ -234,3 +281,9 @@ private fun Iterable<String>.cleanStoredIds(): List<String> =
         .filter { it.isNotBlank() }
         .distinct()
         .toList()
+
+private fun Int?.validAutoNextCountdown(): Int =
+    when (this) {
+        5, 10, 15, 30 -> this
+        else -> 10
+    }

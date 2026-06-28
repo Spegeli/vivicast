@@ -4,7 +4,7 @@ data class Provider(
     val id: String,
     val name: String,
     val type: ProviderType,
-    val credentialsKey: String,
+    val sourceConfigKey: String,
     val isActive: Boolean,
     val status: ProviderStatus,
     val includeLiveTv: Boolean,
@@ -14,17 +14,20 @@ data class Provider(
     val logoPriority: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val stableKey: String = id,
 )
 
 enum class ProviderType { M3u, Xtream }
 
 enum class ProviderStatus {
     Active,
+    ActiveWithPartialErrors,
     Refreshing,
     ConnectionError,
     InvalidCredentials,
     Expired,
     Disabled,
+    CredentialsRequired,
 }
 
 data class Category(
@@ -35,6 +38,7 @@ data class Category(
     val name: String,
     val sortOrder: Int,
     val isHidden: Boolean,
+    val stableKey: String = id,
 )
 
 enum class CategoryType { LiveTv, Movies, Series }
@@ -49,6 +53,7 @@ data class Channel(
     val logoUrl: String?,
     val isCatchupAvailable: Boolean,
     val catchupDays: Int,
+    val stableKey: String = id,
 )
 
 data class Movie(
@@ -70,6 +75,9 @@ data class Movie(
     val plot: String?,
     val trailerUrl: String?,
     val addedAt: Long?,
+    val ageRating: String? = null,
+    val isAdult: Boolean = false,
+    val stableKey: String = id,
 )
 
 data class Series(
@@ -88,6 +96,9 @@ data class Series(
     val cast: String?,
     val plot: String?,
     val addedAt: Long?,
+    val ageRating: String? = null,
+    val isAdult: Boolean = false,
+    val stableKey: String = id,
 )
 
 data class Season(
@@ -97,6 +108,7 @@ data class Season(
     val seasonNumber: Int,
     val name: String,
     val posterUrl: String?,
+    val stableKey: String = id,
 )
 
 data class Episode(
@@ -113,14 +125,20 @@ data class Episode(
     val containerExtension: String?,
     val duration: Long?,
     val airDate: String?,
+    val ageRating: String? = null,
+    val isAdult: Boolean = false,
+    val stableKey: String = id,
 )
 
 data class EpgSource(
     val id: String,
     val name: String,
-    val urlKey: String,
+    val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    val lastRefreshAt: Long? = null,
+    val lastProgramCount: Int = 0,
+    val stableKey: String = id,
 )
 
 data class ProviderEpgSource(
@@ -135,7 +153,7 @@ data class EpgProgram(
     val providerId: String,
     val channelId: String,
     val epgSourceId: String,
-    val externalChannelId: String,
+    val epgChannelId: String,
     val title: String,
     val subtitle: String?,
     val description: String?,
@@ -144,6 +162,8 @@ data class EpgProgram(
     val category: String?,
     val iconUrl: String?,
     val isCatchupAvailable: Boolean,
+    val stableKey: String = id,
+    val normalizedTitle: String = title,
 )
 
 data class EpgChannelMapping(
@@ -153,6 +173,10 @@ data class EpgChannelMapping(
     val epgSourceId: String,
     val epgChannelId: String,
     val isManual: Boolean,
+    val channelStableKey: String = channelId,
+    val epgSourceStableKey: String = epgSourceId,
+    val epgChannelStableKey: String = epgChannelId,
+    val confidence: Float = 0f,
 )
 
 data class Favorite(
@@ -163,6 +187,8 @@ data class Favorite(
     val sortOrder: Int,
     val createdAt: Long,
     val updatedAt: Long,
+    val mediaStableKey: String = mediaId,
+    val isPending: Boolean = false,
 )
 
 enum class MediaType { Channel, Movie, Series, Episode }
@@ -179,6 +205,8 @@ data class PlaybackProgress(
     val lastWatchedAt: Long,
     val createdAt: Long,
     val updatedAt: Long,
+    val mediaStableKey: String = mediaId,
+    val isPending: Boolean = false,
 )
 
 data class ChannelHistory(
@@ -188,6 +216,8 @@ data class ChannelHistory(
     val watchedAt: Long,
     val durationWatchedMillis: Long,
     val updatedAt: Long,
+    val channelStableKey: String = channelId,
+    val isPending: Boolean = false,
 )
 
 data class SearchResults(
@@ -196,4 +226,3 @@ data class SearchResults(
     val series: List<Series>,
     val epgPrograms: List<EpgProgram>,
 )
-

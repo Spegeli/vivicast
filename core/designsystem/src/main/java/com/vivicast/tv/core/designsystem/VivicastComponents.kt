@@ -500,6 +500,7 @@ fun PosterCard(
     favorite: Boolean,
     seen: Boolean,
     modifier: Modifier = Modifier,
+    surfaceModifier: Modifier = Modifier,
     imageResId: Int? = null,
     imageModel: Any? = null,
     onFocused: () -> Unit = {},
@@ -514,6 +515,7 @@ fun PosterCard(
         favorite = favorite,
         seen = seen,
         modifier = modifier,
+        surfaceModifier = surfaceModifier,
         imageResId = imageResId,
         imageModel = imageModel,
         onFocused = onFocused,
@@ -531,6 +533,7 @@ fun VivicastPosterCard(
     favorite: Boolean,
     seen: Boolean,
     modifier: Modifier = Modifier,
+    surfaceModifier: Modifier = Modifier,
     imageResId: Int? = null,
     imageModel: Any? = null,
     onFocused: () -> Unit = {},
@@ -542,7 +545,7 @@ fun VivicastPosterCard(
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
     ) {
         VivicastFocusSurface(
-            modifier = Modifier
+            modifier = surfaceModifier
                 .fillMaxWidth()
                 .height(VivicastCardSizes.PosterImageHeight),
             onClick = onClick,
@@ -859,6 +862,8 @@ fun VivicastTopNavigation(
     items: List<String>,
     selectedIndex: Int,
     modifier: Modifier = Modifier,
+    selectedFocusRequester: FocusRequester? = null,
+    onItemFocusChanged: (Boolean) -> Unit = {},
     onSelected: (Int) -> Unit,
     onFocused: (Int) -> Unit,
 ) {
@@ -882,10 +887,19 @@ fun VivicastTopNavigation(
                 VivicastTopNavItem(
                     label = label,
                     selected = index == selectedIndex,
-                    modifier = Modifier.testTag(topNavItemTag(label)),
+                    modifier = Modifier
+                        .testTag(topNavItemTag(label))
+                        .then(
+                            if (index == selectedIndex && selectedFocusRequester != null) {
+                                Modifier.focusRequester(selectedFocusRequester)
+                            } else {
+                                Modifier
+                            },
+                        ),
                     minWidth = if (label.length > 8) 150.dp else VivicastCardSizes.TopTabMinWidth,
                     onSelected = { onSelected(index) },
                     onFocused = { onFocused(index) },
+                    onFocusChanged = onItemFocusChanged,
                 )
             }
         }
@@ -904,12 +918,14 @@ fun VivicastTopNavItem(
     minWidth: Dp = VivicastCardSizes.TopTabMinWidth,
     onSelected: () -> Unit,
     onFocused: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     VivicastFocusSurface(
         modifier = modifier.width(minWidth).height(VivicastCardSizes.TopTabsHeight),
         selected = selected,
         onClick = onSelected,
         onFocused = onFocused,
+        onFocusChanged = onFocusChanged,
         contentPadding = VivicastSpacing.Space0,
         shape = VivicastShapes.PillRadius,
         focusScale = VivicastFocusDefaults.ScaleSmall,
@@ -1059,6 +1075,12 @@ fun VivicastPlayerTimeline(
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (it.key) {
+                        Key.Enter,
+                        Key.NumPadEnter,
+                        Key.DirectionCenter -> {
+                            onTogglePlay()
+                            true
+                        }
                         Key.DirectionLeft -> {
                             onSeekLeft()
                             true
@@ -1070,7 +1092,7 @@ fun VivicastPlayerTimeline(
                         else -> false
                     }
                 },
-            onClick = onTogglePlay,
+            onClick = null,
             onFocusChanged = onFocusChanged,
             contentPadding = VivicastSpacing.Space3,
             shape = VivicastShapes.PillRadius,

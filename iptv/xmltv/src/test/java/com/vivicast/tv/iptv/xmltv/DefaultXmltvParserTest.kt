@@ -63,8 +63,52 @@ class DefaultXmltvParserTest {
         )
 
         assertEquals(1, document.channels.size)
+        assertEquals(1, document.programs.size)
+        assertEquals("Ohne Titel", document.programs.single().title)
+        assertEquals(1, document.skippedPrograms)
+    }
+
+    @Test
+    fun derivesMissingStopFromNextProgramOnSameChannel() {
+        val document = parser.parse(
+            """
+            <tv>
+              <channel id="ard.de"><display-name>ARD</display-name></channel>
+              <channel id="zdf.de"><display-name>ZDF</display-name></channel>
+              <programme channel="ard.de" start="20260621180000 +0200">
+                <title>First</title>
+              </programme>
+              <programme channel="zdf.de" start="20260621181000 +0200" stop="20260621182000 +0200">
+                <title>Other Channel</title>
+              </programme>
+              <programme channel="ard.de" start="20260621183000 +0200" stop="20260621190000 +0200">
+                <title>Second</title>
+              </programme>
+            </tv>
+            """.trimIndent(),
+        )
+
+        val first = document.programs.first { it.title == "First" }
+
+        assertEquals(time("20260621180000 +0200"), first.startTimeMillis)
+        assertEquals(time("20260621183000 +0200"), first.endTimeMillis)
+    }
+
+    @Test
+    fun skipsMissingStopWhenNoNextProgramExists() {
+        val document = parser.parse(
+            """
+            <tv>
+              <channel id="ard.de"><display-name>ARD</display-name></channel>
+              <programme channel="ard.de" start="20260621180000 +0200">
+                <title>Open End</title>
+              </programme>
+            </tv>
+            """.trimIndent(),
+        )
+
         assertEquals(0, document.programs.size)
-        assertEquals(2, document.skippedPrograms)
+        assertEquals(1, document.skippedPrograms)
     }
 
     private fun time(value: String): Long {

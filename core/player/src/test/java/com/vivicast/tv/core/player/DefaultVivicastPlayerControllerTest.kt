@@ -41,7 +41,7 @@ class DefaultVivicastPlayerControllerTest {
     }
 
     @Test
-    fun startRetriesFiveTimesBeforeError() = runBlocking {
+    fun startAttemptsFiveTimesTotalBeforeError() = runBlocking {
         val engine = AlwaysFailingPlaybackEngine()
         val controller = testController(engine)
 
@@ -51,9 +51,20 @@ class DefaultVivicastPlayerControllerTest {
             controller.state.first { it.status == PlaybackStatus.Error }
         }
 
-        assertEquals(6, engine.startAttempts)
+        assertEquals(5, engine.startAttempts)
         assertEquals(5, controller.state.value.error?.retryCount)
         assertEquals("first", controller.state.value.error?.playbackId)
+    }
+
+    @Test
+    fun defaultRetryDelaysMatchDocumentedSequence() {
+        val delays = DefaultVivicastPlayerController.DEFAULT_RETRY_DELAYS_MILLIS
+
+        assertEquals(500L, delays.retryDelayAfterFailedAttempt(1))
+        assertEquals(1_000L, delays.retryDelayAfterFailedAttempt(2))
+        assertEquals(2_000L, delays.retryDelayAfterFailedAttempt(3))
+        assertEquals(4_000L, delays.retryDelayAfterFailedAttempt(4))
+        assertEquals(0L, delays.retryDelayAfterFailedAttempt(5))
     }
 
     @Test
@@ -92,6 +103,47 @@ class DefaultVivicastPlayerControllerTest {
     }
 
     @Test
+    fun playbackEndedPublishesEndedStateWithFullDurationPosition() = runBlocking {
+        val engine = EventPlaybackEngine().apply {
+            currentPositionMillis = 118_000L
+            durationMillis = 120_000L
+        }
+        val controller = testController(engine)
+
+        controller.play(MOVIE_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        engine.emitPlaybackEnded("first")
+
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Ended }
+        }
+        assertEquals(MOVIE_REQUEST, controller.state.value.request)
+        assertEquals(120_000L, controller.state.value.positionMillis)
+        assertEquals(120_000L, controller.state.value.durationMillis)
+    }
+
+    @Test
+    fun playbackEndedIgnoresStalePlaybackIds() = runBlocking {
+        val engine = EventPlaybackEngine().apply {
+            currentPositionMillis = 118_000L
+            durationMillis = 120_000L
+        }
+        val controller = testController(engine)
+
+        controller.play(MOVIE_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        engine.emitPlaybackEnded("stale")
+
+        assertEquals(PlaybackStatus.Playing, controller.state.value.status)
+    }
+
+    @Test
     fun playbackErrorReconnectsRunningRequest() = runBlocking {
         val engine = ReconnectPlaybackEngine()
         val controller = testController(engine)
@@ -108,6 +160,31 @@ class DefaultVivicastPlayerControllerTest {
         }
         assertEquals(2, engine.startAttempts)
         assertEquals(PlaybackStatus.Playing, controller.state.value.status)
+    }
+
+    @Test
+    fun playbackErrorPublishesReconnectStateWhileReconnectRuns() = runBlocking {
+        val engine = BlockingReconnectPlaybackEngine()
+        val controller = testController(engine)
+
+        controller.play(TEST_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        engine.emitPlaybackError()
+
+        withTimeout(5_000) {
+            controller.state.first { it.isReconnecting }
+        }
+        assertEquals(PlaybackStatus.Starting, controller.state.value.status)
+        assertTrue(controller.state.value.isReconnecting)
+
+        engine.completeReconnect()
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+        Unit
     }
 
     @Test
@@ -148,6 +225,22 @@ class DefaultVivicastPlayerControllerTest {
     }
 
     @Test
+    fun liveTimeshiftStartFallsBackToLiveWithoutSeekWhenTimeshiftStartFails() = runBlocking {
+        val engine = TimeshiftFailingPlaybackEngine()
+        val controller = testController(engine)
+
+        controller.play(TIMESHIFT_REQUEST)
+        withTimeout(5_000) {
+            controller.state.first { it.status == PlaybackStatus.Playing }
+        }
+
+        assertEquals(listOf(true, false), engine.startedWithTimeshift)
+        assertEquals(false, controller.state.value.request?.seekable)
+        assertEquals(null, controller.state.value.request?.timeshift)
+        assertEquals(0L, controller.state.value.timeshiftWindowMillis)
+    }
+
+    @Test
     fun liveTimeshiftSeekTracksOffsetAndCanReturnToLiveEdge() = runBlocking {
         val engine = BlockingPlaybackEngine()
         val controller = testController(engine)
@@ -175,7 +268,7 @@ class DefaultVivicastPlayerControllerTest {
             engine = engine,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
             dispatcher = Dispatchers.Unconfined,
-            retryDelayMillis = 0L,
+            retryDelaysMillis = emptyList(),
         )
 }
 
@@ -268,6 +361,75 @@ private class ReconnectPlaybackEngine(
     override fun release() = Unit
 }
 
+private class TimeshiftFailingPlaybackEngine : PlaybackEngine {
+    val startedWithTimeshift = mutableListOf<Boolean>()
+    override val currentPositionMillis = 0L
+    override val durationMillis = 0L
+
+    override suspend fun start(request: PlaybackRequest) {
+        val hasTimeshift = request.timeshift != null
+        startedWithTimeshift += hasTimeshift
+        if (hasTimeshift) {
+            error("timeshift unavailable")
+        }
+    }
+
+    override fun pause() = Unit
+    override fun resume() = Unit
+    override fun seekBy(deltaMillis: Long) = Unit
+    override fun stop() = Unit
+    override fun release() = Unit
+}
+
+private class BlockingReconnectPlaybackEngine : PlaybackEngine {
+    private val mutablePlaybackErrors = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
+    private val reconnectCompletion = CompletableDeferred<Unit>()
+    var startAttempts = 0
+    override var currentPositionMillis = 15_000L
+    override var durationMillis = 120_000L
+    override val playbackErrors: Flow<Throwable> = mutablePlaybackErrors
+
+    override suspend fun start(request: PlaybackRequest) {
+        startAttempts += 1
+        if (startAttempts > 1) {
+            reconnectCompletion.await()
+        }
+    }
+
+    fun emitPlaybackError() {
+        mutablePlaybackErrors.tryEmit(IllegalStateException("stream aborted"))
+    }
+
+    fun completeReconnect() {
+        reconnectCompletion.complete(Unit)
+    }
+
+    override fun pause() = Unit
+    override fun resume() = Unit
+    override fun seekBy(deltaMillis: Long) = Unit
+    override fun stop() = Unit
+    override fun release() = Unit
+}
+
+private class EventPlaybackEngine : PlaybackEngine {
+    private val mutablePlaybackEnded = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    override var currentPositionMillis = 0L
+    override var durationMillis = 0L
+    override val playbackEnded: Flow<String> = mutablePlaybackEnded
+
+    override suspend fun start(request: PlaybackRequest) = Unit
+
+    fun emitPlaybackEnded(playbackId: String) {
+        mutablePlaybackEnded.tryEmit(playbackId)
+    }
+
+    override fun pause() = Unit
+    override fun resume() = Unit
+    override fun seekBy(deltaMillis: Long) = Unit
+    override fun stop() = Unit
+    override fun release() = Unit
+}
+
 private val TEST_REQUEST = PlaybackRequest(
     playbackId = "first",
     providerId = "provider-a",
@@ -276,6 +438,13 @@ private val TEST_REQUEST = PlaybackRequest(
     title = "Channel A",
     streamUrl = "https://stream.example/channel-a.m3u8",
     seekable = false,
+)
+
+private val MOVIE_REQUEST = TEST_REQUEST.copy(
+    mediaId = "movie-a",
+    mediaType = PlaybackMediaType.Movie,
+    title = "Movie A",
+    seekable = true,
 )
 
 private val SECOND_REQUEST = TEST_REQUEST.copy(

@@ -1,6 +1,8 @@
 package com.vivicast.tv.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
@@ -116,6 +118,9 @@ interface EpgDao {
     @Upsert
     suspend fun upsertPrograms(programs: List<EpgProgramEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPrograms(programs: List<EpgProgramEntity>)
+
     @Upsert
     suspend fun upsertMappings(mappings: List<EpgChannelMappingEntity>)
 
@@ -163,6 +168,14 @@ interface EpgDao {
 
     @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteProgramsForChannels(providerId: String, channelIds: List<String>)
+
+    @Query(
+        """
+        DELETE FROM epg_programs
+        WHERE endTime < :fromMillis OR startTime > :toMillis
+        """,
+    )
+    suspend fun deleteProgramsOutsideWindow(fromMillis: Long, toMillis: Long): Int
 
     @Query(
         """

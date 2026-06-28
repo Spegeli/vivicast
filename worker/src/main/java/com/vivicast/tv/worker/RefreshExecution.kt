@@ -93,6 +93,7 @@ class DefaultPlaylistRefresher(
     private val xtreamClient: XtreamClient,
     private val xtreamParser: XtreamParser,
     private val epgSourceReader: EpgSourceReader,
+    private val refreshRunGuard: RefreshRunGuard = RefreshRunGuard(),
 ) : PlaylistRefresher {
     override suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome {
         val provider = providerRepository.getProvider(target.providerId)
@@ -100,33 +101,44 @@ class DefaultPlaylistRefresher(
         if (!provider.isActive || provider.status == ProviderStatus.Disabled) {
             return PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList())
         }
+        if (!refreshRunGuard.tryEnter(provider.id)) {
+            return PlaylistRefreshOutcome(provider.id, success = false, epgSourceIds = emptyList())
+        }
 
-        providerRepository.setProviderStatus(provider.id, ProviderStatus.Refreshing)
-        return runCatching {
-            when (val credentials = providerRepository.getCredentials(provider.id)) {
-                is ProviderCredentials.M3u -> refreshM3uProvider(provider, credentials)
-                is ProviderCredentials.Xtream -> refreshXtreamProvider(provider, credentials)
-                null -> throw RefreshAuthenticationException("Provider credentials are missing.")
+        try {
+            providerRepository.setProviderStatus(provider.id, ProviderStatus.Refreshing)
+            return runCatching {
+                val successStatus = when (val credentials = providerRepository.getCredentials(provider.id)) {
+                    is ProviderCredentials.M3u -> refreshM3uProvider(provider, credentials)
+                    is ProviderCredentials.Xtream -> refreshXtreamProvider(provider, credentials)
+                    null -> throw RefreshAuthenticationException("Provider credentials are missing.")
+                }
+                providerRepository.setProviderStatus(provider.id, successStatus)
+                PlaylistRefreshOutcome(
+                    providerId = provider.id,
+                    success = true,
+                    epgSourceIds = epgSourceReader.getActiveSourceIdsForProvider(provider.id),
+                )
+            }.getOrElse { error ->
+                providerRepository.setProviderStatus(provider.id, error.toProviderStatus())
+                throw error
             }
-            providerRepository.setProviderStatus(provider.id, ProviderStatus.Active)
-            PlaylistRefreshOutcome(
-                providerId = provider.id,
-                success = true,
-                epgSourceIds = epgSourceReader.getActiveSourceIdsForProvider(provider.id),
-            )
-        }.getOrElse { error ->
-            providerRepository.setProviderStatus(provider.id, error.toProviderStatus())
-            throw error
+        } finally {
+            refreshRunGuard.exit(provider.id)
         }
     }
 
-    private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u) {
+    private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u): ProviderStatus {
         require(provider.type == ProviderType.M3u) { "Provider type mismatch." }
         val playlist = m3uParser.parse(textFetcher.fetch(credentials.url))
-        catalogImportRepository.importM3uLiveChannels(provider.id, playlist)
+        if (playlist.channels.isEmpty()) {
+            throw RefreshImportException("M3U playlist contains no importable entries.")
+        }
+        val result = catalogImportRepository.importM3uLiveChannels(provider.id, playlist)
+        return if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active
     }
 
-    private suspend fun refreshXtreamProvider(provider: Provider, credentials: ProviderCredentials.Xtream) {
+    private suspend fun refreshXtreamProvider(provider: Provider, credentials: ProviderCredentials.Xtream): ProviderStatus {
         require(provider.type == ProviderType.Xtream) { "Provider type mismatch." }
         val xtreamCredentials = XtreamCredentials(
             serverUrl = credentials.serverUrl,
@@ -171,6 +183,7 @@ class DefaultPlaylistRefresher(
             },
         )
         catalogImportRepository.importXtreamCatalog(provider.id, catalog)
+        return ProviderStatus.Active
     }
 }
 
@@ -193,7 +206,7 @@ class RoomEpgSourceReader(
 
     override suspend fun getActiveSource(epgSourceId: String): ResolvedEpgSource? {
         val source = epgDao.getEpgSource(epgSourceId)?.takeIf { it.isActive } ?: return null
-        val url = secureValueStore.read(SecureKey(source.urlKey))?.takeIf { it.isNotBlank() } ?: return null
+        val url = secureValueStore.read(SecureKey(source.sourceConfigKey))?.takeIf { it.isNotBlank() } ?: return null
         val providerIds = epgDao.getProviderEpgSourcesForSource(source.id)
             .map { it.providerId }
             .distinct()
@@ -211,18 +224,49 @@ class DefaultEpgRefresher(
     private val textFetcher: TextFetcher,
     private val xmltvParser: XmltvParser,
     private val epgImportRepository: EpgImportRepository,
+    private val epgPastRetentionDaysProvider: suspend () -> Int = { 1 },
+    private val epgFutureRetentionDaysProvider: suspend () -> Int = { 7 },
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    private val refreshRunGuard: RefreshRunGuard = RefreshRunGuard(),
 ) : EpgRefresher {
     override suspend fun refresh(target: EpgRefreshTarget): EpgRefreshOutcome {
         val source = epgSourceReader.getActiveSource(target.epgSourceId)
             ?: return EpgRefreshOutcome(target.epgSourceId, success = false)
-        val document = xmltvParser.parse(textFetcher.fetch(source.url))
-        val activeProviderIds = source.providerIds.filter { providerId ->
-            providerRepository.getProvider(providerId)?.isActive == true
+        if (!refreshRunGuard.tryEnter(source.id)) {
+            return EpgRefreshOutcome(target.epgSourceId, success = false)
         }
-        activeProviderIds.forEach { providerId ->
-            epgImportRepository.importXmltv(providerId, source.id, document)
+
+        try {
+            val document = xmltvParser.parse(textFetcher.fetch(source.url))
+            if (document.programs.isEmpty()) {
+                throw RefreshImportException("XMLTV document contains no importable programs.")
+            }
+            val activeProviderIds = source.providerIds.filter { providerId ->
+                providerRepository.getProvider(providerId)?.isActive == true
+            }
+            activeProviderIds.forEach { providerId ->
+                epgImportRepository.importXmltv(providerId, source.id, document)
+            }
+            epgImportRepository.cleanupProgramsOutsideRetention(
+                nowMillis = clock(),
+                pastDays = epgPastRetentionDaysProvider(),
+                futureDays = epgFutureRetentionDaysProvider(),
+            )
+            return EpgRefreshOutcome(target.epgSourceId, success = true)
+        } finally {
+            refreshRunGuard.exit(source.id)
         }
-        return EpgRefreshOutcome(target.epgSourceId, success = true)
+    }
+}
+
+class RefreshRunGuard {
+    private val runningKeys = mutableSetOf<String>()
+
+    fun tryEnter(key: String): Boolean =
+        synchronized(runningKeys) { runningKeys.add(key) }
+
+    fun exit(key: String) {
+        synchronized(runningKeys) { runningKeys.remove(key) }
     }
 }
 
@@ -364,13 +408,16 @@ class NoOpEpgMappingApplier : EpgMappingApplier {
 
 class RefreshAuthenticationException(message: String) : RuntimeException(message)
 
+class RefreshImportException(message: String) : RuntimeException(message)
+
 class RefreshHttpException(
     val statusCode: Int,
 ) : RuntimeException("Refresh request failed with HTTP status $statusCode.")
 
 private fun Throwable.toProviderStatus(): ProviderStatus =
     when (this) {
-        is RefreshAuthenticationException -> ProviderStatus.InvalidCredentials
+        is RefreshAuthenticationException -> ProviderStatus.CredentialsRequired
+        is RefreshImportException -> ProviderStatus.ConnectionError
         is RefreshHttpException -> if (statusCode == 401 || statusCode == 403) {
             ProviderStatus.InvalidCredentials
         } else {

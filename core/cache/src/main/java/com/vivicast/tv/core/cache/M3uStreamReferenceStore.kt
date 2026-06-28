@@ -5,29 +5,39 @@ import java.security.MessageDigest
 import java.util.Properties
 
 interface M3uStreamReferenceStore {
-    fun replaceProviderReferences(providerId: String, references: Map<String, String>)
-    fun getStreamUrl(providerId: String, remoteId: String): String?
-    fun deleteProviderReferences(providerId: String)
+    suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>)
+    suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference?
+    suspend fun getStreamUrl(providerId: String, remoteId: String): String? =
+        getReference(providerId, remoteId)?.streamUrl
+
+    suspend fun deleteProviderReferences(providerId: String)
 }
 
+data class M3uStreamReference(
+    val streamUrl: String,
+    val catchupMode: String? = null,
+    val catchupSource: String? = null,
+)
+
 object NoOpM3uStreamReferenceStore : M3uStreamReferenceStore {
-    override fun replaceProviderReferences(providerId: String, references: Map<String, String>) = Unit
-    override fun getStreamUrl(providerId: String, remoteId: String): String? = null
-    override fun deleteProviderReferences(providerId: String) = Unit
+    override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) = Unit
+    override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? = null
+    override suspend fun deleteProviderReferences(providerId: String) = Unit
 }
 
 class FileM3uStreamReferenceStore(
     private val directory: File,
 ) : M3uStreamReferenceStore {
-    @Synchronized
-    override fun replaceProviderReferences(providerId: String, references: Map<String, String>) {
+    override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) {
         directory.mkdirs()
         val properties = Properties()
-        references.forEach { (remoteId, streamUrl) ->
+        references.forEach { (remoteId, reference) ->
             val key = remoteId.trim()
-            val value = streamUrl.trim()
-            if (key.isNotBlank() && value.isNotBlank()) {
-                properties[key] = value
+            val streamUrl = reference.streamUrl.trim()
+            if (key.isNotBlank() && streamUrl.isNotBlank()) {
+                properties["$key.url"] = streamUrl
+                reference.catchupMode?.trim()?.takeIf { it.isNotBlank() }?.let { properties["$key.catchupMode"] = it }
+                reference.catchupSource?.trim()?.takeIf { it.isNotBlank() }?.let { properties["$key.catchupSource"] = it }
             }
         }
         providerFile(providerId).outputStream().use { output ->
@@ -35,17 +45,23 @@ class FileM3uStreamReferenceStore(
         }
     }
 
-    @Synchronized
-    override fun getStreamUrl(providerId: String, remoteId: String): String? {
+    override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? {
         val file = providerFile(providerId)
         if (!file.exists()) return null
         val properties = Properties()
         file.inputStream().use { input -> properties.load(input) }
-        return properties.getProperty(remoteId.trim())?.takeIf { it.isNotBlank() }
+        val key = remoteId.trim()
+        val streamUrl = properties.getProperty("$key.url")
+            ?: properties.getProperty(key)
+            ?: return null
+        return M3uStreamReference(
+            streamUrl = streamUrl.takeIf { it.isNotBlank() } ?: return null,
+            catchupMode = properties.getProperty("$key.catchupMode")?.takeIf { it.isNotBlank() },
+            catchupSource = properties.getProperty("$key.catchupSource")?.takeIf { it.isNotBlank() },
+        )
     }
 
-    @Synchronized
-    override fun deleteProviderReferences(providerId: String) {
+    override suspend fun deleteProviderReferences(providerId: String) {
         providerFile(providerId).delete()
     }
 

@@ -13,12 +13,18 @@ interface EpgImportRepository {
         epgSourceId: String,
         document: XmltvDocument,
     ): EpgImportResult
+
+    suspend fun cleanupProgramsOutsideRetention(
+        nowMillis: Long,
+        pastDays: Int,
+        futureDays: Int,
+    ): Int
 }
 
 data class EpgSourceSaveRequest(
     val sourceId: String? = null,
     val name: String,
-    val urlKey: String,
+    val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
 )

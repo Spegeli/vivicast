@@ -73,6 +73,40 @@ class RoomPlaybackRepositoryTest {
     }
 
     @Test
+    fun homeHistoryObservesAcrossProviders() = runBlocking {
+        repository.saveProgress(progress(id = "old-movie", mediaId = "old", lastWatchedAt = 1_000L))
+        repository.saveProgress(progress(id = "new-episode", providerId = OTHER_PROVIDER_ID, mediaType = MediaType.Episode, mediaId = "episode", lastWatchedAt = 2_000L))
+        repository.saveProgress(progress(id = "done", mediaId = "done", isCompleted = true, lastWatchedAt = 3_000L))
+        repository.saveChannelHistory(history(id = "old-channel", channelId = "old", watchedAt = 1_000L))
+        repository.saveChannelHistory(history(id = "new-channel", providerId = OTHER_PROVIDER_ID, channelId = "new", watchedAt = 2_000L))
+
+        val continueWatching = repository.observeAllContinueWatching().first()
+        val recentChannels = repository.observeAllRecentChannels(limit = 1).first()
+
+        assertEquals(listOf("new-episode", "old-movie"), continueWatching.map { it.id })
+        assertEquals(listOf("new"), recentChannels.map { it.channelId })
+    }
+
+    @Test
+    fun watchNextProgressIncludesOnlyMoviesAndEpisodes() = runBlocking {
+        repository.saveProgress(progress(id = "channel", mediaType = MediaType.Channel, mediaId = "channel"))
+        repository.saveProgress(progress(id = "movie", mediaType = MediaType.Movie, mediaId = "movie"))
+        repository.saveProgress(progress(id = "series", mediaType = MediaType.Series, mediaId = "series"))
+        repository.saveProgress(
+            progress(
+                id = "completed-episode",
+                mediaType = MediaType.Episode,
+                mediaId = "episode",
+                isCompleted = true,
+            ),
+        )
+
+        val watchNextProgress = repository.getWatchNextProgress()
+
+        assertEquals(listOf("completed-episode", "movie"), watchNextProgress.map { it.id }.sorted())
+    }
+
+    @Test
     fun clearProviderPlaybackRemovesProgressAndHistory() = runBlocking {
         repository.saveProgress(progress(id = "progress"))
         repository.saveChannelHistory(history(id = "history"))
@@ -85,6 +119,39 @@ class RoomPlaybackRepositoryTest {
         assertEquals(emptyList<ChannelHistory>(), repository.observeRecentChannels(PROVIDER_ID, limit = 10).first())
         assertEquals(listOf("other-progress"), repository.observeContinueWatching(OTHER_PROVIDER_ID).first().map { it.id })
         assertEquals(listOf("other-history"), repository.observeRecentChannels(OTHER_PROVIDER_ID, limit = 10).first().map { it.id })
+    }
+
+    @Test
+    fun clearHistoryByTypeOnlyRemovesSelectedData() = runBlocking {
+        repository.saveChannelHistory(history(id = "live"))
+        repository.saveProgress(progress(id = "movie", mediaType = MediaType.Movie, mediaId = "movie"))
+        repository.saveProgress(progress(id = "series", mediaType = MediaType.Series, mediaId = "series"))
+        repository.saveProgress(progress(id = "episode", mediaType = MediaType.Episode, mediaId = "episode"))
+
+        repository.clearLiveTvHistory()
+        assertEquals(emptyList<ChannelHistory>(), repository.observeRecentChannels(PROVIDER_ID, limit = 10).first())
+        assertEquals("movie", repository.getProgress(PROVIDER_ID, MediaType.Movie, "movie")?.id)
+
+        repository.clearMovieProgress()
+        assertNull(repository.getProgress(PROVIDER_ID, MediaType.Movie, "movie"))
+        assertEquals("series", repository.getProgress(PROVIDER_ID, MediaType.Series, "series")?.id)
+
+        repository.clearSeriesProgress()
+        assertNull(repository.getProgress(PROVIDER_ID, MediaType.Series, "series"))
+        assertNull(repository.getProgress(PROVIDER_ID, MediaType.Episode, "episode"))
+    }
+
+    @Test
+    fun deleteProgressRemovesOnlySelectedMedia() = runBlocking {
+        repository.saveProgress(progress(id = "movie", mediaType = MediaType.Movie, mediaId = "movie"))
+        repository.saveProgress(progress(id = "episode", mediaType = MediaType.Episode, mediaId = "episode"))
+        repository.saveProgress(progress(id = "other", providerId = OTHER_PROVIDER_ID, mediaType = MediaType.Movie, mediaId = "movie"))
+
+        repository.deleteProgress(PROVIDER_ID, MediaType.Movie, "movie")
+
+        assertNull(repository.getProgress(PROVIDER_ID, MediaType.Movie, "movie"))
+        assertEquals("episode", repository.getProgress(PROVIDER_ID, MediaType.Episode, "episode")?.id)
+        assertEquals("other", repository.getProgress(OTHER_PROVIDER_ID, MediaType.Movie, "movie")?.id)
     }
 
     private fun progress(

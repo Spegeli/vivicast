@@ -1,6 +1,7 @@
 package com.vivicast.tv.data.media
 
 import androidx.room.withTransaction
+import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.cache.NoOpM3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
@@ -30,6 +31,7 @@ class RoomCatalogImportRepository(
     private val favoritesDao = database.favoritesDao()
     private val playbackDao = database.playbackDao()
     private val epgDao = database.epgDao()
+    private val androidTvSearchDao = database.androidTvSearchDao()
 
     override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
         val now = clock()
@@ -64,6 +66,7 @@ class RoomCatalogImportRepository(
             }
             val channelCount = upsertChannels(providerId, channels, existingChannels)
             deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, categoryResult.removedIds)
+            androidTvSearchDao.rebuildEntries()
 
             CatalogImportResult(
                 categoriesAdded = categoryResult.count.added,
@@ -77,7 +80,13 @@ class RoomCatalogImportRepository(
         }
         m3uStreamReferenceStore.replaceProviderReferences(
             providerId = providerId,
-            references = uniqueChannels.values.associate { it.remoteId to it.streamUrl },
+            references = uniqueChannels.values.associate { channel ->
+                channel.remoteId to M3uStreamReference(
+                    streamUrl = channel.streamUrl,
+                    catchupMode = channel.catchupMode,
+                    catchupSource = channel.catchupSource,
+                )
+            },
         )
         return result
     }
@@ -125,6 +134,7 @@ class RoomCatalogImportRepository(
             deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, liveCategories.removedIds)
             deleteRemovedCategories(providerId, CATEGORY_TYPE_MOVIE, movieCategories.removedIds)
             deleteRemovedCategories(providerId, CATEGORY_TYPE_SERIES, seriesCategories.removedIds)
+            androidTvSearchDao.rebuildEntries()
 
             XtreamCatalogImportResult(
                 liveCategories = liveCategories.count,
@@ -158,6 +168,7 @@ class RoomCatalogImportRepository(
                 CategoryEntity(
                     id = categoryId(providerId, type, remoteId),
                     providerId = providerId,
+                    stableKey = categoryStableKey(type, remoteId),
                     type = type,
                     remoteId = remoteId,
                     name = if (remoteId == UNCATEGORIZED_REMOTE_ID) {
@@ -326,6 +337,7 @@ class RoomCatalogImportRepository(
             id = channelId(providerId, remoteId),
             providerId = providerId,
             categoryId = categoryId,
+            stableKey = mediaStableKey(remoteId),
             remoteId = remoteId,
             channelNumber = channelNumber,
             name = name,
@@ -341,6 +353,7 @@ class RoomCatalogImportRepository(
             id = channelId(providerId, remoteId),
             providerId = providerId,
             categoryId = categoryId(providerId, CATEGORY_TYPE_LIVE, categoryRemoteId()),
+            stableKey = mediaStableKey(remoteId),
             remoteId = remoteId,
             channelNumber = channelNumber,
             name = name,
@@ -356,6 +369,7 @@ class RoomCatalogImportRepository(
             id = movieId(providerId, remoteId),
             providerId = providerId,
             categoryId = categoryId(providerId, CATEGORY_TYPE_MOVIE, categoryRemoteId()),
+            stableKey = mediaStableKey(remoteId),
             remoteId = remoteId,
             name = name,
             originalName = null,
@@ -380,6 +394,7 @@ class RoomCatalogImportRepository(
             id = seriesId(providerId, remoteId),
             providerId = providerId,
             categoryId = categoryId(providerId, CATEGORY_TYPE_SERIES, categoryRemoteId()),
+            stableKey = mediaStableKey(remoteId),
             remoteId = remoteId,
             name = name,
             originalName = null,
@@ -407,6 +422,7 @@ class RoomCatalogImportRepository(
             id = seasonId(providerId, seriesRemoteId, seasonNumber),
             providerId = providerId,
             seriesId = seriesId,
+            stableKey = seasonStableKey(seriesRemoteId, seasonNumber),
             seasonNumber = seasonNumber,
             name = this?.name ?: "Staffel $seasonNumber",
             posterUrl = this?.posterUrl,
@@ -421,6 +437,7 @@ class RoomCatalogImportRepository(
             providerId = providerId,
             seriesId = seriesId,
             seasonId = seasonId,
+            stableKey = mediaStableKey(remoteId),
             remoteId = remoteId,
             episodeNumber = episodeNumber,
             seasonNumber = seasonNumber,
@@ -516,6 +533,15 @@ class RoomCatalogImportRepository(
 
         fun episodeId(providerId: String, remoteId: String): String =
             "$providerId:episode:${stableHash(remoteId)}"
+
+        fun categoryStableKey(type: String, remoteId: String): String =
+            stableHash("${type.lowercase()}:$remoteId")
+
+        fun mediaStableKey(remoteId: String): String =
+            stableHash(remoteId)
+
+        fun seasonStableKey(seriesRemoteId: String, seasonNumber: Int): String =
+            stableHash("$seriesRemoteId:$seasonNumber")
 
         fun stableHash(value: String): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))

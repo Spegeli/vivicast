@@ -1,10 +1,12 @@
 package com.vivicast.tv.feature.movies
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.playback.PlaybackRepository
@@ -30,6 +32,8 @@ import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -45,13 +49,38 @@ class MoviesRouteContinueTest {
                 mediaRepository = FakeMediaRepository(),
                 favoritesRepository = FakeFavoritesRepository(),
                 playbackRepository = FakePlaybackRepository(),
+                openTrailer = { false },
             )
         }
 
-        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(2)
+        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
         compose.onAllNodesWithText("Continue Movie").assertCountEquals(2)
-        compose.onNodeWithText("Von Anfang an").assertIsDisplayed()
-        compose.onNodeWithText("42 %").assertIsDisplayed()
+        compose.onAllNodesWithText("Von Anfang an").assertCountEquals(0)
+
+        compose.onNodeWithTag(moviePosterTag(MOVIE_ID)).performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
+        compose.onAllNodesWithText("Filmdetails").assertCountEquals(1)
+        compose.onAllNodesWithText("Von Anfang an").assertCountEquals(1)
+        compose.onAllNodesWithText("42 %").assertCountEquals(1)
+        compose.onAllNodesWithText("Trailer").assertCountEquals(1)
+
+        compose.onNodeWithText("Trailer").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onAllNodesWithText("Für Trailer wird die YouTube-App benötigt.").assertCountEquals(1)
+
+        compose.onNodeWithText("Als gesehen markieren").performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.onAllNodesWithText("Gesehen").assertCountEquals(2)
+        compose.onAllNodesWithText("Als ungesehen markieren").assertCountEquals(1)
+    }
+
+    @Test
+    fun youtubeUrlValidationAcceptsOnlyExpectedHosts() {
+        assertTrue("https://youtube.com/watch?v=abc".isYouTubeUrl())
+        assertTrue("https://www.youtube.com/watch?v=abc".isYouTubeUrl())
+        assertTrue("https://youtu.be/abc".isYouTubeUrl())
+        assertFalse("https://example.com/watch?v=abc".isYouTubeUrl())
+        assertFalse("not a url".isYouTubeUrl())
     }
 }
 
@@ -86,12 +115,17 @@ private class FakeMediaRepository : MediaRepository {
     override fun observeSeries(providerId: String, categoryId: String?): Flow<List<Series>> = flowOf(emptyList())
     override fun observeSeasons(providerId: String, seriesId: String): Flow<List<Season>> = flowOf(emptyList())
     override fun observeEpisodes(providerId: String, seasonId: String): Flow<List<Episode>> = flowOf(emptyList())
+    override suspend fun getChannel(providerId: String, channelId: String): Channel? = null
+    override suspend fun getMovie(providerId: String, movieId: String): Movie? =
+        TEST_MOVIES.firstOrNull { it.providerId == providerId && it.id == movieId }
+    override suspend fun getEpisode(providerId: String, episodeId: String): Episode? = null
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
 }
 
 private class FakeFavoritesRepository : FavoritesRepository {
     override fun observeFavorites(providerId: String, mediaType: MediaType): Flow<List<Favorite>> = flowOf(emptyList())
+    override fun observeFavorites(mediaType: MediaType): Flow<List<Favorite>> = flowOf(emptyList())
     override suspend fun isFavorite(providerId: String, mediaType: MediaType, mediaId: String): Boolean = false
     override suspend fun addFavorite(favorite: Favorite) = Unit
     override suspend fun removeFavorite(providerId: String, mediaType: MediaType, mediaId: String) = Unit
@@ -99,16 +133,33 @@ private class FakeFavoritesRepository : FavoritesRepository {
 }
 
 private class FakePlaybackRepository : PlaybackRepository {
+    private var progress: PlaybackProgress? = TEST_PROGRESS
+
     override fun observeContinueWatching(providerId: String): Flow<List<PlaybackProgress>> =
-        flowOf(listOf(TEST_PROGRESS).filter { it.providerId == providerId })
+        flowOf(listOfNotNull(progress?.takeUnless { it.isCompleted }).filter { it.providerId == providerId })
+
+    override fun observeAllContinueWatching(): Flow<List<PlaybackProgress>> =
+        flowOf(listOfNotNull(progress?.takeUnless { it.isCompleted }))
 
     override fun observeRecentChannels(providerId: String, limit: Int): Flow<List<ChannelHistory>> = flowOf(emptyList())
+    override fun observeAllRecentChannels(limit: Int): Flow<List<ChannelHistory>> = flowOf(emptyList())
     override suspend fun getProgress(providerId: String, mediaType: MediaType, mediaId: String): PlaybackProgress? =
-        TEST_PROGRESS.takeIf { it.providerId == providerId && it.mediaType == mediaType && it.mediaId == mediaId }
+        progress?.takeIf { it.providerId == providerId && it.mediaType == mediaType && it.mediaId == mediaId }
 
-    override suspend fun saveProgress(progress: PlaybackProgress) = Unit
+    override suspend fun saveProgress(progress: PlaybackProgress) {
+        this.progress = progress
+    }
+
+    override suspend fun deleteProgress(providerId: String, mediaType: MediaType, mediaId: String) {
+        if (progress?.providerId == providerId && progress?.mediaType == mediaType && progress?.mediaId == mediaId) {
+            progress = null
+        }
+    }
     override suspend fun saveChannelHistory(history: ChannelHistory) = Unit
     override suspend fun clearProviderPlayback(providerId: String) = Unit
+    override suspend fun clearLiveTvHistory() = Unit
+    override suspend fun clearMovieProgress() = Unit
+    override suspend fun clearSeriesProgress() = Unit
 }
 
 private const val PROVIDER_ID = "provider-movies"
@@ -119,7 +170,7 @@ private val TEST_PROVIDER = Provider(
     id = PROVIDER_ID,
     name = "Provider Movies",
     type = ProviderType.Xtream,
-    credentialsKey = "credentials-provider-movies",
+    sourceConfigKey = "credentials-provider-movies",
     isActive = true,
     status = ProviderStatus.Active,
     includeLiveTv = false,

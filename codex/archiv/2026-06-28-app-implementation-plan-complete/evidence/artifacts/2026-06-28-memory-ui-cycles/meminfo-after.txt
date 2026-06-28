@@ -1,0 +1,72 @@
+﻿Applications Memory Usage (in Kilobytes):
+Uptime: 113650897 Realtime: 113650897
+
+** MEMINFO in pid 15490 [com.vivicast.tv] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    13950    13900       32       40    14704    33968    19272     4680
+  Dalvik Heap     6660     6524        0       23    12736    10692     5410     5282
+ Dalvik Other    12838     4540        0        0    21536                           
+        Stack     1760     1760        0        0     1768                           
+       Ashmem       13        0        0        0      568                           
+    Other dev       18        4       12        0      308                           
+     .so mmap     7199      368     3868        3    38700                           
+    .jar mmap     5722        0     2324        0    45180                           
+    .apk mmap      388        0       88        0     1752                           
+    .ttf mmap      975        0      632        0     1424                           
+    .dex mmap       15        0        0        0      864                           
+    .oat mmap       41        0        4        0     1788                           
+    .art mmap     7201     6740      112       52    21256                           
+   Other mmap      385        8      276        0     1552                           
+      Unknown    44524    44516        4        0    44800                           
+        TOTAL   101807    78360     7352      118   208936    44660    24682     9962
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    13376                          33992
+         Native Heap:    13900                          14704
+                Code:     7400                         106408
+               Stack:     1760                           1768
+            Graphics:        0                              0
+       Private Other:    49276
+              System:    16095
+             Unknown:                                   52064
+ 
+           TOTAL PSS:   101807            TOTAL RSS:   208936       TOTAL SWAP PSS:      118
+ 
+ Objects
+               Views:        7         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       16        AssetManagers:        0
+       Local Binders:       22        Proxy Binders:       51
+       Parcel memory:        8         Parcel count:       32
+    Death Recipients:        0             WebViews:        0
+ 
+ Native Allocations
+                         Count                       Total(kB)
+                        ------                         ------
+    Other (malloced):      433                             39
+ Other (nonmalloced):       90                             64
+ 
+ SQL
+         MEMORY_USED:     1371
+  PAGECACHE_OVERFLOW:      893          MALLOC_SIZE:       46
+ 
+ DATABASES
+      pgsz     dbsz   Lookaside(b) cache hits cache misses cache size  Dbname
+PER CONNECTION STATS
+         4      104             14    67   179     1  /data/user/0/com.vivicast.tv/no_backup/androidx.work.workdb
+         4        8                    0     0     0    (attached) temp
+         4      104             22    13    29     1  /data/user/0/com.vivicast.tv/no_backup/androidx.work.workdb (1)
+         4      544             12    81  1314     1  /data/user/0/com.vivicast.tv/databases/vivicast.db
+         4        8                    0     0     0    (attached) temp
+         4      544             45   231   138     1  /data/user/0/com.vivicast.tv/databases/vivicast.db (3)
+         4      544             33   112   210     1  /data/user/0/com.vivicast.tv/databases/vivicast.db (2)
+         4       32             66    11    50     8  /data/user/0/com.vivicast.tv/databases/exoplayer_internal.db
+POOL STATS
+     cache hits  cache misses    cache size  Dbname
+             80           212           292  /data/user/0/com.vivicast.tv/no_backup/androidx.work.workdb
+            267          1438          1705  /data/user/0/com.vivicast.tv/databases/vivicast.db
+              9            53            62  /data/user/0/com.vivicast.tv/databases/exoplayer_internal.db

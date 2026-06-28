@@ -32,11 +32,46 @@ interface CatalogDao {
     )
     fun observeChannels(providerId: String, categoryId: String?): Flow<List<ChannelEntity>>
 
+    @Query(
+        """
+        SELECT * FROM channels
+        WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY COALESCE(channelNumber, ''), name COLLATE NOCASE
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    fun observeChannelsPage(
+        providerId: String,
+        categoryId: String?,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ChannelEntity>>
+
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND type = :type")
     suspend fun getCategories(providerId: String, type: String): List<CategoryEntity>
 
     @Query("SELECT * FROM channels WHERE providerId = :providerId")
     suspend fun getChannels(providerId: String): List<ChannelEntity>
+
+    @Query("SELECT * FROM channels WHERE providerId = :providerId AND id = :channelId")
+    suspend fun getChannel(providerId: String, channelId: String): ChannelEntity?
+
+    @Query(
+        """
+        SELECT channels.* FROM channels
+        INNER JOIN providers ON providers.id = channels.providerId
+        WHERE providers.stableKey = :providerStableKey
+            AND channels.stableKey = :channelStableKey
+            AND providers.isActive = 1
+            AND providers.status != 'DISABLED'
+            AND providers.includeLiveTv = 1
+        LIMIT 1
+        """,
+    )
+    suspend fun getChannelByStableKeys(
+        providerStableKey: String,
+        channelStableKey: String,
+    ): ChannelEntity?
 
     @Query(
         """
@@ -88,14 +123,94 @@ interface CatalogDao {
     @Query("SELECT * FROM movies WHERE providerId = :providerId")
     suspend fun getMovies(providerId: String): List<MovieEntity>
 
+    @Query("SELECT * FROM movies WHERE providerId = :providerId AND id = :movieId")
+    suspend fun getMovie(providerId: String, movieId: String): MovieEntity?
+
+    @Query(
+        """
+        SELECT movies.* FROM movies
+        INNER JOIN providers ON providers.id = movies.providerId
+        WHERE providers.stableKey = :providerStableKey
+            AND movies.stableKey = :movieStableKey
+            AND providers.isActive = 1
+            AND providers.status != 'DISABLED'
+            AND providers.includeMovies = 1
+        LIMIT 1
+        """,
+    )
+    suspend fun getMovieByStableKeys(
+        providerStableKey: String,
+        movieStableKey: String,
+    ): MovieEntity?
+
     @Query("SELECT * FROM series WHERE providerId = :providerId")
     suspend fun getSeries(providerId: String): List<SeriesEntity>
+
+    @Query("SELECT * FROM series WHERE providerId = :providerId AND id = :seriesId")
+    suspend fun getSeries(providerId: String, seriesId: String): SeriesEntity?
+
+    @Query(
+        """
+        SELECT series.* FROM series
+        INNER JOIN providers ON providers.id = series.providerId
+        WHERE providers.stableKey = :providerStableKey
+            AND series.stableKey = :seriesStableKey
+            AND providers.isActive = 1
+            AND providers.status != 'DISABLED'
+            AND providers.includeSeries = 1
+        LIMIT 1
+        """,
+    )
+    suspend fun getSeriesByStableKeys(
+        providerStableKey: String,
+        seriesStableKey: String,
+    ): SeriesEntity?
 
     @Query("SELECT * FROM seasons WHERE providerId = :providerId")
     suspend fun getSeasons(providerId: String): List<SeasonEntity>
 
     @Query("SELECT * FROM episodes WHERE providerId = :providerId")
     suspend fun getEpisodes(providerId: String): List<EpisodeEntity>
+
+    @Query("SELECT * FROM episodes WHERE providerId = :providerId AND id = :episodeId")
+    suspend fun getEpisode(providerId: String, episodeId: String): EpisodeEntity?
+
+    @Query(
+        """
+        SELECT episodes.* FROM episodes
+        INNER JOIN providers ON providers.id = episodes.providerId
+        WHERE providers.stableKey = :providerStableKey
+            AND episodes.stableKey = :episodeStableKey
+            AND providers.isActive = 1
+            AND providers.status != 'DISABLED'
+            AND providers.includeSeries = 1
+        LIMIT 1
+        """,
+    )
+    suspend fun getEpisodeByStableKeys(
+        providerStableKey: String,
+        episodeStableKey: String,
+    ): EpisodeEntity?
+
+    @Query(
+        """
+        SELECT * FROM episodes
+        WHERE providerId = :providerId
+            AND seriesId = :seriesId
+            AND (
+                seasonNumber > :seasonNumber
+                OR (seasonNumber = :seasonNumber AND episodeNumber > :episodeNumber)
+            )
+        ORDER BY seasonNumber, episodeNumber
+        LIMIT 1
+        """,
+    )
+    suspend fun getNextEpisode(
+        providerId: String,
+        seriesId: String,
+        seasonNumber: Int,
+        episodeNumber: Int,
+    ): EpisodeEntity?
 
     @Query(
         """
@@ -108,12 +223,42 @@ interface CatalogDao {
 
     @Query(
         """
+        SELECT * FROM movies
+        WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    fun observeMoviesPage(
+        providerId: String,
+        categoryId: String?,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<MovieEntity>>
+
+    @Query(
+        """
         SELECT * FROM series
         WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
         ORDER BY name COLLATE NOCASE
         """,
     )
     fun observeSeries(providerId: String, categoryId: String?): Flow<List<SeriesEntity>>
+
+    @Query(
+        """
+        SELECT * FROM series
+        WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
+        ORDER BY name COLLATE NOCASE
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    fun observeSeriesPage(
+        providerId: String,
+        categoryId: String?,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<SeriesEntity>>
 
     @Query("SELECT * FROM seasons WHERE providerId = :providerId AND seriesId = :seriesId ORDER BY seasonNumber")
     fun observeSeasons(providerId: String, seriesId: String): Flow<List<SeasonEntity>>

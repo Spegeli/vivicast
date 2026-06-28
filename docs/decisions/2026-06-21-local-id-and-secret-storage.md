@@ -1,25 +1,25 @@
 # 2026-06-21 - Local ID and Secret Storage Strategy
 
+Status: superseded for implementation by `../vivicast-docs/prd/PRD-v1/06-data-model.md` and `../vivicast-docs/architecture/decisions/ADR-010-stable-identities-and-restore-keys.md`.
+
 ## Context
 
 PRD v1 requires local Room storage, provider isolation, local search, provider deletion cleanup, and encrypted storage for credentials and secret URLs.
 
-## Decision
+## Superseding Rule
 
-- Room entity primary keys use stable local `String` IDs.
-- Imported provider content keeps provider isolation by storing `providerId` on every provider-owned entity.
-- Remote identity is represented by `providerId + remoteId` for imported catalog items.
-- User-owned cross-cutting state uses `providerId + mediaType + mediaId` for favorites and playback progress.
-- Room stores secret references only:
-  - provider credentials use `credentialsKey`
-  - protected EPG URLs use `urlKey`
-- Room must not store raw M3U URLs, Xtream server URLs, Xtream usernames, Xtream passwords, or protected EPG URLs.
+This local decision predates the final docs repo alignment and must not be used as an active source of truth when it differs from the final docs.
+
+Implementation must follow:
+
+- Local Room `id` values are only local database IDs.
+- Provider identity must use `ProviderEntity.stableKey` as `providerStableKey` for backup, restore, favorites, history, and playback progress references.
+- Imported provider content must carry final `stableKey` values.
+- User-owned cross-cutting state must use stable references such as `providerStableKey + mediaType + mediaStableKey` and must support pending restore references.
+- `providerId + remoteId` and `providerId + mediaType + mediaId` are not sufficient backup/restore identities.
+- Secret or private values must be referenced through protected secret storage, not persisted as raw Room values or plaintext app-private files.
 
 ## Consequences
 
-- Provider rename does not change IDs or break favorites/history/progress.
-- Provider deletion can clean all provider-owned rows through `providerId`.
-- Duplicate channel/movie/series names from different providers remain distinct.
-- Later ingest code must generate deterministic local IDs or preserve previously assigned IDs during delta sync.
-- Later backup code must explicitly decide whether encrypted secrets are exported and must never infer them from Room rows.
-
+- Existing code using only local IDs or `remoteId` needs migration before backup/restore, favorites, history, or playback progress can be considered final-doc compliant.
+- Current plaintext stream reference storage must be rechecked against final secret-store rules before production use.

@@ -1,0 +1,2 @@
+﻿--------- beginning of main
+06-27 23:55:02.253 14224 14241 I VivicastBenchmark: largeFixtureRestore restoreMs=725 providers=1 favorites=1000 progress=2000 history=2000 pendingFavorites=1000 pendingProgress=2000 pendingHistory=2000
