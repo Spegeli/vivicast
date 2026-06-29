@@ -170,6 +170,27 @@ class SettingsDialogFocusTest {
 
         compose.waitUntil(timeoutMillis = 5_000) { submitted == "secret-pass" }
     }
+
+    @Test
+    fun backupPanelShowsTargetAndLastBackupMetadata() {
+        var submitted: BackupSettingsState? = null
+
+        compose.setContent {
+            BackupSettingsPanel(
+                state = BackupSettingsState(),
+                onBackupSettingsChanged = { submitted = it },
+            )
+        }
+
+        compose.onNodeWithText("Backup-Ziel").assertIsDisplayed()
+        compose.onNodeWithText("Lokaler Speicher").assertIsDisplayed()
+        compose.onNodeWithText("Letzte Sicherung").assertIsDisplayed()
+        compose.onNodeWithText("Nie").assertIsDisplayed()
+
+        compose.onNodeWithText("Backup-Ziel").performSemanticsAction(SemanticsActions.OnClick)
+
+        compose.waitUntil(timeoutMillis = 5_000) { submitted?.target == BackupTargetMode.Smb }
+    }
 }
 
 private val TEST_PROVIDER = Provider(

@@ -42,13 +42,13 @@ fun VivicastTheme(content: @Composable () -> Unit) {
 }
 
 object VivicastColors {
-    val Background = Color(0xFF070A0F)
-    val BackgroundElevated = Color(0xFF0B1220)
-    val Surface = Color(0xFF111827)
-    val SurfaceHigh = Color(0xFF172033)
-    val SurfaceFocus = Color(0xFF1E3A5F)
-    val SurfacePressed = Color(0xFF24476F)
-    val SurfaceSelected = Color(0xFF142B44)
+    val Background = Color(0xFF050914)
+    val BackgroundElevated = Color(0xFF07111F)
+    val Surface = Color(0xFF0B1628)
+    val SurfaceHigh = Color(0xFF101D33)
+    val SurfaceFocus = Color(0xFF102B46)
+    val SurfacePressed = Color(0xFF15395C)
+    val SurfaceSelected = Color(0xFF102B46)
     val SurfaceDisabled = Color(0x80111827)
 
     val TextPrimary = Color(0xFFF8FAFC)
@@ -57,20 +57,20 @@ object VivicastColors {
     val TextDisabled = Color(0xFF64748B)
     val TextOnAccent = Color(0xFF031525)
 
-    val Accent = Color(0xFF38BDF8)
-    val AccentSoft = Color(0xFF0EA5E9)
-    val FocusRing = Color(0xFF7DD3FC)
-    val FocusGlow = Color(0x6638BDF8)
+    val Accent = Color(0xFF00C8FF)
+    val AccentSoft = Color(0xFF38D5FF)
+    val FocusRing = Color(0xFF00D4FF)
+    val FocusGlow = Color(0x6600BFFF)
     val Focus = FocusRing
 
     val Success = Color(0xFF22C55E)
     val Warning = Color(0xFFF59E0B)
     val Error = Color(0xFFEF4444)
     val Info = Accent
-    val Live = Color(0xFFEF4444)
+    val Live = Color(0xFFFF2D3A)
     val Favorite = Color(0xFFFACC15)
-    val CatchUp = Color(0xFFA78BFA)
-    val Progress = Accent
+    val CatchUp = Color(0xFF0EA5E9)
+    val Progress = Color(0xFF159BFF)
 }
 
 object VivicastTypography {
@@ -79,12 +79,12 @@ object VivicastTypography {
     val TitleLarge = TextStyle(color = VivicastColors.TextPrimary, fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold)
     val TitleMedium = TextStyle(color = VivicastColors.TextPrimary, fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold)
     val TitleSmall = TextStyle(color = VivicastColors.TextPrimary, fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)
-    val BodyLarge = TextStyle(color = VivicastColors.TextSecondary, fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.Normal)
+    val BodyLarge = TextStyle(color = VivicastColors.TextPrimary, fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.Normal)
     val BodyMedium = TextStyle(color = VivicastColors.TextSecondary, fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.Normal)
     val BodySmall = TextStyle(color = VivicastColors.TextTertiary, fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal)
     val LabelLarge = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
     val LabelMedium = TextStyle(color = VivicastColors.TextPrimary, fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold)
-    val LabelSmall = TextStyle(color = VivicastColors.TextPrimary, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+    val LabelSmall = TextStyle(color = VivicastColors.TextSecondary, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
 
     val ScreenTitle = DisplayMedium
     val Body = BodyMedium
@@ -103,15 +103,21 @@ object VivicastSpacing {
     val Space9 = 64.dp
     val Space10 = 80.dp
 
-    val ScreenHorizontal = Space8
-    val ScreenVertical = Space6
-    val PanelPadding = Space5
-    val CardPadding = Space4
-    val ButtonHorizontal = Space5
-    val ButtonVertical = Space3
-    val ContentGap = Space5
-    val RowGap = Space5
-    val ColumnGap = Space4
+    val ScreenHorizontal = Space8       // 48dp — TV safe area
+    val ScreenVertical = Space6         // 32dp
+    val PanelPadding = Space5           // 24dp
+    val CardPadding = Space4            // 16dp
+    val ButtonHorizontal = Space5       // 24dp
+    val ButtonVertical = Space3         // 12dp
+    val ContentGap = Space4             // 16dp
+    val RowGap = Space2                 // 8dp
+    val SectionGap = Space6             // 32dp
+    val ColumnGap = Space5              // 24dp
+    val GridGap = Space5                // 24dp
+    val SettingsRowHorizontal = Space5  // 24dp
+    val SettingsRowVertical = Space4    // 16dp
+    val PlayerHorizontalSafe = Space8   // 48dp
+    val PlayerVerticalSafe = Space7     // 40dp
 }
 
 object VivicastShapes {
@@ -127,22 +133,34 @@ object VivicastShapes {
     val PosterRadius = RoundedCornerShape(RadiusMedium)
     val PanelRadius = RoundedCornerShape(RadiusXLarge)
     val PillRadius = RoundedCornerShape(RadiusPill)
+
+    // Semantic aliases (matches compose-template)
+    val Small = RoundedCornerShape(RadiusSmall)
+    val Medium = RoundedCornerShape(RadiusMedium)
+    val Large = RoundedCornerShape(RadiusLarge)
+    val XLarge = RoundedCornerShape(RadiusXLarge)
+    val Pill = PillRadius
+    val Button = Medium
+    val Dialog = XLarge
+    val SettingsRow = Large
+    val TopNavItem = Large
 }
 
 object VivicastBorders {
     val Hairline: Dp = 1.dp
-    val FocusWidth: Dp = 3.dp
+    val FocusWidth: Dp = 2.dp
     val FocusInset: Dp = 0.dp
     val PanelWidth: Dp = 1.dp
 }
 
 object VivicastFocusDefaults {
-    val ScaleSmall = 1.03f
+    val ScaleSmall = 1.02f
+    val ScaleButton = 1.03f
     val ScaleMedium = 1.06f
     val ScaleLarge = 1.08f
     val RingWidth: Dp = VivicastBorders.FocusWidth
     val RingGap: Dp = 3.dp
-    val GlowElevation: Dp = 20.dp
+    val GlowElevation: Dp = 18.dp
     val GlowAlpha = 0.40f
 
     val BorderWidth: Dp = RingWidth
@@ -158,12 +176,12 @@ object VivicastAlpha {
 }
 
 object VivicastCardSizes {
-    val TopTabsHeight = 56.dp
-    val TopTabMinWidth = 104.dp
-    val ChannelItemHeight = 104.dp
+    val TopTabsHeight = 34.dp
+    val TopTabMinWidth = 72.dp
+    val ChannelItemHeight = 80.dp
     val ChannelLogoWidth = 64.dp
     val ChannelLogoHeight = 42.dp
-    val ActionPillHeight = 44.dp
+    val ActionPillHeight = 36.dp
     val PosterWidth = 124.dp
     val PosterImageHeight = 112.dp
     const val PosterAspectRatio = 2f / 3f
@@ -171,11 +189,11 @@ object VivicastCardSizes {
     val SearchPosterHeight = 150.dp
     val SearchWideWidth = 320.dp
     val SearchWideHeight = 88.dp
-    val HeroHeight = 220.dp
+    val HeroHeight = 190.dp
     val PlayerOverlayHeight = 246.dp
     val PlayerTimelineHeight = 50.dp
-    val SettingsNavItemHeight = 62.dp
-    val SettingsRowHeight = 82.dp
+    val SettingsNavItemHeight = 48.dp
+    val SettingsRowHeight = 58.dp
 }
 
 object VivicastMotion {

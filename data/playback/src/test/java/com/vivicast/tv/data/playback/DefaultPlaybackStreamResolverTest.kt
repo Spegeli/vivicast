@@ -32,6 +32,7 @@ class DefaultPlaybackStreamResolverTest {
                     password = "demo/pass",
                 ),
             ),
+            m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
         )
 
         val result = resolver.resolve(
@@ -268,7 +269,10 @@ class DefaultPlaybackStreamResolverTest {
                 password = "secret",
             ),
         )
-        val resolver = DefaultPlaybackStreamResolver(providerRepository = repository)
+        val resolver = DefaultPlaybackStreamResolver(
+            providerRepository = repository,
+            m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
+        )
 
         val result = resolver.resolve(
             PlaybackStreamRequest(
@@ -312,6 +316,7 @@ class DefaultPlaybackStreamResolverTest {
                     password = "secret",
                 ),
             ),
+            m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
         )
 
     private class FakeProviderRepository(

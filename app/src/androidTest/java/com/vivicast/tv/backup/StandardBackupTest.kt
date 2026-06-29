@@ -11,7 +11,8 @@ import com.vivicast.tv.core.database.model.PlaybackProgressEntity
 import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.SearchHistoryEntity
 import com.vivicast.tv.core.datastore.AppearancePreferences
-import com.vivicast.tv.core.datastore.CachePreferences
+import com.vivicast.tv.core.datastore.BackupPreferences
+import com.vivicast.tv.core.datastore.BackupTargetPreference
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.GeneralPreferences
@@ -87,6 +88,10 @@ class StandardBackupTest {
         assertFalse(security.has("checkValue"))
         assertFalse(security.has("failedAttempts"))
         assertFalse(security.has("lockoutCount"))
+        assertFalse(json.getJSONObject("preferences").has("cache"))
+        val backup = json.getJSONObject("preferences").getJSONObject("backup")
+        assertEquals(BackupTargetPreference.LocalStorage.name, backup.getString("targetType"))
+        assertFalse(backup.has("lastBackupAtMillis"))
 
         val text = json.toString()
         assertFalse(text.contains("protectSettings", ignoreCase = true))
@@ -796,11 +801,11 @@ private class FakePreferencesStore(
     override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
-    override suspend fun updateCache(cache: CachePreferences) = Unit
     override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
         this.parentalControl = parentalControl
     }
 
     override suspend fun updateEpg(epg: EpgPreferences) = Unit
+    override suspend fun updateBackup(backup: BackupPreferences) = Unit
     override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) = Unit
 }

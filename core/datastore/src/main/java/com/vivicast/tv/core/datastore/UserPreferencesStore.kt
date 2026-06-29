@@ -12,9 +12,9 @@ interface UserPreferencesStore {
     suspend fun updateHistory(history: HistoryPreferences)
     suspend fun updateSearchHistory(searchHistory: List<String>)
     suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>)
-    suspend fun updateCache(cache: CachePreferences)
     suspend fun updateParentalControl(parentalControl: ParentalControlPreferences)
     suspend fun updateEpg(epg: EpgPreferences)
+    suspend fun updateBackup(backup: BackupPreferences)
     suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences)
 }
 
@@ -26,9 +26,9 @@ data class UserPreferences(
     val history: HistoryPreferences = HistoryPreferences(),
     val searchHistory: List<String> = emptyList(),
     val expandedLiveTvProviderIds: Set<String> = emptySet(),
-    val cache: CachePreferences = CachePreferences(),
     val parentalControl: ParentalControlPreferences = ParentalControlPreferences(),
     val epg: EpgPreferences = EpgPreferences(),
+    val backup: BackupPreferences = BackupPreferences(),
     val diagnostics: DiagnosticsPreferences = DiagnosticsPreferences(),
 )
 
@@ -37,8 +37,8 @@ data class GeneralPreferences(
     val doubleBackToExit: Boolean = true,
     val backgroundRefreshEnabled: Boolean = true,
     val rememberSorting: Boolean = true,
-    val startDestination: StartDestinationPreference = StartDestinationPreference.Home,
     val globalUserAgent: String = DEFAULT_GLOBAL_USER_AGENT,
+    val lastSettingsSection: String? = null,
 )
 
 data class AppearancePreferences(
@@ -52,9 +52,10 @@ data class AppearancePreferences(
 
 data class PlaybackPreferences(
     val bufferSize: BufferSizePreference = BufferSizePreference.Medium,
-    val audioDecoder: DecoderPreference = DecoderPreference.Automatic,
-    val videoDecoder: DecoderPreference = DecoderPreference.Automatic,
+    val audioDecoder: DecoderPreference = DecoderPreference.Hardware,
+    val videoDecoder: DecoderPreference = DecoderPreference.Hardware,
     val afrEnabled: Boolean = false,
+    val audioPassthroughEnabled: Boolean = false,
     val timeshiftEnabled: Boolean = true,
     val timeshiftStorage: TimeshiftStoragePreference = TimeshiftStoragePreference.Automatic,
     val timeshiftMinutes: Int = 30,
@@ -69,10 +70,6 @@ data class HistoryPreferences(
     val enabled: Boolean = true,
     val maxRecentChannels: Int = 50,
     val watchedThresholdPercent: Int = 95,
-)
-
-data class CachePreferences(
-    val maxCacheSizeMb: Int = 500,
 )
 
 data class ParentalControlPreferences(
@@ -91,13 +88,18 @@ data class EpgPreferences(
     val refreshOnPlaylistChangeEnabled: Boolean = true,
 )
 
+data class BackupPreferences(
+    val target: BackupTargetPreference = BackupTargetPreference.LocalStorage,
+    val lastBackupAtMillis: Long? = null,
+)
+
 data class DiagnosticsPreferences(
     val diagnosticsLoggingEnabled: Boolean = false,
     val retentionDays: Int = 1,
     val keepLastSessionSummary: Boolean = true,
 )
 
-enum class ThemeColor { Dark }
+enum class ThemeColor { Dark, HighContrastDark, AmoledDark }
 
 enum class AccentColor { Blue }
 
@@ -117,6 +119,6 @@ enum class TimeshiftStoragePreference { Automatic, Ram, InternalStorage }
 
 enum class ExternalPlayerPreference { Internal, External, AskEveryTime }
 
-enum class StartDestinationPreference { Home, LiveTv, Movies, Series }
+enum class BackupTargetPreference { LocalStorage, Smb, GoogleDrive }
 
 const val DEFAULT_GLOBAL_USER_AGENT = "Vivicast/1.0"

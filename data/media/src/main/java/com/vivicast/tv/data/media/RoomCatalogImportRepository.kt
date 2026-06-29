@@ -3,7 +3,6 @@ package com.vivicast.tv.data.media
 import androidx.room.withTransaction
 import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
-import com.vivicast.tv.core.cache.NoOpM3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
@@ -24,7 +23,7 @@ import java.security.MessageDigest
 
 class RoomCatalogImportRepository(
     private val database: VivicastDatabase,
-    private val m3uStreamReferenceStore: M3uStreamReferenceStore = NoOpM3uStreamReferenceStore,
+    private val m3uStreamReferenceStore: M3uStreamReferenceStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : CatalogImportRepository {
     private val catalogDao = database.catalogDao()

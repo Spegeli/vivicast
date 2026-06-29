@@ -21,26 +21,26 @@ sealed interface StandardBackupRestoreValidation {
 
 fun validateStandardBackupForRestore(jsonText: String): StandardBackupRestoreValidation =
     runCatching { JSONObject(jsonText).validateBackupForRestore(expectedMode = "STANDARD", allowSecrets = false) }
-        .getOrElse { StandardBackupRestoreValidation.Invalid("Backup-Datei ungueltig.") }
+        .getOrElse { StandardBackupRestoreValidation.Invalid("Backup-Datei ungültig.") }
 
 fun validateFullBackupPayloadForRestore(jsonText: String): StandardBackupRestoreValidation =
     runCatching { JSONObject(jsonText).validateBackupForRestore(expectedMode = "FULL", allowSecrets = true) }
-        .getOrElse { StandardBackupRestoreValidation.Invalid("Backup-Datei ungueltig.") }
+        .getOrElse { StandardBackupRestoreValidation.Invalid("Backup-Datei ungültig.") }
 
 private fun JSONObject.validateBackupForRestore(
     expectedMode: String,
     allowSecrets: Boolean,
 ): StandardBackupRestoreValidation {
     if (optInt("schemaVersion", -1) != STANDARD_BACKUP_SCHEMA_VERSION) {
-        return StandardBackupRestoreValidation.Invalid("Backup-Version nicht unterstuetzt.")
+        return StandardBackupRestoreValidation.Invalid("Backup-Version nicht unterstützt.")
     }
     if (optString("exportMode") != expectedMode) {
-        return StandardBackupRestoreValidation.Invalid("Backup-Modus nicht unterstuetzt.")
+        return StandardBackupRestoreValidation.Invalid("Backup-Modus nicht unterstützt.")
     }
     val exportedAtMillis = optLong("exportedAtMillis", -1L)
-    if (exportedAtMillis < 0L) return StandardBackupRestoreValidation.Invalid("Backup-Datei ungueltig.")
+    if (exportedAtMillis < 0L) return StandardBackupRestoreValidation.Invalid("Backup-Datei ungültig.")
     if (!allowSecrets) findStandardBackupSecretKey()?.let {
-        return StandardBackupRestoreValidation.Invalid("Standard-Backup enthaelt geheime Werte.")
+        return StandardBackupRestoreValidation.Invalid("Standard-Backup enthält geheime Werte.")
     }
 
     val providers = optJSONArray("providers") ?: JSONArray()
@@ -151,10 +151,10 @@ private fun JSONObject.nullableString(key: String): String? =
     if (!has(key) || isNull(key)) null else optString(key).trim()
 
 private fun invalidBackup(): StandardBackupRestoreValidation.Invalid =
-    StandardBackupRestoreValidation.Invalid("Backup-Datei ungueltig.")
+    StandardBackupRestoreValidation.Invalid("Backup-Datei ungültig.")
 
 private fun invalidReference(): StandardBackupRestoreValidation.Invalid =
-    StandardBackupRestoreValidation.Invalid("Backup-Referenzen ungueltig.")
+    StandardBackupRestoreValidation.Invalid("Backup-Referenzen ungültig.")
 
 private fun isRestorableSourceUrl(url: String, allowSecrets: Boolean): Boolean =
     if (allowSecrets) fullBackupHttpUrlOrNull(url) != null else standardBackupM3uUrlOrNull(url) != null

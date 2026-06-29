@@ -33,7 +33,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.SectionTitle
@@ -63,6 +65,29 @@ fun PlayerRoute(
     onPlayNextEpisode: () -> Unit = {},
     onAutoNextBack: () -> Unit = {},
 ) {
+    val timeshiftUnavailableStr = stringResource(R.string.player_timeshift_unavailable)
+    val aspectFillStr = stringResource(R.string.player_aspect_fill)
+    val aspectFitStr = stringResource(R.string.player_aspect_fit)
+    val noPlaybackStr = stringResource(R.string.player_no_playback)
+    val playbackErrorStr = stringResource(R.string.player_playback_error)
+    val statusIdleStr = stringResource(R.string.player_status_idle)
+    val statusStartingStr = stringResource(R.string.player_status_starting)
+    val statusPlaybackStr = stringResource(R.string.player_status_playback)
+    val statusPausedStr = stringResource(R.string.player_status_paused)
+    val statusEndedStr = stringResource(R.string.player_status_ended)
+    val statusErrorStr = stringResource(R.string.player_status_error)
+    val statusLiveStr = stringResource(R.string.player_status_live)
+    val statusTimeshiftStr = stringResource(R.string.player_status_timeshift)
+    val reconnectingStr = stringResource(R.string.player_reconnecting)
+    val errorTitleStr = stringResource(R.string.player_error_title)
+    val retryLabelStr = stringResource(R.string.player_retry_label)
+    val timeshiftAtLiveStr = stringResource(R.string.player_timeshift_at_live)
+    val timelineHintStr = stringResource(R.string.player_timeline_hint)
+    val audioSystemStr = stringResource(R.string.language_system)
+    val audioDeStr = stringResource(R.string.language_german)
+    val audioEnStr = stringResource(R.string.language_english)
+    val audioOriginalStr = stringResource(R.string.audio_original)
+    val subtitleOffStr = stringResource(R.string.value_off)
     var overlayVisible by remember { mutableStateOf(false) }
     var overlayInteractionTick by remember { mutableIntStateOf(0) }
     var fallbackPlaying by remember { mutableStateOf(false) }
@@ -94,7 +119,7 @@ fun PlayerRoute(
     }
     val seekable = request?.seekable ?: false
     val progress = controllerState?.progressPercent() ?: fallbackProgress
-    val title = request?.title ?: "Keine Wiedergabe"
+    val title = request?.title ?: noPlaybackStr
     val badges = controllerState?.badges() ?: emptyList()
     val audioOption = currentState?.audioOption ?: fallbackAudioOption
     val subtitleOption = currentState?.subtitleOption ?: fallbackSubtitleOption
@@ -220,19 +245,19 @@ fun PlayerRoute(
             VivicastPlayerOverlay(
                 title = title,
                 subtitle = if (controllerState?.status == PlaybackStatus.Error) {
-                    "Wiedergabe konnte nicht gestartet werden."
+                    playbackErrorStr
                 } else if (currentState?.isTimeshiftEnabled == true) {
                     if (currentState.isAtLiveEdge) {
-                        "Timeshift-Fenster aktiv. Live-Kante erreicht."
+                        timeshiftAtLiveStr
                     } else {
-                        "Timeshift: ${currentState.liveEdgeOffsetMillis.formatOffset()} hinter Live."
+                        stringResource(R.string.player_timeshift_offset, currentState.liveEdgeOffsetMillis.formatOffset())
                     }
                 } else if (seekable) {
-                    "Timeline steuert die Position."
+                    timelineHintStr
                 } else {
-                    "Timeshift für diesen Sender nicht verfügbar."
+                    timeshiftUnavailableStr
                 },
-                statusLabel = controllerState?.status?.statusLabel(controllerState) ?: if (playing) "Live" else "Pausiert",
+                statusLabel = controllerState?.status?.statusLabel(controllerState, statusIdleStr, statusStartingStr, statusPlaybackStr, statusPausedStr, statusEndedStr, statusErrorStr, statusLiveStr, statusTimeshiftStr) ?: if (playing) statusLiveStr else statusPausedStr,
                 badges = badges,
                 progress = progress,
                 seekable = seekable,
@@ -267,31 +292,31 @@ fun PlayerRoute(
                 actions = {
                     if (currentState?.isTimeshiftEnabled == true && !currentState.isAtLiveEdge) {
                         ActionPill(
-                            "Live",
+                            statusLiveStr,
                             selected = true,
                             modifier = Modifier.testTag(playerLiveEdgeTag()),
                             onClick = { playerController?.seekToLiveEdge() },
                         )
                     }
                     ActionPill(
-                        "Audio",
+                        stringResource(R.string.player_audio),
                         selected = optionPanel == PlayerOptionPanel.Audio,
                         modifier = Modifier.testTag(playerAudioActionTag()),
                         onClick = { optionPanel = PlayerOptionPanel.Audio },
                     )
                     ActionPill(
-                        "Untertitel",
+                        stringResource(R.string.player_subtitles),
                         selected = optionPanel == PlayerOptionPanel.Subtitle,
                         modifier = Modifier.testTag(playerSubtitleActionTag()),
                         onClick = { optionPanel = PlayerOptionPanel.Subtitle },
                     )
                     ActionPill(
-                        "Bildformat",
+                        stringResource(R.string.player_aspect),
                         selected = optionPanel == PlayerOptionPanel.AspectRatio,
                         modifier = Modifier.testTag(playerAspectActionTag()),
                         onClick = { optionPanel = PlayerOptionPanel.AspectRatio },
                     )
-                    ActionPill("Mehr", onClick = {})
+                    ActionPill(stringResource(R.string.player_more), onClick = {})
                 },
                 footer = {},
             )
@@ -299,24 +324,24 @@ fun PlayerRoute(
 
         when (optionPanel) {
             PlayerOptionPanel.Audio -> PlayerOptionDialog(
-                title = "Audio",
+                title = stringResource(R.string.player_audio),
                 options = listOf(
-                    PlayerOptionItem("audio-system", "Systemstandard", audioOption == PlaybackAudioOption.SystemDefault) {
+                    PlayerOptionItem("audio-system", audioSystemStr, audioOption == PlaybackAudioOption.SystemDefault) {
                         playerController?.selectAudio(PlaybackAudioOption.SystemDefault)
                             ?: run { fallbackAudioOption = PlaybackAudioOption.SystemDefault }
                         optionPanel = null
                     },
-                    PlayerOptionItem("audio-de", "Deutsch", audioOption == PlaybackAudioOption.German) {
+                    PlayerOptionItem("audio-de", audioDeStr, audioOption == PlaybackAudioOption.German) {
                         playerController?.selectAudio(PlaybackAudioOption.German)
                             ?: run { fallbackAudioOption = PlaybackAudioOption.German }
                         optionPanel = null
                     },
-                    PlayerOptionItem("audio-en", "Englisch", audioOption == PlaybackAudioOption.English) {
+                    PlayerOptionItem("audio-en", audioEnStr, audioOption == PlaybackAudioOption.English) {
                         playerController?.selectAudio(PlaybackAudioOption.English)
                             ?: run { fallbackAudioOption = PlaybackAudioOption.English }
                         optionPanel = null
                     },
-                    PlayerOptionItem("audio-original", "Original", audioOption == PlaybackAudioOption.Original) {
+                    PlayerOptionItem("audio-original", audioOriginalStr, audioOption == PlaybackAudioOption.Original) {
                         playerController?.selectAudio(PlaybackAudioOption.Original)
                             ?: run { fallbackAudioOption = PlaybackAudioOption.Original }
                         optionPanel = null
@@ -328,24 +353,24 @@ fun PlayerRoute(
                     .testTag(playerOptionDialogTag()),
             )
             PlayerOptionPanel.Subtitle -> PlayerOptionDialog(
-                title = "Untertitel",
+                title = stringResource(R.string.player_subtitles),
                 options = listOf(
-                    PlayerOptionItem("subtitle-off", "Aus", subtitleOption == PlaybackSubtitleOption.Off) {
+                    PlayerOptionItem("subtitle-off", subtitleOffStr, subtitleOption == PlaybackSubtitleOption.Off) {
                         playerController?.selectSubtitle(PlaybackSubtitleOption.Off)
                             ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.Off }
                         optionPanel = null
                     },
-                    PlayerOptionItem("subtitle-system", "Systemstandard", subtitleOption == PlaybackSubtitleOption.SystemDefault) {
+                    PlayerOptionItem("subtitle-system", audioSystemStr, subtitleOption == PlaybackSubtitleOption.SystemDefault) {
                         playerController?.selectSubtitle(PlaybackSubtitleOption.SystemDefault)
                             ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.SystemDefault }
                         optionPanel = null
                     },
-                    PlayerOptionItem("subtitle-de", "Deutsch", subtitleOption == PlaybackSubtitleOption.German) {
+                    PlayerOptionItem("subtitle-de", audioDeStr, subtitleOption == PlaybackSubtitleOption.German) {
                         playerController?.selectSubtitle(PlaybackSubtitleOption.German)
                             ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.German }
                         optionPanel = null
                     },
-                    PlayerOptionItem("subtitle-en", "Englisch", subtitleOption == PlaybackSubtitleOption.English) {
+                    PlayerOptionItem("subtitle-en", audioEnStr, subtitleOption == PlaybackSubtitleOption.English) {
                         playerController?.selectSubtitle(PlaybackSubtitleOption.English)
                             ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.English }
                         optionPanel = null
@@ -357,19 +382,19 @@ fun PlayerRoute(
                     .testTag(playerOptionDialogTag()),
             )
             PlayerOptionPanel.AspectRatio -> PlayerOptionDialog(
-                title = "Bildformat",
+                title = stringResource(R.string.player_aspect),
                 options = listOf(
-                    PlayerOptionItem("aspect-fit", "Anpassen", aspectRatioMode == PlaybackAspectRatioMode.Fit) {
+                    PlayerOptionItem("aspect-fit", aspectFitStr, aspectRatioMode == PlaybackAspectRatioMode.Fit) {
                         playerController?.selectAspectRatio(PlaybackAspectRatioMode.Fit)
                             ?: run { fallbackAspectRatioMode = PlaybackAspectRatioMode.Fit }
                         optionPanel = null
                     },
-                    PlayerOptionItem("aspect-fill", "Ausfüllen", aspectRatioMode == PlaybackAspectRatioMode.Fill) {
+                    PlayerOptionItem("aspect-fill", aspectFillStr, aspectRatioMode == PlaybackAspectRatioMode.Fill) {
                         playerController?.selectAspectRatio(PlaybackAspectRatioMode.Fill)
                             ?: run { fallbackAspectRatioMode = PlaybackAspectRatioMode.Fill }
                         optionPanel = null
                     },
-                    PlayerOptionItem("aspect-zoom", "Zoom", aspectRatioMode == PlaybackAspectRatioMode.Zoom) {
+                    PlayerOptionItem("aspect-zoom", stringResource(R.string.player_aspect_zoom), aspectRatioMode == PlaybackAspectRatioMode.Zoom) {
                         playerController?.selectAspectRatio(PlaybackAspectRatioMode.Zoom)
                             ?: run { fallbackAspectRatioMode = PlaybackAspectRatioMode.Zoom }
                         optionPanel = null
@@ -385,7 +410,7 @@ fun PlayerRoute(
 
         if (controllerState?.isReconnecting == true) {
             BodyText(
-                text = "Verbindung wird wiederhergestellt...",
+                text = reconnectingStr,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 32.dp)
@@ -398,7 +423,7 @@ fun PlayerRoute(
 
         if (controllerState?.status == PlaybackStatus.Error) {
             PlaybackErrorDialog(
-                message = controllerState?.error?.message ?: "Wiedergabe konnte nicht gestartet werden.",
+                message = controllerState?.error?.message ?: playbackErrorStr,
                 retryFocusRequester = errorRetryFocusRequester,
                 onRetry = {
                     request?.let { playerController?.play(it) }
@@ -423,7 +448,7 @@ fun PlayerRoute(
                 title = if (countdownSeconds != null && autoNextEnabled) {
                     "N\u00e4chste Folge in $countdownSeconds"
                 } else {
-                    "N\u00e4chste Folge abspielen"
+                    stringResource(R.string.player_next_episode)
                 },
                 nextEpisodeTitle = nextEpisodeTitle.orEmpty(),
                 onPlayNextEpisode = ::playNextEpisodeOnce,
@@ -524,7 +549,7 @@ private fun AutoNextPanel(
                     onClick = onPlayNextEpisode,
                 )
                 ActionPill(
-                    label = "Zur\u00fcck",
+                    label = stringResource(R.string.player_back),
                     modifier = Modifier.testTag(playerAutoNextBackTag()),
                     onClick = onBack,
                 )
@@ -544,23 +569,23 @@ private fun PlaybackErrorDialog(
 ) {
     VivicastContentCard(modifier = modifier.fillMaxWidth(0.45f), contentPadding = 22.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-            SectionTitle("Playback-Fehler")
+            SectionTitle(stringResource(R.string.player_error_title))
             BodyText(message, maxLines = 2)
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                 ActionPill(
-                    label = "Erneut",
+                    label = stringResource(R.string.player_retry_label),
                     modifier = Modifier
                         .focusRequester(retryFocusRequester)
                         .testTag(playerErrorRetryTag()),
                     onClick = onRetry,
                 )
                 ActionPill(
-                    label = "Anderen Sender wählen",
+                    label = stringResource(R.string.player_other_channel),
                     modifier = Modifier.testTag(playerErrorChooseAnotherTag()),
                     onClick = onChooseAnotherChannel,
                 )
                 ActionPill(
-                    label = "Schließen",
+                    label = stringResource(R.string.player_close),
                     modifier = Modifier.testTag(playerErrorCloseTag()),
                     onClick = onClose,
                 )
@@ -610,17 +635,27 @@ private fun Long.formatOffset(): String {
     return "${minutes}:${seconds.toString().padStart(2, '0')} min"
 }
 
-private fun PlaybackStatus.statusLabel(state: VivicastPlayerState?): String =
+private fun PlaybackStatus.statusLabel(
+    state: VivicastPlayerState?,
+    idle: String,
+    starting: String,
+    playback: String,
+    paused: String,
+    ended: String,
+    error: String,
+    live: String,
+    timeshift: String,
+): String =
     when (this) {
-        PlaybackStatus.Idle -> "Bereit"
-        PlaybackStatus.Starting -> "Startet"
+        PlaybackStatus.Idle -> idle
+        PlaybackStatus.Starting -> starting
         PlaybackStatus.Playing -> when {
-            state?.isTimeshiftEnabled == true && !state.isAtLiveEdge -> "Timeshift"
-            state?.request?.mediaType == PlaybackMediaType.Channel -> "Live"
-            else -> "Wiedergabe"
+            state?.isTimeshiftEnabled == true && !state.isAtLiveEdge -> timeshift
+            state?.request?.mediaType == PlaybackMediaType.Channel -> live
+            else -> playback
         }
-        PlaybackStatus.Paused -> "Pausiert"
-        PlaybackStatus.Ended -> "Beendet"
-        PlaybackStatus.Error -> "Fehler"
-        PlaybackStatus.Released -> "Beendet"
+        PlaybackStatus.Paused -> paused
+        PlaybackStatus.Ended -> ended
+        PlaybackStatus.Error -> error
+        PlaybackStatus.Released -> ended
     }

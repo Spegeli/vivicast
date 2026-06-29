@@ -37,6 +37,7 @@ import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderCreateRequest
+import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.data.provider.RoomProviderRepository
 import com.vivicast.tv.system.AndroidTvWatchNextPublisher
 import com.vivicast.tv.system.SystemIntegrationPlaybackRepository
@@ -58,7 +59,6 @@ import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
 import com.vivicast.tv.worker.GlobalRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
-import com.vivicast.tv.worker.NoOpEpgMappingApplier
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
@@ -251,7 +251,6 @@ class AppContainer(
             playlistRefresher = playlistRefresher,
             epgSourceResolver = epgSourceReader,
             epgRefresher = epgRefresher,
-            epgMappingApplier = NoOpEpgMappingApplier(),
             logoRefresher = logoRefresher,
             cacheCleaner = cacheCleaner,
             diagnostics = refreshDiagnostics,
@@ -301,9 +300,15 @@ class AppContainer(
         )
 
     private suspend fun testM3uConnection(request: ProviderCreateRequest) {
-        val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
-            ?: throw IllegalArgumentException()
-        val playlist = DefaultM3uParser().parse(OkHttpTextFetcher(okHttpClient).fetch(url))
+        val source = if (request.m3uSourceMode.isAutomaticallyRefreshable) {
+            val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException()
+            OkHttpTextFetcher(okHttpClient).fetch(url)
+        } else {
+            request.m3uContent?.trim()?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException()
+        }
+        val playlist = DefaultM3uParser().parse(source)
         if (playlist.channels.isEmpty()) {
             throw ProviderConnectionResponseException()
         }

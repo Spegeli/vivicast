@@ -1,4 +1,4 @@
-package com.vivicast.tv
+﻿package com.vivicast.tv
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -47,11 +48,20 @@ import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
+import com.vivicast.tv.core.datastore.AccentColor
+import com.vivicast.tv.core.datastore.AnimationSpeedPreference
+import com.vivicast.tv.core.datastore.BackupTargetPreference
+import com.vivicast.tv.core.datastore.BufferSizePreference
+import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
+import com.vivicast.tv.core.datastore.FontScalePreference
+import com.vivicast.tv.core.datastore.LanguagePreference
 import com.vivicast.tv.core.datastore.PlaybackPreferences
-import com.vivicast.tv.core.datastore.StartDestinationPreference
+import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
+import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
@@ -69,6 +79,7 @@ import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState
+import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
@@ -78,16 +89,28 @@ import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState
+import com.vivicast.tv.feature.settings.AppearanceSettingsState
+import com.vivicast.tv.feature.settings.BackupSettingsState
+import com.vivicast.tv.feature.settings.BackupTargetMode
 import com.vivicast.tv.feature.settings.DiagnosticsSettingsState
 import com.vivicast.tv.feature.settings.EpgSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
 import com.vivicast.tv.feature.settings.HistoryClearTarget
 import com.vivicast.tv.feature.settings.ParentalControlSettingsState
 import com.vivicast.tv.feature.settings.ParentalProtectionArea
+import com.vivicast.tv.feature.settings.PlaybackAudioLanguage
+import com.vivicast.tv.feature.settings.PlaybackBufferSizeMode
+import com.vivicast.tv.feature.settings.PlaybackDecoderMode
 import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
+import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
 import com.vivicast.tv.feature.settings.PlaybackTimeshiftStorageMode
-import com.vivicast.tv.feature.settings.SettingsStartDestination
+import com.vivicast.tv.feature.settings.SettingsAccentColor
+import com.vivicast.tv.feature.settings.SettingsAnimationSpeed
+import com.vivicast.tv.feature.settings.SettingsFontScale
+import com.vivicast.tv.feature.settings.SettingsLanguage
+import com.vivicast.tv.feature.settings.SettingsThemeMode
+import com.vivicast.tv.feature.settings.SettingsTransparency
 import com.vivicast.tv.feature.home.HomeRoute
 import com.vivicast.tv.feature.livetv.LiveTvRoute
 import com.vivicast.tv.feature.movies.MoviesRoute
@@ -110,6 +133,7 @@ import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.TimeZone
@@ -117,6 +141,10 @@ import java.util.TimeZone
 class MainActivity : ComponentActivity() {
     private var deepLinkData by mutableStateOf<Uri?>(null)
     private lateinit var appContainer: AppContainer
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleHelper.applyLocale(base))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -184,7 +212,7 @@ private fun VivicastApp(
     val externalPlayerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
-        Toast.makeText(context, "Fortschritt konnte nicht automatisch ermittelt werden.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.main_external_player_error), Toast.LENGTH_SHORT).show()
     }
     val standardBackupExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -196,6 +224,11 @@ private fun VivicastApp(
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(json.toByteArray(Charsets.UTF_8))
                     } ?: error("backup output unavailable")
+                    appContainer.userPreferencesStore.updateBackup(
+                        appContainer.userPreferencesStore.values.first().backup.copy(
+                            lastBackupAtMillis = System.currentTimeMillis(),
+                        ),
+                    )
                     "Backup exportiert."
                 }.getOrElse {
                     "Backup konnte nicht gespeichert werden."
@@ -213,7 +246,7 @@ private fun VivicastApp(
                     context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                 }.getOrNull()
                 if (text.isNullOrBlank()) {
-                    Toast.makeText(context, "Backup-Datei ungueltig.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 when (val validation = validateStandardBackupForRestore(text)) {
@@ -224,6 +257,29 @@ private fun VivicastApp(
                         Toast.makeText(context, validation.message, Toast.LENGTH_SHORT).show()
                     }
                     is StandardBackupRestoreValidation.SafetyBackupFailed -> Unit
+                }
+            }
+        }
+    }
+    var pendingM3uFileImport by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    val m3uFileImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val onContent = pendingM3uFileImport
+        pendingM3uFileImport = null
+        if (uri != null && onContent != null) {
+            scope.launch {
+                val text = runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                }.getOrNull()
+                when {
+                    text.isNullOrBlank() -> Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
+                    text.length > MAX_M3U_INLINE_SOURCE_CHARS ->
+                        Toast.makeText(context, context.getString(R.string.main_m3u_file_too_large), Toast.LENGTH_SHORT).show()
+                    else -> {
+                        onContent(text)
+                        Toast.makeText(context, context.getString(R.string.main_m3u_file_imported), Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -244,6 +300,11 @@ private fun VivicastApp(
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(json.toByteArray(Charsets.UTF_8))
                     } ?: error("backup output unavailable")
+                    appContainer.userPreferencesStore.updateBackup(
+                        appContainer.userPreferencesStore.values.first().backup.copy(
+                            lastBackupAtMillis = System.currentTimeMillis(),
+                        ),
+                    )
                     "Vollbackup exportiert."
                 }.getOrElse {
                     "Vollbackup konnte nicht gespeichert werden."
@@ -267,13 +328,13 @@ private fun VivicastApp(
                 }.getOrNull()
                 if (text.isNullOrBlank()) {
                     passphrase.fill('\u0000')
-                    Toast.makeText(context, "Backup-Datei ungültig.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 val payload = decryptFullBackupPayload(text, passphrase)
                 passphrase.fill('\u0000')
                 if (payload == null) {
-                    Toast.makeText(context, "Passphrase falsch oder Backup beschädigt.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.main_passphrase_incorrect), Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 when (val validation = validateFullBackupPayloadForRestore(payload)) {
@@ -371,7 +432,7 @@ private fun VivicastApp(
                     pinSecurityState = PinSecurityState()
                     unlockedProtectionAreas = emptySet()
                     appContainer.syncWatchNext()
-                    Toast.makeText(context, "Backup wiederhergestellt.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.main_backup_restored), Toast.LENGTH_SHORT).show()
                 }
                 is StandardBackupRestoreValidation.SafetyBackupFailed -> {
                     pendingStandardRestore = null
@@ -392,7 +453,7 @@ private fun VivicastApp(
 
     fun selectRoute(route: String) {
         if (!pinSecurityLoaded && route.canBeProtected()) return
-        requestProtectionUnlock(pinSecurityState.protectionAreaForRoute(route), route.protectionTitle()) {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForRoute(route), route.protectionTitle(context)) {
             selectedRoute = route
         }
     }
@@ -411,7 +472,7 @@ private fun VivicastApp(
             externalPlayerLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(request.streamUrl)))
             true
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "Kein externer Player verfuegbar.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.main_no_external_player), Toast.LENGTH_SHORT).show()
             false
         }
     }
@@ -469,7 +530,7 @@ private fun VivicastApp(
         resumeProgress: Boolean,
         origin: PlaybackOrigin = PlaybackOrigin.MovieDetail,
     ) {
-        requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), "Film freigeben") {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), context.getString(R.string.main_unlock_movies)) {
             scope.launch {
                 when (preferences.playback.externalPlayer) {
                     ExternalPlayerPreference.External -> {
@@ -494,14 +555,14 @@ private fun VivicastApp(
     }
 
     fun openSeriesTarget(series: Series) {
-        requestProtectionUnlock(pinSecurityState.protectionAreaForSeries(series), "Serie freigeben") {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForSeries(series), context.getString(R.string.main_unlock_series)) {
             seriesSearchTarget = series.toSeriesTarget()
             selectRoute("series")
         }
     }
 
     fun openEpisodeTarget(episode: Episode) {
-        requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), "Episode freigeben") {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), context.getString(R.string.main_unlock_generic)) {
             scope.launch {
                 val series = appContainer.mediaRepository.getSeries(episode.providerId, episode.seriesId)
                 seriesSearchTarget = episode.toSeriesTarget(categoryId = series?.categoryId)
@@ -514,7 +575,7 @@ private fun VivicastApp(
         episode: Episode,
         origin: PlaybackOrigin = PlaybackOrigin.SeriesDetail,
     ) {
-        requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), "Episode freigeben") {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), context.getString(R.string.main_unlock_generic)) {
             scope.launch {
                 when (preferences.playback.externalPlayer) {
                     ExternalPlayerPreference.External -> {
@@ -571,7 +632,7 @@ private fun VivicastApp(
                 "movie" -> appContainer.mediaRepository
                     .getMovieByStableKeys(providerStableKey, mediaStableKey)
                     ?.let { movie ->
-                        requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), "Film freigeben") {
+                        requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), context.getString(R.string.main_unlock_movies)) {
                             movieSearchTarget = movie
                             selectRoute("movies")
                         }
@@ -596,8 +657,8 @@ private fun VivicastApp(
         }
         if (!opened) {
             pendingSystemTargetUnavailable = SystemTargetUnavailable(
-                title = "Inhalt nicht verfügbar",
-                body = "Das Android-TV-Ziel fehlt, ist deaktiviert oder benötigt aktualisierte Zugangsdaten.",
+                title = context.getString(R.string.main_content_unavailable_title),
+                body = context.getString(R.string.main_content_unavailable_body),
             )
         }
         onDeepLinkConsumed()
@@ -607,7 +668,7 @@ private fun VivicastApp(
         val currentPreferences = loadedPreferences ?: return@LaunchedEffect
         if (regularStartApplied || explicitSystemTargetSeen || !pinSecurityLoaded) return@LaunchedEffect
         regularStartApplied = true
-        selectRoute(currentPreferences.general.startDestination.toRoute())
+        selectRoute(ROUTE_HOME)
     }
 
     LaunchedEffect(preferences.general.backgroundRefreshEnabled) {
@@ -665,6 +726,11 @@ private fun VivicastApp(
         }
     }
 
+    val strMovies = stringResource(R.string.nav_movies_label)
+    val strSeries = stringResource(R.string.nav_series_label)
+    val strSearch = stringResource(R.string.nav_search_label)
+    val strSettings = stringResource(R.string.nav_settings_label)
+
     val destinations = listOf(
         AppDestination("Home", ROUTE_HOME) {
             HomeRoute(
@@ -703,7 +769,7 @@ private fun VivicastApp(
                 onTargetConsumed = { liveTvSearchTarget = null },
             )
         },
-        AppDestination("Filme", "movies") {
+        AppDestination(strMovies, "movies") {
             MoviesRoute(
                 providerRepository = appContainer.providerRepository,
                 mediaRepository = appContainer.mediaRepository,
@@ -724,7 +790,7 @@ private fun VivicastApp(
                 onTargetConsumed = { movieSearchTarget = null },
             )
         },
-        AppDestination("Serien", "series") {
+        AppDestination(strSeries, "series") {
             SeriesRoute(
                 providerRepository = appContainer.providerRepository,
                 mediaRepository = appContainer.mediaRepository,
@@ -741,7 +807,7 @@ private fun VivicastApp(
                 onTargetConsumed = { seriesSearchTarget = null },
             )
         },
-        AppDestination("Suche", "search") {
+        AppDestination(strSearch, "search") {
             SearchRoute(
                 mediaRepository = appContainer.mediaRepository,
                 autoFocusField = false,
@@ -767,15 +833,24 @@ private fun VivicastApp(
                 },
             )
         },
-        AppDestination("Einstellungen", "settings") {
+        AppDestination(strSettings, "settings") {
             SettingsRoute(
                 providerRepository = appContainer.providerRepository,
                 epgSourceRepository = appContainer.epgSourceRepository,
                 generalSettingsState = GeneralSettingsState(
                     launchOnBoot = preferences.general.launchOnBoot,
+                    doubleBackToExit = preferences.general.doubleBackToExit,
                     backgroundRefreshEnabled = preferences.general.backgroundRefreshEnabled,
                     rememberSorting = preferences.general.rememberSorting,
-                    startDestination = preferences.general.startDestination.toSettingsStartDestination(),
+                    appLanguage = preferences.appearance.language.toSettingsLanguage(),
+                    globalUserAgent = preferences.general.globalUserAgent,
+                ),
+                appearanceSettingsState = AppearanceSettingsState(
+                    themeMode = preferences.appearance.backgroundColor.toSettingsThemeMode(),
+                    accentColor = preferences.appearance.accentColor.toSettingsAccentColor(),
+                    transparency = preferences.appearance.transparency.toSettingsTransparency(),
+                    fontScale = preferences.appearance.fontScale.toSettingsFontScale(),
+                    animationSpeed = preferences.appearance.animationSpeed.toSettingsAnimationSpeed(),
                 ),
                 epgSettingsState = EpgSettingsState(
                     pastRetentionDays = preferences.epg.pastRetentionDays,
@@ -785,6 +860,13 @@ private fun VivicastApp(
                     refreshOnPlaylistChangeEnabled = preferences.epg.refreshOnPlaylistChangeEnabled,
                 ),
                 playbackSettingsState = PlaybackSettingsState(
+                    bufferSize = preferences.playback.bufferSize.toSettingsBufferSizeMode(),
+                    audioDecoder = preferences.playback.audioDecoder.toSettingsDecoderMode(),
+                    videoDecoder = preferences.playback.videoDecoder.toSettingsDecoderMode(),
+                    afrEnabled = preferences.playback.afrEnabled,
+                    preferredAudioLanguage = preferences.playback.preferredAudioLanguage.toSettingsAudioLanguage(),
+                    preferredSubtitleLanguage = preferences.playback.preferredSubtitleLanguage.toSettingsSubtitleLanguage(),
+                    audioPassthroughEnabled = preferences.playback.audioPassthroughEnabled,
                     externalPlayer = preferences.playback.externalPlayer.toSettingsExternalPlayerMode(),
                     timeshiftEnabled = preferences.playback.timeshiftEnabled,
                     timeshiftMinutes = preferences.playback.timeshiftMinutes,
@@ -804,13 +886,48 @@ private fun VivicastApp(
                     totalSizeBytes = cacheStats.totalSizeBytes,
                     fileCount = cacheStats.fileCount,
                 ),
+                backupSettingsState = BackupSettingsState(
+                    target = preferences.backup.target.toSettingsBackupTargetMode(),
+                    lastBackupAtMillis = preferences.backup.lastBackupAtMillis,
+                ),
                 aboutAppState = context.aboutAppState(),
                 diagnosticsSettingsState = preferences.diagnostics.toSettingsDiagnosticsState(),
+                initialSelectedSection = preferences.general.lastSettingsSection,
                 onTestProviderConnection = { request ->
                     appContainer.testProviderConnection(request)
                 },
+                onPickM3uFile = { onContent ->
+                    pendingM3uFileImport = onContent
+                    m3uFileImportLauncher.launch(
+                        arrayOf("application/vnd.apple.mpegurl", "audio/x-mpegurl", "text/plain", "*/*"),
+                    )
+                },
+                onReadM3uClipboard = {
+                    context.readClipboardText()?.take(MAX_M3U_INLINE_SOURCE_CHARS)
+                },
                 onProviderSaved = { providerId ->
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
+                },
+                onSelectedSectionChanged = { section ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateGeneral(
+                            preferences.general.copy(lastSettingsSection = section),
+                        )
+                    }
+                },
+                onLaunchOnBootChanged = { enabled ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateGeneral(
+                            preferences.general.copy(launchOnBoot = enabled),
+                        )
+                    }
+                },
+                onDoubleBackToExitChanged = { enabled ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateGeneral(
+                            preferences.general.copy(doubleBackToExit = enabled),
+                        )
+                    }
                 },
                 onBackgroundRefreshChanged = { enabled ->
                     scope.launch {
@@ -827,11 +944,31 @@ private fun VivicastApp(
                         )
                     }
                 },
-                onStartDestinationChanged = { startDestination ->
+                onLanguageChanged = { language ->
+                    LocaleHelper.save(context, language.toLocaleKey())
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateAppearance(
+                            preferences.appearance.copy(language = language.toDataStoreLanguagePreference()),
+                        )
+                        activity?.recreate()
+                    }
+                },
+                onGlobalUserAgentChanged = { userAgent ->
                     scope.launch {
                         appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(
-                                startDestination = startDestination.toDataStoreStartDestinationPreference(),
+                            preferences.general.copy(globalUserAgent = userAgent),
+                        )
+                    }
+                },
+                onAppearanceSettingsChanged = { appearance ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateAppearance(
+                            preferences.appearance.copy(
+                                backgroundColor = appearance.themeMode.toDataStoreThemeColor(),
+                                accentColor = appearance.accentColor.toDataStoreAccentColor(),
+                                transparency = appearance.transparency.toDataStoreTransparencyLevel(),
+                                fontScale = appearance.fontScale.toDataStoreFontScalePreference(),
+                                animationSpeed = appearance.animationSpeed.toDataStoreAnimationSpeedPreference(),
                             ),
                         )
                     }
@@ -853,6 +990,13 @@ private fun VivicastApp(
                     scope.launch {
                         appContainer.userPreferencesStore.updatePlayback(
                             preferences.playback.copy(
+                                bufferSize = playback.bufferSize.toDataStoreBufferSizePreference(),
+                                audioDecoder = playback.audioDecoder.toDataStoreDecoderPreference(),
+                                videoDecoder = playback.videoDecoder.toDataStoreDecoderPreference(),
+                                afrEnabled = playback.afrEnabled,
+                                preferredAudioLanguage = playback.preferredAudioLanguage.toDataStoreAudioLanguage(),
+                                preferredSubtitleLanguage = playback.preferredSubtitleLanguage.toDataStoreSubtitleLanguage(),
+                                audioPassthroughEnabled = playback.audioPassthroughEnabled,
                                 externalPlayer = playback.externalPlayer.toDataStoreExternalPlayerPreference(),
                                 timeshiftEnabled = playback.timeshiftEnabled,
                                 timeshiftMinutes = playback.timeshiftMinutes,
@@ -924,9 +1068,9 @@ private fun VivicastApp(
                         is PinVerificationResult.Locked -> {
                             pinSecurityState = result.state
                             scope.launch { appContainer.pinSecurityStateStore.write(result.state) }
-                            "PIN ist vorübergehend gesperrt."
+                            context.getString(R.string.main_pin_locked)
                         }
-                        is PinVerificationResult.MissingPin -> "Keine PIN eingerichtet."
+                        is PinVerificationResult.MissingPin -> context.getString(R.string.main_pin_missing)
                     }
                 },
                 onDisablePin = { currentPin ->
@@ -949,9 +1093,9 @@ private fun VivicastApp(
                         is PinVerificationResult.Locked -> {
                             pinSecurityState = result.state
                             scope.launch { appContainer.pinSecurityStateStore.write(result.state) }
-                            "PIN ist vorübergehend gesperrt."
+                            context.getString(R.string.main_pin_locked)
                         }
-                        is PinVerificationResult.MissingPin -> "Keine PIN eingerichtet."
+                        is PinVerificationResult.MissingPin -> context.getString(R.string.main_pin_missing)
                     }
                 },
                 onProtectionChanged = { area, enabled ->
@@ -991,6 +1135,13 @@ private fun VivicastApp(
                         forcePrompt = true,
                     ) {
                         standardBackupImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*"))
+                    }
+                },
+                onBackupSettingsChanged = { backupState ->
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateBackup(
+                            preferences.backup.copy(target = backupState.target.toDataStoreBackupTargetPreference()),
+                        )
                     }
                 },
                 onExportEncryptedFullBackup = { passphrase ->
@@ -1047,6 +1198,11 @@ private fun VivicastApp(
             return@BackHandler
         }
 
+        if (!preferences.general.doubleBackToExit) {
+            activity?.finish()
+            return@BackHandler
+        }
+
         val now = System.currentTimeMillis()
         if (now - lastTopNavigationBackAt <= EXIT_CONFIRMATION_WINDOW_MILLIS) {
             activity?.finish()
@@ -1054,15 +1210,15 @@ private fun VivicastApp(
         }
 
         lastTopNavigationBackAt = now
-        Toast.makeText(context, "Zum Beenden erneut zurück", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.main_exit_confirmation), Toast.LENGTH_SHORT).show()
     }
 
     VivicastScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = VivicastSpacing.ScreenHorizontal, vertical = VivicastSpacing.Space6),
-            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space5),
+                .padding(horizontal = VivicastSpacing.ScreenHorizontal, vertical = VivicastSpacing.ScreenVertical),
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
         ) {
             VivicastTopNavigation(
                 brand = "VIVICAST",
@@ -1142,7 +1298,7 @@ private fun VivicastApp(
                     is PinVerificationResult.Locked -> {
                         pinSecurityState = result.state
                         scope.launch { appContainer.pinSecurityStateStore.write(result.state) }
-                        "PIN ist vorübergehend gesperrt."
+                        context.getString(R.string.main_pin_locked)
                     }
                     is PinVerificationResult.MissingPin -> {
                         pendingProtectionUnlock = null
@@ -1262,12 +1418,12 @@ internal fun PinSecurityState.protectionAreaForSeries(series: Series): ParentalP
 private fun String.canBeProtected(): Boolean =
     this == "settings" || this == "movies" || this == "series"
 
-private fun String.protectionTitle(): String =
+private fun String.protectionTitle(context: Context): String =
     when (this) {
-        "settings" -> "Einstellungen freigeben"
-        "movies" -> "Filme freigeben"
-        "series" -> "Serien freigeben"
-        else -> "Bereich freigeben"
+        "settings" -> context.getString(R.string.main_unlock_settings)
+        "movies" -> context.getString(R.string.main_unlock_movies)
+        "series" -> context.getString(R.string.main_unlock_series)
+        else -> context.getString(R.string.main_unlock_generic)
     }
 
 private fun Series.toSeriesTarget(): SeriesTarget =
@@ -1286,28 +1442,110 @@ private fun Episode.toSeriesTarget(categoryId: String?): SeriesTarget =
         episodeId = id,
     )
 
-private fun StartDestinationPreference.toRoute(): String =
+private fun LanguagePreference.toSettingsLanguage(): SettingsLanguage =
     when (this) {
-        StartDestinationPreference.Home -> ROUTE_HOME
-        StartDestinationPreference.LiveTv -> "live-tv"
-        StartDestinationPreference.Movies -> "movies"
-        StartDestinationPreference.Series -> "series"
+        LanguagePreference.System -> SettingsLanguage.System
+        LanguagePreference.German -> SettingsLanguage.German
+        LanguagePreference.English -> SettingsLanguage.English
     }
 
-private fun StartDestinationPreference.toSettingsStartDestination(): SettingsStartDestination =
+private fun SettingsLanguage.toDataStoreLanguagePreference(): LanguagePreference =
     when (this) {
-        StartDestinationPreference.Home -> SettingsStartDestination.Home
-        StartDestinationPreference.LiveTv -> SettingsStartDestination.LiveTv
-        StartDestinationPreference.Movies -> SettingsStartDestination.Movies
-        StartDestinationPreference.Series -> SettingsStartDestination.Series
+        SettingsLanguage.System -> LanguagePreference.System
+        SettingsLanguage.German -> LanguagePreference.German
+        SettingsLanguage.English -> LanguagePreference.English
     }
 
-private fun SettingsStartDestination.toDataStoreStartDestinationPreference(): StartDestinationPreference =
+private fun SettingsLanguage.toLocaleKey(): String =
     when (this) {
-        SettingsStartDestination.Home -> StartDestinationPreference.Home
-        SettingsStartDestination.LiveTv -> StartDestinationPreference.LiveTv
-        SettingsStartDestination.Movies -> StartDestinationPreference.Movies
-        SettingsStartDestination.Series -> StartDestinationPreference.Series
+        SettingsLanguage.System -> "System"
+        SettingsLanguage.German -> "German"
+        SettingsLanguage.English -> "English"
+    }
+
+private fun BackupTargetPreference.toSettingsBackupTargetMode(): BackupTargetMode =
+    when (this) {
+        BackupTargetPreference.LocalStorage -> BackupTargetMode.LocalStorage
+        BackupTargetPreference.Smb -> BackupTargetMode.Smb
+        BackupTargetPreference.GoogleDrive -> BackupTargetMode.GoogleDrive
+    }
+
+private fun BackupTargetMode.toDataStoreBackupTargetPreference(): BackupTargetPreference =
+    when (this) {
+        BackupTargetMode.LocalStorage -> BackupTargetPreference.LocalStorage
+        BackupTargetMode.Smb -> BackupTargetPreference.Smb
+        BackupTargetMode.GoogleDrive -> BackupTargetPreference.GoogleDrive
+    }
+
+private fun ThemeColor.toSettingsThemeMode(): SettingsThemeMode =
+    when (this) {
+        ThemeColor.Dark -> SettingsThemeMode.StandardDark
+        ThemeColor.HighContrastDark -> SettingsThemeMode.HighContrastDark
+        ThemeColor.AmoledDark -> SettingsThemeMode.AmoledDark
+    }
+
+private fun SettingsThemeMode.toDataStoreThemeColor(): ThemeColor =
+    when (this) {
+        SettingsThemeMode.StandardDark -> ThemeColor.Dark
+        SettingsThemeMode.HighContrastDark -> ThemeColor.HighContrastDark
+        SettingsThemeMode.AmoledDark -> ThemeColor.AmoledDark
+    }
+
+private fun AccentColor.toSettingsAccentColor(): SettingsAccentColor =
+    when (this) {
+        AccentColor.Blue -> SettingsAccentColor.Blue
+    }
+
+private fun SettingsAccentColor.toDataStoreAccentColor(): AccentColor =
+    when (this) {
+        SettingsAccentColor.Blue -> AccentColor.Blue
+    }
+
+private fun TransparencyLevel.toSettingsTransparency(): SettingsTransparency =
+    when (this) {
+        TransparencyLevel.Percent0 -> SettingsTransparency.Percent0
+        TransparencyLevel.Percent25 -> SettingsTransparency.Percent25
+        TransparencyLevel.Percent50,
+        TransparencyLevel.Percent75 -> SettingsTransparency.Percent50
+    }
+
+private fun SettingsTransparency.toDataStoreTransparencyLevel(): TransparencyLevel =
+    when (this) {
+        SettingsTransparency.Percent0 -> TransparencyLevel.Percent0
+        SettingsTransparency.Percent25 -> TransparencyLevel.Percent25
+        SettingsTransparency.Percent50 -> TransparencyLevel.Percent50
+    }
+
+private fun FontScalePreference.toSettingsFontScale(): SettingsFontScale =
+    when (this) {
+        FontScalePreference.Small -> SettingsFontScale.Small
+        FontScalePreference.Medium -> SettingsFontScale.Medium
+        FontScalePreference.Large -> SettingsFontScale.Large
+        FontScalePreference.ExtraLarge -> SettingsFontScale.ExtraLarge
+    }
+
+private fun SettingsFontScale.toDataStoreFontScalePreference(): FontScalePreference =
+    when (this) {
+        SettingsFontScale.Small -> FontScalePreference.Small
+        SettingsFontScale.Medium -> FontScalePreference.Medium
+        SettingsFontScale.Large -> FontScalePreference.Large
+        SettingsFontScale.ExtraLarge -> FontScalePreference.ExtraLarge
+    }
+
+private fun AnimationSpeedPreference.toSettingsAnimationSpeed(): SettingsAnimationSpeed =
+    when (this) {
+        AnimationSpeedPreference.Off -> SettingsAnimationSpeed.Off
+        AnimationSpeedPreference.Fast -> SettingsAnimationSpeed.Fast
+        AnimationSpeedPreference.Normal -> SettingsAnimationSpeed.Normal
+        AnimationSpeedPreference.Slow -> SettingsAnimationSpeed.Slow
+    }
+
+private fun SettingsAnimationSpeed.toDataStoreAnimationSpeedPreference(): AnimationSpeedPreference =
+    when (this) {
+        SettingsAnimationSpeed.Off -> AnimationSpeedPreference.Off
+        SettingsAnimationSpeed.Fast -> AnimationSpeedPreference.Fast
+        SettingsAnimationSpeed.Normal -> AnimationSpeedPreference.Normal
+        SettingsAnimationSpeed.Slow -> AnimationSpeedPreference.Slow
     }
 
 @Composable
@@ -1327,7 +1565,7 @@ private fun ProtectionUnlockDialog(
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                 InfoPanel(
                     title = title,
-                    body = error ?: "PIN eingeben, um den geschützten Bereich freizugeben.",
+                    body = error ?: stringResource(R.string.main_unlock_body),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 BasicTextField(
@@ -1365,7 +1603,7 @@ private fun SystemTargetUnavailableDialog(
                     body = target.body,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                ActionPill("Schließen", modifier = Modifier.width(150.dp), onClick = onDismiss)
+                ActionPill(stringResource(R.string.main_close), modifier = Modifier.width(150.dp), onClick = onDismiss)
             }
         }
     }
@@ -1385,8 +1623,8 @@ private fun ExternalPlayerChoiceDialog(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
                 InfoPanel(
-                    title = "Wiedergabe starten",
-                    body = "Film oder Episode extern abspielen? Externe Player liefern keinen automatischen Fortschritt zurueck.",
+                    title = stringResource(R.string.main_external_dialog_title),
+                    body = stringResource(R.string.main_external_dialog_body),
                     badge = request.title,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1816,7 +2054,12 @@ private fun DiagnosticsPreferences.toSettingsDiagnosticsState(): DiagnosticsSett
 private fun copySupportInformation(context: Context, supportInformation: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Vivicast Support-Informationen", supportInformation))
-    Toast.makeText(context, "Support-Informationen kopiert.", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, context.getString(R.string.main_support_info_copied), Toast.LENGTH_SHORT).show()
+}
+
+private fun Context.readClipboardText(): String? {
+    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    return clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
 }
 
 private fun buildSupportInformation(
@@ -1857,6 +2100,69 @@ private fun PlaybackMediaType.toDomainProgressMediaType(): MediaType? =
         PlaybackMediaType.Episode -> MediaType.Episode
         PlaybackMediaType.Channel,
         PlaybackMediaType.CatchUp -> null
+    }
+
+private fun BufferSizePreference.toSettingsBufferSizeMode(): PlaybackBufferSizeMode =
+    when (this) {
+        BufferSizePreference.Off -> PlaybackBufferSizeMode.Off
+        BufferSizePreference.Small -> PlaybackBufferSizeMode.Small
+        BufferSizePreference.Medium -> PlaybackBufferSizeMode.Medium
+        BufferSizePreference.Large -> PlaybackBufferSizeMode.Large
+        BufferSizePreference.ExtraLarge -> PlaybackBufferSizeMode.ExtraLarge
+    }
+
+private fun PlaybackBufferSizeMode.toDataStoreBufferSizePreference(): BufferSizePreference =
+    when (this) {
+        PlaybackBufferSizeMode.Off -> BufferSizePreference.Off
+        PlaybackBufferSizeMode.Small -> BufferSizePreference.Small
+        PlaybackBufferSizeMode.Medium -> BufferSizePreference.Medium
+        PlaybackBufferSizeMode.Large -> BufferSizePreference.Large
+        PlaybackBufferSizeMode.ExtraLarge -> BufferSizePreference.ExtraLarge
+    }
+
+private fun DecoderPreference.toSettingsDecoderMode(): PlaybackDecoderMode =
+    when (this) {
+        DecoderPreference.Automatic,
+        DecoderPreference.Hardware -> PlaybackDecoderMode.Hardware
+        DecoderPreference.Software -> PlaybackDecoderMode.Software
+    }
+
+private fun PlaybackDecoderMode.toDataStoreDecoderPreference(): DecoderPreference =
+    when (this) {
+        PlaybackDecoderMode.Hardware -> DecoderPreference.Hardware
+        PlaybackDecoderMode.Software -> DecoderPreference.Software
+    }
+
+private fun String?.toSettingsAudioLanguage(): PlaybackAudioLanguage =
+    when (this) {
+        "de" -> PlaybackAudioLanguage.German
+        "en" -> PlaybackAudioLanguage.English
+        "original" -> PlaybackAudioLanguage.Original
+        else -> PlaybackAudioLanguage.SystemDefault
+    }
+
+private fun PlaybackAudioLanguage.toDataStoreAudioLanguage(): String? =
+    when (this) {
+        PlaybackAudioLanguage.SystemDefault -> null
+        PlaybackAudioLanguage.German -> "de"
+        PlaybackAudioLanguage.English -> "en"
+        PlaybackAudioLanguage.Original -> "original"
+    }
+
+private fun String?.toSettingsSubtitleLanguage(): PlaybackSubtitleLanguage =
+    when (this) {
+        "system" -> PlaybackSubtitleLanguage.SystemDefault
+        "de" -> PlaybackSubtitleLanguage.German
+        "en" -> PlaybackSubtitleLanguage.English
+        else -> PlaybackSubtitleLanguage.Off
+    }
+
+private fun PlaybackSubtitleLanguage.toDataStoreSubtitleLanguage(): String? =
+    when (this) {
+        PlaybackSubtitleLanguage.Off -> null
+        PlaybackSubtitleLanguage.SystemDefault -> "system"
+        PlaybackSubtitleLanguage.German -> "de"
+        PlaybackSubtitleLanguage.English -> "en"
     }
 
 private fun ExternalPlayerPreference.toSettingsExternalPlayerMode(): PlaybackExternalPlayerMode =

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -28,9 +29,9 @@ class DataStoreUserPreferencesStore(
                     doubleBackToExit = preferences[Keys.DoubleBackToExit] ?: true,
                     backgroundRefreshEnabled = preferences[Keys.BackgroundRefreshEnabled] ?: true,
                     rememberSorting = preferences[Keys.RememberSorting] ?: true,
-                    startDestination = preferences.enumValue(Keys.StartDestination, StartDestinationPreference.Home),
                     globalUserAgent = preferences[Keys.GlobalUserAgent]?.takeIf { it.isNotBlank() }
                         ?: DEFAULT_GLOBAL_USER_AGENT,
+                    lastSettingsSection = preferences[Keys.LastSettingsSection],
                 ),
                 appearance = AppearancePreferences(
                     backgroundColor = preferences.enumValue(Keys.BackgroundColor, ThemeColor.Dark),
@@ -42,9 +43,10 @@ class DataStoreUserPreferencesStore(
                 ),
                 playback = PlaybackPreferences(
                     bufferSize = preferences.enumValue(Keys.BufferSize, BufferSizePreference.Medium),
-                    audioDecoder = preferences.enumValue(Keys.AudioDecoder, DecoderPreference.Automatic),
-                    videoDecoder = preferences.enumValue(Keys.VideoDecoder, DecoderPreference.Automatic),
+                    audioDecoder = preferences.enumValue(Keys.AudioDecoder, DecoderPreference.Hardware),
+                    videoDecoder = preferences.enumValue(Keys.VideoDecoder, DecoderPreference.Hardware),
                     afrEnabled = preferences[Keys.AfrEnabled] ?: false,
+                    audioPassthroughEnabled = preferences[Keys.AudioPassthroughEnabled] ?: false,
                     timeshiftEnabled = preferences[Keys.TimeshiftEnabled] ?: true,
                     timeshiftStorage = preferences.enumValue(
                         Keys.TimeshiftStorage,
@@ -64,7 +66,6 @@ class DataStoreUserPreferencesStore(
                 ),
                 searchHistory = preferences[Keys.SearchHistory].toSearchHistory(),
                 expandedLiveTvProviderIds = preferences[Keys.ExpandedLiveTvProviderIds].toStoredIdSet(),
-                cache = CachePreferences(),
                 parentalControl = ParentalControlPreferences(
                     pinEnabled = preferences[Keys.PinEnabled] ?: false,
                     protectSettings = preferences[Keys.ProtectSettings] ?: false,
@@ -78,6 +79,10 @@ class DataStoreUserPreferencesStore(
                     refreshIntervalHours = (preferences[Keys.EpgRefreshIntervalHours] ?: 24).coerceIn(1, 168),
                     refreshOnAppStartEnabled = preferences[Keys.EpgRefreshOnAppStartEnabled] ?: true,
                     refreshOnPlaylistChangeEnabled = preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] ?: true,
+                ),
+                backup = BackupPreferences(
+                    target = preferences.enumValue(Keys.BackupTarget, BackupTargetPreference.LocalStorage),
+                    lastBackupAtMillis = preferences[Keys.LastBackupAtMillis]?.takeIf { it > 0L },
                 ),
                 diagnostics = DiagnosticsPreferences(
                     diagnosticsLoggingEnabled = preferences[Keys.DiagnosticsLoggingEnabled]
@@ -105,8 +110,8 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.DoubleBackToExit] = general.doubleBackToExit
             preferences[Keys.BackgroundRefreshEnabled] = general.backgroundRefreshEnabled
             preferences[Keys.RememberSorting] = general.rememberSorting
-            preferences[Keys.StartDestination] = general.startDestination.name
             preferences[Keys.GlobalUserAgent] = general.globalUserAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
+            preferences.setNullable(Keys.LastSettingsSection, general.lastSettingsSection)
         }
     }
 
@@ -127,6 +132,7 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.AudioDecoder] = playback.audioDecoder.name
             preferences[Keys.VideoDecoder] = playback.videoDecoder.name
             preferences[Keys.AfrEnabled] = playback.afrEnabled
+            preferences[Keys.AudioPassthroughEnabled] = playback.audioPassthroughEnabled
             preferences[Keys.TimeshiftEnabled] = playback.timeshiftEnabled
             preferences[Keys.TimeshiftStorage] = playback.timeshiftStorage.name
             preferences[Keys.TimeshiftMinutes] = playback.timeshiftMinutes
@@ -156,8 +162,6 @@ class DataStoreUserPreferencesStore(
         }
     }
 
-    override suspend fun updateCache(cache: CachePreferences) = Unit
-
     override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.PinEnabled] = parentalControl.pinEnabled
@@ -178,6 +182,13 @@ class DataStoreUserPreferencesStore(
         }
     }
 
+    override suspend fun updateBackup(backup: BackupPreferences) {
+        dataStore.edit { preferences ->
+            preferences[Keys.BackupTarget] = backup.target.name
+            preferences.setNullable(Keys.LastBackupAtMillis, backup.lastBackupAtMillis)
+        }
+    }
+
     override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.DiagnosticsLoggingEnabled] = diagnostics.diagnosticsLoggingEnabled
@@ -195,6 +206,14 @@ class DataStoreUserPreferencesStore(
         }
     }
 
+    private fun MutablePreferences.setNullable(key: Preferences.Key<Long>, value: Long?) {
+        if (value == null) {
+            remove(key)
+        } else {
+            this[key] = value
+        }
+    }
+
     private object Keys {
         val SelectedProviderId = stringPreferencesKey("selected_provider_id")
 
@@ -202,8 +221,8 @@ class DataStoreUserPreferencesStore(
         val DoubleBackToExit = booleanPreferencesKey("double_back_to_exit")
         val BackgroundRefreshEnabled = booleanPreferencesKey("background_refresh_enabled")
         val RememberSorting = booleanPreferencesKey("remember_sorting")
-        val StartDestination = stringPreferencesKey("start_destination")
         val GlobalUserAgent = stringPreferencesKey("global_user_agent")
+        val LastSettingsSection = stringPreferencesKey("last_settings_section")
 
         val BackgroundColor = stringPreferencesKey("background_color")
         val AccentColor = stringPreferencesKey("accent_color")
@@ -216,6 +235,7 @@ class DataStoreUserPreferencesStore(
         val AudioDecoder = stringPreferencesKey("audio_decoder")
         val VideoDecoder = stringPreferencesKey("video_decoder")
         val AfrEnabled = booleanPreferencesKey("afr_enabled")
+        val AudioPassthroughEnabled = booleanPreferencesKey("audio_passthrough_enabled")
         val TimeshiftEnabled = booleanPreferencesKey("timeshift_enabled")
         val TimeshiftStorage = stringPreferencesKey("timeshift_storage")
         val TimeshiftMinutes = intPreferencesKey("timeshift_minutes")
@@ -240,6 +260,8 @@ class DataStoreUserPreferencesStore(
         val EpgRefreshIntervalHours = intPreferencesKey("epg_refresh_interval_hours")
         val EpgRefreshOnAppStartEnabled = booleanPreferencesKey("epg_refresh_on_app_start_enabled")
         val EpgRefreshOnPlaylistChangeEnabled = booleanPreferencesKey("epg_refresh_on_playlist_change_enabled")
+        val BackupTarget = stringPreferencesKey("backup_target")
+        val LastBackupAtMillis = longPreferencesKey("last_backup_at_millis")
         val DiagnosticsLoggingEnabled = booleanPreferencesKey("diagnostics_logging_enabled")
         val LegacyDiagnosticsEnabled = booleanPreferencesKey("diagnostics_enabled")
         val DiagnosticsRetentionDays = intPreferencesKey("diagnostics_retention_days")

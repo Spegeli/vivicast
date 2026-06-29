@@ -5,7 +5,6 @@ class GlobalRefreshOrchestrator(
     private val playlistRefresher: PlaylistRefresher,
     private val epgSourceResolver: EpgSourceResolver,
     private val epgRefresher: EpgRefresher,
-    private val epgMappingApplier: EpgMappingApplier,
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
     private val diagnostics: RefreshDiagnostics,
@@ -68,9 +67,6 @@ class GlobalRefreshOrchestrator(
                 )
         }
 
-        epgMappingApplier.applyMappings(epgOutcomes.filter { it.success })
-        diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.EpgMappingApplied, "EPG mapping applied."))
-
         logoRefresher.refreshLogos()
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.LogoRefreshCompleted, "Logo refresh completed."))
 
@@ -104,10 +100,6 @@ interface EpgSourceResolver {
 
 interface EpgRefresher {
     suspend fun refresh(target: EpgRefreshTarget): EpgRefreshOutcome
-}
-
-interface EpgMappingApplier {
-    suspend fun applyMappings(epgOutcomes: List<EpgRefreshOutcome>)
 }
 
 interface LogoRefresher {

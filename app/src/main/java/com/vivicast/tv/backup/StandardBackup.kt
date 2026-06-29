@@ -173,7 +173,6 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("doubleBackToExit", general.doubleBackToExit)
             .put("backgroundRefreshEnabled", general.backgroundRefreshEnabled)
             .put("rememberSorting", general.rememberSorting)
-            .put("startDestination", general.startDestination.name)
             .put("globalUserAgent", general.globalUserAgent))
         .put("appearance", JSONObject()
             .put("backgroundColor", appearance.backgroundColor.name)
@@ -200,13 +199,14 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("maxRecentChannels", history.maxRecentChannels)
             .put("watchedThresholdPercent", history.watchedThresholdPercent))
         .put("expandedLiveTvProviderIds", JSONArray(expandedLiveTvProviderIds.toList()))
-        .put("cache", JSONObject().put("maxCacheSizeMb", cache.maxCacheSizeMb))
         .put("epg", JSONObject()
             .put("pastRetentionDays", epg.pastRetentionDays)
             .put("futureRetentionDays", epg.futureRetentionDays)
             .put("refreshIntervalHours", epg.refreshIntervalHours)
             .put("refreshOnAppStartEnabled", epg.refreshOnAppStartEnabled)
             .put("refreshOnPlaylistChangeEnabled", epg.refreshOnPlaylistChangeEnabled))
+        .put("backup", JSONObject()
+            .put("targetType", backup.target.name))
 
 private fun StandardBackupProvider.toJson(): JSONObject =
     JSONObject()

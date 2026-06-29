@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.designsystem
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +39,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -44,6 +53,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,7 +72,7 @@ fun VivicastScreen(
     content: @Composable () -> Unit,
 ) {
     VivicastScreenBackground(
-        modifier = modifier.padding(horizontal = VivicastSpacing.Space2, vertical = VivicastSpacing.Space1),
+        modifier = modifier,
         content = content,
     )
 }
@@ -104,7 +114,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
         modifier = modifier,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        style = VivicastTypography.TitleLarge,
+        style = VivicastTypography.TitleMedium,
     )
 }
 
@@ -129,6 +139,7 @@ fun VivicastFocusSurface(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     enabled: Boolean = true,
+    showIdleSurface: Boolean = true,
     onClick: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     onFocusChanged: (Boolean) -> Unit = {},
@@ -139,12 +150,19 @@ fun VivicastFocusSurface(
 ) {
     var focused by remember { mutableStateOf(false) }
     val border = Border(
-        border = BorderStroke(VivicastBorders.Hairline, if (selected) VivicastColors.AccentSoft else Color(0xFF26384F)),
+        border = BorderStroke(
+            VivicastBorders.Hairline,
+            when {
+                selected -> VivicastColors.AccentSoft
+                showIdleSurface -> Color(0xFF26384F)
+                else -> Color.Transparent
+            },
+        ),
         shape = shape,
     )
     val focusedBorder = Border(
         border = BorderStroke(VivicastFocusDefaults.RingWidth, VivicastColors.FocusRing),
-        inset = VivicastFocusDefaults.RingGap,
+        inset = 0.dp,
         shape = shape,
     )
     val glow = Glow(
@@ -167,6 +185,16 @@ fun VivicastFocusSurface(
             focusedBorder = focusedBorder,
             pressedBorder = focusedBorder,
         ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (showIdleSurface) VivicastColors.Surface else Color.Transparent,
+            contentColor = VivicastColors.TextPrimary,
+            focusedContainerColor = VivicastColors.SurfaceFocus,
+            focusedContentColor = Color.White,
+            pressedContainerColor = VivicastColors.SurfacePressed,
+            pressedContentColor = Color.White,
+            disabledContainerColor = VivicastColors.SurfaceDisabled,
+            disabledContentColor = VivicastColors.TextDisabled,
+        ),
         glow = ClickableSurfaceDefaults.glow(
             focusedGlow = glow,
             pressedGlow = glow,
@@ -183,16 +211,7 @@ fun VivicastFocusSurface(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .background(focusSurfaceBrush(focused = focused, selected = selected, enabled = enabled))
-                .border(
-                    width = if (focused) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                    color = when {
-                        focused -> VivicastColors.FocusRing
-                        selected -> VivicastColors.AccentSoft
-                        else -> Color(0x332A405A)
-                    },
-                    shape = shape,
-                )
+                .background(focusSurfaceBrush(focused = focused, selected = selected, enabled = enabled, showIdleSurface = showIdleSurface))
                 .padding(contentPadding),
         ) {
             content(focused)
@@ -217,6 +236,7 @@ fun FocusPanel(
         onFocused = onFocused,
         onFocusChanged = onFocusChanged,
         contentPadding = contentPadding,
+        focusScale = 1.0f,
         content = content,
     )
 }
@@ -248,17 +268,17 @@ fun ActionPill(
     onClick: () -> Unit = {},
 ) {
     VivicastFocusSurface(
-        modifier = modifier.widthIn(min = 96.dp, max = 220.dp).height(VivicastCardSizes.ActionPillHeight),
+        modifier = modifier.widthIn(min = 80.dp, max = 260.dp).height(VivicastCardSizes.ActionPillHeight),
         selected = selected,
         onClick = onClick,
-        contentPadding = VivicastSpacing.Space3,
+        contentPadding = VivicastSpacing.Space2,
         shape = VivicastShapes.PillRadius,
-        focusScale = VivicastFocusDefaults.ScaleSmall,
+        focusScale = VivicastFocusDefaults.ScaleButton,
     ) { focused ->
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = VivicastSpacing.Space3),
+                .padding(horizontal = VivicastSpacing.Space2),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -369,10 +389,7 @@ fun VivicastContentRow(
     horizontalGap: Dp = VivicastSpacing.RowGap,
     content: LazyListScope.() -> Unit,
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
-    ) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         SectionTitle(title)
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -460,10 +477,10 @@ fun VivicastHeroPanel(
             }
             Column(
                 verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
-                modifier = Modifier
+            modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .widthIn(max = 920.dp)
-                    .padding(horizontal = VivicastSpacing.Space6, vertical = VivicastSpacing.Space4),
+                    .widthIn(max = 860.dp)
+                    .padding(horizontal = VivicastSpacing.Space5, vertical = VivicastSpacing.Space4),
             ) {
                 Text(
                     text = title,
@@ -696,8 +713,8 @@ fun VivicastDetailsPanel(
             .clip(VivicastShapes.CardRadius)
             .background(Brush.verticalGradient(listOf(Color(0xE6162335), Color(0xD90B1320))))
             .border(VivicastBorders.Hairline, Color(0xFF263C55), VivicastShapes.CardRadius)
-            .padding(VivicastSpacing.Space5),
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+            .padding(VivicastSpacing.Space4),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
     ) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -822,37 +839,111 @@ fun VivicastSettingsRow(
     help: String,
     value: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: (@Composable () -> Unit)? = null,
     onClick: () -> Unit = {},
 ) {
-    VivicastFocusSurface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
-        contentPadding = VivicastSpacing.Space4,
-    ) { focused ->
+    val disabledColor = VivicastColors.TextSecondary.copy(alpha = 0.55f)
+    val titleColor = if (enabled) VivicastColors.TextPrimary else disabledColor
+    val secondaryColor = if (enabled) VivicastColors.TextSecondary else disabledColor
+    val strOn = stringResource(R.string.value_on)
+    val strOff = stringResource(R.string.value_off)
+    val isToggle = value == strOn || value == strOff
+    val isOn = value == strOn
+
+    @Composable
+    fun RowContent(focused: Boolean) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = VivicastTypography.LabelLarge,
-                )
-                BodyText(help, maxLines = 1)
+            if (icon != null) {
+                icon()
+                Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
             }
-            Spacer(modifier = Modifier.width(VivicastSpacing.Space5))
             Text(
-                text = value,
+                text = title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = VivicastTypography.LabelMedium.copy(
-                    color = if (focused) VivicastColors.FocusRing else VivicastColors.TextPrimary,
-                ),
+                style = VivicastTypography.LabelMedium.copy(color = titleColor),
+                modifier = Modifier.weight(1f),
             )
+            Spacer(modifier = Modifier.width(VivicastSpacing.Space4))
+            if (isToggle) {
+                VivicastToggle(isOn = isOn, enabled = enabled)
+            } else {
+                Text(
+                    text = value,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = VivicastTypography.LabelSmall.copy(
+                        color = when {
+                            !enabled -> disabledColor
+                            focused -> VivicastColors.FocusRing
+                            else -> VivicastColors.TextSecondary
+                        },
+                    ),
+                )
+                if (enabled) {
+                    Spacer(modifier = Modifier.width(VivicastSpacing.Space2))
+                    Text(
+                        text = "›",
+                        maxLines = 1,
+                        style = VivicastTypography.LabelMedium.copy(color = secondaryColor),
+                    )
+                }
+            }
         }
+    }
+
+    if (!enabled) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(VivicastShapes.CardRadius)
+                .background(VivicastColors.SurfaceDisabled)
+                .padding(horizontal = VivicastSpacing.Space3, vertical = VivicastSpacing.Space3),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            RowContent(focused = false)
+        }
+        return
+    }
+
+    VivicastFocusSurface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = VivicastSpacing.Space3,
+        focusScale = 1.0f,
+    ) { focused ->
+        RowContent(focused = focused)
+    }
+}
+
+@Composable
+fun VivicastToggle(isOn: Boolean, enabled: Boolean = true, modifier: Modifier = Modifier) {
+    val trackColor = when {
+        !enabled -> VivicastColors.SurfaceHigh
+        isOn -> VivicastColors.Accent
+        else -> VivicastColors.SurfaceHigh
+    }
+    val thumbColor = if (enabled) Color.White else VivicastColors.TextDisabled
+    Box(
+        modifier = modifier
+            .width(44.dp)
+            .height(24.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(trackColor),
+        contentAlignment = if (isOn) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(3.dp)
+                .size(18.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(thumbColor),
+        )
     }
 }
 
@@ -867,48 +958,76 @@ fun VivicastTopNavigation(
     onSelected: (Int) -> Unit,
     onFocused: (Int) -> Unit,
 ) {
+    val strSearch = stringResource(R.string.nav_search_label)
+    val strSettings = stringResource(R.string.nav_settings_label)
+    val iconOnlyLabels = setOf(strSearch, strSettings)
+
+    @Composable
+    fun NavItem(index: Int, label: String) {
+        VivicastTopNavItem(
+            label = label,
+            selected = index == selectedIndex,
+            modifier = Modifier
+                .testTag(topNavItemTag(label))
+                .then(
+                    if (index == selectedIndex && selectedFocusRequester != null) {
+                        Modifier.focusRequester(selectedFocusRequester)
+                    } else {
+                        Modifier
+                    },
+                ),
+            minWidth = topNavItemWidth(label, iconOnlyLabels),
+            onSelected = { onSelected(index) },
+            onFocused = { onFocused(index) },
+            onFocusChanged = onItemFocusChanged,
+        )
+    }
+
     Row(
-        horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space5),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(VivicastShapes.RadiusMediumShape)
-                    .background(Brush.verticalGradient(listOf(VivicastColors.Accent, Color(0xFF2563EB))))
-                    .border(VivicastBorders.Hairline, Color(0x6638BDF8), VivicastShapes.RadiusMediumShape),
-            )
-            Text(text = brand, style = VivicastTypography.TitleLarge)
+        // Left: brand
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            VivicastBrandMark()
+            Text(text = brand, style = VivicastTypography.TitleMedium)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+
+        // Center: main nav items
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             items.forEachIndexed { index, label ->
-                VivicastTopNavItem(
-                    label = label,
-                    selected = index == selectedIndex,
-                    modifier = Modifier
-                        .testTag(topNavItemTag(label))
-                        .then(
-                            if (index == selectedIndex && selectedFocusRequester != null) {
-                                Modifier.focusRequester(selectedFocusRequester)
-                            } else {
-                                Modifier
-                            },
-                        ),
-                    minWidth = if (label.length > 8) 150.dp else VivicastCardSizes.TopTabMinWidth,
-                    onSelected = { onSelected(index) },
-                    onFocused = { onFocused(index) },
-                    onFocusChanged = onItemFocusChanged,
-                )
+                if (label !in iconOnlyLabels) NavItem(index, label)
             }
         }
-        Spacer(Modifier.weight(1f))
+
+        // Right: icon-only items
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items.forEachIndexed { index, label ->
+                if (label in iconOnlyLabels) NavItem(index, label)
+            }
+        }
     }
 }
 
 fun topNavItemTag(label: String): String = "top-nav-item-$label"
 fun playerTimelineTag(): String = "player-timeline"
+
+private fun topNavItemWidth(label: String, iconOnlyLabels: Set<String>): Dp = when {
+    label in iconOnlyLabels -> 44.dp
+    label == "Home" -> 96.dp
+    label == "Live-TV" -> 108.dp
+    else -> VivicastCardSizes.TopTabMinWidth
+}
 
 @Composable
 fun VivicastTopNavItem(
@@ -920,28 +1039,189 @@ fun VivicastTopNavItem(
     onFocused: () -> Unit,
     onFocusChanged: (Boolean) -> Unit = {},
 ) {
-    VivicastFocusSurface(
-        modifier = modifier.width(minWidth).height(VivicastCardSizes.TopTabsHeight),
-        selected = selected,
+    var focused by remember { mutableStateOf(false) }
+    val isActive = selected || focused
+    val strSearch = stringResource(R.string.nav_search_label)
+    val strSettings = stringResource(R.string.nav_settings_label)
+    val iconOnly = label == strSearch || label == strSettings
+    TvSurface(
         onClick = onSelected,
-        onFocused = onFocused,
-        onFocusChanged = onFocusChanged,
-        contentPadding = VivicastSpacing.Space0,
-        shape = VivicastShapes.PillRadius,
-        focusScale = VivicastFocusDefaults.ScaleSmall,
+        modifier = modifier
+            .then(if (iconOnly) Modifier.width(minWidth) else Modifier.widthIn(min = minWidth))
+            .height(VivicastCardSizes.TopTabsHeight)
+            .onFocusChanged {
+                val now = it.isFocused || it.hasFocus
+                focused = now
+                onFocusChanged(now)
+                if (now) onFocused()
+            },
+        shape = ClickableSurfaceDefaults.shape(
+            shape = VivicastShapes.CardRadius,
+            focusedShape = VivicastShapes.CardRadius,
+            pressedShape = VivicastShapes.CardRadius,
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color(0xFF0D273F) else Color.Transparent,
+            contentColor = if (selected) Color.White else VivicastColors.TextSecondary,
+            focusedContainerColor = Color(0xFF0E2A43),
+            focusedContentColor = Color.White,
+            pressedContainerColor = VivicastColors.SurfacePressed,
+            pressedContentColor = Color.White,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    VivicastBorders.FocusWidth,
+                    if (selected) VivicastColors.AccentSoft else Color.Transparent,
+                ),
+                shape = VivicastShapes.CardRadius,
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(VivicastBorders.FocusWidth, VivicastColors.FocusRing),
+                inset = 0.dp,
+                shape = VivicastShapes.CardRadius,
+            ),
+            pressedBorder = Border(
+                border = BorderStroke(VivicastBorders.FocusWidth, VivicastColors.FocusRing),
+                shape = VivicastShapes.CardRadius,
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = VivicastFocusDefaults.ScaleSmall),
+        glow = ClickableSurfaceDefaults.glow(
+            focusedGlow = Glow(elevation = VivicastFocusDefaults.GlowElevation, elevationColor = VivicastColors.FocusGlow),
+        ),
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space4),
+            modifier = Modifier
+                .then(if (iconOnly) Modifier.fillMaxSize() else Modifier.defaultMinSize(minWidth = minWidth).fillMaxHeight())
+                .padding(horizontal = if (iconOnly) VivicastSpacing.Space2 else VivicastSpacing.Space3),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = VivicastTypography.LabelMedium.copy(
-                    color = if (selected) Color.White else VivicastColors.TextSecondary,
-                ),
-            )
+            if (iconOnly) {
+                TopNavIcon(label = label, selected = isActive)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+                    TopNavIcon(label = label, selected = isActive)
+                    Text(
+                        text = label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = VivicastTypography.LabelSmall.copy(
+                            color = if (isActive) Color.White else VivicastColors.TextSecondary,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VivicastBrandMark(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(26.dp)) {
+        val outer = Path().apply {
+            moveTo(size.width * 0.16f, size.height * 0.08f)
+            lineTo(size.width * 0.86f, size.height * 0.50f)
+            lineTo(size.width * 0.16f, size.height * 0.92f)
+            close()
+        }
+        val inner = Path().apply {
+            moveTo(size.width * 0.30f, size.height * 0.28f)
+            lineTo(size.width * 0.62f, size.height * 0.50f)
+            lineTo(size.width * 0.30f, size.height * 0.72f)
+            close()
+        }
+        drawPath(outer, Brush.linearGradient(listOf(Color(0xFF00C8FF), Color(0xFF2563EB))))
+        drawPath(inner, Color(0xAA050914))
+    }
+}
+
+@Composable
+private fun TopNavIcon(label: String, selected: Boolean, modifier: Modifier = Modifier) {
+    val color = if (selected) VivicastColors.AccentSoft else VivicastColors.TextSecondary
+    val strSearch = stringResource(R.string.nav_search_label)
+    val strSettings = stringResource(R.string.nav_settings_label)
+    val strMovies = stringResource(R.string.nav_movies_label)
+    val strSeries = stringResource(R.string.nav_series_label)
+    val iconSize = if (label == strSearch || label == strSettings) 18.dp else 15.dp
+    Canvas(modifier = modifier.size(iconSize)) {
+        val sw = 1.8f
+        val stroke = Stroke(width = sw, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val w = size.width
+        val h = size.height
+        when (label) {
+            "Home" -> {
+                // Classic house: roof + body + door
+                val roof = Path().apply {
+                    moveTo(w * 0.50f, h * 0.10f)
+                    lineTo(w * 0.90f, h * 0.50f)
+                    lineTo(w * 0.10f, h * 0.50f)
+                    close()
+                }
+                drawPath(roof, color, style = stroke)
+                val body = Path().apply {
+                    moveTo(w * 0.22f, h * 0.50f)
+                    lineTo(w * 0.22f, h * 0.90f)
+                    lineTo(w * 0.78f, h * 0.90f)
+                    lineTo(w * 0.78f, h * 0.50f)
+                }
+                drawPath(body, color, style = stroke)
+                drawRect(color, topLeft = Offset(w * 0.40f, h * 0.65f), size = Size(w * 0.20f, h * 0.25f), style = stroke)
+            }
+            "Live-TV" -> {
+                // Clean monitor screen + base + stand — no antenna
+                drawRoundRect(color, topLeft = Offset(w * 0.08f, h * 0.16f), size = Size(w * 0.84f, h * 0.58f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.08f), style = stroke)
+                drawLine(color, Offset(w * 0.36f, h * 0.74f), Offset(w * 0.64f, h * 0.74f), strokeWidth = sw, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.50f, h * 0.74f), Offset(w * 0.50f, h * 0.86f), strokeWidth = sw, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.30f, h * 0.86f), Offset(w * 0.70f, h * 0.86f), strokeWidth = sw, cap = StrokeCap.Round)
+            }
+            strMovies -> {
+                // Clapperboard: rectangle body + striped top bar
+                drawRect(color, topLeft = Offset(w * 0.10f, h * 0.34f), size = Size(w * 0.80f, h * 0.54f), style = stroke)
+                drawRect(color, topLeft = Offset(w * 0.10f, h * 0.18f), size = Size(w * 0.80f, h * 0.18f), style = stroke)
+                // Diagonal lines in top bar (clapperboard stripes)
+                for (i in 0..3) {
+                    val x = w * (0.20f + i * 0.18f)
+                    drawLine(color, Offset(x, h * 0.18f), Offset(x - w * 0.10f, h * 0.36f), strokeWidth = sw, cap = StrokeCap.Round)
+                }
+                // Play button in body
+                val tri = Path().apply {
+                    moveTo(w * 0.38f, h * 0.46f); lineTo(w * 0.38f, h * 0.76f); lineTo(w * 0.68f, h * 0.61f); close()
+                }
+                drawPath(tri, color, style = stroke)
+            }
+            strSeries -> {
+                // Two stacked screens
+                drawRoundRect(color, topLeft = Offset(w * 0.18f, h * 0.10f), size = Size(w * 0.64f, h * 0.42f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.06f), style = stroke)
+                drawRoundRect(color, topLeft = Offset(w * 0.06f, h * 0.44f), size = Size(w * 0.72f, h * 0.44f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.06f), style = stroke)
+            }
+            strSearch -> {
+                // Bold magnifier
+                drawCircle(color, radius = w * 0.28f, center = Offset(w * 0.40f, h * 0.40f), style = Stroke(width = sw + 0.6f, cap = StrokeCap.Round))
+                drawLine(color, Offset(w * 0.62f, h * 0.62f), Offset(w * 0.86f, h * 0.86f), strokeWidth = sw + 0.6f, cap = StrokeCap.Round)
+            }
+            else -> {
+                // Classic gear: thick ring + 6 square teeth + center hole
+                val cx = w * 0.50f; val cy = h * 0.50f
+                drawCircle(color, radius = w * 0.30f, center = Offset(cx, cy),
+                    style = Stroke(width = sw + 1.2f, cap = StrokeCap.Round))
+                drawCircle(color, radius = w * 0.12f, center = Offset(cx, cy), style = stroke)
+                repeat(6) { i ->
+                    val angle = (Math.PI * 2.0 * i / 6.0).toFloat()
+                    val cos = kotlin.math.cos(angle).toFloat()
+                    val sin = kotlin.math.sin(angle).toFloat()
+                    drawLine(
+                        color,
+                        Offset(cx + w * 0.30f * cos, cy + h * 0.30f * sin),
+                        Offset(cx + w * 0.46f * cos, cy + h * 0.46f * sin),
+                        strokeWidth = w * 0.16f,
+                        cap = StrokeCap.Square,
+                    )
+                }
+            }
         }
     }
 }
@@ -967,10 +1247,10 @@ fun VivicastChannelCard(
         onFocused = onFocused,
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(VivicastCardSizes.ChannelItemHeight),
-        contentPadding = VivicastSpacing.Space4,
+        contentPadding = VivicastSpacing.Space3,
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1019,7 +1299,7 @@ fun VivicastPlayerOverlay(
             .clip(VivicastShapes.PanelRadius)
             .background(Color(0xE60A111D))
             .border(VivicastBorders.Hairline, Color(0x8838BDF8), VivicastShapes.PanelRadius)
-            .padding(horizontal = VivicastSpacing.Space7, vertical = VivicastSpacing.Space5),
+            .padding(horizontal = VivicastSpacing.Space6, vertical = VivicastSpacing.Space4),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
     ) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
@@ -1172,11 +1452,12 @@ fun MiniLogo(
 private val VivicastShapes.RadiusMediumShape: RoundedCornerShape
     get() = RoundedCornerShape(RadiusMedium)
 
-private fun focusSurfaceBrush(focused: Boolean, selected: Boolean, enabled: Boolean): Brush {
+private fun focusSurfaceBrush(focused: Boolean, selected: Boolean, enabled: Boolean, showIdleSurface: Boolean): Brush {
     return when {
         !enabled -> Brush.verticalGradient(listOf(VivicastColors.SurfaceDisabled, VivicastColors.SurfaceDisabled))
         focused -> Brush.verticalGradient(listOf(Color(0xFF255077), Color(0xFF0E2A43), Color(0xFF081523)))
         selected -> Brush.verticalGradient(listOf(Color(0xFF173F64), Color(0xFF0D273F), Color(0xFF081522)))
+        !showIdleSurface -> Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
         else -> Brush.verticalGradient(listOf(Color(0xEF152238), Color(0xE80B1423), Color(0xDE08111D)))
     }
 }

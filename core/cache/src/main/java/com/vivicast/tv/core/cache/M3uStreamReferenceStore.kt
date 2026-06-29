@@ -19,12 +19,6 @@ data class M3uStreamReference(
     val catchupSource: String? = null,
 )
 
-object NoOpM3uStreamReferenceStore : M3uStreamReferenceStore {
-    override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) = Unit
-    override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? = null
-    override suspend fun deleteProviderReferences(providerId: String) = Unit
-}
-
 class FileM3uStreamReferenceStore(
     private val directory: File,
 ) : M3uStreamReferenceStore {

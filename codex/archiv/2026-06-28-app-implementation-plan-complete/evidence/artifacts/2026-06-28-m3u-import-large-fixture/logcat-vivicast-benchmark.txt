@@ -1,2 +1,0 @@
-﻿--------- beginning of main
-06-22 22:51:21.301  9534  9549 I VivicastBenchmark: largeFixtureM3u parseMs=439 importMs=2115 totalMs=2554 channels=10000 categories=20

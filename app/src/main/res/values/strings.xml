@@ -1,4 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Vivicast</string>
     <string name="search_hint">Vivicast durchsuchen</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_live_tv">Live-TV</string>
+    <string name="nav_movies">Filme</string>
+    <string name="nav_series">Serien</string>
+    <string name="nav_search">Suche</string>
+    <string name="nav_settings">Einstellungen</string>
+
+    <!-- Settings sections -->
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_section_general">Allgemein</string>
+    <string name="settings_section_playlists">Wiedergabelisten</string>
+    <string name="settings_section_epg">EPG</string>
+    <string name="settings_section_appearance">Optik</string>
+    <string name="settings_section_playback">Wiedergabe</string>
+    <string name="settings_section_parental">Kindersicherung</string>
+    <string name="settings_section_cache">Speicher &amp; Verlauf</string>
+    <string name="settings_section_backup">Backup</string>
+    <string name="settings_section_about">Über die App</string>
+
+    <!-- General settings -->
+    <string name="settings_launch_on_boot">App beim TV-Start starten</string>
+    <string name="settings_double_back">Doppelte Zurück-Taste zum Beenden</string>
+    <string name="settings_language">Sprache</string>
+    <string name="settings_background_refresh">Hintergrundaktualisierung erlauben</string>
+    <string name="settings_remember_sorting">Sortierung merken</string>
+    <string name="settings_user_agent">User-Agent</string>
+
+    <!-- Start destinations -->
+    <string name="start_home">Home</string>
+    <string name="start_live_tv">Live-TV</string>
+    <string name="start_movies">Filme</string>
+    <string name="start_series">Serien</string>
+
+    <!-- Language options -->
+    <string name="language_system">Systemstandard</string>
+    <string name="language_german">Deutsch</string>
+    <string name="language_english">Englisch</string>
+
+    <!-- Toggle values -->
+    <string name="value_on">Ein</string>
+    <string name="value_off">Aus</string>
+    <string name="value_app_default">App-Standard</string>
+
+    <!-- Playback settings -->
+    <string name="settings_buffer_size">Puffergröße</string>
+    <string name="settings_audio_decoder">Audio-Decoder</string>
+    <string name="settings_video_decoder">Video-Decoder</string>
+    <string name="settings_afr">Automatische Bildwiederholrate</string>
+    <string name="settings_external_player">Externer Player</string>
+    <string name="settings_timeshift">Timeshift</string>
+    <string name="settings_timeshift_max_duration">Maximale Timeshift-Dauer</string>
+    <string name="settings_timeshift_storage">Timeshift-Speicher</string>
+    <string name="settings_audio_language">Audio-Sprache</string>
+    <string name="settings_subtitle_language">Untertitel-Sprache</string>
+    <string name="settings_auto_next">Automatisch nächste Folge</string>
+    <string name="settings_auto_next_countdown">Countdown nächste Folge</string>
+    <string name="settings_audio_passthrough">Audio-Passthrough</string>
+
+    <!-- EPG settings -->
+    <string name="settings_epg_interval">Globales EPG-Aktualisierungsintervall</string>
+    <string name="settings_epg_past">EPG-Vergangenheit behalten</string>
+    <string name="settings_epg_future">EPG-Zukunft laden/behalten</string>
+    <string name="settings_epg_on_start">EPG beim App-Start aktualisieren</string>
+    <string name="settings_epg_on_change">EPG bei Playlist-Änderung aktualisieren</string>
+    <string name="settings_epg_now">EPG jetzt aktualisieren</string>
+    <string name="settings_epg_now_value">Starten</string>
+
+    <!-- Appearance settings -->
+    <string name="settings_theme">Hintergrundthema</string>
+    <string name="settings_accent_color">Akzentfarbe</string>
+    <string name="settings_transparency">Transparenz</string>
+    <string name="settings_font_size">Schriftgröße</string>
+    <string name="settings_animations">Animationen</string>
+
+    <!-- Parental settings -->
+    <string name="settings_pin_set">PIN setzen</string>
+    <string name="settings_pin_change">PIN ändern</string>
+    <string name="settings_pin_disable">Kindersicherung deaktivieren</string>
+    <string name="settings_pin_set_value">Setzen</string>
+    <string name="settings_pin_change_value">Ändern</string>
+    <string name="settings_pin_disable_value">Deaktivieren</string>
+    <string name="settings_protect_settings">Einstellungen schützen</string>
+    <string name="settings_protect_movies">Filme schützen</string>
+    <string name="settings_protect_series">Serien schützen</string>
+    <string name="settings_protect_adult">Inhalte ab 18 schützen</string>
+    <string name="settings_lock_session">Sitzungsfreigabe sperren</string>
+    <string name="settings_lock_session_value">Keine Freigabe</string>
+    <string name="settings_pin_required">PIN erforderlich</string>
+
+    <!-- Cache/History settings -->
+    <string name="settings_cache_info">Cache Informationen</string>
+    <string name="settings_cache_clear">Cache leeren</string>
+    <string name="settings_history_clear">Verlauf löschen</string>
+    <string name="settings_cache_clear_value">Ausführen</string>
+
+    <!-- Backup settings -->
+    <string name="settings_backup_export">Backup exportieren</string>
+    <string name="settings_backup_import">Backup importieren</string>
+    <string name="settings_backup_target">Backup-Ziel</string>
+    <string name="settings_backup_last">Letzte Sicherung</string>
+    <string name="settings_backup_full_export">Vollbackup exportieren</string>
+    <string name="settings_backup_full_import">Vollbackup importieren</string>
+    <string name="settings_backup_select_value">Auswählen</string>
+    <string name="settings_backup_full_value">Passphrase</string>
+    <string name="settings_backup_never">Nie</string>
+
+    <!-- Playlist settings -->
+    <string name="settings_playlist_add">Wiedergabeliste hinzufügen</string>
+    <string name="settings_playlist_add_value">Öffnen</string>
+    <string name="settings_playlist_refresh_all">Alle Wiedergabelisten aktualisieren</string>
+    <string name="settings_playlist_refresh_value">Starten</string>
+    <string name="settings_playlist_empty_title">Keine Wiedergabelisten vorhanden</string>
+    <string name="settings_playlist_empty_body">Füge eine Wiedergabeliste hinzu, um Inhalte zu importieren.</string>
+
+    <!-- About -->
+    <string name="about_app_info">App-Informationen</string>
+    <string name="about_copy_version">Versionsinformationen kopieren</string>
+    <string name="about_copied">Kopiert.</string>
+    <string name="about_diagnostics">Diagnose und Support</string>
+    <string name="about_legal">Lizenzhinweise</string>
+    <string name="about_privacy">Datenschutzinformationen</string>
+    <string name="about_open_value">Öffnen</string>
+    <string name="about_third_party">Drittanbieter-Lizenzen</string>
+
+    <!-- Home screen -->
+    <string name="home_favorites">Favoriten</string>
+    <string name="home_continue">Fortsetzen</string>
+    <string name="home_recent_channels">Zuletzt gesehene Sender</string>
+    <string name="home_empty_title">Keine Inhalte</string>
+    <string name="home_empty_body">Füge eine Wiedergabeliste hinzu, um zu starten.</string>
+    <string name="home_add_playlist">Wiedergabeliste hinzufügen</string>
+    <string name="home_livetv_favorites">Live-TV Favoriten</string>
+
+    <!-- Live-TV -->
+    <string name="livetv_channels">Senderliste</string>
+    <string name="livetv_preview">Vorschau</string>
+    <string name="livetv_favorites">Favoriten</string>
+    <string name="livetv_no_channels">Keine Sender</string>
+    <string name="livetv_no_provider">Kein Sender</string>
+    <string name="livetv_add_playlist">Lege in den Einstellungen zuerst eine Wiedergabeliste an.</string>
+    <string name="livetv_select_provider">Wähle links einen Provider und Sender aus.</string>
+    <string name="livetv_preview_hint">OK startet Vorschau</string>
+    <string name="livetv_press_ok">Drücke OK, um die Vorschau zu starten.</string>
+    <string name="livetv_live_badge">Live</string>
+    <string name="livetv_cat_button">Kat.</string>
+    <string name="livetv_details_button">Details</string>
+    <string name="livetv_empty_playlist">Lege in den Einstellungen zuerst eine Wiedergabeliste an.</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Suche…</string>
+    <string name="search_local_title">Lokale Suche</string>
+    <string name="search_local_ready">Bereit</string>
+    <string name="search_microphone">Mikrofon</string>
+    <string name="search_recent">Letzte Suchen</string>
+    <string name="search_channels">Kanäle</string>
+    <string name="search_movies">Filme</string>
+    <string name="search_series">Serien</string>
+    <string name="search_epg">EPG</string>
+    <string name="search_no_results">Keine Ergebnisse</string>
+
+    <!-- Movies / Series -->
+    <string name="movies_all">Alle Filme</string>
+    <string name="movies_new">Neuheiten</string>
+    <string name="movies_continue">Fortsetzen</string>
+    <string name="movies_play">Abspielen</string>
+    <string name="movies_add_favorite">+ Zu Favoriten</string>
+    <string name="movies_details">Details</string>
+    <string name="movies_no_content">Keine Inhalte</string>
+    <string name="series_all">Alle Serien</string>
+    <string name="series_continue">Fortsetzen</string>
+    <string name="series_season">Staffel</string>
+    <string name="series_episode">Episode</string>
+
+    <!-- Player -->
+    <string name="player_audio">Audio</string>
+    <string name="player_subtitles">Untertitel</string>
+    <string name="player_aspect">Bildformat</string>
+    <string name="player_more">Mehr</string>
+    <string name="player_live_badge">LIVE</string>
+    <string name="player_next_episode">Nächste Folge abspielen</string>
+    <string name="player_next_in">Nächste Folge in %d</string>
+    <string name="player_back">Zurück</string>
+    <string name="player_retry">Wiederholen</string>
+    <string name="player_other_channel">Anderen Sender wählen</string>
+    <string name="player_close">Schließen</string>
+    <string name="player_no_timeshift">Nicht verfügbar</string>
+
+    <!-- Common -->
+    <string name="common_open">Öffnen</string>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_save">Speichern</string>
+    <string name="common_delete">Löschen</string>
+    <string name="common_confirm">Bestätigen</string>
+    <string name="common_ok">OK</string>
+    <string name="common_back">Zurück</string>
+    <string name="common_active">Aktiv</string>
+    <string name="common_inactive">Aus</string>
+    <string name="common_add">Hinzufügen</string>
+    <string name="common_edit">Bearbeiten</string>
+    <string name="common_start">Starten</string>
+    <string name="common_minutes">%d Minuten</string>
+    <string name="common_hours">%d Stunden</string>
+    <string name="common_seconds">%d Sekunden</string>
+    <string name="common_days_singular">%d Tag</string>
+    <string name="common_days_plural">%d Tage</string>
+    <string name="common_local_storage">Lokaler Speicher</string>
+    <string name="common_no_provider">Keine Provider</string>
+    <string name="common_details">Details</string>
+    <string name="double_back_exit_hint">Zum Beenden erneut zurück</string>
 </resources>

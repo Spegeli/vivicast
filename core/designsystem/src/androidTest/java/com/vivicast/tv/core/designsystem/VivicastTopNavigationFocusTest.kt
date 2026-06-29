@@ -29,6 +29,10 @@ class VivicastTopNavigationFocusTest {
             )
         }
 
+        compose.onNodeWithTag(topNavItemTag("Home")).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.waitUntil(timeoutMillis = 5_000) { selectedIndex == TEST_ITEMS.indexOf("Home") }
+        compose.onNodeWithTag(topNavItemTag("Home")).assertIsFocused()
+
         compose.onNodeWithTag(topNavItemTag("Suche")).performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitUntil(timeoutMillis = 5_000) { selectedIndex == TEST_ITEMS.indexOf("Suche") }
         compose.onNodeWithTag(topNavItemTag("Suche")).assertIsFocused()
@@ -38,4 +42,4 @@ class VivicastTopNavigationFocusTest {
     }
 }
 
-private val TEST_ITEMS = listOf("Live-TV", "Filme", "Serien", "Suche", "Einstellungen")
+private val TEST_ITEMS = listOf("Home", "Live-TV", "Filme", "Serien", "Suche", "Einstellungen")

@@ -16,7 +16,6 @@ enum class RefreshDiagnosticType {
     PlaylistRefreshFailed,
     EpgRefreshSucceeded,
     EpgRefreshFailed,
-    EpgMappingApplied,
     LogoRefreshCompleted,
     CacheCleanupCompleted,
     RefreshCompleted,

@@ -25,11 +25,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
@@ -38,6 +37,7 @@ import com.vivicast.tv.core.designsystem.VivicastContentRow
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSearchResultCard
 import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgProgram
@@ -99,11 +99,29 @@ private fun RoomSearchRoute(
         }
     }
 
+    val strChannels = stringResource(R.string.search_channels)
+    val strMovies = stringResource(R.string.search_movies)
+    val strSeries = stringResource(R.string.search_series)
+    val strEpg = stringResource(R.string.search_epg)
+    val strMovieType = stringResource(R.string.movies_type_badge)
+    val strSeriesType = stringResource(R.string.series_type_badge)
+    val strLiveTv = stringResource(R.string.search_subtitle_livetv)
+    val strEpgHit = stringResource(R.string.search_subtitle_epg_hit)
+    val strChannelPrefix = stringResource(R.string.search_subtitle_channel)
     SearchContent(
         query = query,
         onQueryChanged = { query = it },
         history = history,
         results = results.toSearchGroups(
+            titleChannels = strChannels,
+            titleMovies = strMovies,
+            titleSeries = strSeries,
+            titleEpg = strEpg,
+            subtitleMovieType = strMovieType,
+            subtitleSeriesType = strSeriesType,
+            subtitleLiveTv = strLiveTv,
+            subtitleEpgHit = strEpgHit,
+            subtitleChannelPrefix = strChannelPrefix,
             onOpenChannel = onOpenChannel,
             onOpenMovie = onOpenMovie,
             onOpenSeries = onOpenSeries,
@@ -126,9 +144,9 @@ private fun RoomSearchRoute(
 private fun SearchUnavailableState() {
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         InfoPanel(
-            title = "Suche nicht verfuegbar",
-            body = "Die Suche wird angezeigt, sobald lokale Mediendaten geladen sind.",
-            badge = "Leer",
+            title = stringResource(R.string.search_unavailable),
+            body = stringResource(R.string.search_unavailable_body),
+            badge = stringResource(R.string.search_local_ready),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -152,14 +170,14 @@ private fun SearchContent(
             verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxWidth()) {
                 SearchField(
                     query = query,
                     onQueryChanged = onQueryChanged,
                     autoFocus = autoFocusField,
-                    modifier = Modifier.weight(1f).height(96.dp),
+                    modifier = Modifier.weight(1f).height(72.dp),
                 )
-                ActionPill("Mikrofon", modifier = Modifier.width(132.dp).height(96.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
+                ActionPill(stringResource(R.string.search_microphone), modifier = Modifier.width(120.dp).testTag(searchVoiceTag()), onClick = onVoiceClick)
             }
 
             if (history.isNotEmpty()) {
@@ -173,9 +191,9 @@ private fun SearchContent(
 
             if (debouncedQuery.isBlank()) {
                 InfoPanel(
-                    title = "Lokale Suche",
-                    body = "Live-TV, Filme, Serien und EPG werden lokal durchsucht.",
-                    badge = "Bereit",
+                    title = stringResource(R.string.search_local_title),
+                    body = stringResource(R.string.search_local_body),
+                    badge = stringResource(R.string.search_local_ready),
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else if (results.any { it.rows.isNotEmpty() }) {
@@ -184,9 +202,9 @@ private fun SearchContent(
                 }
             } else {
                 InfoPanel(
-                    title = "Keine Treffer",
-                    body = "Versuche eine andere Schreibweise, einen kürzeren Suchbegriff oder Teil des Titels.",
-                    badge = "Leer",
+                    title = stringResource(R.string.search_no_results),
+                    body = stringResource(R.string.search_no_results_body),
+                    badge = stringResource(R.string.common_empty_badge),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -207,29 +225,21 @@ private fun SearchField(
             textFocusRequester.requestFocus()
         }
     }
-    FocusPanel(modifier = modifier.testTag(searchFieldPanelTag()), onClick = { textFocusRequester.requestFocus() }, contentPadding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            BodyText("Suche / lokale Ergebnisse")
+    FocusPanel(modifier = modifier.testTag(searchFieldPanelTag()), onClick = { textFocusRequester.requestFocus() }, contentPadding = VivicastSpacing.Space3) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+            BodyText(stringResource(R.string.search_field_label))
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChanged,
                 modifier = Modifier.fillMaxWidth().focusRequester(textFocusRequester).testTag(searchInputTag()),
                 singleLine = true,
                 cursorBrush = SolidColor(VivicastColors.FocusRing),
-                textStyle = TextStyle(
-                    color = VivicastColors.TextPrimary,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
+                textStyle = VivicastTypography.TitleLarge.copy(color = VivicastColors.TextPrimary),
                 decorationBox = { innerTextField ->
                     if (query.isBlank()) {
                         BasicText(
-                            text = "Suche...",
-                            style = TextStyle(
-                                color = VivicastColors.TextSecondary,
-                                fontSize = 36.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            ),
+                            text = stringResource(R.string.search_placeholder),
+                            style = VivicastTypography.TitleLarge.copy(color = VivicastColors.TextSecondary),
                         )
                     }
                     innerTextField()
@@ -246,7 +256,7 @@ private fun SearchHistoryRow(
     onHistoryDeleted: (String) -> Unit,
     onClearHistory: () -> Unit,
 ) {
-    VivicastContentRow(title = "Suchverlauf", horizontalGap = VivicastSpacing.Space3) {
+    VivicastContentRow(title = stringResource(R.string.search_recent), horizontalGap = VivicastSpacing.Space3) {
         items(history, key = { it.lowercase() }) { term ->
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.width(260.dp)) {
                 FocusPanel(
@@ -256,7 +266,7 @@ private fun SearchHistoryRow(
                 ) {
                     BasicText(
                         text = term,
-                        style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -264,7 +274,7 @@ private fun SearchHistoryRow(
             }
         }
         item(key = "__clear_history__") {
-            ActionPill("Leeren", modifier = Modifier.width(130.dp).testTag(searchClearHistoryTag()), onClick = onClearHistory)
+            ActionPill(stringResource(R.string.search_history_clear), modifier = Modifier.width(130.dp).testTag(searchClearHistoryTag()), onClick = onClearHistory)
         }
     }
 }
@@ -301,6 +311,15 @@ private data class SearchItem(
 )
 
 private fun SearchResults.toSearchGroups(
+    titleChannels: String,
+    titleMovies: String,
+    titleSeries: String,
+    titleEpg: String,
+    subtitleMovieType: String,
+    subtitleSeriesType: String,
+    subtitleLiveTv: String,
+    subtitleEpgHit: String,
+    subtitleChannelPrefix: String,
     onOpenChannel: (Channel) -> Unit,
     onOpenMovie: (Movie) -> Unit,
     onOpenSeries: (Series) -> Unit,
@@ -308,11 +327,11 @@ private fun SearchResults.toSearchGroups(
 ): List<SearchGroupData> =
     listOf(
         SearchGroupData(
-            title = "Kanäle",
+            title = titleChannels,
             rows = channels.map { channel ->
                 SearchItem(
                     title = channel.name,
-                    subtitle = channel.channelNumber?.let { "Kanal $it" } ?: "Live-TV",
+                    subtitle = channel.channelNumber?.let { subtitleChannelPrefix.format(it) } ?: subtitleLiveTv,
                     rating = null,
                     posterLike = false,
                     onClick = { onOpenChannel(channel) },
@@ -320,11 +339,11 @@ private fun SearchResults.toSearchGroups(
             },
         ),
         SearchGroupData(
-            title = "Filme",
+            title = titleMovies,
             rows = movies.map { movie ->
                 SearchItem(
                     title = movie.name,
-                    subtitle = movie.year?.let { "Film $it" } ?: "Film",
+                    subtitle = movie.year?.let { "$subtitleMovieType $it" } ?: subtitleMovieType,
                     rating = movie.rating,
                     posterLike = true,
                     onClick = { onOpenMovie(movie) },
@@ -332,11 +351,11 @@ private fun SearchResults.toSearchGroups(
             },
         ),
         SearchGroupData(
-            title = "Serien",
+            title = titleSeries,
             rows = series.map { series ->
                 SearchItem(
                     title = series.name,
-                    subtitle = series.year?.let { "Serie $it" } ?: "Serie",
+                    subtitle = series.year?.let { "$subtitleSeriesType $it" } ?: subtitleSeriesType,
                     rating = series.rating,
                     posterLike = true,
                     onClick = { onOpenSeries(series) },
@@ -344,11 +363,11 @@ private fun SearchResults.toSearchGroups(
             },
         ),
         SearchGroupData(
-            title = "EPG",
+            title = titleEpg,
             rows = epgPrograms.map { program ->
                 SearchItem(
                     title = program.title,
-                    subtitle = program.subtitle ?: "Programmtreffer",
+                    subtitle = program.subtitle ?: subtitleEpgHit,
                     rating = null,
                     posterLike = false,
                     onClick = { onOpenEpgProgram(program) },

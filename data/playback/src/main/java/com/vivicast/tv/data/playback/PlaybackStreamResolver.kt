@@ -1,7 +1,6 @@
 package com.vivicast.tv.data.playback
 
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
-import com.vivicast.tv.core.cache.NoOpM3uStreamReferenceStore
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.MediaType
@@ -57,7 +56,7 @@ enum class PlaybackStreamFailureReason {
 
 class DefaultPlaybackStreamResolver(
     private val providerRepository: ProviderRepository,
-    private val m3uStreamReferenceStore: M3uStreamReferenceStore = NoOpM3uStreamReferenceStore,
+    private val m3uStreamReferenceStore: M3uStreamReferenceStore,
 ) : PlaybackStreamResolver {
     override suspend fun resolve(request: PlaybackStreamRequest): PlaybackStreamResult {
         val provider = providerRepository.getProvider(request.providerId)

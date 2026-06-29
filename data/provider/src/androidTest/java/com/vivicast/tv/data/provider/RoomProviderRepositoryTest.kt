@@ -77,6 +77,45 @@ class RoomProviderRepositoryTest {
     }
 
     @Test
+    fun createM3uFileProviderKeepsInlineContentTransientOnly() = runBlocking {
+        val content = """
+            #EXTM3U
+            #EXTINF:-1,ARD
+            https://stream.example/ard.m3u8
+        """.trimIndent()
+
+        val result = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Local File",
+                type = ProviderType.M3u,
+                m3uSourceMode = M3uSourceMode.File,
+                m3uContent = content,
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+                refreshIntervalHours = 12,
+            ),
+        )
+
+        val provider = requireNotNull(database.providerDao().getProvider(result.provider.id))
+
+        assertEquals(
+            ProviderCredentials.M3u(sourceMode = M3uSourceMode.File, inlineContent = content),
+            repository.getCredentials(result.provider.id),
+        )
+        assertFalse(provider.name.contains("stream.example"))
+        assertFalse(provider.sourceConfigKey.contains("stream.example"))
+        assertFalse(secureValueStore.values.values.contains(content))
+
+        TransientM3uSourceStore.clear(result.provider.id)
+
+        assertEquals(
+            ProviderCredentials.M3u(sourceMode = M3uSourceMode.File, inlineContent = null),
+            repository.getCredentials(result.provider.id),
+        )
+    }
+
+    @Test
     fun duplicateProviderNameIsNotSavedAndDoesNotWriteNewSecrets() = runBlocking {
         repository.createProvider(
             ProviderCreateRequest(

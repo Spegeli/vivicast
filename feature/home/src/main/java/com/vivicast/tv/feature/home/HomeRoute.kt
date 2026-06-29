@@ -16,8 +16,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.HeroPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.PosterCard
@@ -98,7 +100,7 @@ fun HomeRoute(
             )
 
             if (continueItems.isNotEmpty()) {
-                VivicastContentRow(title = "Fortsetzen") {
+                VivicastContentRow(title = stringResource(R.string.home_continue)) {
                     items(continueItems, key = { it.id }) { item ->
                         val imageModel by produceState<Any?>(initialValue = null, item.id, item.imageSourceKey) {
                             value = when (item) {
@@ -109,7 +111,7 @@ fun HomeRoute(
                         PosterCard(
                             title = item.title,
                             rating = "-",
-                            meta = item.meta,
+                            meta = item.localizedMeta(),
                             hasPoster = item.hasImage || imageModel != null,
                             progressPercent = item.progress.progressPercent,
                             favorite = false,
@@ -128,14 +130,17 @@ fun HomeRoute(
             }
 
             if (recentChannels.isNotEmpty()) {
-                VivicastContentRow(title = "Zuletzt gesehene Live-TV-Sender") {
+                VivicastContentRow(title = stringResource(R.string.home_recent_channels)) {
                     items(recentChannels, key = { it.channel.id }) { item ->
                         val logoModel by produceState<Any?>(initialValue = null, item.channel.id, item.channel.logoUrl) {
                             value = resolveChannelLogoModel(item.channel)
                         }
                         VivicastChannelCard(
                             channelName = item.channel.name,
-                            program = item.meta,
+                            program = if (item.history.durationWatchedMillis > 0L)
+                                stringResource(R.string.home_watched_ago, item.history.durationWatchedMillis / 60_000L)
+                            else
+                                stringResource(R.string.home_recently_watched),
                             logoText = item.channel.name.firstOrNull()?.uppercase() ?: "?",
                             logoMissing = item.channel.logoUrl.isNullOrBlank() && logoModel == null,
                             selected = selectedChannelId == item.channel.id,
@@ -153,9 +158,9 @@ fun HomeRoute(
 
             if (continueItems.isEmpty() && recentChannels.isEmpty()) {
                 InfoPanel(
-                    title = "Noch keine Inhalte",
-                    body = "Lege in den Einstellungen zuerst eine Wiedergabeliste an. Begonnene Filme, Serien und zuletzt gesehene Live-TV-Sender erscheinen danach hier.",
-                    badge = "Leer",
+                    title = stringResource(R.string.home_empty_title),
+                    body = stringResource(R.string.home_empty_body_long),
+                    badge = stringResource(R.string.common_empty_badge),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -175,12 +180,12 @@ private fun HomeHero(
     when {
         continueItem != null -> HeroPanel(
             title = continueItem.title,
-            body = "Setze die Wiedergabe an der letzten Position fort.",
-            meta = continueItem.meta,
+            body = stringResource(R.string.home_hero_continue_body),
+            meta = continueItem.localizedMeta(),
             modifier = Modifier.fillMaxWidth(),
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                    ActionPill("Fortsetzen", onClick = {
+                    ActionPill(stringResource(R.string.home_continue), onClick = {
                         when (continueItem) {
                             is ContinueHomeItem.MovieItem -> onOpenMovie(continueItem.movie)
                             is ContinueHomeItem.EpisodeItem -> onOpenEpisode(continueItem.episode)
@@ -192,24 +197,27 @@ private fun HomeHero(
 
         recentChannel != null -> HeroPanel(
             title = recentChannel.channel.name,
-            body = "Zuletzt gesehener Live-TV-Sender.",
-            meta = recentChannel.meta,
+            body = stringResource(R.string.home_hero_recent_channel_body),
+            meta = if (recentChannel.history.durationWatchedMillis > 0L)
+                stringResource(R.string.home_watched_ago, recentChannel.history.durationWatchedMillis / 60_000L)
+            else
+                stringResource(R.string.home_recently_watched),
             modifier = Modifier.fillMaxWidth(),
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                    ActionPill("Live-TV abspielen", onClick = { onOpenChannel(recentChannel.channel) })
+                    ActionPill(stringResource(R.string.home_hero_play_livetv), onClick = { onOpenChannel(recentChannel.channel) })
                 }
             },
         )
 
         else -> HeroPanel(
-            title = "Home",
-            body = "Begonnene Filme, Serien und zuletzt gesehene Live-TV-Sender erscheinen hier.",
-            meta = "Keine Wiedergabeliste",
+            title = stringResource(R.string.nav_home),
+            body = stringResource(R.string.home_hero_default_body),
+            meta = stringResource(R.string.home_hero_no_playlist),
             modifier = Modifier.fillMaxWidth(),
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                    ActionPill("Wiedergabeliste hinzufügen", onClick = onAddPlaylist)
+                    ActionPill(stringResource(R.string.home_add_playlist), onClick = onAddPlaylist)
                 }
             },
         )
@@ -251,7 +259,7 @@ private sealed interface ContinueHomeItem {
     ) : ContinueHomeItem {
         override val id: String = "movie:${movie.providerId}:${movie.id}"
         override val title: String = movie.name
-        override val meta: String = "${progress.progressPercent} % | Film"
+        override val meta: String = "${progress.progressPercent} %"
         override val hasImage: Boolean = !movie.posterUrl.isNullOrBlank()
         override val imageSourceKey: String? = movie.posterUrl
     }
@@ -271,10 +279,10 @@ private sealed interface ContinueHomeItem {
 private data class RecentChannelHomeItem(
     val history: ChannelHistory,
     val channel: Channel,
-) {
-    val meta: String = if (history.durationWatchedMillis > 0L) {
-        "${history.durationWatchedMillis / 60_000L} Min zuletzt gesehen"
-    } else {
-        "Zuletzt gesehen"
-    }
+)
+
+@Composable
+private fun ContinueHomeItem.localizedMeta(): String = when (this) {
+    is ContinueHomeItem.MovieItem -> "${progress.progressPercent} % | ${stringResource(R.string.home_continue_movie_label)}"
+    is ContinueHomeItem.EpisodeItem -> meta
 }

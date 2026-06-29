@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vivicast</string>
+    <string name="search_hint">Search Vivicast</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_live_tv">Live-TV</string>
+    <string name="nav_movies">Movies</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Settings sections -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_playlists">Playlists</string>
+    <string name="settings_section_epg">EPG</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_section_parental">Parental Controls</string>
+    <string name="settings_section_cache">Storage &amp; History</string>
+    <string name="settings_section_backup">Backup</string>
+    <string name="settings_section_about">About</string>
+
+    <!-- General settings -->
+    <string name="settings_launch_on_boot">Launch on TV startup</string>
+    <string name="settings_double_back">Double back to exit</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_background_refresh">Allow background refresh</string>
+    <string name="settings_remember_sorting">Remember sorting</string>
+    <string name="settings_user_agent">User-Agent</string>
+
+    <!-- Start destinations -->
+    <string name="start_home">Home</string>
+    <string name="start_live_tv">Live-TV</string>
+    <string name="start_movies">Movies</string>
+    <string name="start_series">Series</string>
+
+    <!-- Language options -->
+    <string name="language_system">System default</string>
+    <string name="language_german">German</string>
+    <string name="language_english">English</string>
+
+    <!-- Toggle values -->
+    <string name="value_on">On</string>
+    <string name="value_off">Off</string>
+    <string name="value_app_default">App default</string>
+
+    <!-- Playback settings -->
+    <string name="settings_buffer_size">Buffer size</string>
+    <string name="settings_audio_decoder">Audio decoder</string>
+    <string name="settings_video_decoder">Video decoder</string>
+    <string name="settings_afr">Automatic frame rate</string>
+    <string name="settings_external_player">External player</string>
+    <string name="settings_timeshift">Timeshift</string>
+    <string name="settings_timeshift_max_duration">Max timeshift duration</string>
+    <string name="settings_timeshift_storage">Timeshift storage</string>
+    <string name="settings_audio_language">Audio language</string>
+    <string name="settings_subtitle_language">Subtitle language</string>
+    <string name="settings_auto_next">Auto-play next episode</string>
+    <string name="settings_auto_next_countdown">Auto-next countdown</string>
+    <string name="settings_audio_passthrough">Audio passthrough</string>
+
+    <!-- EPG settings -->
+    <string name="settings_epg_interval">Global EPG refresh interval</string>
+    <string name="settings_epg_past">Keep EPG history</string>
+    <string name="settings_epg_future">Load/keep EPG future</string>
+    <string name="settings_epg_on_start">Refresh EPG on app start</string>
+    <string name="settings_epg_on_change">Refresh EPG on playlist change</string>
+    <string name="settings_epg_now">Refresh EPG now</string>
+    <string name="settings_epg_now_value">Start</string>
+
+    <!-- Appearance settings -->
+    <string name="settings_theme">Background theme</string>
+    <string name="settings_accent_color">Accent color</string>
+    <string name="settings_transparency">Transparency</string>
+    <string name="settings_font_size">Font size</string>
+    <string name="settings_animations">Animations</string>
+
+    <!-- Parental settings -->
+    <string name="settings_pin_set">Set PIN</string>
+    <string name="settings_pin_change">Change PIN</string>
+    <string name="settings_pin_disable">Disable parental controls</string>
+    <string name="settings_pin_set_value">Set</string>
+    <string name="settings_pin_change_value">Change</string>
+    <string name="settings_pin_disable_value">Disable</string>
+    <string name="settings_protect_settings">Protect settings</string>
+    <string name="settings_protect_movies">Protect movies</string>
+    <string name="settings_protect_series">Protect series</string>
+    <string name="settings_protect_adult">Protect adult content</string>
+    <string name="settings_lock_session">Lock session access</string>
+    <string name="settings_lock_session_value">No access</string>
+    <string name="settings_pin_required">PIN required</string>
+
+    <!-- Cache/History settings -->
+    <string name="settings_cache_info">Cache information</string>
+    <string name="settings_cache_clear">Clear cache</string>
+    <string name="settings_history_clear">Clear history</string>
+    <string name="settings_cache_clear_value">Execute</string>
+
+    <!-- Backup settings -->
+    <string name="settings_backup_export">Export backup</string>
+    <string name="settings_backup_import">Import backup</string>
+    <string name="settings_backup_target">Backup target</string>
+    <string name="settings_backup_last">Last backup</string>
+    <string name="settings_backup_full_export">Full backup export</string>
+    <string name="settings_backup_full_import">Full backup import</string>
+    <string name="settings_backup_select_value">Select</string>
+    <string name="settings_backup_full_value">Passphrase</string>
+    <string name="settings_backup_never">Never</string>
+
+    <!-- Playlist settings -->
+    <string name="settings_playlist_add">Add playlist</string>
+    <string name="settings_playlist_add_value">Open</string>
+    <string name="settings_playlist_refresh_all">Refresh all playlists</string>
+    <string name="settings_playlist_refresh_value">Start</string>
+    <string name="settings_playlist_empty_title">No playlists configured</string>
+    <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>
+
+    <!-- About -->
+    <string name="about_app_info">App information</string>
+    <string name="about_copy_version">Copy version information</string>
+    <string name="about_copied">Copied.</string>
+    <string name="about_diagnostics">Diagnostics &amp; Support</string>
+    <string name="about_legal">License notices</string>
+    <string name="about_privacy">Privacy information</string>
+    <string name="about_open_value">Open</string>
+    <string name="about_third_party">Third-party licenses</string>
+
+    <!-- Home screen -->
+    <string name="home_favorites">Favorites</string>
+    <string name="home_continue">Continue watching</string>
+    <string name="home_recent_channels">Recently watched channels</string>
+    <string name="home_empty_title">No content</string>
+    <string name="home_empty_body">Add a playlist to get started.</string>
+    <string name="home_add_playlist">Add playlist</string>
+    <string name="home_livetv_favorites">Live-TV Favorites</string>
+
+    <!-- Live-TV -->
+    <string name="livetv_channels">Channel list</string>
+    <string name="livetv_preview">Preview</string>
+    <string name="livetv_favorites">Favorites</string>
+    <string name="livetv_no_channels">No channels</string>
+    <string name="livetv_no_provider">No channel</string>
+    <string name="livetv_add_playlist">Set up a playlist in settings first.</string>
+    <string name="livetv_select_provider">Select a provider and channel on the left.</string>
+    <string name="livetv_preview_hint">OK starts preview</string>
+    <string name="livetv_press_ok">Press OK to start the preview.</string>
+    <string name="livetv_live_badge">Live</string>
+    <string name="livetv_cat_button">Cat.</string>
+    <string name="livetv_details_button">Details</string>
+    <string name="livetv_empty_playlist">Set up a playlist in settings first.</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Search…</string>
+    <string name="search_local_title">Local search</string>
+    <string name="search_local_ready">Ready</string>
+    <string name="search_microphone">Microphone</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_channels">Channels</string>
+    <string name="search_movies">Movies</string>
+    <string name="search_series">Series</string>
+    <string name="search_epg">EPG</string>
+    <string name="search_no_results">No results</string>
+
+    <!-- Movies / Series -->
+    <string name="movies_all">All movies</string>
+    <string name="movies_new">New releases</string>
+    <string name="movies_continue">Continue watching</string>
+    <string name="movies_play">Play</string>
+    <string name="movies_add_favorite">+ Add to favorites</string>
+    <string name="movies_details">Details</string>
+    <string name="movies_no_content">No content</string>
+    <string name="series_all">All series</string>
+    <string name="series_continue">Continue watching</string>
+    <string name="series_season">Season</string>
+    <string name="series_episode">Episode</string>
+
+    <!-- Player -->
+    <string name="player_audio">Audio</string>
+    <string name="player_subtitles">Subtitles</string>
+    <string name="player_aspect">Picture format</string>
+    <string name="player_more">More</string>
+    <string name="player_live_badge">LIVE</string>
+    <string name="player_next_episode">Play next episode</string>
+    <string name="player_next_in">Next episode in %d</string>
+    <string name="player_back">Back</string>
+    <string name="player_retry">Retry</string>
+    <string name="player_other_channel">Choose another channel</string>
+    <string name="player_close">Close</string>
+    <string name="player_no_timeshift">Not available</string>
+
+    <!-- Common -->
+    <string name="common_open">Open</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_ok">OK</string>
+    <string name="common_back">Back</string>
+    <string name="common_active">Active</string>
+    <string name="common_inactive">Off</string>
+    <string name="common_add">Add</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_start">Start</string>
+    <string name="common_minutes">%d minutes</string>
+    <string name="common_hours">%d hours</string>
+    <string name="common_seconds">%d seconds</string>
+    <string name="common_days_singular">%d day</string>
+    <string name="common_days_plural">%d days</string>
+    <string name="common_local_storage">Local storage</string>
+    <string name="common_no_provider">No providers</string>
+    <string name="common_details">Details</string>
+    <string name="double_back_exit_hint">Press back again to exit</string>
+</resources>

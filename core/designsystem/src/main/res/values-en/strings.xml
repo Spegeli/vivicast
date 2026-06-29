@@ -1,0 +1,774 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vivicast</string>
+    <string name="search_hint">Search Vivicast</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_live_tv">Live-TV</string>
+    <string name="nav_movies">Movies</string>
+    <string name="nav_series">Series</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Settings sections -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_playlists">Playlists</string>
+    <string name="settings_section_epg">EPG</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_section_parental">Parental Controls</string>
+    <string name="settings_section_cache">Storage &amp; History</string>
+    <string name="settings_section_backup">Backup</string>
+    <string name="settings_section_about">About</string>
+
+    <!-- General settings -->
+    <string name="settings_launch_on_boot">Launch on TV startup</string>
+    <string name="settings_double_back">Double back to exit</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_background_refresh">Allow background refresh</string>
+    <string name="settings_remember_sorting">Remember sorting</string>
+    <string name="settings_user_agent">User-Agent</string>
+
+    <!-- Start destinations -->
+    <string name="start_home">Home</string>
+    <string name="start_live_tv">Live-TV</string>
+    <string name="start_movies">Movies</string>
+    <string name="start_series">Series</string>
+
+    <!-- Language options -->
+    <string name="language_system">System default</string>
+    <string name="language_german">German</string>
+    <string name="language_english">English</string>
+
+    <!-- Toggle values -->
+    <string name="value_on">On</string>
+    <string name="value_off">Off</string>
+    <string name="value_app_default">App default</string>
+
+    <!-- Playback settings -->
+    <string name="settings_buffer_size">Buffer size</string>
+    <string name="settings_audio_decoder">Audio decoder</string>
+    <string name="settings_video_decoder">Video decoder</string>
+    <string name="settings_afr">Automatic frame rate</string>
+    <string name="settings_external_player">External player</string>
+    <string name="settings_timeshift">Timeshift</string>
+    <string name="settings_timeshift_max_duration">Max timeshift duration</string>
+    <string name="settings_timeshift_storage">Timeshift storage</string>
+    <string name="settings_audio_language">Audio language</string>
+    <string name="settings_subtitle_language">Subtitle language</string>
+    <string name="settings_auto_next">Auto-play next episode</string>
+    <string name="settings_auto_next_countdown">Auto-next countdown</string>
+    <string name="settings_audio_passthrough">Audio passthrough</string>
+
+    <!-- EPG settings -->
+    <string name="settings_epg_interval">Global EPG refresh interval</string>
+    <string name="settings_epg_past">Keep EPG history</string>
+    <string name="settings_epg_future">Load/keep EPG future</string>
+    <string name="settings_epg_on_start">Refresh EPG on app start</string>
+    <string name="settings_epg_on_change">Refresh EPG on playlist change</string>
+    <string name="settings_epg_now">Refresh EPG now</string>
+    <string name="settings_epg_now_value">Start</string>
+
+    <!-- Appearance settings -->
+    <string name="settings_theme">Background theme</string>
+    <string name="settings_accent_color">Accent color</string>
+    <string name="settings_transparency">Transparency</string>
+    <string name="settings_font_size">Font size</string>
+    <string name="settings_animations">Animations</string>
+
+    <!-- Parental settings -->
+    <string name="settings_pin_set">Set PIN</string>
+    <string name="settings_pin_change">Change PIN</string>
+    <string name="settings_pin_disable">Disable parental controls</string>
+    <string name="settings_pin_set_value">Set</string>
+    <string name="settings_pin_change_value">Change</string>
+    <string name="settings_pin_disable_value">Disable</string>
+    <string name="settings_protect_settings">Protect settings</string>
+    <string name="settings_protect_movies">Protect movies</string>
+    <string name="settings_protect_series">Protect series</string>
+    <string name="settings_protect_adult">Protect adult content</string>
+    <string name="settings_lock_session">Lock session access</string>
+    <string name="settings_lock_session_value">No access</string>
+    <string name="settings_pin_required">PIN required</string>
+
+    <!-- Cache/History settings -->
+    <string name="settings_cache_info">Cache information</string>
+    <string name="settings_cache_clear">Clear cache</string>
+    <string name="settings_history_clear">Clear history</string>
+    <string name="settings_cache_clear_value">Execute</string>
+
+    <!-- Backup settings -->
+    <string name="settings_backup_export">Export backup</string>
+    <string name="settings_backup_import">Import backup</string>
+    <string name="settings_backup_target">Backup target</string>
+    <string name="settings_backup_last">Last backup</string>
+    <string name="settings_backup_full_export">Full backup export</string>
+    <string name="settings_backup_full_import">Full backup import</string>
+    <string name="settings_backup_select_value">Select</string>
+    <string name="settings_backup_full_value">Passphrase</string>
+    <string name="settings_backup_never">Never</string>
+
+    <!-- Playlist settings -->
+    <string name="settings_playlist_add">Add playlist</string>
+    <string name="settings_playlist_add_value">Open</string>
+    <string name="settings_playlist_refresh_all">Refresh all playlists</string>
+    <string name="settings_playlist_refresh_value">Start</string>
+    <string name="settings_playlist_empty_title">No playlists configured</string>
+    <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>
+
+    <!-- About -->
+    <string name="about_app_info">App information</string>
+    <string name="about_copy_version">Copy version information</string>
+    <string name="about_copied">Copied.</string>
+    <string name="about_diagnostics">Diagnostics &amp; Support</string>
+    <string name="about_legal">License notices</string>
+    <string name="about_privacy">Privacy information</string>
+    <string name="about_open_value">Open</string>
+    <string name="about_third_party">Third-party licenses</string>
+
+    <!-- Home screen -->
+    <string name="home_favorites">Favorites</string>
+    <string name="home_continue">Continue watching</string>
+    <string name="home_recent_channels">Recently watched channels</string>
+    <string name="home_empty_title">No content</string>
+    <string name="home_empty_body">Add a playlist to get started.</string>
+    <string name="home_add_playlist">Add playlist</string>
+    <string name="home_livetv_favorites">Live-TV Favorites</string>
+
+    <!-- Live-TV -->
+    <string name="livetv_channels">Channel list</string>
+    <string name="livetv_preview">Preview</string>
+    <string name="livetv_favorites">Favorites</string>
+    <string name="livetv_no_channels">No channels</string>
+    <string name="livetv_no_provider">No channel</string>
+    <string name="livetv_add_playlist">Set up a playlist in settings first.</string>
+    <string name="livetv_select_provider">Select a provider and channel on the left.</string>
+    <string name="livetv_preview_hint">OK starts preview</string>
+    <string name="livetv_press_ok">Press OK to start the preview.</string>
+    <string name="livetv_live_badge">Live</string>
+    <string name="livetv_cat_button">Cat.</string>
+    <string name="livetv_details_button">Details</string>
+    <string name="livetv_empty_playlist">Set up a playlist in settings first.</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Search…</string>
+    <string name="search_local_title">Local search</string>
+    <string name="search_local_ready">Ready</string>
+    <string name="search_microphone">Microphone</string>
+    <string name="search_recent">Recent searches</string>
+    <string name="search_channels">Channels</string>
+    <string name="search_movies">Movies</string>
+    <string name="search_series">Series</string>
+    <string name="search_epg">EPG</string>
+    <string name="search_no_results">No results</string>
+    <string name="search_unavailable">Search not available</string>
+    <string name="search_no_results_body">Try a different spelling, a shorter search term, or part of the title.</string>
+
+    <!-- Movies / Series -->
+    <string name="movies_all">All movies</string>
+    <string name="movies_new">New releases</string>
+    <string name="movies_continue">Continue watching</string>
+    <string name="movies_play">Play</string>
+    <string name="movies_add_favorite">+ Add to favorites</string>
+    <string name="movies_details">Details</string>
+    <string name="movies_no_content">No content</string>
+    <string name="movies_unavailable">Movies not available</string>
+    <string name="movies_select_provider">Select a provider and movie category.</string>
+    <string name="movies_play_from_start">From the beginning</string>
+    <string name="movies_mark_watched">Mark as watched</string>
+    <string name="movies_mark_unwatched">Mark as unwatched</string>
+    <string name="movies_no_description">No description available.</string>
+    <string name="movies_trailer_hint">YouTube app required for trailers.</string>
+    <string name="movies_back">Back</string>
+    <string name="movies_continue_watching">Continue</string>
+    <string name="movies_favorites">Favorites</string>
+    <string name="movies_favorites_empty">Add movies to your favorites via the favorites action.</string>
+    <string name="series_all">All series</string>
+    <string name="series_continue">Continue watching</string>
+    <string name="series_season">Season</string>
+    <string name="series_episode">Episode</string>
+    <string name="series_unavailable">Series not available</string>
+    <string name="series_select_provider">Select a provider and series category.</string>
+    <string name="series_favorites_empty">Add series to your favorites via the favorites action.</string>
+    <string name="series_back">Back</string>
+
+    <!-- Player -->
+    <string name="player_audio">Audio</string>
+    <string name="player_subtitles">Subtitles</string>
+    <string name="player_aspect">Picture format</string>
+    <string name="player_more">More</string>
+    <string name="player_live_badge">LIVE</string>
+    <string name="player_next_episode">Play next episode</string>
+    <string name="player_next_in">Next episode in %d</string>
+    <string name="player_back">Back</string>
+    <string name="player_retry">Retry</string>
+    <string name="player_other_channel">Choose another channel</string>
+    <string name="player_close">Close</string>
+    <string name="player_no_timeshift">Not available</string>
+    <string name="player_timeshift_unavailable">Timeshift not available for this channel.</string>
+    <string name="player_aspect_fill">Fill</string>
+    <string name="player_aspect_fit">Fit</string>
+
+    <!-- Theme options -->
+    <string name="theme_dark">Standard dark</string>
+    <string name="theme_dark_contrast">Dark contrast</string>
+    <string name="theme_amoled">AMOLED dark</string>
+
+    <!-- Accent colors -->
+    <string name="accent_blue">Vivicast Blue</string>
+
+    <!-- Font scale -->
+    <string name="font_small">Small</string>
+    <string name="font_medium">Medium</string>
+    <string name="font_large">Large</string>
+    <string name="font_very_large">Very large</string>
+
+    <!-- Animation speed -->
+    <string name="anim_fast">Fast</string>
+    <string name="anim_normal">Normal</string>
+    <string name="anim_slow">Slow</string>
+
+    <!-- Buffer / size options -->
+    <string name="size_small">Small</string>
+    <string name="size_medium">Medium</string>
+    <string name="size_large">Large</string>
+    <string name="size_very_large">Very large</string>
+
+    <!-- Decoder options -->
+    <string name="decoder_hardware">Hardware</string>
+    <string name="decoder_software">Software</string>
+    <string name="decoder_auto">Automatic</string>
+
+    <!-- Player mode -->
+    <string name="player_internal">Internal</string>
+    <string name="player_external">External</string>
+    <string name="player_ask">Ask each time</string>
+
+    <!-- Storage mode -->
+    <string name="storage_auto">Automatic</string>
+    <string name="storage_internal">Internal storage</string>
+
+    <!-- Audio language -->
+    <string name="audio_original">Original</string>
+
+    <!-- Common -->
+    <string name="common_open">Open</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_ok">OK</string>
+    <string name="common_back">Back</string>
+    <string name="common_active">Active</string>
+    <string name="common_inactive">Off</string>
+    <string name="common_add">Add</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_start">Start</string>
+    <string name="common_close">Close</string>
+    <string name="common_export">Export</string>
+    <string name="common_import">Import</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_minutes">%d minutes</string>
+    <string name="common_hours">%d hours</string>
+    <string name="common_seconds">%d seconds</string>
+    <string name="common_days_singular">%d day</string>
+    <string name="common_days_plural">%d days</string>
+    <string name="common_local_storage">Local storage</string>
+    <string name="common_no_provider">No providers</string>
+    <string name="common_details">Details</string>
+    <string name="double_back_exit_hint">Press back again to exit</string>
+    <string name="main_exit_confirmation">Press back again to exit</string>
+    <string name="main_external_player_error">Progress could not be automatically determined.</string>
+    <string name="main_backup_file_invalid">Backup file invalid.</string>
+    <string name="main_m3u_file_invalid">M3U file invalid.</string>
+    <string name="main_m3u_file_too_large">M3U file is too large.</string>
+    <string name="main_m3u_file_imported">M3U file imported.</string>
+    <string name="main_passphrase_incorrect">Passphrase incorrect or backup corrupted.</string>
+    <string name="main_backup_restored">Backup restored.</string>
+    <string name="main_no_external_player">No external player available.</string>
+    <string name="main_support_info_copied">Support information copied.</string>
+
+    <!-- Home hero -->
+    <string name="home_hero_continue_body">Resume playback from the last position.</string>
+    <string name="home_hero_recent_channel_body">Last watched live-TV channel.</string>
+    <string name="home_hero_play_livetv">Play Live-TV</string>
+    <string name="home_hero_default_body">Started movies, series and recently watched live-TV channels appear here.</string>
+    <string name="home_hero_no_playlist">No playlist</string>
+    <string name="home_empty_body_long">Set up a playlist in settings first. Started movies, series and recently watched channels will appear here.</string>
+    <string name="common_empty_badge">Empty</string>
+    <string name="livetv_section_provider">Provider</string>
+    <string name="livetv_section_epg">Channel EPG</string>
+    <string name="livetv_no_lists">No playlists</string>
+    <string name="livetv_add_provider">Set up a provider in settings first.</string>
+    <string name="livetv_no_categories">No categories</string>
+    <string name="livetv_no_categories_body">This provider has no imported live-TV categories.</string>
+    <string name="livetv_load_more">Load more</string>
+    <string name="livetv_no_epg_channel">No channel selected</string>
+    <string name="livetv_no_epg_channel_body">Select a channel to view its EPG.</string>
+    <string name="livetv_no_program_info">No program information available</string>
+    <string name="livetv_epg_on_focus">EPG on focus</string>
+    <string name="livetv_no_program_inline">No program information</string>
+    <string name="livetv_preview_running">Preview running</string>
+    <string name="livetv_provider_label">Provider: </string>
+    <string name="livetv_now_label">Now: </string>
+    <string name="livetv_provider_error">Provider error</string>
+    <string name="livetv_no_channels_no_provider">Set up a playlist in settings first.</string>
+    <string name="livetv_no_channels_provider">This provider has no imported live-TV channels.</string>
+    <string name="livetv_no_channels_category">This category has no imported live-TV channels.</string>
+    <string name="livetv_status_refreshing">Refreshing</string>
+    <string name="livetv_status_invalid_credentials">Invalid credentials</string>
+    <string name="livetv_epg_badge">EPG</string>
+    <string name="common_load_more">Load more</string>
+    <string name="common_provider_section">Provider</string>
+    <string name="common_categories_section">Categories</string>
+    <string name="common_no_playlists">No playlists</string>
+    <string name="common_add_provider">Set up a provider in settings first.</string>
+    <string name="common_favorites">Favorites</string>
+    <string name="movies_no_continue">No started movies</string>
+    <string name="movies_no_favorites">No movie favorites</string>
+    <string name="movies_none">No movies</string>
+    <string name="movies_continue_body">Started movies appear here as long as they are not completed.</string>
+    <string name="movies_no_categories_body">This provider has no imported movie categories.</string>
+    <string name="movies_no_movies_body">This category has no imported movies.</string>
+    <string name="series_no_favorites">No series favorites</string>
+    <string name="series_none">No series</string>
+    <string name="series_no_categories_body">This provider has no imported series categories.</string>
+    <string name="series_no_series_body">This category has no imported series.</string>
+    <string name="series_no_episodes">No episodes</string>
+    <string name="series_no_episodes_body">No episodes imported for this season.</string>
+    <string name="search_field_label">Search / local results</string>
+    <string name="player_no_playback">No playback</string>
+    <string name="player_playback_error">Playback could not be started.</string>
+    <string name="player_status_playback">Playback</string>
+
+    <!-- Main activity / dialogs -->
+    <string name="main_pin_locked">PIN is temporarily locked.</string>
+    <string name="main_pin_missing">No PIN configured.</string>
+    <string name="main_unlock_settings">Unlock settings</string>
+    <string name="main_unlock_movies">Unlock movies</string>
+    <string name="main_unlock_series">Unlock series</string>
+    <string name="main_unlock_generic">Unlock area</string>
+    <string name="main_unlock_body">Enter PIN to unlock the protected area.</string>
+    <string name="main_close">Close</string>
+    <string name="main_content_unavailable_title">Content not available</string>
+    <string name="main_content_unavailable_body">The Android-TV target is missing, disabled, or requires updated credentials.</string>
+    <string name="main_external_dialog_title">Start playback</string>
+    <string name="main_external_dialog_body">Play movie or episode externally? External players do not return automatic progress.</string>
+    <string name="settings_no_options">No options for this area.</string>
+    <string name="settings_epg_add_source">Add EPG source</string>
+    <string name="settings_epg_manual_delete">Delete manually</string>
+    <string name="settings_epg_delete_confirm">Really delete EPG source?</string>
+    <string name="settings_delete">Delete</string>
+    <string name="settings_back">Back</string>
+    <string name="nav_movies_label">Movies</string>
+    <string name="nav_series_label">Series</string>
+    <string name="nav_search_label">Search</string>
+    <string name="nav_settings_label">Settings</string>
+    <string name="movies_watched">Watched</string>
+    <string name="movies_trailer">Trailer</string>
+    <string name="movies_details_title">Movie details</string>
+    <string name="movies_type_badge">Movie</string>
+    <string name="series_watched">Watched</string>
+    <string name="series_add_favorite">Add to favorites</string>
+    <string name="player_error_title">Playback error</string>
+    <string name="player_retry_label">Retry</string>
+    <string name="player_reconnecting">Reconnecting…</string>
+    <string name="player_status_idle">Ready</string>
+    <string name="player_status_starting">Starting</string>
+    <string name="player_status_paused">Paused</string>
+    <string name="player_status_ended">Ended</string>
+    <string name="player_status_error">Error</string>
+    <string name="player_status_live">Live</string>
+    <string name="player_status_timeshift">Timeshift</string>
+    <string name="movies_label_director">Director</string>
+    <string name="movies_label_cast">Cast</string>
+    <string name="movies_label_progress">Progress</string>
+    <string name="series_type_badge">Series</string>
+    <string name="player_timeshift_at_live">Timeshift window active. Live edge reached.</string>
+    <string name="player_timeshift_offset">Timeshift: %s behind live.</string>
+    <string name="player_timeline_hint">Timeline controls position.</string>
+    <string name="search_unavailable_body">Search appears once local media data is loaded.</string>
+    <string name="search_local_body">Live-TV, movies, series and EPG are searched locally.</string>
+    <string name="search_history_clear">Clear</string>
+    <string name="search_subtitle_channel">Channel %s</string>
+    <string name="search_subtitle_livetv">Live-TV</string>
+    <string name="search_subtitle_epg_hit">Program match</string>
+
+    <!-- Live-TV status badges -->
+    <string name="livetv_status_active">Active</string>
+    <string name="livetv_status_active_partial">Active with partial errors</string>
+    <string name="livetv_status_connection_error">Connection error</string>
+    <string name="livetv_status_expired">Expired</string>
+    <string name="livetv_status_disabled">Disabled</string>
+    <string name="livetv_status_credentials_required">Credentials required</string>
+    <string name="livetv_badge_current">Current</string>
+    <string name="livetv_badge_catchup">Catch-Up</string>
+    <string name="livetv_badge_no_epg">No EPG</string>
+    <string name="livetv_no_epg_data">%1$s currently has no local EPG data.</string>
+    <string name="livetv_next_program">Next: %1$s %2$s</string>
+    <string name="livetv_no_favorites_saved">No live-TV favorites saved yet.</string>
+
+    <!-- Home -->
+    <string name="home_watched_ago">%1$d min ago</string>
+    <string name="home_recently_watched">Recently watched</string>
+    <string name="home_continue_movie_label">Movie</string>
+
+    <!-- Movies -->
+    <string name="movies_duration_min">%1$d min</string>
+
+    <!-- Player -->
+    <string name="player_aspect_zoom">Zoom</string>
+
+    <!-- Common additions -->
+    <string name="common_note">Note</string>
+    <string name="common_next">Next</string>
+    <string name="common_remove">Remove</string>
+    <string name="common_manual">Manual</string>
+    <string name="common_not_assigned">Not assigned</string>
+    <string name="common_warning">Warning</string>
+    <string name="common_error">Error</string>
+    <string name="common_secure">Secure</string>
+    <string name="common_insecure_connection">Insecure connection</string>
+    <string name="common_insecure_body">HTTP is allowed but treated as insecure.</string>
+    <string name="common_test_connection">Test connection</string>
+    <string name="common_source">Source</string>
+    <string name="common_paste">Paste</string>
+    <string name="common_apply">Apply</string>
+    <string name="common_clipboard">Clipboard</string>
+    <string name="common_select_file">Select file</string>
+
+    <!-- Settings - General help texts -->
+    <string name="settings_help_launch_on_boot">Attempts to open Vivicast on Android TV startup if the system allows it.</string>
+    <string name="settings_help_double_back">Requires a second back confirmation from the top navigation.</string>
+    <string name="settings_help_language">System default or fixed app language.</string>
+    <string name="settings_help_background_refresh">Refresh playlists and EPG in the background.</string>
+    <string name="settings_help_remember_sorting">Retain local list order per view.</string>
+    <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty uses the app default.</string>
+
+    <!-- Settings - Playback help texts -->
+    <string name="settings_help_next_stream">Applied on next stream start.</string>
+    <string name="settings_help_afr">Adjusts output to match playback when the device supports it.</string>
+    <string name="settings_help_external_player">Applies to movies and single episodes only. Live-TV and catch-up remain internal.</string>
+    <string name="settings_help_timeshift">Enables time-shifted live TV if the channel and stream support it.</string>
+    <string name="settings_help_timeshift_buffer">Limits the active timeshift buffer.</string>
+    <string name="settings_help_disabled_note">Saved but not operable when timeshift is disabled.</string>
+    <string name="settings_help_timeshift_storage">Selects storage for the active timeshift buffer.</string>
+    <string name="settings_help_audio_lang">Preferred audio track if offered by the stream.</string>
+    <string name="settings_help_subtitle_lang">Preferred subtitle track if offered by the stream.</string>
+    <string name="settings_help_auto_next">Applies to series episodes in the internal player.</string>
+    <string name="settings_help_auto_next_countdown">Sets when the auto-next panel appears.</string>
+    <string name="settings_help_autonext_note">Saved but not operable when auto-next is disabled.</string>
+    <string name="settings_help_passthrough">Passes compatible multi-channel formats directly to the output device.</string>
+
+    <!-- Settings - EPG messages and labels -->
+    <string name="settings_epg_msg_scheduled">EPG refresh has been scheduled.</string>
+    <string name="settings_epg_msg_source_saved">EPG source saved. URL remains hidden.</string>
+    <string name="settings_epg_msg_source_assigned">EPG source assigned to provider.</string>
+    <string name="settings_epg_msg_source_unlinked">EPG source removed from provider.</string>
+    <string name="settings_epg_msg_priority_updated">EPG priority updated.</string>
+    <string name="settings_epg_msg_source_select">Select an EPG source or create a new one.</string>
+    <string name="settings_epg_msg_source_deleted">EPG source deleted. Programs and assignments have been removed.</string>
+    <string name="settings_epg_help_interval">Applies only to the automatic interval refresh.</string>
+    <string name="settings_epg_help_past">Cleanup only removes EPG program data outside this window.</string>
+    <string name="settings_epg_retention_day">Day</string>
+    <string name="settings_epg_retention_days">Days</string>
+    <string name="settings_epg_help_cleanup_note">Sources, provider assignments and manual mappings are retained.</string>
+    <string name="settings_epg_help_background">Starts only when background refresh is enabled.</string>
+    <string name="settings_epg_help_on_playlist_change">Separate trigger in addition to the interval.</string>
+    <string name="settings_epg_help_run_now">Schedules a refresh according to the existing refresh plan.</string>
+    <string name="settings_epg_no_providers_body">Set up a playlist first to edit manual EPG assignments.</string>
+    <string name="settings_epg_no_providers_body2">Set up a playlist first to edit EPG assignments.</string>
+    <string name="settings_epg_select_provider">Select provider</string>
+    <string name="settings_epg_select_provider_body">Select a provider on the left, then a channel for manual EPG mapping.</string>
+    <string name="settings_epg_no_channels_label">No channels</string>
+    <string name="settings_epg_no_channels_body">This provider has no imported live-TV channels yet.</string>
+    <string name="settings_epg_channel_number">Channel %1$s</string>
+    <string name="settings_epg_select_channel">Select channel</string>
+    <string name="settings_epg_select_channel_body">Select a provider and channel first.</string>
+    <string name="settings_epg_no_source_linked">No EPG source linked</string>
+    <string name="settings_epg_no_source_body">Assign a source to this provider in the EPG sources section first.</string>
+    <string name="settings_epg_source_section">EPG source</string>
+    <string name="settings_epg_timeshift_format">Time offset: %1$d minutes</string>
+    <string name="settings_epg_channel_id_label">External EPG channel ID</string>
+    <string name="settings_epg_channel_id_hint">e.g. ard.de</string>
+    <string name="settings_epg_delete_body">This EPG source, its programs and assignments will be removed. Providers are retained.</string>
+    <string name="settings_epg_no_sources">No EPG sources</string>
+    <string name="settings_epg_no_sources_body">Create an EPG source to assign it to providers.</string>
+    <string name="settings_epg_assignment_info">Assignment: in detail panel</string>
+    <string name="settings_epg_source_edit_title">Edit EPG source</string>
+    <string name="settings_epg_source_new_title">EPG source</string>
+    <string name="settings_epg_source_edit_body">Change name, time offset and active status. Reset URL only if needed.</string>
+    <string name="settings_epg_source_new_body">URL is stored securely and not saved in Room.</string>
+    <string name="settings_epg_timeshift_label">Time offset</string>
+    <string name="settings_epg_timeshift_help">Corrects EPG times in minutes.</string>
+    <string name="settings_epg_timeshift_value">%1$d min</string>
+    <string name="settings_epg_priority">Priority %1$d</string>
+    <string name="settings_epg_not_assigned">Not assigned</string>
+    <string name="settings_epg_use_as_priority">Use as priority %1$d</string>
+    <string name="settings_epg_higher">Higher</string>
+    <string name="settings_epg_top">Top</string>
+    <string name="settings_epg_lower">Lower</string>
+    <string name="settings_epg_bottom">Bottom</string>
+    <string name="settings_epg_provider_assignment_title">Provider assignment</string>
+    <string name="settings_epg_provider_assignment_body">Priority is configurable per provider. Manual channel mapping remains a separate flow.</string>
+    <string name="settings_epg_no_providers_for_source_body">Set up a playlist first to assign EPG sources.</string>
+
+    <!-- Settings - Provider/Playlist messages and labels -->
+    <string name="settings_provider_no_refreshable">No automatically refreshable playlist available.</string>
+    <string name="settings_provider_msg_refresh_started">Refresh of all URL and Xtream playlists started.</string>
+    <string name="settings_provider_title_edit">Edit playlist</string>
+    <string name="settings_provider_title_new">Add playlist</string>
+    <string name="settings_provider_msg_name_exists">Name already exists.</string>
+    <string name="settings_provider_msg_checking">Checking connection.</string>
+    <string name="settings_provider_msg_connected">Connection successful.</string>
+    <string name="settings_provider_msg_saved_auto">Source saved. Refresh starts automatically.</string>
+    <string name="settings_provider_msg_playlist_saved">Playlist saved. Import has started.</string>
+    <string name="settings_provider_msg_enabled">Playlist enabled.</string>
+    <string name="settings_provider_msg_disabled">Playlist disabled. Data is retained.</string>
+    <string name="settings_provider_section_body">Playlists are configured locally. Credentials are stored outside the database.</string>
+    <string name="settings_provider_msg_deleted">Playlist deleted. Associated data has been removed.</string>
+    <string name="settings_provider_empty_body">No playlist available yet. Nothing will be imported.</string>
+    <string name="settings_provider_name_exists_title">Name already taken</string>
+    <string name="settings_provider_name_exists_body">The name must be unique.</string>
+    <string name="settings_provider_name_duplicate_body">The name already exists locally. Saving is blocked.</string>
+    <string name="settings_provider_section_title">Playlists</string>
+    <string name="settings_provider_file_importing">File is being imported…</string>
+    <string name="settings_provider_file_ready">File ready…</string>
+    <string name="settings_provider_clipboard_label">M3U clipboard</string>
+    <string name="settings_provider_clipboard_body">Allowed: M3U URL or complete M3U content.</string>
+    <string name="settings_provider_content_label">Content *</string>
+    <string name="settings_provider_content_hint">#EXTM3U or https://…</string>
+    <string name="settings_provider_paste_hint">Paste new or leave empty</string>
+    <string name="settings_provider_paste_placeholder">#EXTM3U…</string>
+    <string name="settings_provider_m3u_file_label">M3U file</string>
+
+    <!-- Settings - User-Agent dialog -->
+    <string name="settings_ua_invalid_chars">User-Agent contains invalid control characters.</string>
+
+    <!-- Settings - EPG manual mapping -->
+    <string name="settings_epg_manual_mapping">Manual Mapping</string>
+    <string name="settings_epg_manual_mapping_body">Maps a local channel to an external channel ID from a linked EPG source.</string>
+    <string name="settings_epg_msg_mapping_saved">Manual EPG mapping saved.</string>
+    <string name="settings_epg_msg_mapping_removed">Manual mapping removed. Automatic mapping may apply on next import.</string>
+    <string name="settings_epg_msg_mapping_all_required">Provider, channel, EPG source, and external channel ID must all be selected.</string>
+    <string name="settings_epg_msg_mapping_failed">Mapping failed: %1$s</string>
+    <string name="settings_epg_msg_remove_failed">Remove failed: %1$s</string>
+    <string name="settings_epg_msg_selection_required">Provider, channel, and EPG source must be selected.</string>
+    <string name="settings_epg_badge_manual">Manual</string>
+    <string name="settings_epg_badge_auto">Automatic</string>
+
+    <!-- Settings - Appearance help -->
+    <string name="settings_help_theme">TV-optimized dark display.</string>
+    <string name="settings_help_accent">Focus and warning contrast remain enforced.</string>
+    <string name="settings_help_transparency">Panel and overlay readability stays limited.</string>
+    <string name="settings_help_font_scale">Text size without breaking layout.</string>
+    <string name="settings_help_animation">Focus transitions stay predictable.</string>
+
+    <!-- Settings - Parental control -->
+    <string name="settings_pin_first">Set PIN first.</string>
+    <string name="settings_help_pin_entry">Four digits, masked input via the system keyboard.</string>
+    <string name="settings_help_pin_change">Requires current PIN and confirmation.</string>
+    <string name="settings_help_protect_settings">Protects sensitive settings with PIN.</string>
+    <string name="settings_help_protect_movies">Opens movies only after PIN approval.</string>
+    <string name="settings_help_protect_series">Opens series only after PIN approval.</string>
+    <string name="settings_help_protect_adult">Hides protected adult content without approval.</string>
+    <string name="settings_help_protect_unlocks">Active unlocks stay in memory and are not backed up.</string>
+    <string name="settings_pin_current_required">Enter current PIN completely.</string>
+    <string name="settings_pin_four_digits">New PIN must be four digits.</string>
+    <string name="settings_pin_mismatch">New PINs do not match.</string>
+    <string name="settings_pin_label_current">Current PIN</string>
+    <string name="settings_pin_label_new">New PIN</string>
+    <string name="settings_pin_label_repeat">Repeat new PIN</string>
+
+    <!-- Settings - Backup help -->
+    <string name="settings_help_backup_standard">Standard backup without secret credentials.</string>
+    <string name="settings_help_backup_restore">Restore replaces backup scope after validation and confirmation.</string>
+    <string name="settings_help_backup_target">SMB and Google Drive credentials are not included in the standard backup.</string>
+
+    <!-- Settings - Backup full -->
+    <string name="settings_backup_passphrase_body">Enter backup passphrase. It is not saved and protects the included credentials.</string>
+    <string name="settings_backup_passphrase_missing">Passphrase missing.</string>
+    <string name="settings_backup_full_action_export">Export</string>
+    <string name="settings_backup_full_action_import">Import</string>
+    <string name="settings_help_backup_last">Timestamp of the last successful export on this device.</string>
+    <string name="settings_help_backup_full_export">Encrypted with backup passphrase and includes source credentials.</string>
+    <string name="settings_help_backup_full_import">Restore requires the backup passphrase and replaces backup scope.</string>
+
+    <!-- Settings - Cache / Maintenance -->
+    <string name="settings_cache_info_help">%d files in local media cache.</string>
+    <string name="settings_cache_refreshed">Cache information updated.</string>
+    <string name="settings_cache_cleared">Cache cleared.</string>
+    <string name="settings_history_cleared">History deleted.</string>
+    <string name="settings_history_clear_all_value">All</string>
+    <string name="settings_maintenance_confirm_badge">Confirmation</string>
+
+    <string name="settings_cache_clear_row_help">Removes locally cached media images. Provider data remains.</string>
+    <string name="settings_history_clear_row_help">Deletes Live TV history, movies, series, and search history.</string>
+
+    <string name="maintenance_cache_clear_title">Clear cache</string>
+    <string name="maintenance_cache_clear_row_help">Removes locally cached media images.</string>
+    <string name="maintenance_cache_clear_confirm">Clear cache?</string>
+    <string name="maintenance_cache_clear_body">Only locally cached media images are deleted. Provider data, history, favorites, EPG, and credentials remain.</string>
+    <string name="maintenance_cache_clear_label">Clear cache</string>
+
+    <string name="maintenance_live_tv_title">Delete Live TV history</string>
+    <string name="maintenance_live_tv_row_help">Deletes recently watched Live TV channels.</string>
+    <string name="maintenance_live_tv_confirm">Delete Live TV history?</string>
+    <string name="maintenance_live_tv_body">Live TV history will be deleted. Movies, series, search, provider data, and favorites remain.</string>
+
+    <string name="maintenance_movie_title">Delete movie history</string>
+    <string name="maintenance_movie_row_help">Deletes movie playback progress.</string>
+    <string name="maintenance_movie_confirm">Delete movie history?</string>
+    <string name="maintenance_movie_body">Movie history and playback progress will be deleted. Other histories remain.</string>
+
+    <string name="maintenance_series_title">Delete series history</string>
+    <string name="maintenance_series_row_help">Deletes series and episode playback progress.</string>
+    <string name="maintenance_series_confirm">Delete series history?</string>
+    <string name="maintenance_series_body">Series history and episode playback progress will be deleted. Other histories remain.</string>
+
+    <string name="maintenance_search_title">Delete search history</string>
+    <string name="maintenance_search_row_help">Deletes local search terms.</string>
+    <string name="maintenance_search_confirm">Delete search history?</string>
+    <string name="maintenance_search_body">Search history will be deleted. Playback history, provider data, and favorites remain.</string>
+
+    <string name="maintenance_all_title">Delete all history</string>
+    <string name="maintenance_all_row_help">Deletes Live TV, movies, series, and search.</string>
+    <string name="maintenance_all_confirm">Delete all history?</string>
+    <string name="maintenance_all_body">Live TV history, movie and series progress, and search history will be deleted. Provider data and favorites remain.</string>
+    <string name="maintenance_all_label">Delete all</string>
+
+    <!-- About section -->
+    <string name="about_app_version_title">App version</string>
+    <string name="about_help_version">Installed app version.</string>
+    <string name="about_package_name">Package name</string>
+    <string name="about_help_package">Android Application ID.</string>
+    <string name="about_db_version">Database version</string>
+    <string name="about_help_db">Local Room schema.</string>
+    <string name="about_android_version">Android version</string>
+    <string name="about_help_android">Device system version.</string>
+    <string name="about_device_model">Device model</string>
+    <string name="about_help_device">Non-private technical support information.</string>
+    <string name="about_diagnostics_section">Diagnostics and Support</string>
+    <string name="about_diagnostics_body">General support data may be copied. Log content is not displayed and not copied.</string>
+    <string name="about_diagnostics_badge">Support</string>
+    <string name="about_diagnostics_logging">Diagnostic logging</string>
+    <string name="about_help_logging">Writes only sanitized technical events to private app storage.</string>
+    <string name="about_retention">Retention period</string>
+    <string name="about_help_retention_on">Limits internal diagnostic sessions to 1 to 7 days.</string>
+    <string name="about_help_retention_off">Remains visible, but cannot be changed when diagnostic logging is off.</string>
+    <string name="about_export_diagnostics">Export diagnostics</string>
+    <string name="about_help_export_diagnostics">Creates a ZIP with vivicast-diagnostics.log and diagnostics-metadata.json.</string>
+    <string name="about_copy_support">Copy support information</string>
+    <string name="about_help_copy_support">Copies only the visible non-private technical information.</string>
+    <string name="about_help_legal">Local legal notices.</string>
+    <string name="about_help_privacy">Local privacy information.</string>
+    <string name="about_help_third_party">D-Pad-navigable license list.</string>
+    <string name="about_provider_delete_title">Really delete playlist?</string>
+
+    <!-- About legal dialogs -->
+    <string name="about_legal_licenses_title">License notices</string>
+    <string name="about_legal_licenses_body">Vivicast is a local Android TV app. App-specific license notices are displayed locally and do not trigger network actions.</string>
+    <string name="about_legal_privacy_title">Privacy information</string>
+    <string name="about_legal_privacy_body">Vivicast processes local provider, EPG, media, and settings data on the device. There is no account, no cloud sync, and no telemetry.</string>
+    <string name="about_legal_third_party_title">Third-party licenses</string>
+    <string name="about_legal_third_party_body">Third-party components are referenced exclusively locally in the app. No network actions are triggered from this view.</string>
+
+    <!-- Settings - Provider editor step titles and bodies -->
+    <string name="settings_provider_step_type_title">Select source type</string>
+    <string name="settings_provider_step_m3u_input_title">M3U input method</string>
+    <string name="settings_provider_step_m3u_url_title">M3U URL</string>
+    <string name="settings_provider_step_m3u_clipboard_title">M3U clipboard</string>
+    <string name="settings_provider_step_xtream_title">Xtream Codes</string>
+
+    <string name="settings_provider_step_name_body">Name is required and must be unique.</string>
+    <string name="settings_provider_step_type_body">Source type cannot be changed after saving.</string>
+    <string name="settings_provider_step_m3u_input_body">Select URL, file, or clipboard.</string>
+    <string name="settings_provider_step_m3u_url_body">HTTPS is preferred. HTTP is visibly treated as insecure.</string>
+    <string name="settings_provider_step_m3u_clipboard_body">Clipboard can contain an M3U URL or complete M3U content.</string>
+    <string name="settings_provider_step_xtream_body">Server, username, and password are required for the connection test.</string>
+    <string name="settings_provider_step_edit_body">Type remains unchanged. Modified sources must be tested again.</string>
+
+    <!-- Settings - Validation messages -->
+    <string name="validation_name_missing">Name missing.</string>
+    <string name="validation_content_type_required">At least one content type must be active.</string>
+    <string name="validation_xtream_server_missing">Xtream server missing.</string>
+    <string name="validation_xtream_username_missing">Xtream username missing.</string>
+    <string name="validation_xtream_password_missing">Xtream password missing.</string>
+    <string name="validation_connection_test_required">Connection test missing.</string>
+    <string name="validation_m3u_url_missing">M3U URL missing.</string>
+    <string name="validation_m3u_file_missing">M3U file missing.</string>
+    <string name="validation_m3u_clipboard_missing">M3U content missing.</string>
+    <string name="validation_epg_url_missing">EPG URL missing.</string>
+
+    <!-- Settings - Delete provider -->
+    <string name="settings_provider_delete_body">This action cannot be undone. Associated channels, categories, favorites, history, playback progress, and EPG assignments will be deleted. EPG sources remain.</string>
+
+    <!-- Settings - Provider messages -->
+    <string name="settings_provider_help_add">Add a new source from M3U URL, file, clipboard, or Xtream Codes.</string>
+    <string name="settings_provider_file_saved">File is saved. Selecting a new file replaces the current source.</string>
+    <string name="settings_provider_file_none">No file selected.</string>
+    <string name="settings_provider_file_stage">File ready. Save will replace the current source.</string>
+    <string name="settings_provider_file_import_only">File is import-only. No permanent copy is stored.</string>
+    <string name="settings_provider_file_ready_test">File ready. Test connection and save.</string>
+    <string name="settings_provider_file_pick">Select file</string>
+    <string name="settings_provider_badge_file">File</string>
+    <string name="settings_provider_xtream_stable">Type and ID remain stable.</string>
+    <string name="settings_provider_xtream_credentials">Credentials are stored securely. No custom User-Agent.</string>
+    <string name="settings_provider_title_playlist">Playlist</string>
+    <string name="settings_provider_file_no_auto">File and clipboard sources can only be updated by replacement. Automatic refresh is disabled.</string>
+    <string name="settings_provider_help_refresh_all">Starts a manual refresh for active sources.</string>
+    <string name="settings_provider_msg_name_check">Name already exists.</string>
+    <string name="settings_provider_body_refresh">Controls automatic updates; manual refresh remains available.</string>
+    <string name="settings_provider_msg_save_failed">Save failed: %1$s</string>
+    <string name="settings_provider_msg_status_failed">Status change failed: %1$s</string>
+    <string name="settings_provider_msg_delete_failed">Delete failed: %1$s</string>
+    <string name="settings_provider_badge_secure">Secure</string>
+
+    <!-- Settings - Provider name/url form labels -->
+    <string name="settings_provider_name_label">Name</string>
+    <string name="settings_provider_name_required">Name *</string>
+    <string name="settings_provider_name_placeholder">Playlist name</string>
+    <string name="settings_provider_url_required">URL *</string>
+    <string name="settings_provider_updated_format">Updated: %1$s</string>
+    <string name="settings_provider_live_tv_off">Live TV Off</string>
+    <string name="settings_provider_movies_off">Movies Off</string>
+    <string name="settings_provider_series_off">Series Off</string>
+
+    <!-- Settings - Provider add flow form labels (required fields marked with *) -->
+    <string name="settings_provider_server_required">Server *</string>
+    <string name="settings_provider_username_required">Username *</string>
+    <string name="settings_provider_password_required">Password *</string>
+    <string name="settings_provider_import_section">Import</string>
+
+    <!-- Settings - Provider editor form labels -->
+    <string name="settings_provider_source_section">Source</string>
+    <string name="settings_provider_m3u_url_label">M3U URL</string>
+    <string name="settings_provider_m3u_clipboard_field_label">M3U from Clipboard</string>
+    <string name="settings_provider_placeholder_reset">Set new value or leave empty</string>
+    <string name="settings_provider_server_label">Server</string>
+    <string name="settings_provider_username_label">Username</string>
+    <string name="settings_provider_password_label">Password</string>
+    <string name="settings_provider_content_section">Content</string>
+    <string name="settings_provider_interval_label">Interval</string>
+    <string name="settings_provider_update_title">Update</string>
+    <string name="settings_provider_test_connection">Test Connection</string>
+    <string name="settings_provider_toggle_enabled">Enable/Disable</string>
+    <string name="settings_provider_no_content">No content selected</string>
+
+    <!-- Settings - M3U source mode labels -->
+    <string name="m3u_source_url">URL</string>
+    <string name="m3u_source_file">File</string>
+    <string name="m3u_source_clipboard">Clipboard</string>
+
+    <!-- Settings - EPG panel and error messages -->
+    <string name="settings_epg_panel_title">EPG Management</string>
+    <string name="settings_epg_remote_id_body">Remote ID: %1$s</string>
+    <string name="settings_epg_source_save_failed">Save failed: %1$s</string>
+    <string name="settings_epg_msg_priority_failed">Priority update failed: %1$s</string>
+    <string name="settings_epg_msg_source_delete_failed">Delete failed: %1$s</string>
+
+    <!-- Common -->
+    <string name="common_unknown_error">unknown error</string>
+</resources>

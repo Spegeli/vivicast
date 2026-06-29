@@ -36,11 +36,6 @@ class GlobalRefreshOrchestratorTest {
                     return EpgRefreshOutcome(target.epgSourceId, success = true)
                 }
             },
-            epgMappingApplier = object : EpgMappingApplier {
-                override suspend fun applyMappings(epgOutcomes: List<EpgRefreshOutcome>) {
-                    calls += "apply-mapping:${epgOutcomes.size}"
-                }
-            },
             logoRefresher = object : LogoRefresher {
                 override suspend fun refreshLogos() {
                     calls += "refresh-logos"
@@ -63,7 +58,6 @@ class GlobalRefreshOrchestratorTest {
                 "refresh-playlist:provider-b",
                 "collect-epg",
                 "refresh-epg:epg-shared",
-                "apply-mapping:1",
                 "refresh-logos",
                 "cache-cleanup",
             ),
@@ -100,11 +94,6 @@ class GlobalRefreshOrchestratorTest {
                     error("EPG failed: epg_url=https://epg.example/file.xml?token=abc")
                 }
             },
-            epgMappingApplier = object : EpgMappingApplier {
-                override suspend fun applyMappings(epgOutcomes: List<EpgRefreshOutcome>) {
-                    calls += "mapping:${epgOutcomes.size}"
-                }
-            },
             logoRefresher = object : LogoRefresher {
                 override suspend fun refreshLogos() {
                     calls += "logos"
@@ -124,7 +113,7 @@ class GlobalRefreshOrchestratorTest {
         assertEquals(1, report.playlistsFailed)
         assertEquals(0, report.epgSourcesSucceeded)
         assertEquals(1, report.epgSourcesFailed)
-        assertEquals(listOf("mapping:0", "logos", "cache"), calls)
+        assertEquals(listOf("logos", "cache"), calls)
         assertTrue(diagnostics.events.any { it.type == RefreshDiagnosticType.PlaylistRefreshFailed })
         assertTrue(diagnostics.events.any { it.type == RefreshDiagnosticType.EpgRefreshFailed })
         val diagnosticText = diagnostics.events.joinToString("\n") { it.message }

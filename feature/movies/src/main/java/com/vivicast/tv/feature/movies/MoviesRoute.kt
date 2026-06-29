@@ -31,8 +31,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.HeroPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.PosterCard
@@ -94,9 +96,9 @@ fun MoviesRoute(
 private fun MoviesUnavailableState() {
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         InfoPanel(
-            title = "Filme nicht verfuegbar",
-            body = "Filme werden angezeigt, sobald lokale Provider- und Mediendaten geladen sind.",
-            badge = "Leer",
+            title = stringResource(R.string.movies_unavailable),
+            body = stringResource(R.string.movies_select_provider),
+            badge = stringResource(R.string.common_empty_badge),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -118,6 +120,10 @@ private fun RoomMoviesRoute(
     onTargetConsumed: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val trailerHintStr = stringResource(R.string.movies_trailer_hint)
+    val strFavorites = stringResource(R.string.common_favorites)
+    val strContinue = stringResource(R.string.movies_continue)
+    val strMovieTypeBadge = stringResource(R.string.movies_type_badge)
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
@@ -173,9 +179,9 @@ private fun RoomMoviesRoute(
     val categoriesWithSpecials = remember(selectedProviderId, categories, continueMovieProgress) {
         selectedProviderId?.let { providerId ->
             buildList {
-                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, "Favoriten"))
+                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, strFavorites))
                 if (continueMovieProgress.isNotEmpty()) {
-                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, "Fortsetzen"))
+                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, strContinue))
                 }
                 addAll(categories)
             }
@@ -300,7 +306,7 @@ private fun RoomMoviesRoute(
                         }
                     },
                     onOpenTrailer = {
-                        trailerHint = if (openTrailer(detailMovie)) null else "Für Trailer wird die YouTube-App benötigt."
+                        trailerHint = if (openTrailer(detailMovie)) null else trailerHintStr
                     },
                     onClose = { detailMovieId = null },
                     trailerHint = trailerHint,
@@ -339,12 +345,12 @@ private fun RoomMoviesRoute(
                                 }
                             },
                         )
-                        SectionTitle("Filme")
+                        SectionTitle(stringResource(R.string.nav_movies))
                         if (movies.isEmpty()) {
                             InfoPanel(
                                 title = emptyTitle(selectedProvider, selectedCategory),
                                 body = emptyBody(selectedProvider, selectedCategory),
-                                badge = "Leer",
+                                badge = stringResource(R.string.common_empty_badge),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
@@ -361,7 +367,7 @@ private fun RoomMoviesRoute(
                                     PosterCard(
                                         title = movie.name,
                                         rating = movie.rating?.takeIf { it.isNotBlank() } ?: "-",
-                                        meta = continueMovieProgress[movie.id]?.let { "${it.progressPercent} %" } ?: movie.cardMeta,
+                                        meta = continueMovieProgress[movie.id]?.let { "${it.progressPercent} %" } ?: movie.cardMeta(strMovieTypeBadge),
                                         hasPoster = !movie.posterUrl.isNullOrBlank() || posterModel != null,
                                         progressPercent = continueMovieProgress[movie.id]?.progressPercent ?: 0,
                                         favorite = movie.id in favoriteMovieIds,
@@ -386,7 +392,7 @@ private fun RoomMoviesRoute(
                                 if (canLoadMoreMovies) {
                                     item(span = { GridItemSpan(maxLineSpan) }, key = "load-more-movies") {
                                         ActionPill(
-                                            "Mehr laden",
+                                            stringResource(R.string.common_load_more),
                                             modifier = Modifier.fillMaxWidth(),
                                             onClick = { moviePageCount += 1 },
                                         )
@@ -411,7 +417,7 @@ private fun MovieCategoryColumn(
     onCategorySelected: (Category) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.width(220.dp)) {
-        SectionTitle("Provider")
+        SectionTitle(stringResource(R.string.common_provider_section))
         providers.forEach { provider ->
             ActionPill(
                 label = provider.name,
@@ -420,11 +426,11 @@ private fun MovieCategoryColumn(
                 onClick = { onProviderSelected(provider) },
             )
         }
-        SectionTitle("Kategorien")
+        SectionTitle(stringResource(R.string.common_categories_section))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
             items(categories, key = { it.id }) { category ->
                 ActionPill(
-                    label = category.displayName,
+                    label = category.localizedDisplayName(),
                     selected = selectedCategoryId == category.id,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { onCategorySelected(category) },
@@ -445,21 +451,24 @@ private fun MovieHero(
     onOpenPlayer: (Boolean) -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
+    val noMoviesStr = stringResource(R.string.movies_no_content)
+    val selectProviderStr = stringResource(R.string.movies_select_provider)
+    val playFromStartStr = stringResource(R.string.movies_play_from_start)
     HeroPanel(
-        title = movie?.name ?: "Keine Filme",
-        body = movie?.plot?.takeIf { it.isNotBlank() } ?: "Waehle einen Provider und eine Filmkategorie aus.",
-        meta = movie?.heroMeta ?: provider?.name,
+        title = movie?.name ?: noMoviesStr,
+        body = movie?.plot?.takeIf { it.isNotBlank() } ?: selectProviderStr,
+        meta = movie?.localizedHeroMeta() ?: provider?.name,
         modifier = Modifier.fillMaxWidth(),
         backdropModel = backdropModel,
         action = {
             if (movie != null && showActions) {
                 if (progress != null) {
-                    ActionPill("Fortsetzen", onClick = { onOpenPlayer(true) })
-                    ActionPill("Von Anfang an", onClick = { onOpenPlayer(false) })
+                    ActionPill(stringResource(R.string.movies_continue), onClick = { onOpenPlayer(true) })
+                    ActionPill(playFromStartStr, onClick = { onOpenPlayer(false) })
                 } else {
-                    ActionPill("Abspielen", onClick = { onOpenPlayer(false) })
+                    ActionPill(stringResource(R.string.movies_play), onClick = { onOpenPlayer(false) })
                 }
-                ActionPill(if (isFavorite) "Favorit" else "Zu Favoriten", selected = isFavorite, onClick = onToggleFavorite)
+                ActionPill(if (isFavorite) stringResource(R.string.common_favorites) else stringResource(R.string.movies_add_favorite), selected = isFavorite, onClick = onToggleFavorite)
             }
         },
     )
@@ -490,34 +499,43 @@ private fun MovieDetailPage(
         onOpenPlayer = onOpenPlayer,
         onToggleFavorite = onToggleFavorite,
     )
+    val playFromStartStr = stringResource(R.string.movies_play_from_start)
+    val watchedStr = stringResource(R.string.movies_watched)
+    val trailerStr = stringResource(R.string.movies_trailer)
+    val detailsTitleStr = stringResource(R.string.movies_details_title)
+    val typeBadgeStr = stringResource(R.string.movies_type_badge)
+    val noDescStr = stringResource(R.string.movies_no_description)
+    val labelDirector = stringResource(R.string.movies_label_director)
+    val labelCast = stringResource(R.string.movies_label_cast)
+    val labelProgress = stringResource(R.string.movies_label_progress)
     Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         if (progress?.isCompleted == true) {
-            ActionPill("Gesehen", selected = true)
-            ActionPill("Von Anfang an", onClick = { onOpenPlayer(false) })
+            ActionPill(watchedStr, selected = true)
+            ActionPill(playFromStartStr, onClick = { onOpenPlayer(false) })
         } else if (progress != null) {
-            ActionPill("Fortsetzen", onClick = { onOpenPlayer(true) })
-            ActionPill("Von Anfang an", onClick = { onOpenPlayer(false) })
+            ActionPill(stringResource(R.string.movies_continue), onClick = { onOpenPlayer(true) })
+            ActionPill(playFromStartStr, onClick = { onOpenPlayer(false) })
         } else {
-            ActionPill("Abspielen", onClick = { onOpenPlayer(false) })
+            ActionPill(stringResource(R.string.movies_play), onClick = { onOpenPlayer(false) })
         }
-        ActionPill("Trailer", onClick = onOpenTrailer)
-        ActionPill(if (isFavorite) "Favorit" else "Zu Favoriten", selected = isFavorite, onClick = onToggleFavorite)
+        ActionPill(trailerStr, onClick = onOpenTrailer)
+        ActionPill(if (isFavorite) stringResource(R.string.common_favorites) else stringResource(R.string.movies_add_favorite), selected = isFavorite, onClick = onToggleFavorite)
         if (progress?.isCompleted == true) {
-            ActionPill("Als ungesehen markieren", onClick = onMarkUnseen)
+            ActionPill(stringResource(R.string.movies_mark_unwatched), onClick = onMarkUnseen)
         } else {
-            ActionPill("Als gesehen markieren", onClick = onMarkSeen)
+            ActionPill(stringResource(R.string.movies_mark_watched), onClick = onMarkSeen)
         }
-        ActionPill("Zurück", onClick = onClose)
+        ActionPill(stringResource(R.string.movies_back), onClick = onClose)
     }
     InfoPanel(
-        title = "Filmdetails",
-        body = movie.detailBody(progress),
-        badge = if (progress?.isCompleted == true) "Gesehen" else progress?.let { "${it.progressPercent} %" } ?: "Film",
+        title = detailsTitleStr,
+        body = movie.detailBody(progress, noDescStr, labelDirector, labelCast, labelProgress),
+        badge = if (progress?.isCompleted == true) watchedStr else progress?.let { "${it.progressPercent} %" } ?: typeBadgeStr,
         modifier = Modifier.fillMaxWidth(),
     )
     if (trailerHint != null) {
         InfoPanel(
-            title = "Trailer",
+            title = trailerStr,
             body = trailerHint,
             badge = "YouTube",
             modifier = Modifier.fillMaxWidth(),
@@ -536,52 +554,55 @@ private fun specialCategory(providerId: String, id: String, name: String): Categ
         isHidden = false,
     )
 
+@Composable
 private fun emptyTitle(provider: Provider?, category: Category?): String =
     when {
-        provider == null -> "Keine Wiedergabelisten"
-        category?.id == CONTINUE_CATEGORY_ID -> "Keine begonnenen Filme"
-        category?.id == FAVORITES_CATEGORY_ID -> "Keine Film-Favoriten"
-        else -> "Keine Filme"
+        provider == null -> stringResource(R.string.common_no_playlists)
+        category?.id == CONTINUE_CATEGORY_ID -> stringResource(R.string.movies_no_continue)
+        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.movies_no_favorites)
+        else -> stringResource(R.string.movies_none)
     }
 
+@Composable
 private fun emptyBody(provider: Provider?, category: Category?): String =
     when {
-        provider == null -> "Lege in den Einstellungen zuerst einen Provider an."
-        category?.id == CONTINUE_CATEGORY_ID -> "Begonnene Filme erscheinen hier, solange sie nicht abgeschlossen sind."
-        category?.id == FAVORITES_CATEGORY_ID -> "Füge Filme über die Favoriten-Aktion zu deinen Favoriten hinzu."
-        category == null -> "Dieser Provider enthaelt keine importierten Filmkategorien."
-        else -> "Diese Kategorie enthaelt keine importierten Filme."
+        provider == null -> stringResource(R.string.common_add_provider)
+        category?.id == CONTINUE_CATEGORY_ID -> stringResource(R.string.movies_continue_body)
+        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.movies_favorites_empty)
+        category == null -> stringResource(R.string.movies_no_categories_body)
+        else -> stringResource(R.string.movies_no_movies_body)
     }
 
-private val Category.displayName: String
-    get() = if (remoteId == "__UNCATEGORIZED__") "Nicht kategorisiert" else name
+@Composable
+private fun Category.localizedDisplayName(): String =
+    if (remoteId == "__UNCATEGORIZED__") stringResource(R.string.category_uncategorized) else name
 
-private val Movie.cardMeta: String
-    get() = listOfNotNull(year, rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" }).joinToString(" | ").ifBlank { "Film" }
+private fun Movie.cardMeta(typeBadge: String): String =
+    listOfNotNull(year, rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" }).joinToString(" | ").ifBlank { typeBadge }
 
-private val Movie.heroMeta: String?
-    get() = listOfNotNull(
-        rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" },
-        genre?.takeIf { it.isNotBlank() },
-        year?.takeIf { it.isNotBlank() },
-        duration.minutesLabel(),
-    ).joinToString(" | ").ifBlank { null }
+@Composable
+private fun Movie.localizedHeroMeta(): String? = listOfNotNull(
+    rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" },
+    genre?.takeIf { it.isNotBlank() },
+    year?.takeIf { it.isNotBlank() },
+    duration?.takeIf { it > 0L }?.let { stringResource(R.string.movies_duration_min, it / 60L) },
+).joinToString(" | ").ifBlank { null }
 
-private fun Long?.minutesLabel(): String? {
-    val seconds = this ?: return null
-    if (seconds <= 0L) return null
-    return "${seconds / 60L} Min"
-}
-
-private fun Movie.detailBody(progress: PlaybackProgress?): String =
+private fun Movie.detailBody(
+    progress: PlaybackProgress?,
+    noDescFallback: String,
+    labelDirector: String = "Regie",
+    labelCast: String = "Besetzung",
+    labelProgress: String = "Fortschritt",
+): String =
     buildString {
-        append(plot?.takeIf { it.isNotBlank() } ?: "Keine Beschreibung vorhanden.")
+        append(plot?.takeIf { it.isNotBlank() } ?: noDescFallback)
         val people = listOfNotNull(
-            director?.takeIf { it.isNotBlank() }?.let { "Regie: $it" },
-            cast?.takeIf { it.isNotBlank() }?.let { "Besetzung: $it" },
+            director?.takeIf { it.isNotBlank() }?.let { "$labelDirector: $it" },
+            cast?.takeIf { it.isNotBlank() }?.let { "$labelCast: $it" },
         )
         if (people.isNotEmpty()) append("\n").append(people.joinToString(" | "))
-        if (progress != null) append("\nFortschritt: ${progress.progressPercent} %")
+        if (progress != null) append("\n$labelProgress: ${progress.progressPercent} %")
     }
 
 private fun Movie.completedProgress(existing: PlaybackProgress?, now: Long): PlaybackProgress =

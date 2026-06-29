@@ -27,8 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.HeroPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.PosterCard
@@ -93,9 +95,9 @@ fun SeriesRoute(
 private fun SeriesUnavailableState() {
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         InfoPanel(
-            title = "Serien nicht verfuegbar",
-            body = "Serien werden angezeigt, sobald lokale Provider- und Mediendaten geladen sind.",
-            badge = "Leer",
+            title = stringResource(R.string.series_unavailable),
+            body = stringResource(R.string.series_select_provider),
+            badge = stringResource(R.string.common_empty_badge),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -118,6 +120,9 @@ private fun RoomSeriesRoute(
     onTargetConsumed: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val strFavorites = stringResource(R.string.common_favorites)
+    val strContinue = stringResource(R.string.series_continue)
+    val strSeriesTypeBadge = stringResource(R.string.series_type_badge)
     val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var selectedCategoryId by remember { mutableStateOf<String?>(null) }
@@ -185,9 +190,9 @@ private fun RoomSeriesRoute(
     val categoriesWithSpecials = remember(selectedProviderId, categories, continueSeriesTargets) {
         selectedProviderId?.let { providerId ->
             buildList {
-                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, "Favoriten"))
+                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, strFavorites))
                 if (continueSeriesTargets.isNotEmpty()) {
-                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, "Fortsetzen"))
+                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, strContinue))
                 }
                 addAll(categories)
             }
@@ -411,12 +416,12 @@ private fun RoomSeriesRoute(
                                 }
                             },
                         )
-                        SectionTitle("Serien")
+                        SectionTitle(stringResource(R.string.nav_series))
                         if (seriesItems.isEmpty()) {
                             InfoPanel(
                                 title = emptyTitle(selectedProvider, selectedCategory),
                                 body = emptyBody(selectedProvider, selectedCategory),
-                                badge = "Leer",
+                                badge = stringResource(R.string.common_empty_badge),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
@@ -433,7 +438,7 @@ private fun RoomSeriesRoute(
                                     PosterCard(
                                         title = series.name,
                                         rating = series.rating?.takeIf { it.isNotBlank() } ?: "-",
-                                        meta = continueSeriesTargets[series.id]?.cardMeta ?: series.cardMeta,
+                                        meta = continueSeriesTargets[series.id]?.cardMeta ?: series.cardMeta(strSeriesTypeBadge),
                                         hasPoster = !series.posterUrl.isNullOrBlank() || posterModel != null,
                                         progressPercent = continueSeriesTargets[series.id]?.progress?.progressPercent ?: 0,
                                         favorite = series.id in favoriteSeriesIds,
@@ -458,7 +463,7 @@ private fun RoomSeriesRoute(
                                 if (canLoadMoreSeries) {
                                     item(span = { GridItemSpan(maxLineSpan) }, key = "load-more-series") {
                                         ActionPill(
-                                            "Mehr laden",
+                                            stringResource(R.string.common_load_more),
                                             modifier = Modifier.fillMaxWidth(),
                                             onClick = { seriesPageCount += 1 },
                                         )
@@ -483,7 +488,7 @@ private fun SeriesCategoryColumn(
     onCategorySelected: (Category) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.width(220.dp)) {
-        SectionTitle("Provider")
+        SectionTitle(stringResource(R.string.common_provider_section))
         providers.forEach { provider ->
             ActionPill(
                 label = provider.name,
@@ -492,11 +497,11 @@ private fun SeriesCategoryColumn(
                 onClick = { onProviderSelected(provider) },
             )
         }
-        SectionTitle("Kategorien")
+        SectionTitle(stringResource(R.string.common_categories_section))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
             items(categories, key = { it.id }) { category ->
                 ActionPill(
-                    label = category.displayName,
+                    label = category.localizedDisplayName(),
                     selected = selectedCategoryId == category.id,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { onCategorySelected(category) },
@@ -517,18 +522,20 @@ private fun SeriesHero(
     onOpenPlayer: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
+    val noSeriesStr = stringResource(R.string.movies_no_content)
+    val selectProviderStr = stringResource(R.string.series_select_provider)
     HeroPanel(
-        title = series?.name ?: "Keine Serien",
-        body = series?.plot?.takeIf { it.isNotBlank() } ?: "Waehle einen Provider und eine Serienkategorie aus.",
+        title = series?.name ?: noSeriesStr,
+        body = series?.plot?.takeIf { it.isNotBlank() } ?: selectProviderStr,
         meta = series?.heroMeta ?: provider?.name,
         modifier = Modifier.fillMaxWidth(),
         backdropModel = backdropModel,
         action = {
             if (series != null && showActions) {
                 if (episode != null) {
-                    ActionPill("Abspielen", onClick = onOpenPlayer)
+                    ActionPill(stringResource(R.string.movies_play), onClick = onOpenPlayer)
                 }
-                ActionPill(if (isFavorite) "Favorit" else "Zu Favoriten", selected = isFavorite, onClick = onToggleFavorite)
+                ActionPill(if (isFavorite) stringResource(R.string.common_favorites) else stringResource(R.string.series_add_favorite), selected = isFavorite, onClick = onToggleFavorite)
             }
         },
     )
@@ -568,14 +575,14 @@ private fun SeriesDetailPage(
     Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         if (continueTarget != null) {
             ActionPill(
-                "Fortsetzen",
+                stringResource(R.string.series_continue),
                 modifier = Modifier.testTag(seriesContinueActionTag(series.id)),
                 onClick = { onContinueEpisode(continueTarget) },
             )
             StatusBadge(continueTarget.cardMeta)
         }
-        ActionPill(if (isFavorite) "Favorit" else "Zu Favoriten", selected = isFavorite, onClick = onToggleFavorite)
-        ActionPill("Zurück", onClick = onClose)
+        ActionPill(if (isFavorite) stringResource(R.string.common_favorites) else stringResource(R.string.series_add_favorite), selected = isFavorite, onClick = onToggleFavorite)
+        ActionPill(stringResource(R.string.series_back), onClick = onClose)
     }
     SeriesEpisodeSelector(
         seasons = seasons,
@@ -606,11 +613,12 @@ private fun SeriesEpisodeSelector(
 ) {
     if (seasons.isEmpty()) return
 
+    val staffelStr = stringResource(R.string.series_season)
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             items(seasons, key = { it.id }) { season ->
                 ActionPill(
-                    label = season.name.ifBlank { "Staffel ${season.seasonNumber}" },
+                    label = season.name.ifBlank { "$staffelStr ${season.seasonNumber}" },
                     selected = season.id == selectedSeasonId,
                     onClick = { onSeasonSelected(season) },
                 )
@@ -619,9 +627,9 @@ private fun SeriesEpisodeSelector(
 
         if (episodes.isEmpty()) {
             InfoPanel(
-                title = "Keine Episoden",
-                body = "Fuer diese Staffel sind keine Episoden importiert.",
-                badge = "Leer",
+                title = stringResource(R.string.series_no_episodes),
+                body = stringResource(R.string.series_no_episodes_body),
+                badge = stringResource(R.string.common_empty_badge),
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
@@ -640,10 +648,10 @@ private fun SeriesEpisodeSelector(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                 if (selectedEpisodeProgress?.isCompleted == true) {
-                    StatusBadge("Gesehen")
-                    ActionPill("Als ungesehen markieren", onClick = onMarkEpisodeUnseen)
+                    StatusBadge(stringResource(R.string.series_watched))
+                    ActionPill(stringResource(R.string.movies_mark_unwatched), onClick = onMarkEpisodeUnseen)
                 } else {
-                    ActionPill("Als gesehen markieren", onClick = onMarkEpisodeSeen)
+                    ActionPill(stringResource(R.string.movies_mark_watched), onClick = onMarkEpisodeSeen)
                 }
             }
         }
@@ -661,26 +669,29 @@ private fun specialCategory(providerId: String, id: String, name: String): Categ
         isHidden = false,
     )
 
+@Composable
 private fun emptyTitle(provider: Provider?, category: Category?): String =
     when {
-        provider == null -> "Keine Wiedergabelisten"
-        category?.id == FAVORITES_CATEGORY_ID -> "Keine Serien-Favoriten"
-        else -> "Keine Serien"
+        provider == null -> stringResource(R.string.common_no_playlists)
+        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.series_no_favorites)
+        else -> stringResource(R.string.series_none)
     }
 
+@Composable
 private fun emptyBody(provider: Provider?, category: Category?): String =
     when {
-        provider == null -> "Lege in den Einstellungen zuerst einen Provider an."
-        category?.id == FAVORITES_CATEGORY_ID -> "Füge Serien über die Favoriten-Aktion zu deinen Favoriten hinzu."
-        category == null -> "Dieser Provider enthaelt keine importierten Serienkategorien."
-        else -> "Diese Kategorie enthaelt keine importierten Serien."
+        provider == null -> stringResource(R.string.common_add_provider)
+        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.series_favorites_empty)
+        category == null -> stringResource(R.string.series_no_categories_body)
+        else -> stringResource(R.string.series_no_series_body)
     }
 
-private val Category.displayName: String
-    get() = if (remoteId == "__UNCATEGORIZED__") "Nicht kategorisiert" else name
+@Composable
+private fun Category.localizedDisplayName(): String =
+    if (remoteId == "__UNCATEGORIZED__") stringResource(R.string.category_uncategorized) else name
 
-private val Series.cardMeta: String
-    get() = listOfNotNull(year, rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" }).joinToString(" | ").ifBlank { "Serie" }
+private fun Series.cardMeta(typeBadge: String): String =
+    listOfNotNull(year, rating?.takeIf { it.isNotBlank() }?.let { "Rating $it" }).joinToString(" | ").ifBlank { typeBadge }
 
 private val Series.heroMeta: String?
     get() = listOfNotNull(

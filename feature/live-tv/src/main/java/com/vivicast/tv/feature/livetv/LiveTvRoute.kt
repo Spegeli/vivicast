@@ -40,10 +40,9 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
@@ -54,6 +53,8 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastChannelCard
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
+import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgRepository
 import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.media.MediaRepository
@@ -305,7 +306,7 @@ private fun RoomLiveTvRoute(
                 event.type == KeyEventType.KeyDown && moveBrowserChannel(event.key)
             },
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxSize()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
             if (mode == LiveColumnMode.Category) {
                 RoomProviderCategoryColumn(
                     providers = providers,
@@ -445,29 +446,29 @@ private fun RoomProviderCategoryColumn(
         if (requestSelectedFocusSignal > 0) selectedFocusRequester.requestFocus()
     }
 
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 20.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionTitle("Favoriten")
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            SectionTitle(stringResource(R.string.livetv_favorites))
             FocusPanel(
                 selected = favoriteSelected,
                 onClick = onGlobalFavoritesFocused,
                 onFocused = onGlobalFavoritesFocused,
-                contentPadding = 14.dp,
+                contentPadding = VivicastSpacing.Space3,
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (favoriteSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                     .testTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)),
             ) {
                 BasicText(
-                    text = "Live-TV Favoriten ($favoriteCount)",
-                    style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    text = "${stringResource(R.string.home_livetv_favorites)} ($favoriteCount)",
+                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                 )
             }
-            SectionTitle("Provider")
+            SectionTitle(stringResource(R.string.livetv_section_provider))
             if (providers.isEmpty()) {
-                InfoPanel("Keine Listen", "Lege in den Einstellungen zuerst einen Provider an.", badge = "Leer")
+                InfoPanel(stringResource(R.string.livetv_no_lists), stringResource(R.string.livetv_add_provider), badge = stringResource(R.string.common_empty_badge))
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
                 items(providers, key = { it.id }) { provider ->
                     val selected = provider.id == selectedProviderId
                     val expanded = provider.id in expandedProviderIds
@@ -476,28 +477,28 @@ private fun RoomProviderCategoryColumn(
                         selected = selected,
                         onClick = { onProviderToggle(provider) },
                         onFocused = { onProviderFocused(provider) },
-                        contentPadding = 10.dp,
+                        contentPadding = VivicastSpacing.Space2,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(74.dp)
+                            .height(66.dp)
                             .then(if (selectedProviderFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                             .testTag(providerTreeProviderTag(provider.id)),
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
                             BasicText(
                                 text = "${if (expanded) "v" else ">"} ${provider.name}",
-                                style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                                style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                             )
-                            BodyText(provider.status.label, color = provider.status.color)
+                            BodyText(provider.status.localizedLabel(), color = provider.status.color)
                         }
                     }
 
                     if (selected && expanded) {
                         if (categories.isEmpty()) {
                             InfoPanel(
-                                "Keine Kategorien",
-                                "Dieser Provider enthaelt keine importierten Live-TV-Kategorien.",
-                                badge = "Leer",
+                                stringResource(R.string.livetv_no_categories),
+                                stringResource(R.string.livetv_no_categories_body),
+                                badge = stringResource(R.string.common_empty_badge),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
@@ -507,20 +508,16 @@ private fun RoomProviderCategoryColumn(
                                     selected = selectedCategoryFocusTarget,
                                     onClick = { onCategoryFocused(category) },
                                     onFocused = { onCategoryFocused(category) },
-                                    contentPadding = 14.dp,
+                                    contentPadding = VivicastSpacing.Space3,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 14.dp)
+                                        .padding(start = VivicastSpacing.Space3)
                                         .then(if (selectedCategoryFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                                         .testTag(providerTreeCategoryTag(category.id)),
                                 ) {
                                     BasicText(
-                                        text = category.displayName,
-                                        style = TextStyle(
-                                            color = VivicastColors.TextPrimary,
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                        ),
+                                        text = category.localizedDisplayName(),
+                                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                                     )
                                 }
                             }
@@ -578,20 +575,22 @@ private fun RoomChannelColumn(
             .onPreviewKeyEvent { event ->
                 event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
             },
-        contentPadding = 18.dp,
+        contentPadding = VivicastSpacing.Space4,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionTitle("Senderliste")
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+            SectionTitle(stringResource(R.string.livetv_channels))
             if (channels.isEmpty()) {
-                InfoPanel("Keine Sender", emptyMessage, badge = "Leer")
+                InfoPanel(stringResource(R.string.livetv_no_channels), emptyMessage, badge = stringResource(R.string.common_empty_badge))
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+            val strNoProgramInline = stringResource(R.string.livetv_no_program_inline)
+            val strEpgOnFocus = stringResource(R.string.livetv_epg_on_focus)
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
                 items(channels, key = { it.id }) { channel ->
                     val logoModel by produceState<Any?>(initialValue = null, channel.id, channel.logoUrl) {
                         value = resolveChannelLogoModel(channel)
                     }
                     val isSelected = channel.id == selectedChannelId
-                    val program = if (isSelected) selectedCurrentProgram?.title ?: "Keine Programminformationen" else "EPG bei Fokus"
+                    val program = if (isSelected) selectedCurrentProgram?.title ?: strNoProgramInline else strEpgOnFocus
                     VivicastChannelCard(
                         channelName = channel.name,
                         program = program,
@@ -617,7 +616,7 @@ private fun RoomChannelColumn(
                 }
                 if (canLoadMore) {
                     item(key = "load-more-channels") {
-                        ActionPill("Mehr laden", modifier = Modifier.fillMaxWidth(), onClick = onLoadMore)
+                        ActionPill(stringResource(R.string.livetv_load_more), modifier = Modifier.fillMaxWidth(), onClick = onLoadMore)
                     }
                 }
             }
@@ -651,40 +650,36 @@ private fun RoomEpgColumn(
         if (targetProgramId != null && targetIndex >= 0) onTargetConsumed()
     }
 
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 18.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SectionTitle("Sender-EPG")
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+            SectionTitle(stringResource(R.string.livetv_section_epg))
             when {
                 channel == null -> {
-                    InfoPanel("Kein Sender ausgewaehlt", "Waehle einen Sender aus, um dessen EPG zu sehen.", badge = "EPG")
+                    InfoPanel(stringResource(R.string.livetv_no_epg_channel), stringResource(R.string.livetv_no_epg_channel_body), badge = stringResource(R.string.livetv_epg_badge))
                 }
                 showNoCurrentProgramPlaceholder -> {
                     FocusPanel(
                         selected = true,
                         onClick = { onOpenPlayer(channel) },
                         onFocused = onEpgFocused,
-                        contentPadding = 14.dp,
+                        contentPadding = VivicastSpacing.Space3,
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(initialFocusRequester)
                             .testTag(noEpgPlaceholderTag(channel.id)),
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
                             BasicText(
-                                text = "Keine Programminformationen verfÃ¼gbar",
-                                style = TextStyle(
-                                    color = VivicastColors.TextPrimary,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
+                                text = stringResource(R.string.livetv_no_program_info),
+                                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                             )
-                            BodyText("${channel.name} hat aktuell keine lokalen EPG-Daten.")
-                            StatusBadge("Ohne EPG")
+                            BodyText(stringResource(R.string.livetv_no_epg_data, channel.name))
+                            StatusBadge(stringResource(R.string.livetv_badge_no_epg))
                         }
                     }
                 }
                 else -> {
-                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
                         items(programs, key = { it.id }) { program ->
                             val current = program.isCurrentAt(nowMillis)
                             val target = program.id == targetProgramId
@@ -699,29 +694,25 @@ private fun RoomEpgColumn(
                                     }
                                 },
                                 onFocused = onEpgFocused,
-                                contentPadding = 14.dp,
+                                contentPadding = VivicastSpacing.Space3,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .then(if (program.id == focusProgramId) Modifier.focusRequester(initialFocusRequester) else Modifier)
                                     .testTag(epgProgramRowTag(program.id)),
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
                                     BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
                                     BasicText(
                                         text = program.title,
-                                        style = TextStyle(
-                                            color = VivicastColors.TextPrimary,
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                        ),
+                                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                                     )
                                     program.description?.takeIf { it.isNotBlank() }?.let {
                                         BodyText(it, color = VivicastColors.TextSecondary)
                                     }
                                     if (current || catchUpReady) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            if (current) StatusBadge("Aktuell")
-                                            if (catchUpReady) StatusBadge("Catch-Up")
+                                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+                                            if (current) StatusBadge(stringResource(R.string.livetv_badge_current))
+                                            if (catchUpReady) StatusBadge(stringResource(R.string.livetv_badge_catchup))
                                         }
                                     }
                                 }
@@ -749,55 +740,68 @@ private fun RoomPreviewColumn(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = 16.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionTitle("Vorschau")
+    val strPreviewHint = stringResource(R.string.livetv_preview_hint)
+    val strPreviewRunning = stringResource(R.string.livetv_preview_running)
+    val strNoProvider = stringResource(R.string.livetv_no_provider)
+    val strSelectProvider = stringResource(R.string.livetv_select_provider)
+    val strLiveBadge = stringResource(R.string.livetv_live_badge)
+    val strCatButton = stringResource(R.string.livetv_cat_button)
+    val strDetailsButton = stringResource(R.string.livetv_details_button)
+    val strProviderLabel = stringResource(R.string.livetv_provider_label)
+    val strNowLabel = stringResource(R.string.livetv_now_label)
+    val strNoProgramInline = stringResource(R.string.livetv_no_program_inline)
+    val strProviderError = stringResource(R.string.livetv_provider_error)
+    val strNextProgram = nextProgram?.let { next -> stringResource(R.string.livetv_next_program, next.startTime.hhMm(), next.title) }
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            SectionTitle(stringResource(R.string.livetv_preview))
             FocusPanel(
                 onClick = onStartPreview,
                 onFocused = onPreviewFocused,
                 contentPadding = 0.dp,
-                modifier = Modifier.fillMaxWidth().height(144.dp),
+                modifier = Modifier.fillMaxWidth().height(124.dp),
             ) {
-                PreviewBox(if (previewStarted) "Vorschau lÃ¤uft" else "OK startet Vorschau")
+                PreviewBox(if (previewStarted) strPreviewRunning else strPreviewHint)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ActionPill("Live", modifier = Modifier.weight(1f), onClick = onOpenPlayer)
-                ActionPill("Kat.", modifier = Modifier.weight(1f), onClick = onShowCategoryMode)
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
+                ActionPill(strLiveBadge, modifier = Modifier.weight(1f), onClick = onOpenPlayer)
+                ActionPill(strCatButton, modifier = Modifier.weight(1f), onClick = onShowCategoryMode)
                 ActionPill(
-                    if (isFavorite) "â˜…" else "â˜†",
+                    if (isFavorite) "★" else "☆",
                     modifier = Modifier.weight(1f),
                     selected = isFavorite,
                     onClick = onToggleFavorite,
                 )
             }
             InfoPanel(
-                title = channel?.name ?: "Kein Sender",
+                title = channel?.name ?: strNoProvider,
                 body = channel?.let {
                     buildString {
-                        append("Provider: ${provider?.name.orEmpty()}")
-                        append("\nJetzt: ${currentProgram?.title ?: "Keine Programminformationen"}")
-                        nextProgram?.let { next -> append("\nDanach: ${next.startTime.hhMm()} ${next.title}") }
+                        append("$strProviderLabel${provider?.name.orEmpty()}")
+                        append("\n$strNowLabel${currentProgram?.title ?: strNoProgramInline}")
+                        strNextProgram?.let { append("\n$it") }
                     }
-                } ?: "WÃ¤hle links einen Provider und Sender aus.",
-                badge = if (previewStarted) "Live" else "Details",
+                } ?: strSelectProvider,
+                badge = if (previewStarted) strLiveBadge else strDetailsButton,
             )
             if (
                 provider?.status == ProviderStatus.ConnectionError ||
                 provider?.status == ProviderStatus.InvalidCredentials ||
                 provider?.status == ProviderStatus.CredentialsRequired
             ) {
-                InfoPanel("Provider-Fehler", provider.status.label, badge = "Error")
+                InfoPanel(strProviderError, provider.status.localizedLabel(), badge = "Error")
             }
         }
     }
 }
 
+@Composable
 private fun emptyChannelMessage(provider: Provider?, category: Category?): String =
     when {
-        provider == null -> "Lege in den Einstellungen zuerst eine Wiedergabeliste an."
-        category?.id == FAVORITES_CATEGORY_ID -> "Noch keine Live-TV-Favoriten gespeichert."
-        category == null -> "Dieser Provider enthÃ¤lt keine importierten Live-TV-Sender."
-        else -> "Diese Kategorie enthÃ¤lt keine importierten Live-TV-Sender."
+        provider == null -> stringResource(R.string.livetv_no_channels_no_provider)
+        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.livetv_no_favorites_saved)
+        category == null -> stringResource(R.string.livetv_no_channels_provider)
+        else -> stringResource(R.string.livetv_no_channels_category)
     }
 
 private fun List<EpgProgram>.currentAt(nowMillis: Long): EpgProgram? =
@@ -817,8 +821,9 @@ private fun EpgProgram.isCurrentAt(nowMillis: Long): Boolean =
 private fun Long.hhMm(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(this))
 
-private val Category.displayName: String
-    get() = if (remoteId == "__UNCATEGORIZED__") "Nicht kategorisiert" else name
+@Composable
+private fun Category.localizedDisplayName(): String =
+    if (remoteId == "__UNCATEGORIZED__") stringResource(R.string.category_uncategorized) else name
 
 private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
 private const val LIVE_TV_PAGE_SIZE = 80
@@ -830,17 +835,17 @@ internal fun channelRowTag(channelId: String): String = "live-tv-channel-$channe
 internal fun epgProgramRowTag(programId: String): String = "live-tv-epg-program-$programId"
 internal fun noEpgPlaceholderTag(channelId: String): String = "live-tv-no-epg-$channelId"
 
-private val ProviderStatus.label: String
-    get() = when (this) {
-        ProviderStatus.Active -> "Aktiv"
-        ProviderStatus.ActiveWithPartialErrors -> "Aktiv mit Teilfehlern"
-        ProviderStatus.Refreshing -> "Aktualisierung lÃ¤uft"
-        ProviderStatus.ConnectionError -> "Verbindungsfehler"
-        ProviderStatus.InvalidCredentials -> "Anmeldedaten ungÃ¼ltig"
-        ProviderStatus.Expired -> "Abgelaufen"
-        ProviderStatus.Disabled -> "Deaktiviert"
-        ProviderStatus.CredentialsRequired -> "Zugangsdaten erforderlich"
-    }
+@Composable
+private fun ProviderStatus.localizedLabel(): String = when (this) {
+    ProviderStatus.Active -> stringResource(R.string.livetv_status_active)
+    ProviderStatus.ActiveWithPartialErrors -> stringResource(R.string.livetv_status_active_partial)
+    ProviderStatus.Refreshing -> stringResource(R.string.livetv_status_refreshing)
+    ProviderStatus.ConnectionError -> stringResource(R.string.livetv_status_connection_error)
+    ProviderStatus.InvalidCredentials -> stringResource(R.string.livetv_status_invalid_credentials)
+    ProviderStatus.Expired -> stringResource(R.string.livetv_status_expired)
+    ProviderStatus.Disabled -> stringResource(R.string.livetv_status_disabled)
+    ProviderStatus.CredentialsRequired -> stringResource(R.string.livetv_status_credentials_required)
+}
 
 private val ProviderStatus.color: Color
     get() = when (this) {
@@ -860,14 +865,14 @@ private fun PreviewBox(text: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF16263A), Color(0xFF0B1320))))
-            .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(20.dp)),
+            .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
             text = text,
-            style = TextStyle(color = VivicastColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.SemiBold),
+            style = VivicastTypography.TitleMedium.copy(color = VivicastColors.TextPrimary),
         )
     }
 }

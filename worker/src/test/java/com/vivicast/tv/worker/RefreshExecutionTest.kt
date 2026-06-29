@@ -10,6 +10,7 @@ import com.vivicast.tv.data.media.XtreamCatalogImportResult
 import com.vivicast.tv.data.media.ImportCount
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
+import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
@@ -76,6 +77,75 @@ class RefreshExecutionTest {
         assertEquals(listOf(ProviderStatus.Refreshing, ProviderStatus.Active), providerRepository.statuses)
         assertEquals(listOf("https://playlist.example/list.m3u?token=secret"), textFetcher.urls)
         assertEquals(provider.id, catalogRepository.m3uProviderId)
+        assertEquals("ARD", catalogRepository.m3uPlaylist?.channels?.single()?.name)
+    }
+
+    @Test
+    fun activeProviderPlaylistSourceSkipsManualM3uSources() = runBlocking {
+        val urlProvider = provider(id = "m3u-url", type = ProviderType.M3u)
+        val fileProvider = provider(id = "m3u-file", type = ProviderType.M3u)
+        val clipboardProvider = provider(id = "m3u-clipboard", type = ProviderType.M3u)
+        val xtreamProvider = provider(id = "xtream", type = ProviderType.Xtream)
+        val source = ActiveProviderPlaylistSource(
+            FakeProviderRepository(
+                providers = listOf(urlProvider, fileProvider, clipboardProvider, xtreamProvider),
+                credentials = mapOf(
+                    urlProvider.id to ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
+                    fileProvider.id to ProviderCredentials.M3u(
+                        sourceMode = M3uSourceMode.File,
+                        inlineContent = "#EXTM3U",
+                    ),
+                    clipboardProvider.id to ProviderCredentials.M3u(
+                        sourceMode = M3uSourceMode.Clipboard,
+                        inlineContent = "#EXTM3U",
+                    ),
+                    xtreamProvider.id to ProviderCredentials.Xtream(
+                        serverUrl = "https://xtream.example",
+                        username = "user",
+                        password = "pass",
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(PlaylistRefreshTarget(urlProvider.id), PlaylistRefreshTarget(xtreamProvider.id)),
+            source.collectDuePlaylists(),
+        )
+    }
+
+    @Test
+    fun m3uPlaylistRefreshImportsManualInlineContentWithoutFetchingUrl() = runBlocking {
+        val provider = provider(type = ProviderType.M3u)
+        val providerRepository = FakeProviderRepository(
+            providers = listOf(provider),
+            credentials = mapOf(
+                provider.id to ProviderCredentials.M3u(
+                    sourceMode = M3uSourceMode.File,
+                    inlineContent = """
+                        #EXTM3U
+                        #EXTINF:-1 tvg-name="ARD",ARD
+                        https://stream.example/ard.m3u8
+                    """.trimIndent(),
+                ),
+            ),
+        )
+        val catalogRepository = FakeCatalogImportRepository()
+        val textFetcher = FakeTextFetcher()
+        val refresher = DefaultPlaylistRefresher(
+            providerRepository = providerRepository,
+            catalogImportRepository = catalogRepository,
+            m3uParser = DefaultM3uParser(),
+            textFetcher = textFetcher,
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = EmptyXtreamParser,
+            epgSourceReader = FakeEpgSourceReader(),
+        )
+
+        val outcome = refresher.refresh(PlaylistRefreshTarget(provider.id))
+
+        assertEquals(PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList()), outcome)
+        assertEquals(emptyList<String>(), textFetcher.urls)
         assertEquals("ARD", catalogRepository.m3uPlaylist?.channels?.single()?.name)
     }
 

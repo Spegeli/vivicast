@@ -11,6 +11,8 @@ import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.XtreamCatalog
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.TransientM3uSourceStore
+import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
@@ -78,11 +80,20 @@ class DefaultRefreshWorkerRunner(
 class ActiveProviderPlaylistSource(
     private val providerRepository: ProviderRepository,
 ) : PlaylistRefreshSource {
-    override suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget> =
-        providerRepository.observeProviders()
+    override suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget> {
+        val providers = providerRepository.observeProviders()
             .first()
             .filter { it.isActive && it.status != ProviderStatus.Disabled }
-            .map { PlaylistRefreshTarget(providerId = it.id) }
+        return providers.mapNotNull { provider ->
+            val credentials = providerRepository.getCredentials(provider.id)
+            val refreshable = when (credentials) {
+                is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
+                is ProviderCredentials.Xtream -> true
+                null -> false
+            }
+            if (refreshable) PlaylistRefreshTarget(providerId = provider.id) else null
+        }
+    }
 }
 
 class DefaultPlaylistRefresher(
@@ -130,11 +141,19 @@ class DefaultPlaylistRefresher(
 
     private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u): ProviderStatus {
         require(provider.type == ProviderType.M3u) { "Provider type mismatch." }
-        val playlist = m3uParser.parse(textFetcher.fetch(credentials.url))
+        val source = if (credentials.sourceMode.isAutomaticallyRefreshable) {
+            textFetcher.fetch(credentials.url ?: throw RefreshAuthenticationException("M3U URL is missing."))
+        } else {
+            credentials.inlineContent ?: throw RefreshAuthenticationException("M3U content is missing.")
+        }
+        val playlist = m3uParser.parse(source)
         if (playlist.channels.isEmpty()) {
             throw RefreshImportException("M3U playlist contains no importable entries.")
         }
         val result = catalogImportRepository.importM3uLiveChannels(provider.id, playlist)
+        if (!credentials.sourceMode.isAutomaticallyRefreshable) {
+            TransientM3uSourceStore.clear(provider.id)
+        }
         return if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active
     }
 
@@ -400,10 +419,6 @@ class DefaultCacheCleaner(
     override suspend fun cleanup() {
         mediaCacheStore.cleanup(maxSizeBytesProvider())
     }
-}
-
-class NoOpEpgMappingApplier : EpgMappingApplier {
-    override suspend fun applyMappings(epgOutcomes: List<EpgRefreshOutcome>) = Unit
 }
 
 class RefreshAuthenticationException(message: String) : RuntimeException(message)

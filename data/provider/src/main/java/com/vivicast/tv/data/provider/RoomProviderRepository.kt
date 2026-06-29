@@ -34,8 +34,20 @@ class RoomProviderRepository(
         val provider = providerDao.getProvider(providerId) ?: return null
         return when (provider.type.toProviderType()) {
             ProviderType.M3u -> {
-                val url = secureValueStore.read(provider.secureKey(FIELD_M3U_URL)) ?: return null
-                ProviderCredentials.M3u(url = url)
+                val sourceMode = provider.sourceConfigKey.readM3uSourceMode()
+                when (sourceMode) {
+                    M3uSourceMode.Url -> {
+                        val url = secureValueStore.read(provider.secureKey(FIELD_M3U_URL)) ?: return null
+                        ProviderCredentials.M3u(url = url, sourceMode = sourceMode)
+                    }
+                    M3uSourceMode.File,
+                    M3uSourceMode.Clipboard -> {
+                        ProviderCredentials.M3u(
+                            sourceMode = sourceMode,
+                            inlineContent = TransientM3uSourceStore.read(provider.id),
+                        )
+                    }
+                }
             }
 
             ProviderType.Xtream -> {
@@ -82,6 +94,9 @@ class RoomProviderRepository(
             providerDao.upsertProvider(provider.toEntity())
             androidTvSearchDao.rebuildEntries()
         }
+        if (request.type == ProviderType.M3u && !request.m3uSourceMode.isAutomaticallyRefreshable) {
+            request.m3uContent?.takeIf { it.isNotBlank() }?.let { TransientM3uSourceStore.put(providerId, it) }
+        }
         return ProviderSaveResult(provider = provider, hasDuplicateName = false)
     }
 
@@ -106,6 +121,9 @@ class RoomProviderRepository(
         database.withTransaction {
             providerDao.upsertProvider(updated.toEntity())
             androidTvSearchDao.rebuildEntries()
+        }
+        if (existing.type == ProviderType.M3u && request.m3uSourceMode != null && !request.m3uSourceMode.isAutomaticallyRefreshable) {
+            request.m3uContent?.takeIf { it.isNotBlank() }?.let { TransientM3uSourceStore.put(existing.id, it) }
         }
         return ProviderSaveResult(provider = updated, hasDuplicateName = false)
     }
@@ -168,8 +186,7 @@ class RoomProviderRepository(
     private suspend fun writeCredentialsForCreate(sourceConfigKey: String, request: ProviderCreateRequest) {
         when (request.type) {
             ProviderType.M3u -> {
-                val url = request.m3uUrl.requireSecret("M3U URL")
-                secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_URL), url)
+                writeM3uCredentials(sourceConfigKey, request.m3uSourceMode, request.m3uUrl, request.m3uContent)
                 deleteXtreamCredentials(sourceConfigKey)
             }
 
@@ -189,7 +206,10 @@ class RoomProviderRepository(
     ) {
         when (type) {
             ProviderType.M3u -> {
-                request.m3uUrl.writeIfPresent(sourceConfigKey, FIELD_M3U_URL)
+                val sourceMode = request.m3uSourceMode ?: sourceConfigKey.readM3uSourceMode()
+                if (request.m3uSourceMode != null || !request.m3uUrl.isNullOrBlank() || !request.m3uContent.isNullOrBlank()) {
+                    writeM3uCredentials(sourceConfigKey, sourceMode, request.m3uUrl, request.m3uContent)
+                }
             }
 
             ProviderType.Xtream -> {
@@ -205,8 +225,37 @@ class RoomProviderRepository(
         secureValueStore.write(sourceConfigKey.secureKey(field), secret.trim())
     }
 
+    private suspend fun writeM3uCredentials(
+        sourceConfigKey: String,
+        sourceMode: M3uSourceMode,
+        m3uUrl: String?,
+        m3uContent: String?,
+    ) {
+        secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_SOURCE_MODE), sourceMode.name)
+        when (sourceMode) {
+            M3uSourceMode.Url -> {
+                secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_URL), m3uUrl.requireSecret("M3U URL"))
+                secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
+            }
+            M3uSourceMode.File,
+            M3uSourceMode.Clipboard -> {
+                val content = m3uContent.requireSecret("M3U content")
+                require(content.length <= MAX_M3U_INLINE_SOURCE_CHARS) { "M3U content is too large." }
+                secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
+                secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
+            }
+        }
+    }
+
+    private suspend fun String.readM3uSourceMode(): M3uSourceMode =
+        runCatching {
+            M3uSourceMode.valueOf(secureValueStore.read(secureKey(FIELD_M3U_SOURCE_MODE)).orEmpty())
+        }.getOrDefault(M3uSourceMode.Url)
+
     private suspend fun deleteCredentials(sourceConfigKey: String) {
         secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
+        secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_SOURCE_MODE))
         deleteXtreamCredentials(sourceConfigKey)
     }
 
@@ -312,6 +361,8 @@ private fun sourceConfigKeyFor(providerId: String): String =
 
 private const val SOURCE_CONFIG_KEY_PREFIX = "provider:"
 private const val FIELD_M3U_URL = "m3u_url"
+private const val FIELD_M3U_INLINE_CONTENT = "m3u_inline_content"
+private const val FIELD_M3U_SOURCE_MODE = "m3u_source_mode"
 private const val FIELD_XTREAM_SERVER_URL = "xtream_server_url"
 private const val FIELD_XTREAM_USERNAME = "xtream_username"
 private const val FIELD_XTREAM_PASSWORD = "xtream_password"
