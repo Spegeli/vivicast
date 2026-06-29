@@ -13,6 +13,13 @@ build/
 # Local config
 local.properties
 docs/setup/local-device-notes.md
+signing.properties
+keystore.properties
+
+# Signing keys — never commit
+*.keystore
+*.jks
+*.p12
 
 # Generated and local artifacts
 captures/
@@ -23,6 +30,10 @@ archive/
 .cxx/
 *.apk
 *.aab
+
+# Logs and profiling
+*.log
+*.hprof
 
 # OS
 .DS_Store
