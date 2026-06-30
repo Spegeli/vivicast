@@ -230,7 +230,7 @@ private fun SearchField(
             BodyText(stringResource(R.string.search_field_label))
             BasicTextField(
                 value = query,
-                onValueChange = onQueryChanged,
+                onValueChange = { onQueryChanged(it.take(100)) },
                 modifier = Modifier.fillMaxWidth().focusRequester(textFocusRequester).testTag(searchInputTag()),
                 singleLine = true,
                 cursorBrush = SolidColor(VivicastColors.FocusRing),

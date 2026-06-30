@@ -6,9 +6,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -16,7 +18,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,12 +38,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.vivicast.tv.core.cache.MediaCacheStats
 import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
@@ -67,8 +67,12 @@ import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
 import com.vivicast.tv.core.designsystem.VivicastTopNavigation
 import com.vivicast.tv.core.designsystem.ActionPill
-import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
+import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.VivicastDialog
+import com.vivicast.tv.core.designsystem.VivicastDialogActions
+import com.vivicast.tv.core.designsystem.VivicastDialogWidth
+import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
@@ -261,7 +265,8 @@ private fun VivicastApp(
             }
         }
     }
-    var pendingM3uFileImport by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    var pendingM3uFileImport by remember { mutableStateOf<((String, String) -> Unit)?>(null) }
+    var showFileManagerPrompt by remember { mutableStateOf(false) }
     val m3uFileImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -269,6 +274,7 @@ private fun VivicastApp(
         pendingM3uFileImport = null
         if (uri != null && onContent != null) {
             scope.launch {
+                val fileName = queryDisplayName(context, uri)
                 val text = runCatching {
                     context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                 }.getOrNull()
@@ -277,7 +283,7 @@ private fun VivicastApp(
                     text.length > MAX_M3U_INLINE_SOURCE_CHARS ->
                         Toast.makeText(context, context.getString(R.string.main_m3u_file_too_large), Toast.LENGTH_SHORT).show()
                     else -> {
-                        onContent(text)
+                        onContent(fileName, text)
                         Toast.makeText(context, context.getString(R.string.main_m3u_file_imported), Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -669,6 +675,7 @@ private fun VivicastApp(
         if (regularStartApplied || explicitSystemTargetSeen || !pinSecurityLoaded) return@LaunchedEffect
         regularStartApplied = true
         selectRoute(ROUTE_HOME)
+        topNavigationFocusRequester.requestFocus()
     }
 
     LaunchedEffect(preferences.general.backgroundRefreshEnabled) {
@@ -896,14 +903,16 @@ private fun VivicastApp(
                 onTestProviderConnection = { request ->
                     appContainer.testProviderConnection(request)
                 },
-                onPickM3uFile = { onContent ->
-                    pendingM3uFileImport = onContent
-                    m3uFileImportLauncher.launch(
-                        arrayOf("application/vnd.apple.mpegurl", "audio/x-mpegurl", "text/plain", "*/*"),
-                    )
-                },
-                onReadM3uClipboard = {
-                    context.readClipboardText()?.take(MAX_M3U_INLINE_SOURCE_CHARS)
+                onPickM3uFile = { onContent: (String, String) -> Unit ->
+                    if (hasRealDocumentPicker(context.packageManager)) {
+                        pendingM3uFileImport = onContent
+                        m3uFileImportLauncher.launch(
+                            arrayOf("application/vnd.apple.mpegurl", "audio/x-mpegurl", "text/plain", "*/*"),
+                        )
+                    } else {
+                        // Android TV ohne echten SAF-Picker: Hinweis statt System-Stub-Toast.
+                        showFileManagerPrompt = true
+                    }
                 },
                 onProviderSaved = { providerId ->
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
@@ -1317,6 +1326,16 @@ private fun VivicastApp(
         )
     }
 
+    if (showFileManagerPrompt) {
+        FileManagerMissingDialog(
+            onDismiss = { showFileManagerPrompt = false },
+            onSearch = {
+                showFileManagerPrompt = false
+                openFileManagerSearch(context)
+            },
+        )
+    }
+
     pendingExternalPlaybackRequest?.let { request ->
         ExternalPlayerChoiceDialog(
             request = request,
@@ -1556,34 +1575,37 @@ private fun ProtectionUnlockDialog(
 ) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val fieldFocus = remember { FocusRequester() }
 
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = fieldFocus,
+    ) {
+        InfoPanel(
+            title = title,
+            body = error ?: stringResource(R.string.main_unlock_body),
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = title,
-                    body = error ?: stringResource(R.string.main_unlock_body),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                BasicTextField(
-                    value = pin,
-                    onValueChange = { pin = it.filter(Char::isDigit).take(PIN_LENGTH) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Freigeben", modifier = Modifier.width(150.dp)) {
-                        error = if (pin.length == PIN_LENGTH) onSubmit(pin) else "PIN muss aus vier Ziffern bestehen."
-                    }
-                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), onClick = onDismiss)
-                }
-            }
-        }
+        )
+        VivicastTextField(
+            value = pin,
+            onValueChange = {
+                pin = it.filter(Char::isDigit).take(PIN_LENGTH)
+                error = null
+            },
+            secret = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            focusRequester = fieldFocus,
+            isError = error != null,
+        )
+        VivicastDialogActions(
+            primaryLabel = "Freigeben",
+            onPrimary = {
+                error = if (pin.length == PIN_LENGTH) onSubmit(pin) else "PIN muss aus vier Ziffern bestehen."
+            },
+            secondaryLabel = "Abbrechen",
+            onSecondary = onDismiss,
+        )
     }
 }
 
@@ -1592,19 +1614,80 @@ private fun SystemTargetUnavailableDialog(
     target: SystemTargetUnavailable,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    val closeFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = closeFocus,
+    ) {
+        InfoPanel(
+            title = target.title,
+            body = target.body,
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = target.title,
-                    body = target.body,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ActionPill(stringResource(R.string.main_close), modifier = Modifier.width(150.dp), onClick = onDismiss)
-            }
+        )
+        VivicastButtonRow {
+            ActionPill(stringResource(R.string.main_close), modifier = Modifier.focusRequester(closeFocus), onClick = onDismiss)
+        }
+    }
+}
+
+// Auf Android TV löst ACTION_OPEN_DOCUMENT nur auf den Framework-Stub auf (keine echte
+// Dateiauswahl). Echter Picker = mindestens ein nicht-Stub-Handler.
+private fun hasRealDocumentPicker(pm: PackageManager): Boolean {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        .addCategory(Intent.CATEGORY_OPENABLE)
+        .setType("*/*")
+    @Suppress("DEPRECATION", "QueryPermissionsNeeded")
+    return pm.queryIntentActivities(intent, 0)
+        .any { it.activityInfo?.packageName != "com.android.tv.frameworkpackagestubs" }
+}
+
+private fun queryDisplayName(context: Context, uri: Uri): String {
+    val fromResolver = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && cursor.columnCount > 0) cursor.getString(0) else null
+        }
+    }.getOrNull()
+    return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment.orEmpty()
+}
+
+private fun openFileManagerSearch(context: Context) {
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=file%20manager&c=apps"))
+    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=file%20manager&c=apps"))
+    try {
+        context.startActivity(market)
+    } catch (_: ActivityNotFoundException) {
+        try {
+            context.startActivity(web)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, context.getString(R.string.settings_provider_file_no_store), Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+@Composable
+private fun FileManagerMissingDialog(
+    onDismiss: () -> Unit,
+    onSearch: () -> Unit,
+) {
+    val firstFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = firstFocus,
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.settings_provider_file_no_manager_title),
+            body = stringResource(R.string.settings_provider_file_no_manager_body),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastButtonRow {
+            ActionPill(
+                stringResource(R.string.settings_provider_file_install_manager),
+                modifier = Modifier.focusRequester(firstFocus),
+                onClick = onSearch,
+            )
+            ActionPill(stringResource(R.string.common_cancel), onClick = onDismiss)
         }
     }
 }
@@ -1616,24 +1699,22 @@ private fun ExternalPlayerChoiceDialog(
     onInternal: () -> Unit,
     onExternal: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    val firstFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = firstFocus,
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.main_external_dialog_title),
+            body = stringResource(R.string.main_external_dialog_body),
+            badge = request.title,
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(R.string.main_external_dialog_title),
-                    body = stringResource(R.string.main_external_dialog_body),
-                    badge = request.title,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Intern", modifier = Modifier.width(140.dp), onClick = onInternal)
-                    ActionPill("Extern", modifier = Modifier.width(140.dp), onClick = onExternal)
-                    ActionPill("Abbrechen", modifier = Modifier.width(160.dp), onClick = onDismiss)
-                }
-            }
+        )
+        VivicastButtonRow {
+            ActionPill("Intern", modifier = Modifier.focusRequester(firstFocus), onClick = onInternal)
+            ActionPill("Extern", onClick = onExternal)
+            ActionPill("Abbrechen", onClick = onDismiss)
         }
     }
 }
@@ -1651,24 +1732,25 @@ private fun StandardRestoreConfirmDialog(
     } else {
         "Restore ersetzt lokale Quellen, EPG-Zuordnungen, Favoriten, Verlauf und Fortschritt. Kindersicherung wird danach deaktiviert."
     }
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    val cancelFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = cancelFocus,
+    ) {
+        InfoPanel(
+            title = title,
+            body = body,
+            badge = "${preview.providerCount} Quellen, ${preview.favoriteCount} Favoriten",
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = title,
-                    body = body,
-                    badge = "${preview.providerCount} Quellen, ${preview.favoriteCount} Favoriten",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), onClick = onDismiss)
-                    ActionPill("Wiederherstellen", modifier = Modifier.width(190.dp), selected = true, onClick = onConfirm)
-                }
-            }
-        }
+        )
+        VivicastDialogActions(
+            primaryLabel = "Wiederherstellen",
+            onPrimary = onConfirm,
+            secondaryLabel = "Abbrechen",
+            onSecondary = onDismiss,
+            secondaryFocusRequester = cancelFocus,
+        )
     }
 }
 
@@ -1679,24 +1761,25 @@ private fun StandardRestoreSafetyFailedDialog(
     onContinue: () -> Unit,
 ) {
     val preview = restore.preview
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    val cancelFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = cancelFocus,
+    ) {
+        InfoPanel(
+            title = "Sicherheitsbackup fehlgeschlagen",
+            body = "Lokale Daten bleiben unveraendert. Du kannst abbrechen oder den Restore bewusst ohne internes Sicherheitsbackup fortsetzen.",
+            badge = "${preview.providerCount} Quellen",
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = "Sicherheitsbackup fehlgeschlagen",
-                    body = "Lokale Daten bleiben unveraendert. Du kannst abbrechen oder den Restore bewusst ohne internes Sicherheitsbackup fortsetzen.",
-                    badge = "${preview.providerCount} Quellen",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill("Abbrechen", modifier = Modifier.width(150.dp), onClick = onDismiss)
-                    ActionPill("Fortsetzen", modifier = Modifier.width(160.dp), selected = true, onClick = onContinue)
-                }
-            }
-        }
+        )
+        VivicastDialogActions(
+            primaryLabel = "Fortsetzen",
+            onPrimary = onContinue,
+            secondaryLabel = "Abbrechen",
+            onSecondary = onDismiss,
+            secondaryFocusRequester = cancelFocus,
+        )
     }
 }
 
@@ -2055,11 +2138,6 @@ private fun copySupportInformation(context: Context, supportInformation: String)
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Vivicast Support-Informationen", supportInformation))
     Toast.makeText(context, context.getString(R.string.main_support_info_copied), Toast.LENGTH_SHORT).show()
-}
-
-private fun Context.readClipboardText(): String? {
-    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    return clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
 }
 
 private fun buildSupportInformation(

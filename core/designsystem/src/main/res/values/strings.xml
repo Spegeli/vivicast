@@ -285,6 +285,10 @@
     <string name="main_m3u_file_invalid">M3U-Datei ungültig.</string>
     <string name="main_m3u_file_too_large">M3U-Datei ist zu groß.</string>
     <string name="main_m3u_file_imported">M3U-Datei übernommen.</string>
+    <string name="settings_provider_file_no_manager_title">Keine Dateiauswahl verfügbar</string>
+    <string name="settings_provider_file_no_manager_body">Auf diesem Gerät ist kein Dateimanager installiert, der die Dateiauswahl unterstützt. Installiere einen Dateimanager aus dem Play Store und versuche es danach erneut – oder nutze stattdessen die URL-Eingabe.</string>
+    <string name="settings_provider_file_install_manager">Im Play Store suchen</string>
+    <string name="settings_provider_file_no_store">Kein Play Store verfügbar. Bitte nutze stattdessen die URL-Eingabe.</string>
     <string name="main_passphrase_incorrect">Passphrase falsch oder Backup beschädigt.</string>
     <string name="main_backup_restored">Backup wiederhergestellt.</string>
     <string name="main_no_external_player">Kein externer Player verfügbar.</string>
@@ -434,10 +438,7 @@
     <string name="common_insecure_connection">Unsichere Verbindung</string>
     <string name="common_insecure_body">HTTP ist erlaubt, wird aber als unsicher behandelt.</string>
     <string name="common_test_connection">Verbindung testen</string>
-    <string name="common_source">Quelle</string>
-    <string name="common_paste">Einfügen</string>
-    <string name="common_apply">Übernehmen</string>
-    <string name="common_clipboard">Zwischenablage</string>
+    <string name="common_source">Quelle</string>    <string name="common_clipboard">Zwischenablage</string>
     <string name="common_select_file">Datei auswählen</string>
 
     <!-- Settings - General help texts -->
@@ -517,14 +518,11 @@
     <string name="settings_epg_no_providers_for_source_body">Lege zuerst eine Wiedergabeliste an, um EPG Quellen zuzuordnen.</string>
 
     <!-- Settings - Provider/Playlist messages and labels -->
-    <string name="settings_provider_no_refreshable">Keine automatisch aktualisierbare Wiedergabeliste vorhanden.</string>
-    <string name="settings_provider_msg_refresh_started">Aktualisierung aller URL- und Xtream-Wiedergabelisten gestartet.</string>
     <string name="settings_provider_title_edit">Wiedergabeliste bearbeiten</string>
     <string name="settings_provider_title_new">Wiedergabeliste hinzufügen</string>
     <string name="settings_provider_msg_name_exists">Name existiert bereits.</string>
     <string name="settings_provider_msg_checking">Verbindung wird geprüft.</string>
     <string name="settings_provider_msg_connected">Verbindung erfolgreich.</string>
-    <string name="settings_provider_msg_saved_auto">Quelle gespeichert. Aktualisierung startet automatisch.</string>
     <string name="settings_provider_msg_playlist_saved">Wiedergabeliste gespeichert. Import wurde gestartet.</string>
     <string name="settings_provider_msg_enabled">Wiedergabeliste aktiviert.</string>
     <string name="settings_provider_msg_disabled">Wiedergabeliste deaktiviert. Daten bleiben erhalten.</string>
@@ -532,21 +530,17 @@
     <string name="settings_provider_msg_deleted">Wiedergabeliste gelöscht. Zugehörige Daten wurden entfernt.</string>
     <string name="settings_provider_empty_body">Noch keine Wiedergabeliste vorhanden. Es wird nichts importiert.</string>
     <string name="settings_provider_name_exists_title">Name bereits vorhanden</string>
-    <string name="settings_provider_name_exists_body">Der Name muss eindeutig sein.</string>
+    <string name="settings_provider_name_exists_body">Der Name muss eindeutig sein. Eine Wiedergabeliste mit diesem Namen existiert bereits.</string>
+    <string name="settings_provider_url_exists">Diese URL ist bereits in der Wiedergabeliste „%1$s“ vorhanden.</string>
     <string name="settings_provider_name_duplicate_body">Der Name ist bereits lokal vorhanden. Speichern ist blockiert.</string>
     <string name="settings_provider_section_title">Wiedergabelisten</string>
     <string name="settings_provider_file_importing">Datei wird nur importiert…</string>
-    <string name="settings_provider_file_ready">Datei bereit…</string>
-    <string name="settings_provider_clipboard_label">M3U Zwischenablage</string>
-    <string name="settings_provider_clipboard_body">Erlaubt: M3U URL oder kompletter M3U Inhalt.</string>
-    <string name="settings_provider_content_label">Inhalt *</string>
-    <string name="settings_provider_content_hint">#EXTM3U oder https://…</string>
-    <string name="settings_provider_paste_hint">Neu einfügen oder leer lassen</string>
-    <string name="settings_provider_paste_placeholder">#EXTM3U…</string>
+    <string name="settings_provider_file_ready">Datei bereit…</string>    <string name="settings_provider_content_hint">#EXTM3U oder https://…</string>    <string name="settings_provider_paste_placeholder">#EXTM3U…</string>
     <string name="settings_provider_m3u_file_label">M3U Datei</string>
 
     <!-- Settings - User-Agent dialog -->
     <string name="settings_ua_invalid_chars">User-Agent enthält ungültige Steuerzeichen.</string>
+    <string name="settings_ua_default_hint">Leer lassen und speichern, um den Standard-User-Agent zu verwenden.</string>
 
     <!-- Settings - EPG manual mapping -->
     <string name="settings_epg_manual_mapping">Manuelle Zuordnung</string>
@@ -582,6 +576,7 @@
     <string name="settings_pin_label_current">Aktuelle PIN</string>
     <string name="settings_pin_label_new">Neue PIN</string>
     <string name="settings_pin_label_repeat">Neue PIN wiederholen</string>
+    <string name="settings_pin_placeholder">4 Ziffern</string>
 
     <!-- Settings - Backup help -->
     <string name="settings_help_backup_standard">Standard-Backup ohne geheime Zugangswerte.</string>
@@ -679,16 +674,12 @@
     <!-- Settings - Provider editor step titles and bodies -->
     <string name="settings_provider_step_type_title">Quelltyp wählen</string>
     <string name="settings_provider_step_m3u_input_title">M3U Eingabeart</string>
-    <string name="settings_provider_step_m3u_url_title">M3U URL</string>
-    <string name="settings_provider_step_m3u_clipboard_title">M3U Zwischenablage</string>
-    <string name="settings_provider_step_xtream_title">Xtream Codes</string>
+    <string name="settings_provider_step_m3u_url_title">M3U URL</string>    <string name="settings_provider_step_xtream_title">Xtream Codes</string>
 
     <string name="settings_provider_step_name_body">Name ist ein Pflichtfeld und muss eindeutig sein.</string>
     <string name="settings_provider_step_type_body">Der Quelltyp kann nach dem Speichern nicht geändert werden.</string>
     <string name="settings_provider_step_m3u_input_body">Wähle URL, Datei oder Zwischenablage.</string>
-    <string name="settings_provider_step_m3u_url_body">HTTPS wird bevorzugt. HTTP wird sichtbar als unsicher behandelt.</string>
-    <string name="settings_provider_step_m3u_clipboard_body">Zwischenablage kann eine M3U URL oder kompletten M3U Inhalt enthalten.</string>
-    <string name="settings_provider_step_xtream_body">Server, Benutzername und Passwort werden für den Verbindungstest benötigt.</string>
+    <string name="settings_provider_step_m3u_url_body">HTTPS wird bevorzugt. HTTP wird sichtbar als unsicher behandelt.</string>    <string name="settings_provider_step_xtream_body">Server, Benutzername und Passwort werden für den Verbindungstest benötigt.</string>
     <string name="settings_provider_step_edit_body">Typ bleibt unverändert. Geänderte Quellen müssen erneut getestet werden.</string>
 
     <!-- Settings - Validation messages -->
@@ -699,9 +690,7 @@
     <string name="validation_xtream_password_missing">Xtream Passwort fehlt.</string>
     <string name="validation_connection_test_required">Verbindungstest fehlt.</string>
     <string name="validation_m3u_url_missing">M3U URL fehlt.</string>
-    <string name="validation_m3u_file_missing">M3U Datei fehlt.</string>
-    <string name="validation_m3u_clipboard_missing">M3U Inhalt fehlt.</string>
-    <string name="validation_epg_url_missing">EPG URL fehlt.</string>
+    <string name="validation_m3u_file_missing">M3U Datei fehlt.</string>    <string name="validation_epg_url_missing">EPG URL fehlt.</string>
 
     <!-- Settings - Delete provider -->
     <string name="settings_provider_delete_body">Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Sender, Kategorien, Favoriten, Verlauf, Playback Progress und EPG-Zuordnungen werden gelöscht. EPG-Quellen bleiben erhalten.</string>
@@ -712,8 +701,14 @@
     <string name="settings_provider_file_none">Keine Datei ausgewählt.</string>
     <string name="settings_provider_file_stage">Datei bereit. Speichern ersetzt die bisherige Quelle.</string>
     <string name="settings_provider_file_import_only">Datei wird nur importiert. Es wird keine dauerhafte Kopie gespeichert.</string>
-    <string name="settings_provider_file_ready_test">Datei bereit. Verbindung testen und speichern.</string>
+    <string name="settings_provider_file_ready_test">Datei bereit. Prüfen und speichern.</string>
     <string name="settings_provider_file_pick">Datei auswählen</string>
+    <string name="settings_provider_file_selected">%1$s • %2$d Sender</string>
+    <string name="settings_provider_file_label_empty">Datei:</string>
+    <string name="settings_provider_file_label">Datei: %1$s • %2$d Sender</string>
+    <string name="settings_provider_file_test">Datei prüfen</string>
+    <string name="settings_provider_file_test_ok">Datei gültig</string>
+    <string name="settings_provider_file_test_fail">Datei ungültig</string>
     <string name="settings_provider_badge_file">Datei</string>
     <string name="settings_provider_xtream_stable">Typ und ID bleiben stabil.</string>
     <string name="settings_provider_xtream_credentials">Zugangsdaten werden geschützt gespeichert. Kein eigener User-Agent.</string>
@@ -729,9 +724,9 @@
 
     <!-- Settings - Provider name/url form labels -->
     <string name="settings_provider_name_label">Name</string>
-    <string name="settings_provider_name_required">Name *</string>
+    <string name="settings_provider_name_required">Name</string>
     <string name="settings_provider_name_placeholder">Name der Wiedergabeliste</string>
-    <string name="settings_provider_url_required">URL *</string>
+    <string name="settings_provider_url_required">URL</string>
     <string name="settings_provider_updated_format">Aktualisiert: %1$s</string>
     <string name="settings_provider_live_tv_off">Live-TV aus</string>
     <string name="settings_provider_movies_off">Filme aus</string>
@@ -745,9 +740,7 @@
 
     <!-- Settings - Provider editor form labels -->
     <string name="settings_provider_source_section">Quelle</string>
-    <string name="settings_provider_m3u_url_label">M3U URL</string>
-    <string name="settings_provider_m3u_clipboard_field_label">M3U aus Zwischenablage</string>
-    <string name="settings_provider_placeholder_reset">Neu setzen oder leer lassen</string>
+    <string name="settings_provider_m3u_url_label">M3U URL</string>    <string name="settings_provider_placeholder_reset">Neu setzen oder leer lassen</string>
     <string name="settings_provider_server_label">Server</string>
     <string name="settings_provider_username_label">Benutzername</string>
     <string name="settings_provider_password_label">Passwort</string>
@@ -755,14 +748,14 @@
     <string name="settings_provider_interval_label">Intervall</string>
     <string name="settings_provider_update_title">Aktualisierung</string>
     <string name="settings_provider_test_connection">Verbindung testen</string>
+    <string name="settings_provider_test_ok">Verbunden</string>
+    <string name="settings_provider_test_fail">Nicht erreichbar</string>
     <string name="settings_provider_toggle_enabled">Aktiv/Aus</string>
     <string name="settings_provider_no_content">Keine Inhalte ausgewählt</string>
 
     <!-- Settings - M3U source mode labels -->
     <string name="m3u_source_url">URL</string>
     <string name="m3u_source_file">Datei</string>
-    <string name="m3u_source_clipboard">Zwischenablage</string>
-
     <!-- Settings - EPG panel and error messages -->
     <string name="settings_epg_panel_title">EPG Verwaltung</string>
     <string name="settings_epg_remote_id_body">Remote-ID: %1$s</string>

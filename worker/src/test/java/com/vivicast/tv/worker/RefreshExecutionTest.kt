@@ -84,19 +84,14 @@ class RefreshExecutionTest {
     fun activeProviderPlaylistSourceSkipsManualM3uSources() = runBlocking {
         val urlProvider = provider(id = "m3u-url", type = ProviderType.M3u)
         val fileProvider = provider(id = "m3u-file", type = ProviderType.M3u)
-        val clipboardProvider = provider(id = "m3u-clipboard", type = ProviderType.M3u)
         val xtreamProvider = provider(id = "xtream", type = ProviderType.Xtream)
         val source = ActiveProviderPlaylistSource(
             FakeProviderRepository(
-                providers = listOf(urlProvider, fileProvider, clipboardProvider, xtreamProvider),
+                providers = listOf(urlProvider, fileProvider, xtreamProvider),
                 credentials = mapOf(
                     urlProvider.id to ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
                     fileProvider.id to ProviderCredentials.M3u(
                         sourceMode = M3uSourceMode.File,
-                        inlineContent = "#EXTM3U",
-                    ),
-                    clipboardProvider.id to ProviderCredentials.M3u(
-                        sourceMode = M3uSourceMode.Clipboard,
                         inlineContent = "#EXTM3U",
                     ),
                     xtreamProvider.id to ProviderCredentials.Xtream(

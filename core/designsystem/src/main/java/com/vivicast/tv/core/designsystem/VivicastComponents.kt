@@ -59,6 +59,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
@@ -361,6 +370,231 @@ fun VivicastGlassPanel(
             .padding(contentPadding),
     ) {
         content()
+    }
+}
+
+/** Standard width tiers for [VivicastDialog]. Add a tier rather than tuning dialogs individually. */
+enum class VivicastDialogWidth { Compact, Standard, Wide }
+
+private fun Modifier.vivicastDialogWidth(width: VivicastDialogWidth): Modifier = when (width) {
+    VivicastDialogWidth.Compact -> this.widthIn(min = 360.dp, max = 480.dp)
+    VivicastDialogWidth.Standard -> this.widthIn(min = 560.dp, max = 720.dp)
+    VivicastDialogWidth.Wide -> this.widthIn(min = 720.dp, max = 960.dp)
+}
+
+/**
+ * Shared popup scaffold: Dialog + GlassPanel with standard width tier, BACK-to-dismiss, an
+ * optional title, and a uniform content column spacing. Pass [title] = null for self-contained
+ * content that renders its own heading (e.g. the multi-step provider flow).
+ */
+@Composable
+fun VivicastDialog(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: VivicastDialogWidth = VivicastDialogWidth.Compact,
+    heightCap: Dp? = null,
+    title: String? = null,
+    initialFocus: FocusRequester? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (initialFocus != null) {
+        LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        VivicastGlassPanel(
+            modifier = modifier
+                .vivicastDialogWidth(width)
+                .then(if (heightCap != null) Modifier.heightIn(max = heightCap) else Modifier)
+                .onPreviewKeyEvent {
+                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
+                        onDismiss()
+                        true
+                    } else {
+                        false
+                    }
+                },
+            contentPadding = VivicastSpacing.Space5,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                if (title != null) {
+                    SectionTitle(title)
+                }
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Standard dialog text field: optional label, theme rounding, focus highlight, placeholder, and
+ * error state (red border + label). [label] = null for single-field dialogs where the title labels it.
+ */
+@Composable
+fun VivicastTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    fieldModifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String = "",
+    secret: Boolean = false,
+    singleLine: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    height: Dp = 58.dp,
+    focusRequester: FocusRequester? = null,
+    isError: Boolean = false,
+    maxLength: Int? = null,
+    trailingActionLabel: String? = null,
+    onTrailingAction: () -> Unit = {},
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+        if (label != null) {
+            BasicText(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelMedium.copy(
+                    color = if (isError) VivicastColors.Error else VivicastColors.TextSecondary,
+                ),
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = { if (maxLength != null) onValueChange(it.take(maxLength)) else onValueChange(it) },
+            singleLine = singleLine,
+            keyboardOptions = keyboardOptions,
+            textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(height)
+                .then(fieldModifier)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
+                .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
+                .border(
+                    width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                    color = when {
+                        isError -> VivicastColors.Error
+                        focused -> VivicastColors.FocusRing
+                        else -> Color(0x66344A62)
+                    },
+                    shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
+                )
+                .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty() && placeholder.isNotEmpty()) {
+                        BasicText(
+                            text = placeholder,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+        )
+        if (trailingActionLabel != null) {
+            ActionPill(
+                label = trailingActionLabel,
+                modifier = Modifier.width(150.dp),
+                onClick = onTrailingAction,
+            )
+        }
+    }
+}
+
+/**
+ * Lays out its children (buttons) all at the width of the widest child and centers the group.
+ * Opt-in: use inside popups to give a button row uniform widths. Not used by the top navigation.
+ */
+@Composable
+fun VivicastButtonRow(
+    modifier: Modifier = Modifier,
+    spacing: Dp = VivicastSpacing.Space3,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content, modifier = modifier.fillMaxWidth()) { measurables, constraints ->
+        if (measurables.isEmpty()) {
+            return@Layout layout(constraints.maxWidth, 0) {}
+        }
+        val gapPx = spacing.roundToPx()
+        val target = measurables.maxOf { it.maxIntrinsicWidth(constraints.maxHeight) }
+            .coerceAtMost(constraints.maxWidth)
+        val childConstraints = constraints.copy(minWidth = target, maxWidth = target)
+        val placeables = measurables.map { it.measure(childConstraints) }
+        val rowHeight = placeables.maxOf { it.height }
+        val totalWidth = placeables.sumOf { it.width } + gapPx * (placeables.size - 1)
+        val startX = ((constraints.maxWidth - totalWidth) / 2).coerceAtLeast(0)
+        layout(constraints.maxWidth, rowHeight) {
+            var x = startX
+            placeables.forEach { placeable ->
+                placeable.placeRelative(x, (rowHeight - placeable.height) / 2)
+                x += placeable.width + gapPx
+            }
+        }
+    }
+}
+
+/**
+ * Standard dialog button row: equal-width buttons (widest button's width), centered, secondary
+ * (and optional tertiary) on the left, primary on the right. Primary is highlighted only via focus.
+ */
+@Composable
+fun VivicastDialogActions(
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    secondaryLabel: String,
+    onSecondary: () -> Unit,
+    modifier: Modifier = Modifier,
+    tertiaryLabel: String? = null,
+    onTertiary: () -> Unit = {},
+    primaryTestTag: String? = null,
+    secondaryTestTag: String? = null,
+    tertiaryTestTag: String? = null,
+    primaryFocusRequester: FocusRequester? = null,
+    secondaryFocusRequester: FocusRequester? = null,
+) {
+    VivicastButtonRow(modifier = modifier) {
+        ActionPill(
+            label = secondaryLabel,
+            modifier = Modifier
+                .then(if (secondaryFocusRequester != null) Modifier.focusRequester(secondaryFocusRequester) else Modifier)
+                .then(if (secondaryTestTag != null) Modifier.testTag(secondaryTestTag) else Modifier),
+            onClick = onSecondary,
+        )
+        if (tertiaryLabel != null) {
+            ActionPill(
+                label = tertiaryLabel,
+                modifier = if (tertiaryTestTag != null) Modifier.testTag(tertiaryTestTag) else Modifier,
+                onClick = onTertiary,
+            )
+        }
+        ActionPill(
+            label = primaryLabel,
+            modifier = Modifier
+                .then(if (primaryFocusRequester != null) Modifier.focusRequester(primaryFocusRequester) else Modifier)
+                .then(if (primaryTestTag != null) Modifier.testTag(primaryTestTag) else Modifier),
+            onClick = onPrimary,
+        )
+    }
+}
+
+/** Compact, consistent error/hint line for popups: small red text, same look everywhere. */
+@Composable
+fun VivicastDialogError(text: String?, modifier: Modifier = Modifier) {
+    if (text != null) {
+        BasicText(
+            text = text,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier.fillMaxWidth(),
+            style = VivicastTypography.LabelSmall.copy(color = VivicastColors.Error),
+        )
     }
 }
 

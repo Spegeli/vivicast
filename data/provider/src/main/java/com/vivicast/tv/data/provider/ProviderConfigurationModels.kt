@@ -55,7 +55,6 @@ sealed interface ProviderCredentials {
 enum class M3uSourceMode {
     Url,
     File,
-    Clipboard,
 }
 
 val M3uSourceMode.isAutomaticallyRefreshable: Boolean

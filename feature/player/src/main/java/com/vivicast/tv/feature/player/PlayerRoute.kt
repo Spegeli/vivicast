@@ -37,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.VivicastButtonRow
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.VivicastContentCard
@@ -506,7 +507,7 @@ private fun PlayerOptionDialog(
     VivicastContentCard(modifier = modifier.fillMaxWidth(0.36f), contentPadding = 22.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
             SectionTitle(title)
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            VivicastButtonRow {
                 options.forEachIndexed { index, option ->
                     ActionPill(
                         label = option.label,
@@ -540,7 +541,7 @@ private fun AutoNextPanel(
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
             SectionTitle(title)
             BodyText(nextEpisodeTitle, maxLines = 1)
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            VivicastButtonRow {
                 ActionPill(
                     label = title,
                     modifier = Modifier
@@ -571,7 +572,7 @@ private fun PlaybackErrorDialog(
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
             SectionTitle(stringResource(R.string.player_error_title))
             BodyText(message, maxLines = 2)
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            VivicastButtonRow {
                 ActionPill(
                     label = stringResource(R.string.player_retry_label),
                     modifier = Modifier

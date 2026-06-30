@@ -18,12 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,11 +32,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -49,21 +44,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
@@ -73,7 +59,13 @@ import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
+import com.vivicast.tv.core.designsystem.VivicastButtonRow
 import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastDialog
+import com.vivicast.tv.core.designsystem.VivicastDialogActions
+import com.vivicast.tv.core.designsystem.VivicastDialogError
+import com.vivicast.tv.core.designsystem.VivicastDialogWidth
+import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
@@ -306,8 +298,7 @@ fun SettingsRoute(
     diagnosticsSettingsState: DiagnosticsSettingsState = DiagnosticsSettingsState(),
     initialSelectedSection: String? = null,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
-    onPickM3uFile: ((String) -> Unit) -> Unit = {},
-    onReadM3uClipboard: () -> String? = { null },
+    onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     onSelectedSectionChanged: (String) -> Unit = {},
     onLaunchOnBootChanged: (Boolean) -> Unit = {},
@@ -482,7 +473,6 @@ fun SettingsRoute(
                             providerRepository = providerRepository,
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
-                            onReadM3uClipboard = onReadM3uClipboard,
                             onProviderSaved = onProviderSaved,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
@@ -1209,7 +1199,7 @@ internal fun GeneralSettingsPanel(
         LanguagePickerDialog(
             current = state.appLanguage,
             onSelect = { lang ->
-                onLanguageChanged(lang)
+                if (lang != state.appLanguage) onLanguageChanged(lang)
                 showLanguagePicker = false
             },
             onDismiss = { showLanguagePicker = false },
@@ -1226,44 +1216,44 @@ private fun UserAgentDialog(
     var value by remember(initialValue) { mutableStateOf(initialValue) }
     var error by remember { mutableStateOf<String?>(null) }
     val strInvalidChars = stringResource(R.string.settings_ua_invalid_chars)
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
 
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier.fillMaxWidth().testTag(userAgentDialogTag()),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                SectionTitle("User-Agent")
-                BasicTextField(
-                    value = value,
-                    onValueChange = { value = it.take(200) },
-                    singleLine = true,
-                    textStyle = TextStyle(color = VivicastColors.TextPrimary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, VivicastColors.SurfaceHigh, RoundedCornerShape(4.dp))
-                        .padding(VivicastSpacing.Space3)
-                        .testTag(userAgentFieldTag()),
-                )
-                if (error != null) {
-                    BodyText(error!!, color = VivicastColors.Error)
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3, Alignment.CenterHorizontally),
-                ) {
-                    ActionPill(stringResource(R.string.common_cancel), modifier = Modifier.width(150.dp).testTag(userAgentCancelTag()), onClick = onCancel)
-                    ActionPill(stringResource(R.string.common_save), modifier = Modifier.width(150.dp).testTag(userAgentSaveTag()), selected = false) {
-                        val trimmed = value.trim()
-                        if (trimmed.any { it.isISOControl() }) {
-                            error = strInvalidChars
-                        } else {
-                            onSave(trimmed)
-                        }
-                    }
-                }
-            }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_user_agent),
+        modifier = Modifier.testTag(userAgentDialogTag()),
+    ) {
+        VivicastTextField(
+            value = value,
+            onValueChange = {
+                value = it.take(200)
+                error = null
+            },
+            fieldModifier = Modifier.testTag(userAgentFieldTag()),
+            focusRequester = fieldFocus,
+            isError = error != null,
+        )
+        BodyText(stringResource(R.string.settings_ua_default_hint), maxLines = 2)
+        if (error != null) {
+            BodyText(error!!, color = VivicastColors.Error)
         }
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.common_save),
+            onPrimary = {
+                val trimmed = value.trim()
+                if (trimmed.any { it.isISOControl() }) {
+                    error = strInvalidChars
+                } else {
+                    onSave(trimmed)
+                }
+            },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            primaryTestTag = userAgentSaveTag(),
+            secondaryTestTag = userAgentCancelTag(),
+        )
     }
 }
 
@@ -1286,29 +1276,25 @@ private fun LanguagePickerDialog(
     onDismiss: () -> Unit,
 ) {
     val selectedFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { selectedFocusRequester.requestFocus() }
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
-            modifier = Modifier.widthIn(max = 360.dp).wrapContentHeight(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                SectionTitle(stringResource(R.string.settings_language))
-                SettingsLanguage.entries.forEach { lang ->
-                    FocusPanel(
-                        selected = lang == current,
-                        onClick = { onSelect(lang) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(VivicastCardSizes.SettingsRowHeight)
-                            .then(if (lang == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
-                    ) {
-                        BasicText(
-                            text = lang.label(),
-                            style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                        )
-                    }
-                }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_language),
+        initialFocus = selectedFocusRequester,
+    ) {
+        SettingsLanguage.entries.forEach { lang ->
+            FocusPanel(
+                selected = lang == current,
+                onClick = { onSelect(lang) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(unbounded = true)
+                    .then(if (lang == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
+            ) {
+                BasicText(
+                    text = lang.label(),
+                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                )
             }
         }
     }
@@ -1514,7 +1500,7 @@ private fun EpgSettingsPanel(
     firstFocusModifier: Modifier = Modifier,
 ) {
     val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
-    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
+    val providers by remember { providerRepository.observeProviders() }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
@@ -2452,52 +2438,27 @@ fun DeleteEpgSourceDialog(
 ) {
     val cancelFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        cancelFocusRequester.requestFocus()
-    }
-
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier
-                .widthIn(min = 560.dp, max = 680.dp)
-                .onPreviewKeyEvent {
-                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
-                        onCancel()
-                        true
-                    } else {
-                        false
-                    }
-                }
-                .testTag(deleteEpgSourceDialogTag(source.id)),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(R.string.settings_epg_delete_confirm),
-                    body = stringResource(R.string.settings_epg_delete_body),
-                    badge = source.name,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill(
-                        stringResource(R.string.common_cancel),
-                        modifier = Modifier
-                            .focusRequester(cancelFocusRequester)
-                            .width(150.dp)
-                            .testTag(deleteEpgSourceCancelTag(source.id)),
-                        selected = true,
-                        onClick = onCancel,
-                    )
-                    ActionPill(
-                        stringResource(R.string.settings_delete),
-                        modifier = Modifier
-                            .width(140.dp)
-                            .testTag(deleteEpgSourceConfirmTag(source.id)),
-                        onClick = onDelete,
-                    )
-                }
-            }
-        }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = cancelFocusRequester,
+        modifier = Modifier.testTag(deleteEpgSourceDialogTag(source.id)),
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.settings_epg_delete_confirm),
+            body = stringResource(R.string.settings_epg_delete_body),
+            badge = source.name,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.settings_delete),
+            onPrimary = onDelete,
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            primaryTestTag = deleteEpgSourceConfirmTag(source.id),
+            secondaryTestTag = deleteEpgSourceCancelTag(source.id),
+            secondaryFocusRequester = cancelFocusRequester,
+        )
     }
 }
 
@@ -2505,12 +2466,11 @@ fun DeleteEpgSourceDialog(
 private fun ProviderSettingsPanel(
     providerRepository: ProviderRepository,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
-    onPickM3uFile: ((String) -> Unit) -> Unit = {},
-    onReadM3uClipboard: () -> String? = { null },
+    onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
+    val providers by remember { providerRepository.observeProviders() }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(ProviderEditorState.newProvider(ProviderType.M3u)) }
@@ -2518,16 +2478,14 @@ private fun ProviderSettingsPanel(
     var showEditor by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Provider?>(null) }
+    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
     val strProviderSaved = stringResource(R.string.settings_provider_msg_playlist_saved)
-    val strProviderSavedAuto = stringResource(R.string.settings_provider_msg_saved_auto)
     val strProviderEnabled = stringResource(R.string.settings_provider_msg_enabled)
     val strProviderDisabled = stringResource(R.string.settings_provider_msg_disabled)
     val strProviderSaveFailed = stringResource(R.string.settings_provider_msg_save_failed)
     val strProviderStatusFailed = stringResource(R.string.settings_provider_msg_status_failed)
     val strProviderDeleteFailed = stringResource(R.string.settings_provider_msg_delete_failed)
     val strProviderDeleted = stringResource(R.string.settings_provider_msg_deleted)
-    val strProviderNoRefreshable = stringResource(R.string.settings_provider_no_refreshable)
-    val strProviderRefreshStarted = stringResource(R.string.settings_provider_msg_refresh_started)
     val strProviderChecking = stringResource(R.string.settings_provider_msg_checking)
     val strProviderConnected = stringResource(R.string.settings_provider_msg_connected)
     val strProviderDuplicate = stringResource(R.string.settings_provider_msg_name_check)
@@ -2540,16 +2498,14 @@ private fun ProviderSettingsPanel(
     val strValidationConnTest = stringResource(R.string.validation_connection_test_required)
     val strValidationM3uUrl = stringResource(R.string.validation_m3u_url_missing)
     val strValidationM3uFile = stringResource(R.string.validation_m3u_file_missing)
-    val strValidationM3uClipboard = stringResource(R.string.validation_m3u_clipboard_missing)
-
     fun ProviderEditorState.validationMessageResolved(requireConnectionTest: Boolean) = validationMessage(
         requireConnectionTest, strValidationNameMissing, strValidationContentType,
         strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
-        strValidationConnTest, strValidationM3uUrl, strValidationM3uFile, strValidationM3uClipboard,
+        strValidationConnTest, strValidationM3uUrl, strValidationM3uFile,
     )
     fun ProviderEditorState.connectionTestRequestMessageResolved() = connectionTestRequestMessage(
         strValidationNameMissing, strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
-        strValidationM3uUrl, strValidationM3uFile, strValidationM3uClipboard,
+        strValidationM3uUrl, strValidationM3uFile,
     )
 
     LaunchedEffect(providers) {
@@ -2566,113 +2522,119 @@ private fun ProviderSettingsPanel(
             provider.id != editor.providerId && provider.name.equals(editor.name.trim(), ignoreCase = true)
         }
 
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-        if (!showEditor) {
-            ProviderOverviewPanel(
-                providers = providers,
-                message = message,
-                firstFocusModifier = firstFocusModifier,
-                onAddProvider = {
-                    selectedProviderId = null
-                    editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                    editorStep = ProviderEditorStep.Name
-                    showEditor = true
-                    message = null
-                },
-                onRefreshAll = {
-                    scope.launch {
-                        val refreshableProviders = providers.filter { provider ->
-                            provider.isActive &&
-                                when (val credentials = providerRepository.getCredentials(provider.id)) {
-                                    is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
-                                    is ProviderCredentials.Xtream -> true
-                                    null -> false
-                                }
-                        }
-                        if (refreshableProviders.isEmpty()) {
-                            message = strProviderNoRefreshable
-                        } else {
-                            refreshableProviders.forEach { provider -> onProviderSaved(provider.id) }
-                            message = strProviderRefreshStarted
-                        }
-                    }
-                },
-                onOpenProvider = { provider ->
-                    selectedProviderId = provider.id
-                    editor = ProviderEditorState.from(provider)
-                    editorStep = ProviderEditorStep.Edit
-                    showEditor = true
-                    message = null
-                    scope.launch {
-                        val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
-                        if (selectedProviderId == provider.id) {
-                            editor = ProviderEditorState.from(provider, credentials)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
-            ActionPill(
-                label = stringResource(R.string.settings_back),
-                modifier = firstFocusModifier.width(150.dp),
-                onClick = {
-                    selectedProviderId = null
-                    editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                    editorStep = ProviderEditorStep.Name
-                    showEditor = false
-                    message = null
-                },
-            )
-            SectionTitle(if (editor.isEditing) stringResource(R.string.settings_provider_title_edit) else stringResource(R.string.settings_provider_title_new))
+    var existingM3uUrls by remember { mutableStateOf<List<ProviderUrlEntry>>(emptyList()) }
+    LaunchedEffect(providers) {
+        existingM3uUrls = providers.mapNotNull { provider ->
+            val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
+            (credentials as? ProviderCredentials.M3u)
+                ?.takeIf { it.sourceMode == M3uSourceMode.Url }
+                ?.url
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { ProviderUrlEntry(provider.id, it, provider.name) }
         }
+    }
+    val duplicateUrlName = if (editor.type == ProviderType.M3u &&
+        editor.m3uSourceMode == M3uSourceMode.Url && editor.m3uUrl.isNotBlank()
+    ) {
+        existingM3uUrls.firstOrNull { it.providerId != editor.providerId && it.url == editor.m3uUrl.trim() }?.name
+    } else {
+        null
+    }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-            ProviderList(
-                providers = providers,
-                selectedProviderId = selectedProviderId,
-                onSelectProvider = { provider ->
-                    selectedProviderId = provider.id
-                    editor = ProviderEditorState.from(provider)
-                    showEditor = true
-                    message = null
-                    scope.launch {
-                        val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
-                        if (selectedProviderId == provider.id) {
-                            editor = ProviderEditorState.from(provider, credentials)
-                        }
+    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+        ProviderOverviewPanel(
+            providers = providers,
+            message = message,
+            firstFocusModifier = firstFocusModifier,
+            onAddProvider = {
+                selectedProviderId = null
+                editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                editorStep = ProviderEditorStep.Name
+                showEditor = true
+                message = null
+                connectionTestStatus = ConnectionTestStatus.Idle
+            },
+            onRefreshAll = {
+                scope.launch {
+                    if (providers.any { it.status == ProviderStatus.Refreshing }) return@launch
+                    val refreshableProviders = providers.filter { provider ->
+                        provider.isActive &&
+                            when (val credentials = providerRepository.getCredentials(provider.id)) {
+                                is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
+                                is ProviderCredentials.Xtream -> true
+                                null -> false
+                            }
                     }
-                },
-                modifier = Modifier.weight(0.42f).fillMaxHeight(),
-            )
+                    refreshableProviders.forEach { provider -> onProviderSaved(provider.id) }
+                }
+            },
+            onOpenProvider = { provider ->
+                selectedProviderId = provider.id
+                editor = ProviderEditorState.from(provider)
+                editorStep = ProviderEditorStep.Edit
+                showEditor = true
+                message = null
+                scope.launch {
+                    val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
+                    if (selectedProviderId == provider.id) {
+                        editor = ProviderEditorState.from(provider, credentials)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 
-            if (showEditor) {
-                if (!editor.isEditing) {
+    if (showEditor) {
+        val dismissEditor: () -> Unit = {
+            selectedProviderId = null
+            editor = ProviderEditorState.newProvider(ProviderType.M3u)
+            editorStep = ProviderEditorStep.Name
+            showEditor = false
+            message = null
+        }
+        VivicastDialog(
+            onDismiss = dismissEditor,
+            width = VivicastDialogWidth.Wide,
+            heightCap = 560.dp,
+            modifier = Modifier.testTag("settings-provider-editor-dialog"),
+        ) {
+            if (!editor.isEditing) {
                     ProviderAddFlow(
                         editor = editor,
                         step = editorStep,
                         duplicateName = duplicateName,
+                        duplicateUrlName = duplicateUrlName,
                         message = message,
-                        onStepChange = { editorStep = it },
+                        onStepChange = {
+                            editorStep = it
+                            connectionTestStatus = ConnectionTestStatus.Idle
+                        },
                         onEditorChange = {
                             editor = it
                             message = null
+                            connectionTestStatus = ConnectionTestStatus.Idle
                         },
+                        connectionTestStatus = connectionTestStatus,
                         onTestConnection = {
                             val validationMessage = editor.connectionTestRequestMessageResolved()
                             when {
                                 duplicateName -> message = strProviderDuplicate
+                                duplicateUrlName != null -> Unit
                                 validationMessage != null -> message = validationMessage
                                 else -> {
-                                    message = strProviderChecking
+                                    message = null
+                                    connectionTestStatus = ConnectionTestStatus.Testing
                                     scope.launch {
                                         val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
                                         if (errorMessage == null) {
                                             editor = editor.copy(connectionTestPassed = true)
-                                            message = strProviderConnected
+                                            connectionTestStatus = ConnectionTestStatus.Passed
+                                            message = null
                                         } else {
                                             editor = editor.copy(connectionTestPassed = false)
+                                            connectionTestStatus = ConnectionTestStatus.Failed
                                             message = errorMessage
                                         }
                                     }
@@ -2684,20 +2646,34 @@ private fun ProviderSettingsPanel(
                                 message = strProviderDuplicate
                                 return@ProviderAddFlow
                             }
-                            val validationMessage = editor.validationMessageResolved(requireConnectionTest = true)
+                            if (duplicateUrlName != null) {
+                                return@ProviderAddFlow
+                            }
+                            val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
                             if (validationMessage != null) {
                                 message = validationMessage
                                 return@ProviderAddFlow
                             }
                             scope.launch {
+                                connectionTestStatus = ConnectionTestStatus.Testing
+                                message = null
+                                val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
+                                if (errorMessage != null) {
+                                    editor = editor.copy(connectionTestPassed = false)
+                                    connectionTestStatus = ConnectionTestStatus.Failed
+                                    message = errorMessage
+                                    return@launch
+                                }
+                                editor = editor.copy(connectionTestPassed = true)
+                                connectionTestStatus = ConnectionTestStatus.Passed
                                 runCatching { providerRepository.createProvider(editor.toCreateRequest()) }
                                     .onSuccess { result ->
                                         selectedProviderId = result.provider.id
                                         editor = ProviderEditorState.from(result.provider)
                                         editorStep = ProviderEditorStep.Edit
+                                        connectionTestStatus = ConnectionTestStatus.Idle
                                         showEditor = false
                                         onProviderSaved(result.provider.id)
-                                        message = strProviderSavedAuto
                                     }
                                     .onFailure { error ->
                                         message = strProviderSaveFailed.format(error.message ?: "?")
@@ -2708,12 +2684,12 @@ private fun ProviderSettingsPanel(
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
                             editorStep = ProviderEditorStep.Name
+                            connectionTestStatus = ConnectionTestStatus.Idle
                             showEditor = false
                             message = null
                         },
                         onPickM3uFile = onPickM3uFile,
-                        onReadM3uClipboard = onReadM3uClipboard,
-                        modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
                 ProviderEditor(
@@ -2762,9 +2738,10 @@ private fun ProviderSettingsPanel(
                                 providerRepository.createProvider(editor.toCreateRequest())
                             }
                         }.onSuccess { result ->
-                            selectedProviderId = result.provider.id
-                            val credentials = runCatching { providerRepository.getCredentials(result.provider.id) }.getOrNull()
-                            editor = ProviderEditorState.from(result.provider, credentials)
+                            selectedProviderId = null
+                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                            editorStep = ProviderEditorStep.Name
+                            showEditor = false
                             onProviderSaved(result.provider.id)
                             message = strProviderSaved
                         }.onFailure { error ->
@@ -2787,21 +2764,11 @@ private fun ProviderSettingsPanel(
                     pendingDelete = providers.firstOrNull { it.id == editor.providerId }
                     },
                     onPickM3uFile = onPickM3uFile,
-                    onReadM3uClipboard = onReadM3uClipboard,
-                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 }
-            } else {
-                InfoPanel(
-                    title = stringResource(R.string.settings_provider_section_title),
-                    body = message ?: strProviderSectionBody,
-                    badge = stringResource(R.string.settings_provider_badge_secure),
-                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                )
             }
         }
-        }
-    }
 
     pendingDelete?.let { provider ->
         DeleteProviderDialog(
@@ -2898,7 +2865,7 @@ private fun ProviderSourceCard(
     FocusPanel(
         selected = false,
         onClick = onClick,
-        modifier = modifier.height(104.dp),
+        modifier = modifier,
         contentPadding = VivicastSpacing.Space4,
     ) {
         Row(
@@ -2927,7 +2894,6 @@ private fun ProviderSourceCard(
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                BodyText(provider.importSummary(), maxLines = 1)
                 BodyText(stringResource(R.string.settings_provider_updated_format, provider.updatedAt.toBackupTimestamp()), maxLines = 1)
             }
         }
@@ -2996,36 +2962,36 @@ private fun ProviderAddFlow(
     editor: ProviderEditorState,
     step: ProviderEditorStep,
     duplicateName: Boolean,
+    duplicateUrlName: String?,
     message: String?,
+    connectionTestStatus: ConnectionTestStatus,
     onStepChange: (ProviderEditorStep) -> Unit,
     onEditorChange: (ProviderEditorState) -> Unit,
     onTestConnection: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    onPickM3uFile: ((String) -> Unit) -> Unit,
-    onReadM3uClipboard: () -> String?,
+    onPickM3uFile: ((String, String) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val firstFocus = remember { FocusRequester() }
+    var nameError by remember { mutableStateOf(false) }
+    LaunchedEffect(step) {
+        runCatching { firstFocus.requestFocus() }
+    }
+    val errorText = when {
+        duplicateName -> stringResource(R.string.settings_provider_name_exists_body)
+        duplicateUrlName != null -> stringResource(R.string.settings_provider_url_exists, duplicateUrlName)
+        else -> message
+    }
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
-        item {
-            InfoPanel(
-                title = stringResource(step.titleRes),
-                body = stringResource(step.bodyRes),
-                badge = stringResource(R.string.common_add),
-                modifier = Modifier.fillMaxWidth(),
-            )
+        item(key = "step-title") {
+            SectionTitle(stringResource(step.titleRes))
         }
-        if (message != null) {
-            item {
-                InfoPanel(
-                    title = stringResource(R.string.common_note),
-                    body = message,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        item(key = "step-error") {
+            VivicastDialogError(errorText)
         }
         when (step) {
             ProviderEditorStep.Name -> {
@@ -3034,25 +3000,25 @@ private fun ProviderAddFlow(
                         label = stringResource(R.string.settings_provider_name_required),
                         value = editor.name,
                         placeholder = stringResource(R.string.settings_provider_name_placeholder),
-                        onValueChange = { onEditorChange(editor.copy(name = it, connectionTestPassed = false)) },
+                        onValueChange = {
+                            nameError = false
+                            onEditorChange(editor.copy(name = it, connectionTestPassed = false))
+                        },
+                        focusRequester = firstFocus,
+                        isError = nameError,
+                        maxLength = 25,
                     )
-                }
-                if (duplicateName) {
-                    item {
-                        InfoPanel(
-                            title = stringResource(R.string.settings_provider_name_exists_title),
-                            body = stringResource(R.string.settings_provider_name_exists_body),
-                            badge = stringResource(R.string.common_error),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
                 }
                 item {
                     ProviderFlowActions(
                         primaryLabel = stringResource(R.string.common_next),
                         onPrimary = {
                             if (editor.name.isNotBlank() && !duplicateName) {
+                                nameError = false
                                 onStepChange(ProviderEditorStep.Type)
+                            } else {
+                                nameError = true
+                                runCatching { firstFocus.requestFocus() }
                             }
                         },
                         secondaryLabel = stringResource(R.string.common_cancel),
@@ -3062,16 +3028,15 @@ private fun ProviderAddFlow(
             }
             ProviderEditorStep.Type -> {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                        ActionPill(
+                    VivicastButtonRow {
+                        ProviderChoiceButton(
                             label = "M3U",
-                            modifier = Modifier.width(140.dp),
+                            modifier = Modifier.focusRequester(firstFocus),
                             selected = editor.type == ProviderType.M3u,
                             onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, connectionTestPassed = false)) },
                         )
-                        ActionPill(
+                        ProviderChoiceButton(
                             label = "Xtream Codes",
-                            modifier = Modifier.width(220.dp),
                             selected = editor.type == ProviderType.Xtream,
                             onClick = { onEditorChange(editor.copy(type = ProviderType.Xtream, connectionTestPassed = false)) },
                         )
@@ -3092,11 +3057,11 @@ private fun ProviderAddFlow(
             }
             ProviderEditorStep.M3uInput -> {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                        M3uSourceMode.entries.forEach { mode ->
-                            ActionPill(
+                    VivicastButtonRow {
+                        M3uSourceMode.entries.forEachIndexed { index, mode ->
+                            ProviderChoiceButton(
                                 label = stringResource(mode.labelRes),
-                                modifier = Modifier.width(mode.pillWidth),
+                                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
                                 selected = editor.m3uSourceMode == mode,
                                 onClick = {
                                     onEditorChange(
@@ -3131,100 +3096,85 @@ private fun ProviderAddFlow(
                         value = editor.m3uUrl,
                         placeholder = "https://...",
                         onValueChange = { onEditorChange(editor.copy(m3uUrl = it, connectionTestPassed = false)) },
+                        focusRequester = firstFocus,
+                        maxLength = 250,
                     )
                 }
                 if (editor.m3uUrl.startsWith("http://", ignoreCase = true)) {
                     item { InfoPanel(title = stringResource(R.string.common_insecure_connection), body = stringResource(R.string.common_insecure_body), badge = "HTTP", modifier = Modifier.fillMaxWidth()) }
                 }
                 item {
-                    ProviderFlowActions(
-                        primaryLabel = stringResource(R.string.settings_provider_test_connection),
-                        onPrimary = onTestConnection,
-                        secondaryLabel = stringResource(R.string.common_save),
-                        onSecondary = onSave,
-                        cancelLabel = stringResource(R.string.common_back),
-                        onCancel = { onStepChange(ProviderEditorStep.M3uInput) },
+                    VivicastButtonRow {
+                        ConnectionTestButton(
+                            status = connectionTestStatus,
+                            onClick = onTestConnection,
+                        )
+                    }
+                }
+                item {
+                    VivicastDialogActions(
+                        primaryLabel = stringResource(R.string.common_save),
+                        onPrimary = onSave,
+                        secondaryLabel = stringResource(R.string.common_back),
+                        onSecondary = { onStepChange(ProviderEditorStep.M3uInput) },
+                        tertiaryLabel = stringResource(R.string.common_cancel),
+                        onTertiary = onCancel,
                     )
                 }
             }
             ProviderEditorStep.M3uFile -> {
                 item {
-                    InfoPanel(
-                        title = stringResource(R.string.settings_provider_m3u_file_label),
-                        body = if (editor.m3uContent.isBlank()) {
-                            stringResource(R.string.settings_provider_file_import_only)
+                    BodyText(
+                        if (editor.m3uContent.isNotBlank() && editor.m3uFileName.isNotBlank()) {
+                            stringResource(
+                                R.string.settings_provider_file_label,
+                                editor.m3uFileName,
+                                m3uChannelCount(editor.m3uContent),
+                            )
                         } else {
-                            stringResource(R.string.settings_provider_file_ready_test)
-                        },
-                        badge = stringResource(R.string.settings_provider_badge_file),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                item {
-                    ActionPill(
-                        label = stringResource(R.string.settings_provider_file_pick),
-                        modifier = Modifier.width(190.dp),
-                        selected = editor.m3uContent.isNotBlank(),
-                        onClick = {
-                            onPickM3uFile { content ->
-                                onEditorChange(
-                                    editor.copy(
-                                        m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS),
-                                        m3uHasExistingSource = false,
-                                        connectionTestPassed = false,
-                                    ),
-                                )
-                            }
+                            stringResource(R.string.settings_provider_file_label_empty)
                         },
                     )
                 }
                 item {
-                    ProviderFlowActions(
-                        primaryLabel = stringResource(R.string.settings_provider_test_connection),
-                        onPrimary = onTestConnection,
-                        secondaryLabel = stringResource(R.string.common_save),
-                        onSecondary = onSave,
-                        cancelLabel = stringResource(R.string.common_back),
-                        onCancel = { onStepChange(ProviderEditorStep.M3uInput) },
-                    )
-                }
-            }
-            ProviderEditorStep.M3uClipboard -> {
-                item {
-                    InfoPanel(
-                        title = stringResource(R.string.settings_provider_clipboard_label),
-                        body = stringResource(R.string.settings_provider_clipboard_body),
-                        badge = stringResource(R.string.m3u_source_clipboard),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                item {
-                    ProviderTextField(
-                        label = stringResource(R.string.settings_provider_content_label),
-                        value = editor.m3uContent,
-                        placeholder = "#EXTM3U oder https://...",
-                        onValueChange = {
-                            onEditorChange(editor.copy(m3uContent = it.take(MAX_M3U_INLINE_SOURCE_CHARS), connectionTestPassed = false))
-                        },
-                        singleLine = false,
-                        height = 116.dp,
-                        trailingActionLabel = stringResource(R.string.common_apply),
-                        onTrailingAction = {
-                            val content = onReadM3uClipboard()
-                            if (!content.isNullOrBlank()) {
-                                onEditorChange(editor.copy(m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS), connectionTestPassed = false))
-                            }
-                        },
-                    )
+                    VivicastButtonRow {
+                        ActionPill(
+                            label = stringResource(R.string.settings_provider_file_pick),
+                            modifier = Modifier.focusRequester(firstFocus),
+                            selected = editor.m3uContent.isNotBlank(),
+                            onClick = {
+                                onPickM3uFile { fileName, content ->
+                                    onEditorChange(
+                                        editor.copy(
+                                            m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS),
+                                            m3uFileName = fileName,
+                                            m3uHasExistingSource = false,
+                                            connectionTestPassed = false,
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                        ActionPill(
+                            label = when (connectionTestStatus) {
+                                ConnectionTestStatus.Testing -> stringResource(R.string.settings_provider_msg_checking)
+                                ConnectionTestStatus.Passed -> "✓ " + stringResource(R.string.settings_provider_file_test_ok)
+                                ConnectionTestStatus.Failed -> "✗ " + stringResource(R.string.settings_provider_file_test_fail)
+                                else -> stringResource(R.string.settings_provider_file_test)
+                            },
+                            selected = connectionTestStatus == ConnectionTestStatus.Passed,
+                            onClick = onTestConnection,
+                        )
+                    }
                 }
                 item {
-                    ProviderFlowActions(
-                        primaryLabel = stringResource(R.string.settings_provider_test_connection),
-                        onPrimary = onTestConnection,
-                        secondaryLabel = stringResource(R.string.common_save),
-                        onSecondary = onSave,
-                        cancelLabel = stringResource(R.string.common_back),
-                        onCancel = { onStepChange(ProviderEditorStep.M3uInput) },
+                    VivicastDialogActions(
+                        primaryLabel = stringResource(R.string.common_save),
+                        onPrimary = onSave,
+                        secondaryLabel = stringResource(R.string.common_back),
+                        onSecondary = { onStepChange(ProviderEditorStep.M3uInput) },
+                        tertiaryLabel = stringResource(R.string.common_cancel),
+                        onTertiary = onCancel,
                     )
                 }
             }
@@ -3235,6 +3185,8 @@ private fun ProviderAddFlow(
                         value = editor.xtreamServerUrl,
                         placeholder = "http://host:8080",
                         onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it, connectionTestPassed = false)) },
+                        focusRequester = firstFocus,
+                        maxLength = 250,
                     )
                 }
                 item {
@@ -3243,6 +3195,7 @@ private fun ProviderAddFlow(
                         value = editor.xtreamUsername,
                         placeholder = stringResource(R.string.settings_provider_username_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamUsername = it, connectionTestPassed = false)) },
+                        maxLength = 100,
                     )
                 }
                 item {
@@ -3252,6 +3205,7 @@ private fun ProviderAddFlow(
                         placeholder = stringResource(R.string.settings_provider_password_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
                         secret = true,
+                        maxLength = 100,
                     )
                 }
                 if (editor.xtreamServerUrl.startsWith("http://", ignoreCase = true)) {
@@ -3260,21 +3214,29 @@ private fun ProviderAddFlow(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                         BodyText(stringResource(R.string.settings_provider_import_section), maxLines = 1)
-                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                            ActionPill(stringResource(R.string.nav_live_tv), modifier = Modifier.width(132.dp), selected = editor.includeLiveTv, onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv, connectionTestPassed = false)) })
-                            ActionPill(stringResource(R.string.nav_movies_label), modifier = Modifier.width(118.dp), selected = editor.includeMovies, onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies, connectionTestPassed = false)) })
-                            ActionPill(stringResource(R.string.nav_series_label), modifier = Modifier.width(118.dp), selected = editor.includeSeries, onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries, connectionTestPassed = false)) })
+                        VivicastButtonRow {
+                            ActionPill(stringResource(R.string.nav_live_tv), selected = editor.includeLiveTv, onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv, connectionTestPassed = false)) })
+                            ActionPill(stringResource(R.string.nav_movies_label), selected = editor.includeMovies, onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies, connectionTestPassed = false)) })
+                            ActionPill(stringResource(R.string.nav_series_label), selected = editor.includeSeries, onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries, connectionTestPassed = false)) })
                         }
                     }
                 }
                 item {
-                    ProviderFlowActions(
-                        primaryLabel = stringResource(R.string.settings_provider_test_connection),
-                        onPrimary = onTestConnection,
-                        secondaryLabel = stringResource(R.string.common_save),
-                        onSecondary = onSave,
-                        cancelLabel = stringResource(R.string.common_back),
-                        onCancel = { onStepChange(ProviderEditorStep.Type) },
+                    VivicastButtonRow {
+                        ConnectionTestButton(
+                            status = connectionTestStatus,
+                            onClick = onTestConnection,
+                        )
+                    }
+                }
+                item {
+                    VivicastDialogActions(
+                        primaryLabel = stringResource(R.string.common_save),
+                        onPrimary = onSave,
+                        secondaryLabel = stringResource(R.string.common_back),
+                        onSecondary = { onStepChange(ProviderEditorStep.Type) },
+                        tertiaryLabel = stringResource(R.string.common_cancel),
+                        onTertiary = onCancel,
                     )
                 }
             }
@@ -3292,12 +3254,92 @@ private fun ProviderFlowActions(
     cancelLabel: String? = null,
     onCancel: () -> Unit = {},
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-        ActionPill(label = primaryLabel, modifier = Modifier.width(190.dp), selected = true, onClick = onPrimary)
-        ActionPill(label = secondaryLabel, modifier = Modifier.width(150.dp), onClick = onSecondary)
-        if (cancelLabel != null) {
-            ActionPill(label = cancelLabel, modifier = Modifier.width(150.dp), onClick = onCancel)
+    VivicastDialogActions(
+        primaryLabel = primaryLabel,
+        onPrimary = onPrimary,
+        secondaryLabel = secondaryLabel,
+        onSecondary = onSecondary,
+        tertiaryLabel = cancelLabel,
+        onTertiary = onCancel,
+    )
+}
+
+// ponytail: Näherung über #EXTINF-Zeilen; exakte Zahl liefert der Parser erst beim Import.
+private fun m3uChannelCount(content: String): Int =
+    content.lineSequence().count { it.trimStart().startsWith("#EXTINF", ignoreCase = true) }
+
+private enum class ConnectionTestStatus { Idle, Testing, Passed, Failed }
+
+@Composable
+private fun ConnectionTestButton(
+    status: ConnectionTestStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val statusColor: Color? = when (status) {
+        ConnectionTestStatus.Passed -> VivicastColors.Success
+        ConnectionTestStatus.Failed -> VivicastColors.Error
+        else -> null
+    }
+    val glyph: String? = when (status) {
+        ConnectionTestStatus.Passed -> "✓"
+        ConnectionTestStatus.Failed -> "✗"
+        else -> null
+    }
+    val labelRes = when (status) {
+        ConnectionTestStatus.Testing -> R.string.settings_provider_msg_checking
+        ConnectionTestStatus.Passed -> R.string.settings_provider_test_ok
+        ConnectionTestStatus.Failed -> R.string.settings_provider_test_fail
+        else -> R.string.settings_provider_test_connection
+    }
+    FocusPanel(
+        onClick = onClick,
+        modifier = modifier.then(
+            if (statusColor != null) {
+                Modifier.border(VivicastBorders.FocusWidth, statusColor, VivicastShapes.CardRadius)
+            } else {
+                Modifier
+            },
+        ),
+    ) { _ ->
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (glyph != null) {
+                BasicText(
+                    text = glyph,
+                    style = VivicastTypography.LabelLarge.copy(color = statusColor ?: VivicastColors.TextPrimary),
+                )
+            }
+            BasicText(
+                text = stringResource(labelRes),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelMedium.copy(color = statusColor ?: VivicastColors.TextPrimary),
+            )
         }
+    }
+}
+
+@Composable
+private fun ProviderChoiceButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FocusPanel(
+        selected = selected,
+        onClick = onClick,
+        modifier = modifier,
+    ) { _ ->
+        BasicText(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+        )
     }
 }
 
@@ -3311,10 +3353,11 @@ private fun ProviderEditor(
     onSave: () -> Unit,
     onToggleEnabled: () -> Unit,
     onDelete: () -> Unit,
-    onPickM3uFile: ((String) -> Unit) -> Unit,
-    onReadM3uClipboard: () -> String?,
+    onPickM3uFile: ((String, String) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
@@ -3349,21 +3392,21 @@ private fun ProviderEditor(
                 value = editor.name,
                 placeholder = stringResource(R.string.settings_provider_name_placeholder),
                 onValueChange = { onEditorChange(editor.copy(name = it)) },
+                focusRequester = firstFocus,
+                maxLength = 25,
             )
         }
 
         if (!editor.isEditing) {
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                VivicastButtonRow {
                     ActionPill(
                         label = "M3U",
-                        modifier = Modifier.width(132.dp),
                         selected = editor.type == ProviderType.M3u,
                         onClick = { onEditorChange(ProviderEditorState.newProvider(ProviderType.M3u)) },
                     )
                     ActionPill(
                         label = "Xtream",
-                        modifier = Modifier.width(150.dp),
                         selected = editor.type == ProviderType.Xtream,
                         onClick = { onEditorChange(ProviderEditorState.newProvider(ProviderType.Xtream)) },
                     )
@@ -3376,11 +3419,10 @@ private fun ProviderEditor(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                         BodyText(stringResource(R.string.settings_provider_source_section), maxLines = 1)
-                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                        VivicastButtonRow {
                             M3uSourceMode.entries.forEach { mode ->
                                 ActionPill(
                                     label = stringResource(mode.labelRes),
-                                    modifier = Modifier.width(mode.pillWidth),
                                     selected = editor.m3uSourceMode == mode,
                                     onClick = {
                                         onEditorChange(
@@ -3408,6 +3450,7 @@ private fun ProviderEditor(
                                 onEditorChange(editor.copy(m3uUrl = it, m3uHasExistingSource = false, connectionTestPassed = false))
                             },
                             secret = editor.isEditing,
+                            maxLength = 250,
                         )
                         M3uSourceMode.File -> Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                             InfoPanel(
@@ -3428,10 +3471,11 @@ private fun ProviderEditor(
                                 label = stringResource(R.string.settings_provider_file_pick),
                                 modifier = Modifier.width(190.dp),
                                 onClick = {
-                                    onPickM3uFile { content ->
+                                    onPickM3uFile { fileName, content ->
                                         onEditorChange(
                                             editor.copy(
                                                 m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS),
+                                                m3uFileName = fileName,
                                                 m3uHasExistingSource = false,
                                                 connectionTestPassed = false,
                                             ),
@@ -3439,41 +3483,16 @@ private fun ProviderEditor(
                                     }
                                 },
                             )
-                        }
-                        M3uSourceMode.Clipboard -> ProviderTextField(
-                            label = stringResource(R.string.settings_provider_m3u_clipboard_field_label),
-                            value = editor.m3uContent,
-                            placeholder = if (editor.m3uHasExistingSource) {
-                                stringResource(R.string.settings_provider_paste_hint)
-                            } else {
-                                "#EXTM3U..."
-                            },
-                            onValueChange = {
-                                onEditorChange(
-                                    editor.copy(
-                                        m3uContent = it.take(MAX_M3U_INLINE_SOURCE_CHARS),
-                                        m3uHasExistingSource = false,
-                                        connectionTestPassed = false,
+                            if (editor.m3uContent.isNotBlank() && editor.m3uFileName.isNotBlank()) {
+                                BodyText(
+                                    stringResource(
+                                        R.string.settings_provider_file_selected,
+                                        editor.m3uFileName,
+                                        m3uChannelCount(editor.m3uContent),
                                     ),
                                 )
-                            },
-                            secret = editor.isEditing,
-                            singleLine = false,
-                            height = 116.dp,
-                            trailingActionLabel = stringResource(R.string.common_paste),
-                            onTrailingAction = {
-                                val content = onReadM3uClipboard()
-                                if (!content.isNullOrBlank()) {
-                                    onEditorChange(
-                                        editor.copy(
-                                            m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS),
-                                            m3uHasExistingSource = false,
-                                            connectionTestPassed = false,
-                                        ),
-                                    )
-                                }
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -3486,6 +3505,7 @@ private fun ProviderEditor(
                         placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://server.example",
                         onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it, connectionTestPassed = false)) },
                         secret = editor.isEditing,
+                        maxLength = 250,
                     )
                 }
                 item {
@@ -3495,6 +3515,7 @@ private fun ProviderEditor(
                         placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_username_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamUsername = it, connectionTestPassed = false)) },
                         secret = editor.isEditing,
+                        maxLength = 100,
                     )
                 }
                 item {
@@ -3504,6 +3525,7 @@ private fun ProviderEditor(
                         placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_password_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
                         secret = true,
+                        maxLength = 100,
                     )
                 }
             }
@@ -3513,22 +3535,19 @@ private fun ProviderEditor(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                     BodyText(stringResource(R.string.settings_provider_content_section), maxLines = 1)
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+                    VivicastButtonRow {
                         ActionPill(
                             label = stringResource(R.string.nav_live_tv),
-                            modifier = Modifier.width(132.dp),
                             selected = editor.includeLiveTv,
                             onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv)) },
                         )
                         ActionPill(
                             label = stringResource(R.string.nav_movies_label),
-                            modifier = Modifier.width(118.dp),
                             selected = editor.includeMovies,
                             onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies)) },
                         )
                         ActionPill(
                             label = stringResource(R.string.nav_series_label),
-                            modifier = Modifier.width(118.dp),
                             selected = editor.includeSeries,
                             onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries)) },
                         )
@@ -3588,17 +3607,16 @@ private fun ProviderEditor(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+            VivicastButtonRow {
                 ActionPill(
                     label = stringResource(R.string.settings_provider_test_connection),
-                    modifier = Modifier.width(210.dp),
                     selected = editor.connectionTestPassed,
                     onClick = onTestConnection,
                 )
-                ActionPill(label = stringResource(R.string.common_save), modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
+                ActionPill(label = stringResource(R.string.common_save), onClick = onSave)
                 if (editor.isEditing) {
-                    ActionPill(label = stringResource(R.string.settings_provider_toggle_enabled), modifier = Modifier.width(150.dp), onClick = onToggleEnabled)
-                    ActionPill(label = stringResource(R.string.settings_delete), modifier = Modifier.width(140.dp), onClick = onDelete)
+                    ActionPill(label = stringResource(R.string.settings_provider_toggle_enabled), onClick = onToggleEnabled)
+                    ActionPill(label = stringResource(R.string.settings_delete), onClick = onDelete)
                 }
             }
         }
@@ -3616,55 +3634,24 @@ private fun ProviderTextField(
     height: Dp = 58.dp,
     trailingActionLabel: String? = null,
     onTrailingAction: () -> Unit = {},
+    focusRequester: FocusRequester? = null,
+    isError: Boolean = false,
+    maxLength: Int? = null,
 ) {
-    var focused by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-        BasicText(
-            text = label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextSecondary),
-        )
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = singleLine,
-            textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
-            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
-                .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
-                .border(
-                    width = if (focused) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                    color = if (focused) VivicastColors.FocusRing else Color(0x66344A62),
-                    shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
-                )
-                .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
-            decorationBox = { innerTextField ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) {
-                        BasicText(
-                            text = placeholder,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
-                        )
-                    }
-                    innerTextField()
-                }
-            },
-        )
-        if (trailingActionLabel != null) {
-            ActionPill(
-                label = trailingActionLabel,
-                modifier = Modifier.width(150.dp),
-                onClick = onTrailingAction,
-            )
-        }
-    }
+    VivicastTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        placeholder = placeholder,
+        secret = secret,
+        singleLine = singleLine,
+        height = height,
+        focusRequester = focusRequester,
+        isError = isError,
+        maxLength = maxLength,
+        trailingActionLabel = trailingActionLabel,
+        onTrailingAction = onTrailingAction,
+    )
 }
 
 @Composable
@@ -3675,52 +3662,27 @@ fun DeleteProviderDialog(
 ) {
     val cancelFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
-        cancelFocusRequester.requestFocus()
-    }
-
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier
-                .widthIn(min = 560.dp, max = 680.dp)
-                .onPreviewKeyEvent {
-                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
-                        onCancel()
-                        true
-                    } else {
-                        false
-                    }
-                }
-                .testTag(deleteProviderDialogTag(provider.id)),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(R.string.about_provider_delete_title),
-                    body = stringResource(R.string.settings_provider_delete_body),
-                    badge = provider.name,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill(
-                        stringResource(R.string.common_cancel),
-                        modifier = Modifier
-                            .focusRequester(cancelFocusRequester)
-                            .width(150.dp)
-                            .testTag(deleteProviderCancelTag(provider.id)),
-                        selected = true,
-                        onClick = onCancel,
-                    )
-                    ActionPill(
-                        stringResource(R.string.settings_delete),
-                        modifier = Modifier
-                            .width(140.dp)
-                            .testTag(deleteProviderConfirmTag(provider.id)),
-                        onClick = onDelete,
-                    )
-                }
-            }
-        }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = cancelFocusRequester,
+        modifier = Modifier.testTag(deleteProviderDialogTag(provider.id)),
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.about_provider_delete_title),
+            body = stringResource(R.string.settings_provider_delete_body),
+            badge = provider.name,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.settings_delete),
+            onPrimary = onDelete,
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            primaryTestTag = deleteProviderConfirmTag(provider.id),
+            secondaryTestTag = deleteProviderCancelTag(provider.id),
+            secondaryFocusRequester = cancelFocusRequester,
+        )
     }
 }
 
@@ -3973,114 +3935,60 @@ private fun PinDialog(
         PinDialogMode.Disable -> stringResource(R.string.settings_pin_disable)
     }
 
-    LaunchedEffect(Unit) {
-        firstFocusRequester.requestFocus()
-    }
+    val pinKeyboard = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+    val pinPlaceholder = stringResource(R.string.settings_pin_placeholder)
 
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier
-                .widthIn(min = 560.dp, max = 680.dp)
-                .testTag(pinDialogTag()),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                SectionTitle(title)
-                if (mode != PinDialogMode.Set) {
-                    PinTextField(
-                        label = stringResource(R.string.settings_pin_label_current),
-                        value = currentPin,
-                        onValueChange = { currentPin = it.pinInput() },
-                        modifier = Modifier
-                            .focusRequester(firstFocusRequester)
-                            .testTag(pinCurrentFieldTag()),
-                    )
-                }
-                if (mode != PinDialogMode.Disable) {
-                    PinTextField(
-                        label = stringResource(R.string.settings_pin_label_new),
-                        value = newPin,
-                        onValueChange = { newPin = it.pinInput() },
-                        modifier = Modifier
-                            .then(if (mode == PinDialogMode.Set) Modifier.focusRequester(firstFocusRequester) else Modifier)
-                            .testTag(pinNewFieldTag()),
-                    )
-                    PinTextField(
-                        label = stringResource(R.string.settings_pin_label_repeat),
-                        value = repeatPin,
-                        onValueChange = { repeatPin = it.pinInput() },
-                        modifier = Modifier.testTag(pinRepeatFieldTag()),
-                    )
-                }
-                error?.let { BodyText(it, color = VivicastColors.Error, maxLines = 2) }
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                    ActionPill(
-                        label = stringResource(R.string.common_cancel),
-                        modifier = Modifier.testTag(pinCancelTag()),
-                        onClick = onCancel,
-                    )
-                    ActionPill(
-                        label = if (mode == PinDialogMode.Disable) stringResource(R.string.settings_pin_disable_value) else stringResource(R.string.common_save),
-                        selected = mode == PinDialogMode.Disable,
-                        modifier = Modifier.testTag(pinConfirmTag()),
-                        onClick = {
-                            error = validatePinDialog(mode, currentPin, newPin, repeatPin, strPinCurrentRequired, strPinFourDigits, strPinMismatch)
-                                ?: onConfirm(currentPin, newPin)
-                        },
-                    )
-                }
-            }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        title = title,
+        initialFocus = firstFocusRequester,
+        modifier = Modifier.testTag(pinDialogTag()),
+    ) {
+        if (mode != PinDialogMode.Set) {
+            VivicastTextField(
+                value = currentPin,
+                onValueChange = { currentPin = it.pinInput() },
+                label = stringResource(R.string.settings_pin_label_current),
+                placeholder = pinPlaceholder,
+                secret = true,
+                keyboardOptions = pinKeyboard,
+                focusRequester = firstFocusRequester,
+                fieldModifier = Modifier.testTag(pinCurrentFieldTag()),
+            )
         }
-    }
-}
-
-@Composable
-private fun PinTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-        BasicText(
-            text = label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextSecondary),
-        )
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = modifier
-                .fillMaxWidth()
-                .height(58.dp)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
-                .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
-                .border(
-                    width = if (focused) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                    color = if (focused) VivicastColors.FocusRing else Color(0x66344A62),
-                    shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
-                )
-                .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
-            decorationBox = { innerTextField ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) {
-                        BasicText(
-                            text = "4 Ziffern",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
-                        )
-                    }
-                    innerTextField()
-                }
+        if (mode != PinDialogMode.Disable) {
+            VivicastTextField(
+                value = newPin,
+                onValueChange = { newPin = it.pinInput() },
+                label = stringResource(R.string.settings_pin_label_new),
+                placeholder = pinPlaceholder,
+                secret = true,
+                keyboardOptions = pinKeyboard,
+                focusRequester = if (mode == PinDialogMode.Set) firstFocusRequester else null,
+                fieldModifier = Modifier.testTag(pinNewFieldTag()),
+            )
+            VivicastTextField(
+                value = repeatPin,
+                onValueChange = { repeatPin = it.pinInput() },
+                label = stringResource(R.string.settings_pin_label_repeat),
+                placeholder = pinPlaceholder,
+                secret = true,
+                keyboardOptions = pinKeyboard,
+                fieldModifier = Modifier.testTag(pinRepeatFieldTag()),
+            )
+        }
+        error?.let { BodyText(it, color = VivicastColors.Error, maxLines = 2) }
+        VivicastDialogActions(
+            primaryLabel = if (mode == PinDialogMode.Disable) stringResource(R.string.settings_pin_disable_value) else stringResource(R.string.common_save),
+            onPrimary = {
+                error = validatePinDialog(mode, currentPin, newPin, repeatPin, strPinCurrentRequired, strPinFourDigits, strPinMismatch)
+                    ?: onConfirm(currentPin, newPin)
             },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            primaryTestTag = pinConfirmTag(),
+            secondaryTestTag = pinCancelTag(),
         )
     }
 }
@@ -4227,39 +4135,47 @@ private fun FullBackupPassphraseDialog(
     var error by remember { mutableStateOf<String?>(null) }
     val strPassphraseBody = stringResource(R.string.settings_backup_passphrase_body)
     val strPassphraseMissing = stringResource(R.string.settings_backup_passphrase_missing)
+    val fieldFocus = remember { FocusRequester() }
 
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier.fillMaxWidth().testTag(fullBackupPassphraseDialogTag()),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(action.titleRes),
-                    body = error ?: strPassphraseBody,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                BasicTextField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth().testTag(fullBackupPassphraseFieldTag()),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill(stringResource(R.string.common_cancel), modifier = Modifier.width(150.dp).testTag(fullBackupPassphraseCancelTag()), onClick = onCancel)
-                    ActionPill(stringResource(action.confirmLabelRes), modifier = Modifier.width(180.dp).testTag(fullBackupPassphraseConfirmTag()), selected = true) {
-                        val value = passphrase.trim()
-                        if (value.isBlank()) {
-                            error = strPassphraseMissing
-                        } else {
-                            onConfirm(value)
-                        }
-                    }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = fieldFocus,
+        modifier = Modifier.testTag(fullBackupPassphraseDialogTag()),
+    ) {
+        InfoPanel(
+            title = stringResource(action.titleRes),
+            body = error ?: strPassphraseBody,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastTextField(
+            value = passphrase,
+            onValueChange = {
+                passphrase = it
+                error = null
+            },
+            secret = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            focusRequester = fieldFocus,
+            fieldModifier = Modifier.testTag(fullBackupPassphraseFieldTag()),
+            isError = error != null,
+            maxLength = 100,
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(action.confirmLabelRes),
+            onPrimary = {
+                val value = passphrase.trim()
+                if (value.isBlank()) {
+                    error = strPassphraseMissing
+                } else {
+                    onConfirm(value)
                 }
-            }
-        }
+            },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            primaryTestTag = fullBackupPassphraseConfirmTag(),
+            secondaryTestTag = fullBackupPassphraseCancelTag(),
+        )
     }
 }
 
@@ -4428,24 +4344,23 @@ private fun AboutLegalDialog(
     page: AboutLegalPage,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        GlassPanel(
+    val closeFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = closeFocus,
+    ) {
+        InfoPanel(
+            title = stringResource(page.titleRes),
+            body = stringResource(page.bodyRes),
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(page.titleRes),
-                    body = stringResource(page.bodyRes),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ActionPill(
-                    label = stringResource(R.string.common_close),
-                    modifier = Modifier.width(150.dp),
-                    selected = true,
-                    onClick = onDismiss,
-                )
-            }
+        )
+        VivicastButtonRow {
+            ActionPill(
+                label = stringResource(R.string.common_close),
+                modifier = Modifier.focusRequester(closeFocus),
+                onClick = onDismiss,
+            )
         }
     }
 }
@@ -4550,24 +4465,26 @@ private fun MaintenanceConfirmDialog(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onCancel) {
-        GlassPanel(
-            modifier = Modifier.fillMaxWidth().testTag(action.dialogTag),
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                InfoPanel(
-                    title = stringResource(action.confirmTitleRes),
-                    body = stringResource(action.bodyRes),
-                    badge = stringResource(R.string.settings_maintenance_confirm_badge),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-                    ActionPill(stringResource(R.string.common_cancel), modifier = Modifier.width(150.dp), onClick = onCancel)
-                    ActionPill(stringResource(action.confirmLabelRes), modifier = Modifier.width(170.dp), onClick = onConfirm)
-                }
-            }
-        }
+    val cancelFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = cancelFocus,
+        modifier = Modifier.testTag(action.dialogTag),
+    ) {
+        InfoPanel(
+            title = stringResource(action.confirmTitleRes),
+            body = stringResource(action.bodyRes),
+            badge = stringResource(R.string.settings_maintenance_confirm_badge),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(action.confirmLabelRes),
+            onPrimary = onConfirm,
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            secondaryFocusRequester = cancelFocus,
+        )
     }
 }
 
@@ -4657,7 +4574,6 @@ private enum class ProviderEditorStep {
     M3uInput,
     M3uUrl,
     M3uFile,
-    M3uClipboard,
     Xtream,
     Edit,
 }
@@ -4670,7 +4586,6 @@ private val ProviderEditorStep.titleRes: Int
         ProviderEditorStep.M3uInput -> R.string.settings_provider_step_m3u_input_title
         ProviderEditorStep.M3uUrl -> R.string.settings_provider_step_m3u_url_title
         ProviderEditorStep.M3uFile -> R.string.settings_provider_m3u_file_label
-        ProviderEditorStep.M3uClipboard -> R.string.settings_provider_step_m3u_clipboard_title
         ProviderEditorStep.Xtream -> R.string.settings_provider_step_xtream_title
         ProviderEditorStep.Edit -> R.string.settings_provider_title_edit
     }
@@ -4683,7 +4598,6 @@ private val ProviderEditorStep.bodyRes: Int
         ProviderEditorStep.M3uInput -> R.string.settings_provider_step_m3u_input_body
         ProviderEditorStep.M3uUrl -> R.string.settings_provider_step_m3u_url_body
         ProviderEditorStep.M3uFile -> R.string.settings_provider_file_import_only
-        ProviderEditorStep.M3uClipboard -> R.string.settings_provider_step_m3u_clipboard_body
         ProviderEditorStep.Xtream -> R.string.settings_provider_step_xtream_body
         ProviderEditorStep.Edit -> R.string.settings_provider_step_edit_body
     }
@@ -4704,6 +4618,7 @@ private data class ProviderEditorState(
     val includeSeries: Boolean,
     val refreshIntervalHours: Int,
     val connectionTestPassed: Boolean,
+    val m3uFileName: String = "",
 ) {
     val isEditing: Boolean get() = providerId != null
     val isAutomaticallyRefreshable: Boolean
@@ -4719,12 +4634,11 @@ private data class ProviderEditorState(
         msgConnTest: String,
         msgM3uUrl: String,
         msgM3uFile: String,
-        msgM3uClipboard: String,
     ): String? {
         if (name.isBlank()) return msgNameMissing
         if (type == ProviderType.Xtream && !includeLiveTv && !includeMovies && !includeSeries) return msgContentType
         when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = isEditing, msgM3uUrl, msgM3uFile, msgM3uClipboard)?.let { return it }
+            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = isEditing, msgM3uUrl, msgM3uFile)?.let { return it }
             ProviderType.Xtream -> if (!isEditing) {
                 if (xtreamServerUrl.isBlank()) return msgXtreamServer
                 if (xtreamUsername.isBlank()) return msgXtreamUser
@@ -4742,11 +4656,10 @@ private data class ProviderEditorState(
         msgXtreamPass: String,
         msgM3uUrl: String,
         msgM3uFile: String,
-        msgM3uClipboard: String,
     ): String? {
         if (name.isBlank()) return msgNameMissing
         return when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = false, msgM3uUrl, msgM3uFile, msgM3uClipboard)
+            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = false, msgM3uUrl, msgM3uFile)
             ProviderType.Xtream -> when {
                 xtreamServerUrl.isBlank() -> msgXtreamServer
                 xtreamUsername.isBlank() -> msgXtreamUser
@@ -4807,12 +4720,11 @@ private data class ProviderEditorState(
     private val shouldReplaceM3uSource: Boolean
         get() = !m3uHasExistingSource || m3uUrl.isNotBlank() || m3uContent.isNotBlank()
 
-    private fun m3uSourceValidationMessage(allowExistingSource: Boolean, msgUrl: String, msgFile: String, msgClipboard: String): String? {
+    private fun m3uSourceValidationMessage(allowExistingSource: Boolean, msgUrl: String, msgFile: String): String? {
         if (allowExistingSource && m3uHasExistingSource && m3uUrl.isBlank() && m3uContent.isBlank()) return null
         return when (m3uSourceMode) {
             M3uSourceMode.Url -> if (m3uUrl.isBlank()) msgUrl else null
             M3uSourceMode.File -> if (m3uContent.isBlank()) msgFile else null
-            M3uSourceMode.Clipboard -> if (m3uContent.isBlank()) msgClipboard else null
         }
     }
 
@@ -4862,22 +4774,15 @@ private val M3uSourceMode.labelRes: Int
     get() = when (this) {
         M3uSourceMode.Url -> R.string.m3u_source_url
         M3uSourceMode.File -> R.string.m3u_source_file
-        M3uSourceMode.Clipboard -> R.string.m3u_source_clipboard
     }
 
 private val M3uSourceMode.addStep: ProviderEditorStep
     get() = when (this) {
         M3uSourceMode.Url -> ProviderEditorStep.M3uUrl
         M3uSourceMode.File -> ProviderEditorStep.M3uFile
-        M3uSourceMode.Clipboard -> ProviderEditorStep.M3uClipboard
     }
 
-private val M3uSourceMode.pillWidth: Dp
-    get() = when (this) {
-        M3uSourceMode.Url -> 118.dp
-        M3uSourceMode.File -> 132.dp
-        M3uSourceMode.Clipboard -> 210.dp
-    }
+private data class ProviderUrlEntry(val providerId: String?, val url: String, val name: String)
 
 private data class EpgSourceEditorState(
     val sourceId: String?,
@@ -4958,7 +4863,7 @@ private val ProviderStatus.tone: Color
     get() = when (this) {
         ProviderStatus.Active -> VivicastColors.Success
         ProviderStatus.ActiveWithPartialErrors -> VivicastColors.Warning
-        ProviderStatus.Refreshing -> VivicastColors.Info
+        ProviderStatus.Refreshing -> VivicastColors.Warning
         ProviderStatus.ConnectionError -> VivicastColors.Warning
         ProviderStatus.InvalidCredentials -> VivicastColors.Error
         ProviderStatus.Expired -> VivicastColors.Warning

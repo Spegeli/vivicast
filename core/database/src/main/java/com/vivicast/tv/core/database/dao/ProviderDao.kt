@@ -26,6 +26,9 @@ interface ProviderDao {
     @Query("UPDATE providers SET status = :status, updatedAt = :updatedAt WHERE id = :providerId")
     suspend fun setProviderStatus(providerId: String, status: String, updatedAt: Long)
 
+    @Query("UPDATE providers SET status = :status WHERE id = :providerId")
+    suspend fun setProviderStatusOnly(providerId: String, status: String)
+
     @Query("UPDATE providers SET isActive = :isActive, updatedAt = :updatedAt WHERE id = :providerId")
     suspend fun setProviderActive(providerId: String, isActive: Boolean, updatedAt: Long)
 

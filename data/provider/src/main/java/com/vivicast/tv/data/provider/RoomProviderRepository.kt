@@ -40,8 +40,7 @@ class RoomProviderRepository(
                         val url = secureValueStore.read(provider.secureKey(FIELD_M3U_URL)) ?: return null
                         ProviderCredentials.M3u(url = url, sourceMode = sourceMode)
                     }
-                    M3uSourceMode.File,
-                    M3uSourceMode.Clipboard -> {
+                    M3uSourceMode.File -> {
                         ProviderCredentials.M3u(
                             sourceMode = sourceMode,
                             inlineContent = TransientM3uSourceStore.read(provider.id),
@@ -137,7 +136,13 @@ class RoomProviderRepository(
 
     override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) {
         database.withTransaction {
-            providerDao.setProviderStatus(providerId, status.storageValue, clock())
+            // updatedAt nur bei erfolgreichem Refresh bumpen; Start (Refreshing) und Fehler-Status
+            // lassen "Updated" unverändert.
+            if (status == ProviderStatus.Active || status == ProviderStatus.ActiveWithPartialErrors) {
+                providerDao.setProviderStatus(providerId, status.storageValue, clock())
+            } else {
+                providerDao.setProviderStatusOnly(providerId, status.storageValue)
+            }
             androidTvSearchDao.rebuildEntries()
         }
     }
@@ -237,8 +242,7 @@ class RoomProviderRepository(
                 secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_URL), m3uUrl.requireSecret("M3U URL"))
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
             }
-            M3uSourceMode.File,
-            M3uSourceMode.Clipboard -> {
+            M3uSourceMode.File -> {
                 val content = m3uContent.requireSecret("M3U content")
                 require(content.length <= MAX_M3U_INLINE_SOURCE_CHARS) { "M3U content is too large." }
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
@@ -248,9 +252,11 @@ class RoomProviderRepository(
     }
 
     private suspend fun String.readM3uSourceMode(): M3uSourceMode =
-        runCatching {
-            M3uSourceMode.valueOf(secureValueStore.read(secureKey(FIELD_M3U_SOURCE_MODE)).orEmpty())
-        }.getOrDefault(M3uSourceMode.Url)
+        when (secureValueStore.read(secureKey(FIELD_M3U_SOURCE_MODE)).orEmpty()) {
+            // Legacy "Clipboard" providers stored inline content identical to File.
+            "File", "Clipboard" -> M3uSourceMode.File
+            else -> M3uSourceMode.Url
+        }
 
     private suspend fun deleteCredentials(sourceConfigKey: String) {
         secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
