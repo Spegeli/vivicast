@@ -72,11 +72,9 @@ import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
-import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackReturnTarget
-import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
 import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerState
@@ -122,16 +120,10 @@ import com.vivicast.tv.feature.search.SearchRoute
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
-import com.vivicast.tv.data.playback.PLAYBACK_COMPLETION_THRESHOLD_PERCENT
-import com.vivicast.tv.data.playback.automaticPlaybackProgressPercent
-import com.vivicast.tv.data.playback.shouldSaveAutomaticPlaybackProgress
 import com.vivicast.tv.domain.model.Channel
-import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.EpgProgram
-import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
-import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -253,68 +245,7 @@ internal suspend fun AppContainer.savePlaybackProgress(
     state: VivicastPlayerState,
     automaticProgressSaveTimes: MutableMap<String, Long>,
     forceSave: Boolean = false,
-) {
-    val request = state.request ?: return
-
-    if (request.mediaType == PlaybackMediaType.Channel) {
-        if (state.status != PlaybackStatus.Playing && state.status != PlaybackStatus.Paused) return
-        val now = System.currentTimeMillis()
-        playbackRepository.saveChannelHistory(
-            ChannelHistory(
-                id = channelHistoryId(request.providerId, request.mediaId),
-                providerId = request.providerId,
-                channelId = request.mediaId,
-                watchedAt = now,
-                durationWatchedMillis = state.positionMillis.coerceAtLeast(0L),
-                updatedAt = now,
-                channelStableKey = request.mediaStableKey,
-            ),
-        )
-        return
-    }
-
-    val mediaType = request.mediaType.toDomainProgressMediaType() ?: return
-    val mediaEnded = state.status == PlaybackStatus.Ended
-    if (state.status != PlaybackStatus.Playing && state.status != PlaybackStatus.Paused && !mediaEnded) return
-    val positionMillis = state.positionMillis.coerceAtLeast(0L)
-    val durationMillis = state.durationMillis.coerceAtLeast(0L)
-
-    val now = System.currentTimeMillis()
-    val existing = playbackRepository.getProgress(request.providerId, mediaType, request.mediaId)
-    if (!shouldSaveAutomaticPlaybackProgress(
-            existing = existing,
-            lastSavedAtMillis = automaticProgressSaveTimes[request.playbackId],
-            nowMillis = now,
-            positionMillis = positionMillis,
-            durationMillis = durationMillis,
-            force = state.status == PlaybackStatus.Paused || mediaEnded || forceSave,
-            allowCreateBelowMinimum = mediaEnded,
-        )
-    ) {
-        return
-    }
-
-    val progressPercent = automaticPlaybackProgressPercent(positionMillis, durationMillis)
-    playbackRepository.saveProgress(
-        PlaybackProgress(
-            id = existing?.id ?: playbackProgressId(request.providerId, mediaType, request.mediaId),
-            providerId = request.providerId,
-            mediaType = mediaType,
-            mediaId = request.mediaId,
-            positionMillis = positionMillis,
-            durationMillis = durationMillis,
-            progressPercent = progressPercent,
-            isCompleted = existing?.isCompleted == true ||
-                mediaEnded ||
-                progressPercent >= PLAYBACK_COMPLETION_THRESHOLD_PERCENT,
-            lastWatchedAt = now,
-            createdAt = existing?.createdAt ?: now,
-            updatedAt = now,
-            mediaStableKey = request.mediaStableKey,
-        ),
-    )
-    automaticProgressSaveTimes[request.playbackId] = now
-}
+) = playbackProgressRecorder.record(state, automaticProgressSaveTimes, forceSave)
 
 internal suspend fun AppContainer.clearHistory(target: HistoryClearTarget) {
     when (target) {
@@ -330,18 +261,4 @@ internal suspend fun AppContainer.clearHistory(target: HistoryClearTarget) {
         }
     }
 }
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "$providerId:progress:${mediaType.name.lowercase()}:$mediaId"
-
-private fun channelHistoryId(providerId: String, channelId: String): String =
-    "$providerId:history:channel:$channelId"
-
-private fun PlaybackMediaType.toDomainProgressMediaType(): MediaType? =
-    when (this) {
-        PlaybackMediaType.Movie -> MediaType.Movie
-        PlaybackMediaType.Episode -> MediaType.Episode
-        PlaybackMediaType.Channel,
-        PlaybackMediaType.CatchUp -> null
-    }
 
