@@ -37,10 +37,11 @@ import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.playback.PlaybackRequestFactory
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
+import com.vivicast.tv.data.provider.ProviderConnectionResponseException
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderCreateRequest
-import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.data.provider.RoomProviderRepository
+import com.vivicast.tv.data.provider.TestProviderConnectionUseCase
 import com.vivicast.tv.system.AndroidTvWatchNextPublisher
 import com.vivicast.tv.system.SystemIntegrationPlaybackRepository
 import com.vivicast.tv.system.SystemIntegrationProviderRepository
@@ -301,59 +302,25 @@ class AppContainer(
             }
         }.getOrDefault(false)
 
+    val testProviderConnectionUseCase: TestProviderConnectionUseCase by lazy {
+        TestProviderConnectionUseCase(
+            m3uParser = DefaultM3uParser(),
+            xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
+            fetchText = { url -> OkHttpTextFetcher(okHttpClient).fetch(url) },
+        )
+    }
+
     suspend fun testProviderConnection(request: ProviderCreateRequest): String? =
-        runCatching {
-            when (request.type) {
-                ProviderType.M3u -> testM3uConnection(request)
-                ProviderType.Xtream -> testXtreamConnection(request)
-            }
-        }.fold(
-            onSuccess = { null },
-            onFailure = { it.toProviderConnectionMessage() },
-        )
-
-    private suspend fun testM3uConnection(request: ProviderCreateRequest) {
-        val source = if (request.m3uSourceMode.isAutomaticallyRefreshable) {
-            val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalArgumentException()
-            OkHttpTextFetcher(okHttpClient).fetch(url)
-        } else {
-            request.m3uContent?.trim()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalArgumentException()
-        }
-        val playlist = DefaultM3uParser().parse(source)
-        if (playlist.channels.isEmpty()) {
-            throw ProviderConnectionResponseException()
-        }
-    }
-
-    private suspend fun testXtreamConnection(request: ProviderCreateRequest) {
-        val credentials = XtreamCredentials(
-            serverUrl = request.xtreamServerUrl?.trim()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalArgumentException(),
-            username = request.xtreamUsername?.trim()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalArgumentException(),
-            password = request.xtreamPassword?.trim()?.takeIf { it.isNotBlank() }
-                ?: throw IllegalArgumentException(),
-        )
-        val client = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient))
-        val response = when {
-            request.includeLiveTv -> client.getLiveCategories(credentials)
-            request.includeMovies -> client.getVodCategories(credentials)
-            request.includeSeries -> client.getSeriesCategories(credentials)
-            else -> throw IllegalArgumentException()
-        }
-        if (!response.trimStart().startsWith("[")) {
-            throw ProviderConnectionResponseException()
-        }
-    }
+        runCatching { testProviderConnectionUseCase.test(request) }
+            .fold(
+                onSuccess = { null },
+                onFailure = { it.toProviderConnectionMessage() },
+            )
 
     private companion object {
         const val DEFAULT_MEDIA_CACHE_SIZE_BYTES = 500L * 1024L * 1024L
     }
 }
-
-private class ProviderConnectionResponseException : RuntimeException()
 
 private class RuntimeUserAgentPolicy {
     @Volatile

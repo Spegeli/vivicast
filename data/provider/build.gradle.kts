@@ -27,8 +27,12 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":core:database"))
     implementation(project(":core:security"))
+    implementation(project(":iptv:m3u"))
+    implementation(project(":iptv:xtream"))
     implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.coroutines.core)
+
+    testImplementation(libs.junit)
 
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.core)
