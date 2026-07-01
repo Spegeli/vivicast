@@ -1,0 +1,77 @@
+# Vivicast detekt config (P2-08).
+#
+# Goal: prevent new god-files (large classes, long/complex methods, too many functions) from
+# re-appearing after the P0/P1 splits. NOT a full style/format linter — the noisy default rulesets
+# are switched off so the gate produces a small, meaningful signal instead of hundreds of Compose
+# false positives. Runs on top of detekt's default config (buildUponDefaultConfig = true).
+
+build:
+  # Any non-baselined issue fails `./gradlew detekt`. Existing accepted large files live in
+  # config/detekt/baseline.xml.
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+# --- The gate we actually care about: size & complexity ---
+complexity:
+  active: true
+  LargeClass:
+    active: true
+    threshold: 600
+  LongMethod:
+    active: true
+    threshold: 150
+  LongParameterList:
+    active: true
+    # Compose composables and Route entry points legitimately take many parameters/callbacks.
+    functionThreshold: 10
+    constructorThreshold: 10
+    ignoreDefaultParameters: true
+    ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 40
+    thresholdInClasses: 30
+    thresholdInInterfaces: 30
+    thresholdInObjects: 30
+    thresholdInEnums: 30
+    ignoreDeprecated: true
+    ignoreOverridden: true
+    ignoreAnnotatedFunctions: ['Composable']
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 20
+    ignoreSingleWhenExpression: true
+  CognitiveComplexMethod:
+    active: false
+  NestedBlockDepth:
+    active: true
+    threshold: 6
+  ComplexCondition:
+    active: true
+    threshold: 5
+  MethodOverloading:
+    active: false
+  NamedArguments:
+    active: false
+
+# --- Everything below is noise for a Compose/Android multi-module app: switched off so the gate
+#     stays focused on god-file size/complexity. ---
+comments:
+  active: false
+coroutines:
+  active: false
+empty-blocks:
+  active: false
+exceptions:
+  active: false
+naming:
+  active: false
+performance:
+  active: false
+potential-bugs:
+  active: false
+style:
+  active: false

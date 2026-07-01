@@ -7,6 +7,20 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.detekt)
+}
+
+// P2-08: single root-applied detekt scanning every module's main sources. One config, one baseline,
+// one `./gradlew detekt` task. The gate protects against new god-files (large classes/long/complex
+// methods); existing accepted large files are tolerated via config/detekt/baseline.xml.
+detekt {
+    buildUponDefaultConfig = true
+    parallel = true
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+    baseline = file("$rootDir/config/detekt/baseline.xml")
+    source.setFrom(
+        files(subprojects.map { file("${it.projectDir}/src/main/java") }),
+    )
 }
 
 subprojects {
