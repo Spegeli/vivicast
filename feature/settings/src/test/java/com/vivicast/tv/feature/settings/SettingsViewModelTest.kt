@@ -23,6 +23,7 @@ import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -504,6 +505,74 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun getProviderCredentials_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val creds = ProviderCredentials.M3u(url = "http://x", sourceMode = M3uSourceMode.Url)
+        val providerRepo = FakeProviderRepository(credentials = mapOf("p1" to creds))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        val result = vm.getProviderCredentials("p1")
+
+        assertEquals("p1", providerRepo.credentialsProviderId)
+        assertEquals(creds, result)
+        scope.cancel()
+    }
+
+    @Test
+    fun createProvider_delegatesToRepositoryAndReturnsResult() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        val result = vm.createProvider(ProviderCreateRequest(name = "New", type = ProviderType.M3u, m3uUrl = "http://x"))
+
+        assertTrue(result.isSuccess)
+        assertEquals("New", providerRepo.createRequest?.name)
+        assertEquals("created", result.getOrNull()?.provider?.id)
+        scope.cancel()
+    }
+
+    @Test
+    fun updateProvider_delegatesToRepositoryAndReturnsResult() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        val result = vm.updateProvider(ProviderUpdateRequest(providerId = "p1", name = "Renamed"))
+
+        assertTrue(result.isSuccess)
+        assertEquals("p1", providerRepo.updateRequest?.providerId)
+        assertEquals("updated", result.getOrNull()?.provider?.id)
+        scope.cancel()
+    }
+
+    @Test
+    fun setProviderEnabled_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        val result = vm.setProviderEnabled("p1", false)
+
+        assertTrue(result.isSuccess)
+        assertEquals("p1" to false, providerRepo.setEnabledCall)
+        scope.cancel()
+    }
+
+    @Test
+    fun deleteProvider_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        val result = vm.deleteProvider("p1")
+
+        assertTrue(result.isSuccess)
+        assertEquals("p1", providerRepo.deletedProviderId)
+        scope.cancel()
+    }
+
+    @Test
     fun onPlaybackSettingsChanged_writesPreference() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore()
@@ -691,19 +760,41 @@ private class FakeEpgSourceRepository(
 
 private class FakeProviderRepository(
     initialProviders: List<Provider> = emptyList(),
+    private val credentials: Map<String, ProviderCredentials> = emptyMap(),
 ) : ProviderRepository {
     val providersFlow = MutableStateFlow(initialProviders)
+    var credentialsProviderId: String? = null
+        private set
+    var createRequest: ProviderCreateRequest? = null
+        private set
+    var updateRequest: ProviderUpdateRequest? = null
+        private set
+    var setEnabledCall: Pair<String, Boolean>? = null
+        private set
+    var deletedProviderId: String? = null
+        private set
 
     override fun observeProviders(): Flow<List<Provider>> = providersFlow
     override suspend fun getProvider(providerId: String): Provider? = null
-    override suspend fun getCredentials(providerId: String): ProviderCredentials? = null
-    override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult =
-        ProviderSaveResult(provider = provider("p", "P"), hasDuplicateName = false)
-    override suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult =
-        ProviderSaveResult(provider = provider("p", "P"), hasDuplicateName = false)
+    override suspend fun getCredentials(providerId: String): ProviderCredentials? {
+        credentialsProviderId = providerId
+        return credentials[providerId]
+    }
+    override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult {
+        createRequest = request
+        return ProviderSaveResult(provider = provider("created", "Created"), hasDuplicateName = false)
+    }
+    override suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult {
+        updateRequest = request
+        return ProviderSaveResult(provider = provider("updated", "Updated"), hasDuplicateName = false)
+    }
     override suspend fun saveProvider(provider: Provider) = Unit
     override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) = Unit
     override suspend fun setProviderActive(providerId: String, isActive: Boolean) = Unit
-    override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
-    override suspend fun deleteProvider(providerId: String) = Unit
+    override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) {
+        setEnabledCall = providerId to isEnabled
+    }
+    override suspend fun deleteProvider(providerId: String) {
+        deletedProviderId = providerId
+    }
 }

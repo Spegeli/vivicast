@@ -298,8 +298,12 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionPlaylists -> ProviderSettingsPanel(
-                            providerRepository = providerRepository,
                             providers = settingsUiState.providers,
+                            onGetProviderCredentials = viewModel::getProviderCredentials,
+                            onCreateProvider = viewModel::createProvider,
+                            onUpdateProvider = viewModel::updateProvider,
+                            onSetProviderEnabled = viewModel::setProviderEnabled,
+                            onDeleteProvider = viewModel::deleteProvider,
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,

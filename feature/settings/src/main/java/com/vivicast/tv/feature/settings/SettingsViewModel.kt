@@ -15,7 +15,11 @@ import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.provider.ProviderCreateRequest
+import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.ProviderSaveResult
+import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgSource
@@ -193,6 +197,27 @@ internal class SettingsViewModel(
 
     suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.clearManualChannelMapping(providerId, channelId, epgSourceId) }
+
+    /**
+     * Provider CRUD runs the repository call inside the ViewModel. Reads (credentials) delegate
+     * directly; mutations return a [Result] so the panel keeps its localized messaging and local
+     * wizard/editor reset. Connection-test, SAF file picking and the save-scheduler side effect
+     * stay App-hoisted (the panel/route call them around these methods).
+     */
+    suspend fun getProviderCredentials(providerId: String): ProviderCredentials? =
+        providerRepository.getCredentials(providerId)
+
+    suspend fun createProvider(request: ProviderCreateRequest): Result<ProviderSaveResult> =
+        runCatching { providerRepository.createProvider(request) }
+
+    suspend fun updateProvider(request: ProviderUpdateRequest): Result<ProviderSaveResult> =
+        runCatching { providerRepository.updateProvider(request) }
+
+    suspend fun setProviderEnabled(providerId: String, enabled: Boolean): Result<Unit> =
+        runCatching { providerRepository.setProviderEnabled(providerId, enabled) }
+
+    suspend fun deleteProvider(providerId: String): Result<Unit> =
+        runCatching { providerRepository.deleteProvider(providerId) }
 
     /**
      * EPG-source CRUD + provider-link actions run the repository call inside the ViewModel and

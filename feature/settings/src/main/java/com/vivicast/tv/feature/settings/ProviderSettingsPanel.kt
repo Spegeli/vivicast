@@ -83,6 +83,7 @@ import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.domain.model.Provider
@@ -100,8 +101,12 @@ import java.util.Date
 
 @Composable
 internal fun ProviderSettingsPanel(
-    providerRepository: ProviderRepository,
     providers: List<Provider>,
+    onGetProviderCredentials: suspend (String) -> ProviderCredentials?,
+    onCreateProvider: suspend (ProviderCreateRequest) -> Result<ProviderSaveResult>,
+    onUpdateProvider: suspend (ProviderUpdateRequest) -> Result<ProviderSaveResult>,
+    onSetProviderEnabled: suspend (String, Boolean) -> Result<Unit>,
+    onDeleteProvider: suspend (String) -> Result<Unit>,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
@@ -161,7 +166,7 @@ internal fun ProviderSettingsPanel(
     var existingM3uUrls by remember { mutableStateOf<List<ProviderUrlEntry>>(emptyList()) }
     LaunchedEffect(providers) {
         existingM3uUrls = providers.mapNotNull { provider ->
-            val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
+            val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
             (credentials as? ProviderCredentials.M3u)
                 ?.takeIf { it.sourceMode == M3uSourceMode.Url }
                 ?.url
@@ -196,7 +201,7 @@ internal fun ProviderSettingsPanel(
                     if (providers.any { it.status == ProviderStatus.Refreshing }) return@launch
                     val refreshableProviders = providers.filter { provider ->
                         provider.isActive &&
-                            when (val credentials = providerRepository.getCredentials(provider.id)) {
+                            when (val credentials = onGetProviderCredentials(provider.id)) {
                                 is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
                                 is ProviderCredentials.Xtream -> true
                                 null -> false
@@ -212,7 +217,7 @@ internal fun ProviderSettingsPanel(
                 showEditor = true
                 message = null
                 scope.launch {
-                    val credentials = runCatching { providerRepository.getCredentials(provider.id) }.getOrNull()
+                    val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
                     if (selectedProviderId == provider.id) {
                         editor = ProviderEditorState.from(provider, credentials)
                     }
@@ -302,7 +307,7 @@ internal fun ProviderSettingsPanel(
                                 }
                                 editor = editor.copy(connectionTestPassed = true)
                                 connectionTestStatus = ConnectionTestStatus.Passed
-                                runCatching { providerRepository.createProvider(editor.toCreateRequest()) }
+                                onCreateProvider(editor.toCreateRequest())
                                     .onSuccess { result ->
                                         selectedProviderId = result.provider.id
                                         editor = ProviderEditorState.from(result.provider)
@@ -367,13 +372,12 @@ internal fun ProviderSettingsPanel(
                         return@ProviderEditor
                     }
                     scope.launch {
-                        runCatching {
-                            if (editor.isEditing) {
-                                providerRepository.updateProvider(editor.toUpdateRequest())
-                            } else {
-                                providerRepository.createProvider(editor.toCreateRequest())
-                            }
-                        }.onSuccess { result ->
+                        val saveResult = if (editor.isEditing) {
+                            onUpdateProvider(editor.toUpdateRequest())
+                        } else {
+                            onCreateProvider(editor.toCreateRequest())
+                        }
+                        saveResult.onSuccess { result ->
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
                             editorStep = ProviderEditorStep.Name
@@ -389,7 +393,7 @@ internal fun ProviderSettingsPanel(
                     val provider = providers.firstOrNull { it.id == editor.providerId } ?: return@ProviderEditor
                     scope.launch {
                         val enabled = !provider.isActive
-                        runCatching { providerRepository.setProviderEnabled(provider.id, enabled) }
+                        onSetProviderEnabled(provider.id, enabled)
                             .onSuccess {
                                 message = if (enabled) strProviderEnabled else strProviderDisabled
                             }
@@ -412,7 +416,7 @@ internal fun ProviderSettingsPanel(
             onCancel = { pendingDelete = null },
             onDelete = {
                 scope.launch {
-                    runCatching { providerRepository.deleteProvider(provider.id) }
+                    onDeleteProvider(provider.id)
                         .onSuccess {
                             pendingDelete = null
                             selectedProviderId = null
