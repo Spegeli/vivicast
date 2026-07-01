@@ -63,10 +63,11 @@ failing on anything **new**. These are known/accepted and intentionally not refa
 - Room DAOs `CatalogDao`, `EpgDao` (`TooManyFunctions`).
 - `StandardBackupRestoreValidator.kt` validation method.
 
-`core/designsystem/VivicastComponents.kt` (P2-06), `core/database/VivicastMigrations.kt`,
-`core/player/VivicastPlayerController.kt` and `data/media/RoomCatalogImportRepository.kt` /
-`worker/RefreshExecution.kt` are also intentionally **not** split now; any current hits are covered by
-the baseline.
+`core/designsystem/VivicastComponents.kt` was split in P2-06 into nine cohesive designsystem files
+(VivicastSurfaces / Layout / Badges / Panels / Dialogs / Inputs / Cards / Navigation / Player), so it
+no longer exists. `core/database/VivicastMigrations.kt`, `core/player/VivicastPlayerController.kt` and
+`data/media/RoomCatalogImportRepository.kt` / `worker/RefreshExecution.kt` are still intentionally
+**not** split now; any current hits are covered by the baseline.
 
 ## How to handle new violations
 
