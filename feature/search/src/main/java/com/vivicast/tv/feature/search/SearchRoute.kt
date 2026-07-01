@@ -14,12 +14,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -44,12 +40,8 @@ import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.SearchResults
 import com.vivicast.tv.domain.model.Series
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-
-private const val SEARCH_DEBOUNCE_MS = 300L
-private const val SEARCH_LIMIT_PER_TYPE = 20
-private const val MAX_SEARCH_HISTORY = 20
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun SearchRoute(
@@ -83,21 +75,8 @@ private fun RoomSearchRoute(
     onOpenSeries: (Series) -> Unit,
     onOpenEpgProgram: (EpgProgram) -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList(), emptyList())) }
-    var debouncedQuery by remember { mutableStateOf("") }
-    val history by mediaRepository.observeSearchHistory(MAX_SEARCH_HISTORY).collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(query) {
-        delay(SEARCH_DEBOUNCE_MS)
-        val trimmed = query.trim()
-        debouncedQuery = trimmed
-        results = mediaRepository.search(trimmed, SEARCH_LIMIT_PER_TYPE)
-        if (trimmed.length >= 2) {
-            mediaRepository.addSearchHistory(trimmed)
-        }
-    }
+    val viewModel: SearchViewModel = viewModel(factory = SearchViewModelFactory(mediaRepository))
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     val strChannels = stringResource(R.string.search_channels)
     val strMovies = stringResource(R.string.search_movies)
@@ -109,10 +88,10 @@ private fun RoomSearchRoute(
     val strEpgHit = stringResource(R.string.search_subtitle_epg_hit)
     val strChannelPrefix = stringResource(R.string.search_subtitle_channel)
     SearchContent(
-        query = query,
-        onQueryChanged = { query = it },
-        history = history,
-        results = results.toSearchGroups(
+        query = uiState.query,
+        onQueryChanged = viewModel::onQueryChanged,
+        history = uiState.history,
+        results = uiState.results.toSearchGroups(
             titleChannels = strChannels,
             titleMovies = strMovies,
             titleSeries = strSeries,
@@ -127,15 +106,11 @@ private fun RoomSearchRoute(
             onOpenSeries = onOpenSeries,
             onOpenEpgProgram = onOpenEpgProgram,
         ),
-        debouncedQuery = debouncedQuery,
+        debouncedQuery = uiState.debouncedQuery,
         autoFocusField = autoFocusField,
-        onHistorySelected = { query = it },
-        onHistoryDeleted = { term ->
-            scope.launch { mediaRepository.deleteSearchHistory(term) }
-        },
-        onClearHistory = {
-            scope.launch { mediaRepository.clearSearchHistory() }
-        },
+        onHistorySelected = viewModel::onHistorySelected,
+        onHistoryDeleted = viewModel::onHistoryRemoved,
+        onClearHistory = viewModel::onClearHistory,
         onVoiceClick = {},
     )
 }
