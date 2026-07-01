@@ -7,6 +7,11 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.vivicast.tv.core.cache.MediaCacheCleanupResult
+import com.vivicast.tv.core.cache.MediaCacheEntry
+import com.vivicast.tv.core.cache.MediaCacheKey
+import com.vivicast.tv.core.cache.MediaCacheStats
+import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.BackupPreferences
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
@@ -84,16 +89,14 @@ class SettingsRouteInitialSectionTest {
                 providerRepository = EmptyProviderRepository,
                 epgSourceRepository = EmptyEpgSourceRepository,
                 userPreferencesStore = EmptyUserPreferencesStore,
-                cacheSettingsState = CacheSettingsState(),
+                mediaCacheStore = EmptyMediaCacheStore,
                 aboutAppState = AboutAppState(),
                 initialSelectedSection = initialSelectedSection,
                 onTestProviderConnection = { null },
                 onProviderSaved = {},
                 onBackgroundRefreshChanged = {},
                 onRunGlobalRefresh = {},
-                onClearCache = {},
                 onClearHistory = {},
-                onReloadCacheStats = {},
             )
         }
     }
@@ -112,6 +115,18 @@ private object EmptyUserPreferencesStore : UserPreferencesStore {
     override suspend fun updateEpg(epg: EpgPreferences) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit
     override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) = Unit
+}
+
+private object EmptyMediaCacheStore : MediaCacheStore {
+    override suspend fun hasEntry(key: MediaCacheKey): Boolean = false
+    override suspend fun getEntry(key: MediaCacheKey): MediaCacheEntry? = null
+    override suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry =
+        throw UnsupportedOperationException()
+    override suspend fun stats(): MediaCacheStats = MediaCacheStats(totalSizeBytes = 0, fileCount = 0)
+    override suspend fun cleanup(maxSizeBytes: Long): MediaCacheCleanupResult =
+        MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
+    override suspend fun clear(): MediaCacheCleanupResult =
+        MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
 }
 
 private object EmptyProviderRepository : ProviderRepository {

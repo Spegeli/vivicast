@@ -12,4 +12,5 @@ internal data class SettingsUiState(
     val playback: PlaybackSettingsState = PlaybackSettingsState(),
     val epg: EpgSettingsState = EpgSettingsState(),
     val diagnostics: DiagnosticsSettingsState = DiagnosticsSettingsState(),
+    val cache: CacheSettingsState = CacheSettingsState(),
 )

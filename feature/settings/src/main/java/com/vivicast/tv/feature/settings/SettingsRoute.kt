@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
@@ -119,8 +120,8 @@ fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
     userPreferencesStore: UserPreferencesStore,
+    mediaCacheStore: MediaCacheStore,
     parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
-    cacheSettingsState: CacheSettingsState,
     backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
     initialSelectedSection: String? = null,
@@ -142,12 +143,10 @@ fun SettingsRoute(
     onExportDiagnostics: () -> Unit = {},
     onCopySupportInformation: () -> Unit = {},
     onRunGlobalRefresh: () -> Unit,
-    onClearCache: () -> Unit,
     onClearHistory: (HistoryClearTarget) -> Unit,
-    onReloadCacheStats: () -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(userPreferencesStore),
+        factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore),
     )
     val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settingsSections = settingsSectionsList()
@@ -180,7 +179,7 @@ fun SettingsRoute(
     }
 
     LaunchedEffect(Unit) {
-        onReloadCacheStats()
+        viewModel.onReloadCacheStats()
         awaitFrame()
         selectedSectionFocusRequester.requestFocus()
     }
@@ -332,10 +331,10 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionCache -> MaintenanceSettingsPanel(
-                            cacheSettingsState = cacheSettingsState,
-                            onClearCache = onClearCache,
+                            cacheSettingsState = settingsUiState.cache,
+                            onClearCache = viewModel::onClearCache,
                             onClearHistory = onClearHistory,
-                            onReloadCacheStats = onReloadCacheStats,
+                            onReloadCacheStats = viewModel::onReloadCacheStats,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionBackup -> BackupSettingsPanel(

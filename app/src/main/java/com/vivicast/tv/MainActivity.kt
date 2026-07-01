@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.vivicast.tv.core.cache.MediaCacheStats
 import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
@@ -91,7 +90,6 @@ import com.vivicast.tv.backup.decryptFullBackupPayload
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
 import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
-import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
 import com.vivicast.tv.feature.settings.BackupSettingsState
@@ -192,7 +190,6 @@ private fun VivicastApp(
 ) {
     var playerVisible by remember { mutableStateOf(false) }
     var selectedRoute by remember { mutableStateOf(ROUTE_HOME) }
-    var cacheStats by remember { mutableStateOf(MediaCacheStats(totalSizeBytes = 0L, fileCount = 0)) }
     var livePlaybackChannels by remember { mutableStateOf(emptyList<Channel>()) }
     var liveTvSearchTarget by remember { mutableStateOf<LiveTvSearchTarget?>(null) }
     var movieSearchTarget by remember { mutableStateOf<Movie?>(null) }
@@ -690,9 +687,6 @@ private fun VivicastApp(
 
     LaunchedEffect(selectedRoute) {
         lastTopNavigationBackAt = 0L
-        if (selectedRoute == "settings") {
-            cacheStats = appContainer.mediaCacheStore.stats()
-        }
     }
 
     LaunchedEffect(appContainer) {
@@ -845,6 +839,7 @@ private fun VivicastApp(
                 providerRepository = appContainer.providerRepository,
                 epgSourceRepository = appContainer.epgSourceRepository,
                 userPreferencesStore = appContainer.userPreferencesStore,
+                mediaCacheStore = appContainer.mediaCacheStore,
                 parentalControlSettingsState = ParentalControlSettingsState(
                     hasPin = pinSecurityState.hasPin,
                     lockedUntilMillis = pinSecurityState.lockedUntilMillis,
@@ -852,10 +847,6 @@ private fun VivicastApp(
                     protectMovies = pinSecurityState.protectMovies,
                     protectSeries = pinSecurityState.protectSeries,
                     protectAdultContent = pinSecurityState.protectAdultContent,
-                ),
-                cacheSettingsState = CacheSettingsState(
-                    totalSizeBytes = cacheStats.totalSizeBytes,
-                    fileCount = cacheStats.fileCount,
                 ),
                 backupSettingsState = BackupSettingsState(
                     target = preferences.backup.target.toSettingsBackupTargetMode(),
@@ -1050,20 +1041,9 @@ private fun VivicastApp(
                 onRunGlobalRefresh = {
                     appContainer.refreshWorkScheduler.enqueueGlobalRefresh()
                 },
-                onClearCache = {
-                    scope.launch {
-                        appContainer.mediaCacheStore.clear()
-                        cacheStats = appContainer.mediaCacheStore.stats()
-                    }
-                },
                 onClearHistory = { target ->
                     scope.launch {
                         appContainer.clearHistory(target)
-                    }
-                },
-                onReloadCacheStats = {
-                    scope.launch {
-                        cacheStats = appContainer.mediaCacheStore.stats()
                     }
                 },
             )

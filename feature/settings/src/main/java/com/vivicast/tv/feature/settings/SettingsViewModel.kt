@@ -2,6 +2,8 @@ package com.vivicast.tv.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vivicast.tv.core.cache.MediaCacheStats
+import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
@@ -26,12 +28,14 @@ import kotlinx.coroutines.launch
  */
 internal class SettingsViewModel(
     private val userPreferencesStore: UserPreferencesStore,
+    private val mediaCacheStore: MediaCacheStore,
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
     private val coroutineScope: CoroutineScope = scope ?: viewModelScope
 
     private var currentPreferences: UserPreferences = UserPreferences()
+    private var currentCache: CacheSettingsState = CacheSettingsState()
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -40,8 +44,25 @@ internal class SettingsViewModel(
         coroutineScope.launch {
             userPreferencesStore.values.collect { preferences ->
                 currentPreferences = preferences
-                _uiState.value = preferences.toSettingsUiState()
+                _uiState.value = preferences.toSettingsUiState().copy(cache = currentCache)
             }
+        }
+    }
+
+    /** Loads the media cache stats into the state (mirrors the original App reload). */
+    fun onReloadCacheStats() {
+        coroutineScope.launch {
+            currentCache = mediaCacheStore.stats().toCacheSettingsState()
+            _uiState.value = _uiState.value.copy(cache = currentCache)
+        }
+    }
+
+    /** Clears the media cache and reloads the stats afterwards, mirroring the original behaviour. */
+    fun onClearCache() {
+        coroutineScope.launch {
+            mediaCacheStore.clear()
+            currentCache = mediaCacheStore.stats().toCacheSettingsState()
+            _uiState.value = _uiState.value.copy(cache = currentCache)
         }
     }
 
@@ -169,3 +190,6 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
     ),
     diagnostics = diagnostics.toSettingsDiagnosticsState(),
 )
+
+private fun MediaCacheStats.toCacheSettingsState(): CacheSettingsState =
+    CacheSettingsState(totalSizeBytes = totalSizeBytes, fileCount = fileCount)

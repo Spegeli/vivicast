@@ -1,5 +1,10 @@
 package com.vivicast.tv.feature.settings
 
+import com.vivicast.tv.core.cache.MediaCacheCleanupResult
+import com.vivicast.tv.core.cache.MediaCacheEntry
+import com.vivicast.tv.core.cache.MediaCacheKey
+import com.vivicast.tv.core.cache.MediaCacheStats
+import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.BackupPreferences
 import com.vivicast.tv.core.datastore.BufferSizePreference
@@ -25,8 +30,12 @@ import org.junit.Test
 
 class SettingsViewModelTest {
 
-    private fun newViewModel(scope: CoroutineScope, store: FakeUserPreferencesStore): SettingsViewModel =
-        SettingsViewModel(store, scope = scope)
+    private fun newViewModel(
+        scope: CoroutineScope,
+        store: FakeUserPreferencesStore,
+        cacheStore: FakeMediaCacheStore = FakeMediaCacheStore(),
+    ): SettingsViewModel =
+        SettingsViewModel(store, cacheStore, scope = scope)
 
     @Test
     fun initialState_mapsGeneralAppearancePlaybackFromPreferences() = runBlocking {
@@ -208,6 +217,33 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun onReloadCacheStats_loadsStatsFromStore() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val cacheStore = FakeMediaCacheStore(MediaCacheStats(totalSizeBytes = 2048, fileCount = 5))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), cacheStore)
+
+        vm.onReloadCacheStats()
+
+        assertEquals(2048L, vm.uiState.value.cache.totalSizeBytes)
+        assertEquals(5, vm.uiState.value.cache.fileCount)
+        scope.cancel()
+    }
+
+    @Test
+    fun onClearCache_clearsThenReloadsStats() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val cacheStore = FakeMediaCacheStore(MediaCacheStats(totalSizeBytes = 4096, fileCount = 9))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), cacheStore)
+
+        vm.onClearCache()
+
+        assertEquals(true, cacheStore.cleared)
+        assertEquals(0L, vm.uiState.value.cache.totalSizeBytes)
+        assertEquals(0, vm.uiState.value.cache.fileCount)
+        scope.cancel()
+    }
+
+    @Test
     fun onPlaybackSettingsChanged_writesPreference() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore()
@@ -256,4 +292,27 @@ private class FakeUserPreferencesStore(
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
     override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit
+}
+
+private class FakeMediaCacheStore(
+    private var currentStats: MediaCacheStats = MediaCacheStats(totalSizeBytes = 0, fileCount = 0),
+) : MediaCacheStore {
+    var cleared = false
+        private set
+
+    override suspend fun hasEntry(key: MediaCacheKey): Boolean = false
+    override suspend fun getEntry(key: MediaCacheKey): MediaCacheEntry? = null
+    override suspend fun put(key: MediaCacheKey, bytes: ByteArray): MediaCacheEntry =
+        throw UnsupportedOperationException()
+
+    override suspend fun stats(): MediaCacheStats = currentStats
+
+    override suspend fun cleanup(maxSizeBytes: Long): MediaCacheCleanupResult =
+        MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = currentStats.totalSizeBytes)
+
+    override suspend fun clear(): MediaCacheCleanupResult {
+        cleared = true
+        currentStats = MediaCacheStats(totalSizeBytes = 0, fileCount = 0)
+        return MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
+    }
 }
