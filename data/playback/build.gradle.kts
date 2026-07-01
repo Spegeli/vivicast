@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":core:cache"))
     implementation(project(":core:database"))
+    implementation(project(":core:player"))
     implementation(project(":data:provider"))
     implementation(libs.androidx.room.ktx)
     implementation(libs.kotlinx.coroutines.core)

@@ -243,38 +243,7 @@ internal suspend fun AppContainer.createMoviePlaybackRequest(
     movie: Movie,
     resumeProgress: Boolean,
     origin: PlaybackOrigin,
-): PlaybackRequest? {
-    val stream = playbackStreamResolver.resolve(
-        PlaybackStreamRequest(
-            providerId = movie.providerId,
-            mediaId = movie.id,
-            mediaType = MediaType.Movie,
-            remoteId = movie.remoteId,
-            containerExtension = movie.containerExtension,
-        ),
-    ).resolvedStreamOrNull() ?: return null
-    val progress = if (resumeProgress) {
-        playbackRepository.getProgress(movie.providerId, MediaType.Movie, movie.id)
-            ?.takeUnless { it.isCompleted }
-    } else {
-        null
-    }
-
-    return PlaybackRequest(
-        playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
-        providerId = stream.providerId,
-        mediaId = stream.mediaId,
-        mediaType = PlaybackMediaType.Movie,
-        providerStableKey = stream.providerStableKey,
-        mediaStableKey = movie.stableKey,
-        origin = origin,
-        returnTarget = PlaybackReturnTarget.MovieDetail,
-        title = movie.name,
-        streamUrl = stream.url,
-        seekable = true,
-        startPositionMillis = progress?.positionMillis ?: 0L,
-    )
-}
+): PlaybackRequest? = playbackRequestFactory.movieRequest(movie, resumeProgress, origin)
 
 internal suspend fun AppContainer.openEpisodePlayback(
     episode: Episode,
@@ -289,34 +258,7 @@ internal suspend fun AppContainer.openEpisodePlayback(
 internal suspend fun AppContainer.createEpisodePlaybackRequest(
     episode: Episode,
     origin: PlaybackOrigin,
-): PlaybackRequest? {
-    val stream = playbackStreamResolver.resolve(
-        PlaybackStreamRequest(
-            providerId = episode.providerId,
-            mediaId = episode.id,
-            mediaType = MediaType.Episode,
-            remoteId = episode.remoteId,
-            containerExtension = episode.containerExtension,
-        ),
-    ).resolvedStreamOrNull() ?: return null
-    val progress = playbackRepository.getProgress(episode.providerId, MediaType.Episode, episode.id)
-        ?.takeUnless { it.isCompleted }
-
-    return PlaybackRequest(
-        playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
-        providerId = stream.providerId,
-        mediaId = stream.mediaId,
-        mediaType = PlaybackMediaType.Episode,
-        providerStableKey = stream.providerStableKey,
-        mediaStableKey = episode.stableKey,
-        origin = origin,
-        returnTarget = PlaybackReturnTarget.SeriesDetail,
-        title = episode.name,
-        streamUrl = stream.url,
-        seekable = true,
-        startPositionMillis = progress?.positionMillis ?: 0L,
-    )
-}
+): PlaybackRequest? = playbackRequestFactory.episodeRequest(episode, origin)
 
 internal suspend fun AppContainer.openCatchUpPlayback(
     channel: Channel,

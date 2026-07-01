@@ -33,6 +33,7 @@ import com.vivicast.tv.data.media.RoomCatalogImportRepository
 import com.vivicast.tv.data.media.RoomMediaRepository
 import com.vivicast.tv.data.playback.DefaultPlaybackStreamResolver
 import com.vivicast.tv.data.playback.PlaybackRepository
+import com.vivicast.tv.data.playback.PlaybackRequestFactory
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -192,6 +193,13 @@ class AppContainer(
         SystemIntegrationPlaybackRepository(rawPlaybackRepository) {
             syncWatchNext()
         }
+    }
+
+    val playbackRequestFactory: PlaybackRequestFactory by lazy {
+        PlaybackRequestFactory(
+            playbackStreamResolver = playbackStreamResolver,
+            playbackRepository = playbackRepository,
+        )
     }
 
     val watchNextSynchronizer: WatchNextSynchronizer by lazy {
