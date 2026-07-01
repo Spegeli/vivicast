@@ -273,7 +273,21 @@ class SettingsViewModelTest {
 
         val state = vm.uiState.value
         assertEquals(listOf("s1"), state.epgSources.map { it.id })
-        assertEquals(listOf("p1"), state.epgProviders.map { it.id })
+        // Shared provider list, used by both the EPG area and the Provider-settings overview.
+        assertEquals(listOf("p1"), state.providers.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun providerFlowChange_updatesUiStateReactively() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository(initialProviders = listOf(provider("p1", "Provider 1")))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+
+        assertEquals(listOf("p1"), vm.uiState.value.providers.map { it.id })
+        providerRepo.providersFlow.value = listOf(provider("p1", "Provider 1"), provider("p2", "Provider 2"))
+
+        assertEquals(listOf("p1", "p2"), vm.uiState.value.providers.map { it.id })
         scope.cancel()
     }
 

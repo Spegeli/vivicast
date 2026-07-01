@@ -54,7 +54,7 @@ internal class SettingsViewModel(
     private var currentPreferences: UserPreferences = UserPreferences()
     private var currentCache: CacheSettingsState = CacheSettingsState()
     private var currentEpgSources: List<EpgSource> = emptyList()
-    private var currentEpgProviders: List<Provider> = emptyList()
+    private var currentProviders: List<Provider> = emptyList()
     private var currentProviderEpgLinks: List<ProviderEpgSource> = emptyList()
     private var currentManualMappingChannels: List<Channel> = emptyList()
     private var currentManualMappings: List<EpgChannelMapping> = emptyList()
@@ -83,7 +83,7 @@ internal class SettingsViewModel(
         }
         coroutineScope.launch {
             providerRepository.observeProviders().collect { providers ->
-                currentEpgProviders = providers
+                currentProviders = providers
                 if (selectedEpgProviderId.value != null && providers.none { it.id == selectedEpgProviderId.value }) {
                     selectedEpgProviderId.value = null
                 }
@@ -134,7 +134,7 @@ internal class SettingsViewModel(
         _uiState.value = currentPreferences.toSettingsUiState().copy(
             cache = currentCache,
             epgSources = currentEpgSources,
-            epgProviders = currentEpgProviders,
+            providers = currentProviders,
             selectedEpgProviderId = selectedEpgProviderId.value,
             providerEpgLinks = currentProviderEpgLinks,
             manualMappingChannels = currentManualMappingChannels,

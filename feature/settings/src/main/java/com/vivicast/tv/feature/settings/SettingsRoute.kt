@@ -299,6 +299,7 @@ fun SettingsRoute(
                         )
                         sectionPlaylists -> ProviderSettingsPanel(
                             providerRepository = providerRepository,
+                            providers = settingsUiState.providers,
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
@@ -307,7 +308,7 @@ fun SettingsRoute(
                         sectionEpg -> EpgSettingsPanel(
                             state = settingsUiState.epg,
                             sources = settingsUiState.epgSources,
-                            providers = settingsUiState.epgProviders,
+                            providers = settingsUiState.providers,
                             selectedProviderId = settingsUiState.selectedEpgProviderId,
                             providerLinks = settingsUiState.providerEpgLinks,
                             manualMappingChannels = settingsUiState.manualMappingChannels,

@@ -101,12 +101,12 @@ import java.util.Date
 @Composable
 internal fun ProviderSettingsPanel(
     providerRepository: ProviderRepository,
+    providers: List<Provider>,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val providers by remember { providerRepository.observeProviders() }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(ProviderEditorState.newProvider(ProviderType.M3u)) }
