@@ -19,12 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,19 +53,17 @@ import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vivicast.tv.data.epg.EpgRepository
 import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
-import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgProgram
-import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -133,11 +129,17 @@ private fun RoomLiveTvRoute(
     targetEpgStartTime: Long?,
     onTargetConsumed: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
-    var selectedProviderId by remember { mutableStateOf<String?>(null) }
-    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
-    var selectedChannelId by remember { mutableStateOf<String?>(null) }
+    val viewModel: LiveTvViewModel = viewModel(
+        factory = LiveTvViewModelFactory(
+            providerRepository = providerRepository,
+            mediaRepository = mediaRepository,
+            epgRepository = epgRepository,
+            favoritesRepository = favoritesRepository,
+        ),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Pure-visual state kept in the composable layer.
     var mode by remember { mutableStateOf(LiveColumnMode.Category) }
     var focusedArea by remember { mutableStateOf(LiveFocusArea.Provider) }
     var selectedCategoryFocusRequest by remember { mutableStateOf(0) }
@@ -145,7 +147,28 @@ private fun RoomLiveTvRoute(
     var epgFocusRequest by remember { mutableStateOf(0) }
     var previewStarted by remember { mutableStateOf(false) }
     var firstProviderExpansionApplied by remember { mutableStateOf(false) }
-    var channelPageCount by remember { mutableStateOf(1) }
+
+    // Feed the App-hoisted expansion into the ViewModel (drives the category default guard).
+    LaunchedEffect(expandedProviderIds) { viewModel.onExpandedProvidersChanged(expandedProviderIds) }
+    // Mirror the original "preview off when the channel auto-resets" side effect.
+    LaunchedEffect(uiState.channelResetSignal) { previewStarted = false }
+
+    val providers = uiState.providers
+    val categories = uiState.categories
+    val channels = uiState.channels
+    val selectedProviderId = uiState.selectedProviderId
+    val selectedCategoryId = uiState.selectedCategoryId
+    val selectedChannelId = uiState.selectedChannelId
+    val favoriteChannelIds = uiState.favoriteChannelIds
+    val selectedProvider = uiState.selectedProvider
+    val selectedCategory = uiState.selectedCategory
+    val selectedChannel = uiState.selectedChannel
+    val channelProvider = uiState.channelProvider
+    val canLoadMoreChannels = uiState.canLoadMore
+    val nowMillis = uiState.nowMillis
+    val selectedPrograms = uiState.selectedPrograms
+    val currentProgram = uiState.currentProgram
+    val nextProgram = uiState.nextProgram
 
     BackHandler(enabled = focusedArea != LiveFocusArea.Provider) {
         when (focusedArea) {
@@ -165,16 +188,9 @@ private fun RoomLiveTvRoute(
         }
     }
 
-    LaunchedEffect(providers) {
-        if (selectedProviderId == null || providers.none { it.id == selectedProviderId }) {
-            selectedProviderId = providers.firstOrNull { it.isActive }?.id ?: providers.firstOrNull()?.id
-        }
-    }
     LaunchedEffect(targetProviderId, targetCategoryId, targetChannelId, targetEpgProgramId) {
         val providerId = targetProviderId ?: return@LaunchedEffect
-        selectedProviderId = providerId
-        selectedCategoryId = targetCategoryId
-        selectedChannelId = targetChannelId
+        viewModel.onTarget(targetProviderId, targetCategoryId, targetChannelId, targetEpgStartTime)
         if (providerId !in expandedProviderIds) {
             onExpandedProviderIdsChanged(expandedProviderIds + providerId)
         }
@@ -193,97 +209,9 @@ private fun RoomLiveTvRoute(
             firstProviderExpansionApplied = true
         }
     }
-
-    val categoriesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { mediaRepository.observeCategories(it, CategoryType.LiveTv) } ?: flowOf(emptyList())
-    }
-    val categories by categoriesFlow.collectAsState(initial = emptyList())
-    val favoritesFlow = remember(favoritesRepository) { favoritesRepository.observeFavorites(MediaType.Channel) }
-    val favorites by favoritesFlow.collectAsState(initial = emptyList())
-    val favoriteChannelIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
-    val favoriteChannels by produceState(initialValue = emptyList(), mediaRepository, favorites) {
-        value = favorites.mapNotNull { favorite ->
-            mediaRepository.getChannel(favorite.providerId, favorite.mediaId)
-        }
-    }
-    val selectedProviderExpanded = selectedProviderId in expandedProviderIds
-
-    LaunchedEffect(selectedProviderId, selectedCategoryId) {
-        channelPageCount = 1
-    }
-
-    LaunchedEffect(selectedProviderId, selectedProviderExpanded, categories, selectedCategoryId) {
-        if (selectedCategoryId == FAVORITES_CATEGORY_ID) return@LaunchedEffect
-        if (!selectedProviderExpanded) {
-            selectedCategoryId = null
-        } else if (selectedCategoryId == null || categories.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = categories.firstOrNull()?.id
-        }
-    }
-
-    val channelsFlow = remember(selectedProviderId, selectedCategoryId, channelPageCount) {
-        if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
-            flowOf(emptyList())
-        } else {
-            selectedProviderId?.let { providerId ->
-            val categoryId = selectedCategoryId?.takeUnless { it == FAVORITES_CATEGORY_ID }
-            mediaRepository.observeChannelsPage(
-                providerId = providerId,
-                categoryId = categoryId,
-                limit = channelPageCount * LIVE_TV_PAGE_SIZE,
-            )
-            } ?: flowOf(emptyList())
-        }
-    }
-    val observedChannels by channelsFlow.collectAsState(initial = emptyList())
-    val channels = remember(observedChannels, selectedCategoryId, favoriteChannels) {
-        if (selectedCategoryId == FAVORITES_CATEGORY_ID) {
-            favoriteChannels.sortedBy { it.name.lowercase(Locale.getDefault()) }
-        } else {
-            observedChannels
-        }
-    }
-
     LaunchedEffect(channels) {
         onPlayableChannelsChanged(channels)
     }
-
-    LaunchedEffect(channels) {
-        if (selectedChannelId == null || channels.none { it.id == selectedChannelId }) {
-            selectedChannelId = channels.firstOrNull()?.id
-            previewStarted = false
-        }
-    }
-
-    val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId }
-    val targetChannel by produceState<Channel?>(initialValue = null, mediaRepository, targetProviderId, targetChannelId) {
-        value = if (targetProviderId != null && targetChannelId != null) {
-            mediaRepository.getChannel(targetProviderId, targetChannelId)
-        } else {
-            null
-        }
-    }
-    val selectedChannel = channels.firstOrNull { it.id == selectedChannelId } ?: targetChannel?.takeIf { it.id == selectedChannelId }
-    val channelProvider = selectedChannel?.let { channel -> providers.firstOrNull { it.id == channel.providerId } } ?: selectedProvider
-    val canLoadMoreChannels = selectedCategoryId != FAVORITES_CATEGORY_ID &&
-        observedChannels.size >= channelPageCount * LIVE_TV_PAGE_SIZE
-    val nowMillis = remember(selectedChannel?.id, targetEpgStartTime) { targetEpgStartTime ?: System.currentTimeMillis() }
-    val programsFlow = remember(selectedProviderId, selectedChannel?.id, nowMillis) {
-        if (selectedChannel == null) {
-            flowOf(emptyList())
-        } else {
-            epgRepository.observeProgramsForChannel(
-                providerId = selectedChannel.providerId,
-                channelId = selectedChannel.id,
-                fromMillis = nowMillis - EPG_PAST_WINDOW_MILLIS,
-                toMillis = nowMillis + EPG_FUTURE_WINDOW_MILLIS,
-            )
-        }
-    }
-    val selectedPrograms by programsFlow.collectAsState(initial = emptyList())
-    val currentProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.currentAt(nowMillis) }
-    val nextProgram = remember(selectedPrograms, nowMillis) { selectedPrograms.nextAfter(nowMillis) }
 
     fun moveBrowserChannel(key: Key): Boolean {
         if (focusedArea != LiveFocusArea.ChannelList || channels.isEmpty()) return false
@@ -293,7 +221,7 @@ private fun RoomLiveTvRoute(
             Key.ChannelDown -> (selectedIndex + 1).coerceAtMost(channels.lastIndex)
             else -> return false
         }
-        selectedChannelId = channels[nextIndex].id
+        viewModel.onChannelFocused(channels[nextIndex].id)
         previewStarted = false
         selectedChannelFocusRequest += 1
         return true
@@ -315,19 +243,16 @@ private fun RoomLiveTvRoute(
                     categories = categories,
                     selectedCategoryId = selectedCategoryId,
                     favoriteSelected = selectedCategoryId == FAVORITES_CATEGORY_ID,
-                    favoriteCount = favoriteChannels.size,
+                    favoriteCount = uiState.favoriteChannelCount,
                     requestSelectedFocusSignal = selectedCategoryFocusRequest,
                     onGlobalFavoritesFocused = {
-                        selectedCategoryId = FAVORITES_CATEGORY_ID
-                        selectedChannelId = null
+                        viewModel.onGlobalFavoritesSelected()
                         mode = LiveColumnMode.Category
                         focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
                     onProviderFocused = {
-                        selectedProviderId = it.id
-                        if (it.id !in expandedProviderIds) selectedCategoryId = null
-                        selectedChannelId = null
+                        viewModel.onProviderFocused(it.id)
                         focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
@@ -339,15 +264,12 @@ private fun RoomLiveTvRoute(
                             expandedProviderIds + provider.id
                         }
                         onExpandedProviderIdsChanged(nextExpandedProviderIds)
-                        selectedProviderId = provider.id
-                        if (wasExpanded) selectedCategoryId = null
-                        selectedChannelId = null
+                        viewModel.onProviderToggled(provider.id, wasExpanded)
                         focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
                     onCategoryFocused = {
-                        selectedCategoryId = it.id
-                        selectedChannelId = null
+                        viewModel.onCategorySelected(it.id)
                         focusedArea = LiveFocusArea.Provider
                         previewStarted = false
                     },
@@ -366,18 +288,18 @@ private fun RoomLiveTvRoute(
                 canLoadMore = canLoadMoreChannels,
                 requestSelectedFocusSignal = selectedChannelFocusRequest,
                 onChannelFocused = {
-                    selectedChannelId = it.id
+                    viewModel.onChannelFocused(it.id)
                     focusedArea = LiveFocusArea.ChannelList
                     previewStarted = false
                 },
                 onChannelClick = {
-                    selectedChannelId = it.id
+                    viewModel.onChannelFocused(it.id)
                     mode = LiveColumnMode.Channel
                     focusedArea = LiveFocusArea.Epg
                     epgFocusRequest += 1
                     previewStarted = true
                 },
-                onLoadMore = { channelPageCount += 1 },
+                onLoadMore = { viewModel.onLoadMore() },
                 modifier = Modifier.weight(if (mode == LiveColumnMode.Category) 0.33f else 0.32f),
             )
 
@@ -412,13 +334,7 @@ private fun RoomLiveTvRoute(
                 },
                 onOpenPlayer = { selectedChannel?.let(onOpenPlayer) },
                 onShowCategoryMode = { mode = LiveColumnMode.Category },
-                onToggleFavorite = {
-                    val channelId = selectedChannel?.id
-                    val providerId = selectedChannel?.providerId
-                    if (providerId != null && channelId != null) {
-                        scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Channel, channelId) }
-                    }
-                },
+                onToggleFavorite = { viewModel.onToggleFavorite() },
                 modifier = Modifier.weight(0.42f),
             )
         }
@@ -804,12 +720,6 @@ private fun emptyChannelMessage(provider: Provider?, category: Category?): Strin
         else -> stringResource(R.string.livetv_no_channels_category)
     }
 
-private fun List<EpgProgram>.currentAt(nowMillis: Long): EpgProgram? =
-    firstOrNull { it.isCurrentAt(nowMillis) }
-
-private fun List<EpgProgram>.nextAfter(nowMillis: Long): EpgProgram? =
-    firstOrNull { it.startTime > nowMillis }
-
 private fun EpgProgram?.progressAt(nowMillis: Long): Int {
     if (this == null || endTime <= startTime || !isCurrentAt(nowMillis)) return 0
     return (((nowMillis - startTime) * 100) / (endTime - startTime)).toInt().coerceIn(0, 100)
@@ -825,10 +735,6 @@ private fun Long.hhMm(): String =
 private fun Category.localizedDisplayName(): String =
     if (remoteId == "__UNCATEGORIZED__") stringResource(R.string.category_uncategorized) else name
 
-private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
-private const val LIVE_TV_PAGE_SIZE = 80
-private const val EPG_PAST_WINDOW_MILLIS = 4L * 60L * 60L * 1000L
-private const val EPG_FUTURE_WINDOW_MILLIS = 8L * 60L * 60L * 1000L
 internal fun providerTreeProviderTag(providerId: String): String = "live-tv-provider-$providerId"
 internal fun providerTreeCategoryTag(categoryId: String): String = "live-tv-category-$categoryId"
 internal fun channelRowTag(channelId: String): String = "live-tv-channel-$channelId"
