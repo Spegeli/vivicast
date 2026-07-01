@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -18,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.HeroPanel
@@ -30,12 +31,8 @@ import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.domain.model.Channel
-import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.Episode
-import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
-import com.vivicast.tv.domain.model.PlaybackProgress
-import kotlinx.coroutines.flow.flowOf
 
 @Composable
 fun HomeRoute(
@@ -49,21 +46,50 @@ fun HomeRoute(
     onOpenChannel: (Channel) -> Unit = {},
     onAddPlaylist: () -> Unit = {},
 ) {
-    val continueFlow = remember(playbackRepository) {
-        playbackRepository?.observeAllContinueWatching() ?: flowOf(emptyList())
-    }
-    val recentChannelsFlow = remember(playbackRepository) {
-        playbackRepository?.observeAllRecentChannels(limit = 12) ?: flowOf(emptyList())
-    }
-    val continueProgress by continueFlow.collectAsState(initial = emptyList())
-    val recentChannelHistory by recentChannelsFlow.collectAsState(initial = emptyList())
-    val continueItems by produceState(initialValue = emptyList(), mediaRepository, continueProgress) {
-        value = mediaRepository?.resolveContinueItems(continueProgress) ?: emptyList()
-    }
-    val recentChannels by produceState(initialValue = emptyList(), mediaRepository, recentChannelHistory) {
-        value = mediaRepository?.resolveRecentChannels(recentChannelHistory) ?: emptyList()
+    if (playbackRepository == null || mediaRepository == null) {
+        HomeContent(
+            continueItems = emptyList(),
+            recentChannels = emptyList(),
+            resolveChannelLogoModel = resolveChannelLogoModel,
+            resolveMoviePosterModel = resolveMoviePosterModel,
+            resolveEpisodeImageModel = resolveEpisodeImageModel,
+            onOpenMovie = onOpenMovie,
+            onOpenEpisode = onOpenEpisode,
+            onOpenChannel = onOpenChannel,
+            onAddPlaylist = onAddPlaylist,
+        )
+        return
     }
 
+    val viewModel: HomeViewModel = viewModel(
+        factory = HomeViewModelFactory(playbackRepository, mediaRepository),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    HomeContent(
+        continueItems = uiState.continueItems,
+        recentChannels = uiState.recentChannels,
+        resolveChannelLogoModel = resolveChannelLogoModel,
+        resolveMoviePosterModel = resolveMoviePosterModel,
+        resolveEpisodeImageModel = resolveEpisodeImageModel,
+        onOpenMovie = onOpenMovie,
+        onOpenEpisode = onOpenEpisode,
+        onOpenChannel = onOpenChannel,
+        onAddPlaylist = onAddPlaylist,
+    )
+}
+
+@Composable
+private fun HomeContent(
+    continueItems: List<ContinueHomeItem>,
+    recentChannels: List<RecentChannelHomeItem>,
+    resolveChannelLogoModel: suspend (Channel) -> Any?,
+    resolveMoviePosterModel: suspend (Movie) -> Any?,
+    resolveEpisodeImageModel: suspend (Episode) -> Any?,
+    onOpenMovie: (Movie) -> Unit,
+    onOpenEpisode: (Episode) -> Unit,
+    onOpenChannel: (Channel) -> Unit,
+    onAddPlaylist: () -> Unit,
+) {
     var selectedContinueId by remember { mutableStateOf<String?>(null) }
     var selectedChannelId by remember { mutableStateOf<String?>(null) }
 
@@ -223,63 +249,6 @@ private fun HomeHero(
         )
     }
 }
-
-private suspend fun MediaRepository.resolveContinueItems(progress: List<PlaybackProgress>): List<ContinueHomeItem> =
-    progress.mapNotNull { item ->
-        when (item.mediaType) {
-            MediaType.Movie -> getMovie(item.providerId, item.mediaId)?.let { movie ->
-                ContinueHomeItem.MovieItem(progress = item, movie = movie)
-            }
-            MediaType.Episode -> getEpisode(item.providerId, item.mediaId)?.let { episode ->
-                ContinueHomeItem.EpisodeItem(progress = item, episode = episode)
-            }
-            MediaType.Channel,
-            MediaType.Series -> null
-        }
-    }
-
-private suspend fun MediaRepository.resolveRecentChannels(history: List<ChannelHistory>): List<RecentChannelHomeItem> =
-    history.mapNotNull { item ->
-        getChannel(item.providerId, item.channelId)?.let { channel ->
-            RecentChannelHomeItem(history = item, channel = channel)
-        }
-    }
-
-private sealed interface ContinueHomeItem {
-    val id: String
-    val title: String
-    val meta: String
-    val progress: PlaybackProgress
-    val hasImage: Boolean
-    val imageSourceKey: String?
-
-    data class MovieItem(
-        override val progress: PlaybackProgress,
-        val movie: Movie,
-    ) : ContinueHomeItem {
-        override val id: String = "movie:${movie.providerId}:${movie.id}"
-        override val title: String = movie.name
-        override val meta: String = "${progress.progressPercent} %"
-        override val hasImage: Boolean = !movie.posterUrl.isNullOrBlank()
-        override val imageSourceKey: String? = movie.posterUrl
-    }
-
-    data class EpisodeItem(
-        override val progress: PlaybackProgress,
-        val episode: Episode,
-    ) : ContinueHomeItem {
-        override val id: String = "episode:${episode.providerId}:${episode.id}"
-        override val title: String = episode.name
-        override val meta: String = "${progress.progressPercent} % | S${episode.seasonNumber}E${episode.episodeNumber}"
-        override val hasImage: Boolean = !episode.thumbnailUrl.isNullOrBlank()
-        override val imageSourceKey: String? = episode.thumbnailUrl
-    }
-}
-
-private data class RecentChannelHomeItem(
-    val history: ChannelHistory,
-    val channel: Channel,
-)
 
 @Composable
 private fun ContinueHomeItem.localizedMeta(): String = when (this) {
