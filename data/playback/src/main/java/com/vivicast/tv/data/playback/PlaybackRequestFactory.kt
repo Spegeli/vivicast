@@ -4,6 +4,9 @@ import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackReturnTarget
+import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
+import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
@@ -14,8 +17,9 @@ import com.vivicast.tv.domain.model.Movie
  * layer: no player controller, no navigation, no Android/Compose types. The App host still owns
  * `playerController.play(...)` and the `onStarted` side effect.
  *
- * [clock] is injectable so the generated [playbackId] is deterministic in tests. Channel / catch-up
- * request building and progress writing stay App-hosted until P1-03c / P1-03d.
+ * [clock] is injectable so the generated [playbackId] and the catch-up window guard are
+ * deterministic in tests. The App still owns the timeshift preference mapping (it passes a ready
+ * [PlaybackTimeshiftConfig] in) and progress writing (P1-03d).
  */
 class PlaybackRequestFactory(
     private val playbackStreamResolver: PlaybackStreamResolver,
@@ -91,8 +95,82 @@ class PlaybackRequestFactory(
         )
     }
 
+    suspend fun channelRequest(
+        channel: Channel,
+        timeshift: PlaybackTimeshiftConfig?,
+        origin: PlaybackOrigin,
+    ): PlaybackRequest? {
+        val stream = playbackStreamResolver.resolve(
+            PlaybackStreamRequest(
+                providerId = channel.providerId,
+                mediaId = channel.id,
+                mediaType = MediaType.Channel,
+                remoteId = channel.remoteId,
+            ),
+        ).resolvedStreamOrNull() ?: return null
+
+        return PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.Channel,
+            providerStableKey = stream.providerStableKey,
+            mediaStableKey = channel.stableKey,
+            origin = origin,
+            returnTarget = PlaybackReturnTarget.LiveTv,
+            title = channel.name,
+            streamUrl = stream.url,
+            seekable = timeshift != null,
+            timeshift = timeshift,
+        )
+    }
+
+    suspend fun catchUpRequest(
+        channel: Channel,
+        program: EpgProgram,
+        origin: PlaybackOrigin,
+    ): PlaybackRequest? {
+        if (!channel.canStartCatchUp(program, nowMillis = clock())) return null
+        val stream = playbackStreamResolver.resolve(
+            PlaybackStreamRequest(
+                providerId = channel.providerId,
+                mediaId = channel.id,
+                mediaType = MediaType.Channel,
+                remoteId = channel.remoteId,
+                catchupStartMillis = program.startTime,
+                catchupEndMillis = program.endTime,
+            ),
+        ).resolvedStreamOrNull() ?: return null
+
+        return PlaybackRequest(
+            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
+            providerId = stream.providerId,
+            mediaId = stream.mediaId,
+            mediaType = PlaybackMediaType.CatchUp,
+            providerStableKey = stream.providerStableKey,
+            mediaStableKey = channel.stableKey,
+            origin = origin,
+            returnTarget = PlaybackReturnTarget.LiveTv,
+            title = "${channel.name} - ${program.title}",
+            streamUrl = stream.url,
+            seekable = true,
+            epgProgramStableKey = program.stableKey,
+        )
+    }
+
     private fun playbackId(providerId: String, mediaType: MediaType, mediaId: String): String =
         "$providerId:${mediaType.name.lowercase()}:$mediaId:${clock()}"
+}
+
+private const val MILLIS_PER_DAY = 86_400_000L
+
+private fun Channel.canStartCatchUp(program: EpgProgram, nowMillis: Long): Boolean {
+    if (!isCatchupAvailable || !program.isCatchupAvailable) return false
+    if (providerId != program.providerId || id != program.channelId) return false
+    if (program.startTime >= program.endTime || program.endTime > nowMillis) return false
+    if (catchupDays <= 0) return false
+    val earliestAllowedStart = nowMillis - catchupDays * MILLIS_PER_DAY
+    return program.startTime >= earliestAllowedStart
 }
 
 @Suppress("DEPRECATION")

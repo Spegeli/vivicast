@@ -122,8 +122,6 @@ import com.vivicast.tv.feature.search.SearchRoute
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
-import com.vivicast.tv.data.playback.PlaybackStreamRequest
-import com.vivicast.tv.data.playback.PlaybackStreamResult
 import com.vivicast.tv.data.playback.PLAYBACK_COMPLETION_THRESHOLD_PERCENT
 import com.vivicast.tv.data.playback.automaticPlaybackProgressPercent
 import com.vivicast.tv.data.playback.shouldSaveAutomaticPlaybackProgress
@@ -199,32 +197,12 @@ internal suspend fun AppContainer.openChannelPlayback(
     origin: PlaybackOrigin,
     onStarted: () -> Unit,
 ) {
-    val stream = playbackStreamResolver.resolve(
-        PlaybackStreamRequest(
-            providerId = channel.providerId,
-            mediaId = channel.id,
-            mediaType = MediaType.Channel,
-            remoteId = channel.remoteId,
-        ),
-    ).resolvedStreamOrNull() ?: return
-    val timeshift = playbackPreferences.timeshiftConfig()
-
-    playerController.play(
-        PlaybackRequest(
-            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
-            providerId = stream.providerId,
-            mediaId = stream.mediaId,
-            mediaType = PlaybackMediaType.Channel,
-            providerStableKey = stream.providerStableKey,
-            mediaStableKey = channel.stableKey,
-            origin = origin,
-            returnTarget = PlaybackReturnTarget.LiveTv,
-            title = channel.name,
-            streamUrl = stream.url,
-            seekable = timeshift != null,
-            timeshift = timeshift,
-        ),
-    )
+    val request = playbackRequestFactory.channelRequest(
+        channel = channel,
+        timeshift = playbackPreferences.timeshiftConfig(),
+        origin = origin,
+    ) ?: return
+    playerController.play(request)
     onStarted()
 }
 
@@ -266,44 +244,9 @@ internal suspend fun AppContainer.openCatchUpPlayback(
     origin: PlaybackOrigin,
     onStarted: () -> Unit,
 ) {
-    if (!channel.canStartCatchUp(program, nowMillis = System.currentTimeMillis())) return
-    val stream = playbackStreamResolver.resolve(
-        PlaybackStreamRequest(
-            providerId = channel.providerId,
-            mediaId = channel.id,
-            mediaType = MediaType.Channel,
-            remoteId = channel.remoteId,
-            catchupStartMillis = program.startTime,
-            catchupEndMillis = program.endTime,
-        ),
-    ).resolvedStreamOrNull() ?: return
-
-    playerController.play(
-        PlaybackRequest(
-            playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
-            providerId = stream.providerId,
-            mediaId = stream.mediaId,
-            mediaType = PlaybackMediaType.CatchUp,
-            providerStableKey = stream.providerStableKey,
-            mediaStableKey = channel.stableKey,
-            origin = origin,
-            returnTarget = PlaybackReturnTarget.LiveTv,
-            title = "${channel.name} - ${program.title}",
-            streamUrl = stream.url,
-            seekable = true,
-            epgProgramStableKey = program.stableKey,
-        ),
-    )
+    val request = playbackRequestFactory.catchUpRequest(channel, program, origin) ?: return
+    playerController.play(request)
     onStarted()
-}
-
-private fun Channel.canStartCatchUp(program: EpgProgram, nowMillis: Long): Boolean {
-    if (!isCatchupAvailable || !program.isCatchupAvailable) return false
-    if (providerId != program.providerId || id != program.channelId) return false
-    if (program.startTime >= program.endTime || program.endTime > nowMillis) return false
-    if (catchupDays <= 0) return false
-    val earliestAllowedStart = nowMillis - catchupDays * MILLIS_PER_DAY
-    return program.startTime >= earliestAllowedStart
 }
 
 internal suspend fun AppContainer.savePlaybackProgress(
@@ -387,13 +330,6 @@ internal suspend fun AppContainer.clearHistory(target: HistoryClearTarget) {
         }
     }
 }
-
-@Suppress("DEPRECATION")
-private fun PlaybackStreamResult.resolvedStreamOrNull() =
-    (this as? PlaybackStreamResult.Resolved)?.stream
-
-private fun playbackId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "$providerId:${mediaType.name.lowercase()}:$mediaId:${System.currentTimeMillis()}"
 
 private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
     "$providerId:progress:${mediaType.name.lowercase()}:$mediaId"

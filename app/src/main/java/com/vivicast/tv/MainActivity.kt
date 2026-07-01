@@ -1320,4 +1320,3 @@ private fun Int.floorMod(modulus: Int): Int =
 private const val ROUTE_HOME = "home"
 internal const val PIN_LENGTH = 4
 private const val EXIT_CONFIRMATION_WINDOW_MILLIS = 2_000L
-internal const val MILLIS_PER_DAY = 86_400_000L
