@@ -100,12 +100,14 @@ import java.util.Date
 
 @Composable
 internal fun EpgSettingsPanel(
-    epgSourceRepository: EpgSourceRepository,
     state: EpgSettingsState,
     sources: List<EpgSource>,
     providers: List<Provider>,
     selectedProviderId: String?,
     providerLinks: List<ProviderEpgSource>,
+    manualMappingChannels: List<Channel>,
+    manualMappings: List<EpgChannelMapping>,
+    selectedManualMappingChannelId: String?,
     onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
     onRunGlobalRefresh: () -> Unit,
     onSelectProvider: (String) -> Unit,
@@ -114,6 +116,10 @@ internal fun EpgSettingsPanel(
     onLinkProvider: suspend (providerId: String, sourceId: String, priority: Int) -> Result<Unit>,
     onUnlinkProvider: suspend (providerId: String, sourceId: String) -> Result<Unit>,
     onMoveProviderLink: suspend (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Result<Unit>,
+    onSelectManualMappingChannel: (String) -> Unit,
+    onResetManualMappingChannel: () -> Unit,
+    onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
+    onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
     firstFocusModifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -177,6 +183,12 @@ internal fun EpgSettingsPanel(
                 modifier = Modifier.width(230.dp),
                 selected = showManualMapping,
                 onClick = {
+                    // Re-opening the manual-mapping view drops the channel selection, mirroring the
+                    // pre-P1-04f3b panel-remount reset. Guarded so re-clicking while already open
+                    // (no remount previously) does not reset.
+                    if (!showManualMapping) {
+                        onResetManualMappingChannel()
+                    }
                     showManualMapping = true
                     showEditor = false
                     message = null
@@ -190,9 +202,14 @@ internal fun EpgSettingsPanel(
                 sources = sources,
                 selectedProviderId = selectedProviderId,
                 providerLinks = providerLinks,
-                repository = epgSourceRepository,
+                channels = manualMappingChannels,
+                mappings = manualMappings,
+                selectedChannelId = selectedManualMappingChannelId,
                 message = message,
                 onSelectProvider = onSelectProvider,
+                onSelectChannel = onSelectManualMappingChannel,
+                onSetManualMapping = onSetManualMapping,
+                onClearManualMapping = onClearManualMapping,
                 onMessage = { message = it },
                 modifier = Modifier.fillMaxSize(),
             )

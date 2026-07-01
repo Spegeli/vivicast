@@ -305,12 +305,14 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionEpg -> EpgSettingsPanel(
-                            epgSourceRepository = epgSourceRepository,
                             state = settingsUiState.epg,
                             sources = settingsUiState.epgSources,
                             providers = settingsUiState.epgProviders,
                             selectedProviderId = settingsUiState.selectedEpgProviderId,
                             providerLinks = settingsUiState.providerEpgLinks,
+                            manualMappingChannels = settingsUiState.manualMappingChannels,
+                            manualMappings = settingsUiState.manualMappingsForSelectedChannel,
+                            selectedManualMappingChannelId = settingsUiState.selectedManualMappingChannelId,
                             onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
                             onRunGlobalRefresh = onRunGlobalRefresh,
                             onSelectProvider = viewModel::onEpgProviderSelected,
@@ -319,6 +321,10 @@ fun SettingsRoute(
                             onLinkProvider = viewModel::linkEpgSourceToProvider,
                             onUnlinkProvider = viewModel::unlinkEpgSourceFromProvider,
                             onMoveProviderLink = viewModel::moveEpgSourcePriority,
+                            onSelectManualMappingChannel = viewModel::onManualMappingChannelSelected,
+                            onResetManualMappingChannel = viewModel::onManualMappingReset,
+                            onSetManualMapping = viewModel::setManualChannelMapping,
+                            onClearManualMapping = viewModel::clearManualChannelMapping,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionAppearance -> AppearanceSettingsPanel(

@@ -104,24 +104,19 @@ internal fun ManualEpgMappingPanel(
     sources: List<EpgSource>,
     selectedProviderId: String?,
     providerLinks: List<ProviderEpgSource>,
-    repository: EpgSourceRepository,
+    channels: List<Channel>,
+    mappings: List<EpgChannelMapping>,
+    selectedChannelId: String?,
     message: String?,
     onSelectProvider: (String) -> Unit,
+    onSelectChannel: (String) -> Unit,
+    onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
+    onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
     onMessage: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedChannelId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
     var selectedSourceId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
     var epgChannelId by remember(selectedProviderId) { mutableStateOf("") }
-    val channels by (selectedProviderId?.let { repository.observeChannelsForProvider(it) } ?: flowOf(emptyList()))
-        .collectAsState(initial = emptyList())
-    val mappings by (
-        if (selectedProviderId != null && selectedChannelId != null) {
-            repository.observeMappingsForChannel(selectedProviderId, selectedChannelId!!)
-        } else {
-            flowOf(emptyList())
-        }
-    ).collectAsState(initial = emptyList())
     val linkedSources = remember(providerLinks, sources) {
         providerLinks
             .sortedBy { it.priority }
@@ -135,12 +130,6 @@ internal fun ManualEpgMappingPanel(
     val strMappingRemoved = stringResource(R.string.settings_epg_msg_mapping_removed)
     val strRemoveFailed = stringResource(R.string.settings_epg_msg_remove_failed)
     val strSelectionRequired = stringResource(R.string.settings_epg_msg_selection_required)
-
-    LaunchedEffect(channels) {
-        if (selectedChannelId != null && channels.none { it.id == selectedChannelId }) {
-            selectedChannelId = null
-        }
-    }
 
     LaunchedEffect(linkedSources) {
         if (selectedSourceId == null || linkedSources.none { it.id == selectedSourceId }) {
@@ -179,7 +168,7 @@ internal fun ManualEpgMappingPanel(
             selectedProviderId = selectedProviderId,
             selectedChannelId = selectedChannelId,
             onSelectChannel = {
-                selectedChannelId = it
+                onSelectChannel(it)
                 onMessage(null)
             },
             modifier = Modifier.weight(0.34f).fillMaxHeight(),
@@ -208,16 +197,14 @@ internal fun ManualEpgMappingPanel(
                     return@ManualMappingDetail
                 }
                 scope.launch {
-                    runCatching {
-                        repository.setManualChannelMapping(
-                            ManualEpgChannelMappingRequest(
-                                providerId = providerId,
-                                channelId = channelId,
-                                epgSourceId = sourceId,
-                                epgChannelId = normalizedExternalId,
-                            ),
-                        )
-                    }.onSuccess {
+                    onSetManualMapping(
+                        ManualEpgChannelMappingRequest(
+                            providerId = providerId,
+                            channelId = channelId,
+                            epgSourceId = sourceId,
+                            epgChannelId = normalizedExternalId,
+                        ),
+                    ).onSuccess {
                         onMessage(strMappingSaved)
                     }.onFailure { error ->
                         onMessage(strMappingFailed.format(error.message ?: "?"))
@@ -233,7 +220,7 @@ internal fun ManualEpgMappingPanel(
                     return@ManualMappingDetail
                 }
                 scope.launch {
-                    runCatching { repository.clearManualChannelMapping(providerId, channelId, sourceId) }
+                    onClearManualMapping(providerId, channelId, sourceId)
                         .onSuccess {
                             epgChannelId = ""
                             onMessage(strMappingRemoved)

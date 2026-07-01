@@ -14,7 +14,10 @@ import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgSource
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderEpgSource
@@ -23,6 +26,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -52,9 +56,14 @@ internal class SettingsViewModel(
     private var currentEpgSources: List<EpgSource> = emptyList()
     private var currentEpgProviders: List<Provider> = emptyList()
     private var currentProviderEpgLinks: List<ProviderEpgSource> = emptyList()
+    private var currentManualMappingChannels: List<Channel> = emptyList()
+    private var currentManualMappings: List<EpgChannelMapping> = emptyList()
 
-    /** Selected provider in the EPG area; keys the provider↔EPG-source link flow. */
+    /** Selected provider in the EPG area; keys the provider↔EPG-source link + manual-mapping channel flows. */
     private val selectedEpgProviderId = MutableStateFlow<String?>(null)
+
+    /** Selected channel in the manual-mapping area; keys the mappings flow. */
+    private val selectedManualMappingChannelId = MutableStateFlow<String?>(null)
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -91,6 +100,33 @@ internal class SettingsViewModel(
                     recomposeState()
                 }
         }
+        coroutineScope.launch {
+            selectedEpgProviderId
+                .flatMapLatest { providerId ->
+                    if (providerId == null) flowOf(emptyList()) else epgSourceRepository.observeChannelsForProvider(providerId)
+                }
+                .collect { channels ->
+                    currentManualMappingChannels = channels
+                    if (selectedManualMappingChannelId.value != null && channels.none { it.id == selectedManualMappingChannelId.value }) {
+                        selectedManualMappingChannelId.value = null
+                    }
+                    recomposeState()
+                }
+        }
+        coroutineScope.launch {
+            combine(selectedEpgProviderId, selectedManualMappingChannelId) { providerId, channelId -> providerId to channelId }
+                .flatMapLatest { (providerId, channelId) ->
+                    if (providerId != null && channelId != null) {
+                        epgSourceRepository.observeMappingsForChannel(providerId, channelId)
+                    } else {
+                        flowOf(emptyList())
+                    }
+                }
+                .collect { mappings ->
+                    currentManualMappings = mappings
+                    recomposeState()
+                }
+        }
     }
 
     /** Rebuilds the immutable [SettingsUiState] from all currently held sources. */
@@ -101,6 +137,9 @@ internal class SettingsViewModel(
             epgProviders = currentEpgProviders,
             selectedEpgProviderId = selectedEpgProviderId.value,
             providerEpgLinks = currentProviderEpgLinks,
+            manualMappingChannels = currentManualMappingChannels,
+            selectedManualMappingChannelId = selectedManualMappingChannelId.value,
+            manualMappingsForSelectedChannel = currentManualMappings,
         )
     }
 
@@ -123,9 +162,37 @@ internal class SettingsViewModel(
 
     /** Selects the EPG-area provider whose links are observed (shared by editor + manual mapping). */
     fun onEpgProviderSelected(providerId: String) {
+        // Mirror the panel's remember(selectedProviderId) reset: a provider switch clears the channel.
+        selectedManualMappingChannelId.value = null
         selectedEpgProviderId.value = providerId
         recomposeState()
     }
+
+    /** Selects the manual-mapping channel whose mappings are observed. */
+    fun onManualMappingChannelSelected(channelId: String) {
+        selectedManualMappingChannelId.value = channelId
+        recomposeState()
+    }
+
+    /**
+     * Clears the manual-mapping channel selection when the manual-mapping view is (re)opened.
+     * Mirrors the pre-P1-04f3b panel-local `remember(selectedProviderId)` reset that dropped the
+     * channel selection every time the panel re-mounted.
+     */
+    fun onManualMappingReset() {
+        selectedManualMappingChannelId.value = null
+        recomposeState()
+    }
+
+    /**
+     * Manual-mapping set/clear run the repository call inside the ViewModel and return the outcome so
+     * the panel keeps its localized success/error messaging (no localized strings in the ViewModel).
+     */
+    suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): Result<Unit> =
+        runCatching { epgSourceRepository.setManualChannelMapping(request); Unit }
+
+    suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String): Result<Unit> =
+        runCatching { epgSourceRepository.clearManualChannelMapping(providerId, channelId, epgSourceId) }
 
     /**
      * EPG-source CRUD + provider-link actions run the repository call inside the ViewModel and

@@ -370,6 +370,126 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun manualMappingChannels_loadForSelectedProvider() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(
+            channelsByProvider = mapOf("p1" to MutableStateFlow(listOf(channel("c1", "p1", "Channel 1")))),
+        )
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        assertTrue(vm.uiState.value.manualMappingChannels.isEmpty())
+        vm.onEpgProviderSelected("p1")
+
+        assertEquals(listOf("c1"), vm.uiState.value.manualMappingChannels.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun onManualMappingChannelSelected_exposesMappings() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(
+            channelsByProvider = mapOf("p1" to MutableStateFlow(listOf(channel("c1", "p1", "Channel 1")))),
+            mappingsByChannel = mapOf("c1" to listOf(mapping("p1", "c1", "s1"))),
+        )
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+        vm.onEpgProviderSelected("p1")
+
+        vm.onManualMappingChannelSelected("c1")
+
+        assertEquals("c1", vm.uiState.value.selectedManualMappingChannelId)
+        assertEquals(listOf("s1"), vm.uiState.value.manualMappingsForSelectedChannel.map { it.epgSourceId })
+        scope.cancel()
+    }
+
+    @Test
+    fun providerChange_resetsManualMappingChannel() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(
+            channelsByProvider = mapOf(
+                "p1" to MutableStateFlow(listOf(channel("c1", "p1", "Channel 1"))),
+                "p2" to MutableStateFlow(listOf(channel("c2", "p2", "Channel 2"))),
+            ),
+        )
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+        vm.onEpgProviderSelected("p1")
+        vm.onManualMappingChannelSelected("c1")
+        assertEquals("c1", vm.uiState.value.selectedManualMappingChannelId)
+
+        vm.onEpgProviderSelected("p2")
+
+        assertEquals(null, vm.uiState.value.selectedManualMappingChannelId)
+        assertTrue(vm.uiState.value.manualMappingsForSelectedChannel.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun channelDisappears_resetsSelectedManualMappingChannel() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val channelsFlow = MutableStateFlow(listOf(channel("c1", "p1", "Channel 1")))
+        val epgRepo = FakeEpgSourceRepository(channelsByProvider = mapOf("p1" to channelsFlow))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+        vm.onEpgProviderSelected("p1")
+        vm.onManualMappingChannelSelected("c1")
+        assertEquals("c1", vm.uiState.value.selectedManualMappingChannelId)
+
+        channelsFlow.value = emptyList()
+
+        assertEquals(null, vm.uiState.value.selectedManualMappingChannelId)
+        scope.cancel()
+    }
+
+    @Test
+    fun onManualMappingReset_clearsSelectedChannel() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(
+            channelsByProvider = mapOf("p1" to MutableStateFlow(listOf(channel("c1", "p1", "Channel 1")))),
+            mappingsByChannel = mapOf("c1" to listOf(mapping("p1", "c1", "s1"))),
+        )
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+        vm.onEpgProviderSelected("p1")
+        vm.onManualMappingChannelSelected("c1")
+        assertEquals("c1", vm.uiState.value.selectedManualMappingChannelId)
+
+        // Re-opening the manual-mapping view (parent calls this on remount).
+        vm.onManualMappingReset()
+
+        assertEquals(null, vm.uiState.value.selectedManualMappingChannelId)
+        assertTrue(vm.uiState.value.manualMappingsForSelectedChannel.isEmpty())
+        // The provider selection is untouched (channels stay available).
+        assertEquals("p1", vm.uiState.value.selectedEpgProviderId)
+        assertEquals(listOf("c1"), vm.uiState.value.manualMappingChannels.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun setManualChannelMapping_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        val result = vm.setManualChannelMapping(
+            ManualEpgChannelMappingRequest(providerId = "p1", channelId = "c1", epgSourceId = "s1", epgChannelId = "x"),
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("c1", epgRepo.setMappingRequest?.channelId)
+        assertEquals("x", epgRepo.setMappingRequest?.epgChannelId)
+        scope.cancel()
+    }
+
+    @Test
+    fun clearManualChannelMapping_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.clearManualChannelMapping("p1", "c1", "s1")
+
+        assertEquals(Triple("p1", "c1", "s1"), epgRepo.clearMappingCall)
+        scope.cancel()
+    }
+
+    @Test
     fun onPlaybackSettingsChanged_writesPreference() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore()
@@ -446,6 +566,29 @@ private class FakeMediaCacheStore(
 private fun epgSource(id: String, name: String): EpgSource =
     EpgSource(id = id, name = name, sourceConfigKey = "cfg-$id", timeShiftMinutes = 0, isActive = true)
 
+private fun channel(id: String, providerId: String, name: String): Channel =
+    Channel(
+        id = id,
+        providerId = providerId,
+        categoryId = null,
+        remoteId = "remote-$id",
+        channelNumber = null,
+        name = name,
+        logoUrl = null,
+        isCatchupAvailable = false,
+        catchupDays = 0,
+    )
+
+private fun mapping(providerId: String, channelId: String, epgSourceId: String): EpgChannelMapping =
+    EpgChannelMapping(
+        id = "$providerId-$channelId-$epgSourceId",
+        providerId = providerId,
+        channelId = channelId,
+        epgSourceId = epgSourceId,
+        epgChannelId = "epg-$channelId",
+        isManual = true,
+    )
+
 private fun provider(id: String, name: String): Provider =
     Provider(
         id = id,
@@ -466,6 +609,8 @@ private fun provider(id: String, name: String): Provider =
 private class FakeEpgSourceRepository(
     initialSources: List<EpgSource> = emptyList(),
     private val links: Map<String, List<ProviderEpgSource>> = emptyMap(),
+    private val channelsByProvider: Map<String, MutableStateFlow<List<Channel>>> = emptyMap(),
+    private val mappingsByChannel: Map<String, List<EpgChannelMapping>> = emptyMap(),
 ) : EpgSourceRepository {
     val sourcesFlow = MutableStateFlow(initialSources)
     var savedRequest: EpgSourceEditRequest? = null
@@ -478,11 +623,16 @@ private class FakeEpgSourceRepository(
         private set
     var moveCall: Triple<String, String, EpgSourcePriorityDirection>? = null
         private set
+    var setMappingRequest: ManualEpgChannelMappingRequest? = null
+        private set
+    var clearMappingCall: Triple<String, String, String>? = null
+        private set
 
     override fun observeEpgSources(): Flow<List<EpgSource>> = sourcesFlow
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         flowOf(links[providerId] ?: emptyList())
-    override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = flowOf(emptyList())
+    override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> =
+        channelsByProvider[providerId] ?: flowOf(emptyList())
     override fun observeProgramsForChannel(
         providerId: String,
         channelId: String,
@@ -490,10 +640,14 @@ private class FakeEpgSourceRepository(
         toMillis: Long,
     ): Flow<List<EpgProgram>> = flowOf(emptyList())
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
-        flowOf(emptyList())
-    override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping =
-        throw UnsupportedOperationException()
-    override suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String) = Unit
+        flowOf(mappingsByChannel[channelId] ?: emptyList())
+    override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping {
+        setMappingRequest = request
+        return mapping(request.providerId, request.channelId, request.epgSourceId)
+    }
+    override suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String) {
+        clearMappingCall = Triple(providerId, channelId, epgSourceId)
+    }
 
     override suspend fun saveSource(request: EpgSourceEditRequest): EpgSource {
         savedRequest = request
