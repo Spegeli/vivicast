@@ -7,6 +7,16 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.vivicast.tv.core.datastore.AppearancePreferences
+import com.vivicast.tv.core.datastore.BackupPreferences
+import com.vivicast.tv.core.datastore.DiagnosticsPreferences
+import com.vivicast.tv.core.datastore.EpgPreferences
+import com.vivicast.tv.core.datastore.GeneralPreferences
+import com.vivicast.tv.core.datastore.HistoryPreferences
+import com.vivicast.tv.core.datastore.ParentalControlPreferences
+import com.vivicast.tv.core.datastore.PlaybackPreferences
+import com.vivicast.tv.core.datastore.UserPreferences
+import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -73,18 +83,13 @@ class SettingsRouteInitialSectionTest {
             SettingsRoute(
                 providerRepository = EmptyProviderRepository,
                 epgSourceRepository = EmptyEpgSourceRepository,
-                generalSettingsState = GeneralSettingsState(),
-                epgSettingsState = EpgSettingsState(),
-                playbackSettingsState = PlaybackSettingsState(),
+                userPreferencesStore = EmptyUserPreferencesStore,
                 cacheSettingsState = CacheSettingsState(),
                 aboutAppState = AboutAppState(),
                 initialSelectedSection = initialSelectedSection,
                 onTestProviderConnection = { null },
                 onProviderSaved = {},
                 onBackgroundRefreshChanged = {},
-                onRememberSortingChanged = {},
-                onEpgPreferencesChanged = {},
-                onPlaybackPreferencesChanged = {},
                 onRunGlobalRefresh = {},
                 onClearCache = {},
                 onClearHistory = {},
@@ -92,6 +97,21 @@ class SettingsRouteInitialSectionTest {
             )
         }
     }
+}
+
+private object EmptyUserPreferencesStore : UserPreferencesStore {
+    override val values: Flow<UserPreferences> = flowOf(UserPreferences())
+    override suspend fun updateSelectedProviderId(providerId: String?) = Unit
+    override suspend fun updateGeneral(general: GeneralPreferences) = Unit
+    override suspend fun updateAppearance(appearance: AppearancePreferences) = Unit
+    override suspend fun updatePlayback(playback: PlaybackPreferences) = Unit
+    override suspend fun updateHistory(history: HistoryPreferences) = Unit
+    override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
+    override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
+    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) = Unit
+    override suspend fun updateEpg(epg: EpgPreferences) = Unit
+    override suspend fun updateBackup(backup: BackupPreferences) = Unit
+    override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) = Unit
 }
 
 private object EmptyProviderRepository : ProviderRepository {

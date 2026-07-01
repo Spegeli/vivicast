@@ -50,6 +50,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
@@ -115,29 +118,17 @@ private fun settingsSectionsList() = listOf(
 fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
-    generalSettingsState: GeneralSettingsState,
-    appearanceSettingsState: AppearanceSettingsState = AppearanceSettingsState(),
-    epgSettingsState: EpgSettingsState,
-    playbackSettingsState: PlaybackSettingsState,
+    userPreferencesStore: UserPreferencesStore,
     parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
     cacheSettingsState: CacheSettingsState,
     backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
-    diagnosticsSettingsState: DiagnosticsSettingsState = DiagnosticsSettingsState(),
     initialSelectedSection: String? = null,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
-    onSelectedSectionChanged: (String) -> Unit = {},
-    onLaunchOnBootChanged: (Boolean) -> Unit = {},
-    onDoubleBackToExitChanged: (Boolean) -> Unit = {},
     onBackgroundRefreshChanged: (Boolean) -> Unit,
-    onRememberSortingChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit = {},
-    onGlobalUserAgentChanged: (String) -> Unit = {},
-    onAppearanceSettingsChanged: (AppearanceSettingsState) -> Unit = {},
-    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
-    onPlaybackPreferencesChanged: (PlaybackSettingsState) -> Unit,
     onSetPin: (String) -> String? = { null },
     onChangePin: (String, String) -> String? = { _, _ -> null },
     onDisablePin: (String) -> String? = { null },
@@ -155,6 +146,10 @@ fun SettingsRoute(
     onClearHistory: (HistoryClearTarget) -> Unit,
     onReloadCacheStats: () -> Unit,
 ) {
+    val viewModel: SettingsViewModel = viewModel(
+        factory = SettingsViewModelFactory(userPreferencesStore),
+    )
+    val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settingsSections = settingsSectionsList()
     val mainSections = remember(settingsSections) { settingsSections.dropLast(1) }
     val sectionGeneral = stringResource(R.string.settings_section_general)
@@ -181,7 +176,7 @@ fun SettingsRoute(
         .focusProperties { left = selectedSectionFocusRequester }
     val selectSection: (String) -> Unit = { section ->
         selectedSection = section
-        onSelectedSectionChanged(section)
+        viewModel.onSelectedSectionChanged(section)
     }
 
     LaunchedEffect(Unit) {
@@ -288,13 +283,19 @@ fun SettingsRoute(
                     SettingsPanelTitle(selectedSection)
                     when (selectedSection) {
                         sectionGeneral -> GeneralSettingsPanel(
-                            state = generalSettingsState,
-                            onLaunchOnBootChanged = onLaunchOnBootChanged,
-                            onDoubleBackToExitChanged = onDoubleBackToExitChanged,
-                            onBackgroundRefreshChanged = onBackgroundRefreshChanged,
-                            onRememberSortingChanged = onRememberSortingChanged,
-                            onLanguageChanged = onLanguageChanged,
-                            onGlobalUserAgentChanged = onGlobalUserAgentChanged,
+                            state = settingsUiState.general,
+                            onLaunchOnBootChanged = viewModel::onLaunchOnBootChanged,
+                            onDoubleBackToExitChanged = viewModel::onDoubleBackToExitChanged,
+                            onBackgroundRefreshChanged = { enabled ->
+                                viewModel.onBackgroundRefreshChanged(enabled)
+                                onBackgroundRefreshChanged(enabled)
+                            },
+                            onRememberSortingChanged = viewModel::onRememberSortingChanged,
+                            onLanguageChanged = { language ->
+                                viewModel.onLanguageChanged(language)
+                                onLanguageChanged(language)
+                            },
+                            onGlobalUserAgentChanged = viewModel::onGlobalUserAgentChanged,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionPlaylists -> ProviderSettingsPanel(
@@ -307,19 +308,19 @@ fun SettingsRoute(
                         sectionEpg -> EpgSettingsPanel(
                             providerRepository = providerRepository,
                             epgSourceRepository = epgSourceRepository,
-                            state = epgSettingsState,
-                            onEpgPreferencesChanged = onEpgPreferencesChanged,
+                            state = settingsUiState.epg,
+                            onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
                             onRunGlobalRefresh = onRunGlobalRefresh,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionAppearance -> AppearanceSettingsPanel(
-                            state = appearanceSettingsState,
-                            onAppearanceSettingsChanged = onAppearanceSettingsChanged,
+                            state = settingsUiState.appearance,
+                            onAppearanceSettingsChanged = viewModel::onAppearanceSettingsChanged,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionPlayback -> PlaybackSettingsPanel(
-                            state = playbackSettingsState,
-                            onPlaybackPreferencesChanged = onPlaybackPreferencesChanged,
+                            state = settingsUiState.playback,
+                            onPlaybackPreferencesChanged = viewModel::onPlaybackSettingsChanged,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionParental -> ParentalControlSettingsPanel(
@@ -348,8 +349,11 @@ fun SettingsRoute(
                         )
                         sectionAbout -> AboutSettingsPanel(
                             state = aboutAppState,
-                            diagnosticsSettingsState = diagnosticsSettingsState,
-                            onDiagnosticsSettingsChanged = onDiagnosticsSettingsChanged,
+                            diagnosticsSettingsState = settingsUiState.diagnostics,
+                            onDiagnosticsSettingsChanged = { diagnostics ->
+                                viewModel.onDiagnosticsSettingsChanged(diagnostics)
+                                onDiagnosticsSettingsChanged(diagnostics)
+                            },
                             onExportDiagnostics = onExportDiagnostics,
                             onCopySupportInformation = onCopySupportInformation,
                             firstFocusModifier = detailFirstFocusModifier,

@@ -844,43 +844,7 @@ private fun VivicastApp(
             SettingsRoute(
                 providerRepository = appContainer.providerRepository,
                 epgSourceRepository = appContainer.epgSourceRepository,
-                generalSettingsState = GeneralSettingsState(
-                    launchOnBoot = preferences.general.launchOnBoot,
-                    doubleBackToExit = preferences.general.doubleBackToExit,
-                    backgroundRefreshEnabled = preferences.general.backgroundRefreshEnabled,
-                    rememberSorting = preferences.general.rememberSorting,
-                    appLanguage = preferences.appearance.language.toSettingsLanguage(),
-                    globalUserAgent = preferences.general.globalUserAgent,
-                ),
-                appearanceSettingsState = AppearanceSettingsState(
-                    themeMode = preferences.appearance.backgroundColor.toSettingsThemeMode(),
-                    accentColor = preferences.appearance.accentColor.toSettingsAccentColor(),
-                    transparency = preferences.appearance.transparency.toSettingsTransparency(),
-                    fontScale = preferences.appearance.fontScale.toSettingsFontScale(),
-                    animationSpeed = preferences.appearance.animationSpeed.toSettingsAnimationSpeed(),
-                ),
-                epgSettingsState = EpgSettingsState(
-                    pastRetentionDays = preferences.epg.pastRetentionDays,
-                    futureRetentionDays = preferences.epg.futureRetentionDays,
-                    refreshIntervalHours = preferences.epg.refreshIntervalHours,
-                    refreshOnAppStartEnabled = preferences.epg.refreshOnAppStartEnabled,
-                    refreshOnPlaylistChangeEnabled = preferences.epg.refreshOnPlaylistChangeEnabled,
-                ),
-                playbackSettingsState = PlaybackSettingsState(
-                    bufferSize = preferences.playback.bufferSize.toSettingsBufferSizeMode(),
-                    audioDecoder = preferences.playback.audioDecoder.toSettingsDecoderMode(),
-                    videoDecoder = preferences.playback.videoDecoder.toSettingsDecoderMode(),
-                    afrEnabled = preferences.playback.afrEnabled,
-                    preferredAudioLanguage = preferences.playback.preferredAudioLanguage.toSettingsAudioLanguage(),
-                    preferredSubtitleLanguage = preferences.playback.preferredSubtitleLanguage.toSettingsSubtitleLanguage(),
-                    audioPassthroughEnabled = preferences.playback.audioPassthroughEnabled,
-                    externalPlayer = preferences.playback.externalPlayer.toSettingsExternalPlayerMode(),
-                    timeshiftEnabled = preferences.playback.timeshiftEnabled,
-                    timeshiftMinutes = preferences.playback.timeshiftMinutes,
-                    timeshiftStorage = preferences.playback.timeshiftStorage.toSettingsTimeshiftStorageMode(),
-                    autoNextEnabled = preferences.playback.autoNextEnabled,
-                    autoNextCountdownSeconds = preferences.playback.autoNextCountdownSeconds,
-                ),
+                userPreferencesStore = appContainer.userPreferencesStore,
                 parentalControlSettingsState = ParentalControlSettingsState(
                     hasPin = pinSecurityState.hasPin,
                     lockedUntilMillis = pinSecurityState.lockedUntilMillis,
@@ -898,7 +862,6 @@ private fun VivicastApp(
                     lastBackupAtMillis = preferences.backup.lastBackupAtMillis,
                 ),
                 aboutAppState = context.aboutAppState(),
-                diagnosticsSettingsState = preferences.diagnostics.toSettingsDiagnosticsState(),
                 initialSelectedSection = preferences.general.lastSettingsSection,
                 onTestProviderConnection = { request ->
                     appContainer.testProviderConnection(request)
@@ -917,115 +880,24 @@ private fun VivicastApp(
                 onProviderSaved = { providerId ->
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
                 },
-                onSelectedSectionChanged = { section ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(lastSettingsSection = section),
-                        )
-                    }
-                },
-                onLaunchOnBootChanged = { enabled ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(launchOnBoot = enabled),
-                        )
-                    }
-                },
-                onDoubleBackToExitChanged = { enabled ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(doubleBackToExit = enabled),
-                        )
-                    }
-                },
                 onBackgroundRefreshChanged = { enabled ->
+                    // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.
                     scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(backgroundRefreshEnabled = enabled),
-                        )
                         appContainer.refreshWorkScheduler.setBackgroundRefreshEnabled(enabled)
                     }
                 },
-                onRememberSortingChanged = { enabled ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(rememberSorting = enabled),
-                        )
-                    }
-                },
                 onLanguageChanged = { language ->
+                    // Preference write moved to SettingsViewModel (P1-04f1); only Locale/recreate stay here.
                     LocaleHelper.save(context, language.toLocaleKey())
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateAppearance(
-                            preferences.appearance.copy(language = language.toDataStoreLanguagePreference()),
-                        )
-                        activity?.recreate()
-                    }
-                },
-                onGlobalUserAgentChanged = { userAgent ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateGeneral(
-                            preferences.general.copy(globalUserAgent = userAgent),
-                        )
-                    }
-                },
-                onAppearanceSettingsChanged = { appearance ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateAppearance(
-                            preferences.appearance.copy(
-                                backgroundColor = appearance.themeMode.toDataStoreThemeColor(),
-                                accentColor = appearance.accentColor.toDataStoreAccentColor(),
-                                transparency = appearance.transparency.toDataStoreTransparencyLevel(),
-                                fontScale = appearance.fontScale.toDataStoreFontScalePreference(),
-                                animationSpeed = appearance.animationSpeed.toDataStoreAnimationSpeedPreference(),
-                            ),
-                        )
-                    }
-                },
-                onEpgPreferencesChanged = { epg ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateEpg(
-                            preferences.epg.copy(
-                                pastRetentionDays = epg.pastRetentionDays,
-                                futureRetentionDays = epg.futureRetentionDays,
-                                refreshIntervalHours = epg.refreshIntervalHours,
-                                refreshOnAppStartEnabled = epg.refreshOnAppStartEnabled,
-                                refreshOnPlaylistChangeEnabled = epg.refreshOnPlaylistChangeEnabled,
-                            ),
-                        )
-                    }
-                },
-                onPlaybackPreferencesChanged = { playback ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updatePlayback(
-                            preferences.playback.copy(
-                                bufferSize = playback.bufferSize.toDataStoreBufferSizePreference(),
-                                audioDecoder = playback.audioDecoder.toDataStoreDecoderPreference(),
-                                videoDecoder = playback.videoDecoder.toDataStoreDecoderPreference(),
-                                afrEnabled = playback.afrEnabled,
-                                preferredAudioLanguage = playback.preferredAudioLanguage.toDataStoreAudioLanguage(),
-                                preferredSubtitleLanguage = playback.preferredSubtitleLanguage.toDataStoreSubtitleLanguage(),
-                                audioPassthroughEnabled = playback.audioPassthroughEnabled,
-                                externalPlayer = playback.externalPlayer.toDataStoreExternalPlayerPreference(),
-                                timeshiftEnabled = playback.timeshiftEnabled,
-                                timeshiftMinutes = playback.timeshiftMinutes,
-                                timeshiftStorage = playback.timeshiftStorage.toDataStoreTimeshiftStoragePreference(),
-                                autoNextEnabled = playback.autoNextEnabled,
-                                autoNextCountdownSeconds = playback.autoNextCountdownSeconds,
-                            ),
-                        )
-                    }
+                    activity?.recreate()
                 },
                 onDiagnosticsSettingsChanged = { diagnostics ->
+                    // Preference write moved to SettingsViewModel (P1-04f2a); only the DiagnosticsStore
+                    // system effect stays here.
                     scope.launch {
-                        val updated = preferences.diagnostics.copy(
-                            diagnosticsLoggingEnabled = diagnostics.diagnosticsLoggingEnabled,
-                            retentionDays = diagnostics.retentionDays.coerceIn(1, 7),
-                        )
-                        appContainer.userPreferencesStore.updateDiagnostics(updated)
                         appContainer.diagnosticsStore.setLoggingEnabled(
-                            enabled = updated.diagnosticsLoggingEnabled,
-                            retentionDays = updated.retentionDays,
+                            enabled = diagnostics.diagnosticsLoggingEnabled,
+                            retentionDays = diagnostics.retentionDays.coerceIn(1, 7),
                         )
                     }
                 },
