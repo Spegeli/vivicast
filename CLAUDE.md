@@ -27,6 +27,31 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 - **No** server backend, account system, cloud sync, telemetry, external metadata provider, or automatic provider merging in PRD v1
 - **No** provider-specific header/cookie/User-Agent in PRD v1 — only global User-Agent under Allgemein
 
+## Current Architecture Status
+
+The P0–P3 architecture remediation is **completed** (see the completion report for the full record):
+
+- 6/6 main feature areas (Home, Live-TV, Movies, Series, Search, Settings) use a ViewModel + immutable UiState.
+- No direct Repository Flows/CRUD in feature Composables.
+- Normal Routes read state via `collectAsStateWithLifecycle`.
+- `PlayerRoute`'s `collectAsState` is a documented realtime-player exception.
+- `PlaybackRequestFactory` / `PlaybackProgressRecorder` live in `:data:playback`.
+- `TestProviderConnectionUseCase` lives in `:data:provider`.
+- The designsystem is split into grouped `Vivicast*.kt` files (`VivicastComponents.kt` no longer exists).
+- A detekt size/complexity gate exists.
+
+## Active App Architecture References
+
+Only these three docs are active app-architecture references:
+
+- `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`
+- `docs/SETTINGS-APP-HOISTED-DECISIONS.md`
+- `docs/DETEKT-GATE.md`
+
+Files under `docs/archive/` (the original audit, refactoring plan, file-split plan, settings-VM plan,
+playback-orchestration plan) are **historical context only** — they must not override active docs or
+the current code.
+
 ## Source Priority (conflicts resolved in this order)
 
 1. `../vivicast-docs/prd/PRD-v1/` — product scope, behavior, data, security, acceptance criteria
@@ -37,7 +62,11 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 6. `../vivicast-docs/design/components/` — reusable UI components
 7. `../vivicast-docs/design/mockups/high-fidelity/02-ui-direction-decisions.md` — visual direction
 8. `../vivicast-docs/design/mockups/high-fidelity/rendered/` — visual target (not a source for labels/nav/logic)
-9. `plans/` (this repo) — implementation plans (concretize but never override above)
+9. **Active app-architecture references (this repo)** — normative for *how* app code is structured (never override product/design above):
+   - `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`
+   - `docs/SETTINGS-APP-HOISTED-DECISIONS.md`
+   - `docs/DETEKT-GATE.md`
+10. `plans/` (this repo) — implementation plans (concretize but never override above)
 
 ## Key Docs in vivicast-docs
 
@@ -55,9 +84,13 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 
 1. Check `plans/` for any existing plan for the affected area — read it first if found
 2. Read relevant PRD, ADR, design, interaction, component files from `../vivicast-docs`
-3. Inspect existing app code before replacing anything
-4. Reuse existing code when it doesn't conflict with `../vivicast-docs`
-5. For larger changes: create a plan file under `plans/`
+3. For architecture-sensitive work, read the active app-architecture references first:
+   - `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`
+   - `docs/SETTINGS-APP-HOISTED-DECISIONS.md`
+   - `docs/DETEKT-GATE.md`
+4. Inspect existing app code before replacing anything
+5. Reuse existing code when it doesn't conflict with `../vivicast-docs`
+6. For larger changes: create a plan file under `plans/`
 
 ## When to Stop and Ask
 
@@ -73,37 +106,71 @@ Don't ask for decisions already clearly covered by active docs.
 ## Module Structure
 
 ```
-app/          ← MainActivity, DI, Backup, Diagnostics, WatchNext, AndroidTV Search
+app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPreferenceMappers
+                (App/Context-only mappers), PlaybackOrchestration (thin App host: image resolvers +
+                open*/save delegation + clearHistory), Backup, Diagnostics, WatchNext, AndroidTV
+                Search, other app-hoisted effects (SAF, PIN, scheduler, locale/recreate)
 core/
   cache/      ← M3uStreamReferenceStore, MediaCache
   common/     ← AppResult
   database/   ← Room DB, DAOs (Provider, Catalog, EPG, Favorites, Playback, Search)
   datastore/  ← UserPreferencesStore
-  designsystem/ ← VivicastTheme, VivicastComponents
+  designsystem/ ← VivicastTheme + grouped components: VivicastSurfaces / Layout / Badges / Panels /
+                Dialogs / Inputs / Cards / Navigation / Player (no VivicastComponents.kt)
   network/    ← NetworkClientFactory
-  player/     ← VivicastPlayerController
+  player/     ← VivicastPlayerController (PlaybackRequest, VivicastPlayerState)
   security/   ← Keystore SecureValueStore, PinSecurity
 data/
   epg/        ← EpgRepository, EpgImportRepository
   favorites/  ← FavoritesRepository
   media/      ← MediaRepository, CatalogImportRepository
-  playback/   ← PlaybackRepository, PlaybackStreamResolver, PlaybackProgressRules
-  provider/   ← ProviderRepository, ProviderConfigurationModels
-domain/       ← VivicastModels, UseCase
-feature/
-  home/       ← HomeRoute
-  live-tv/    ← LiveTvRoute
-  movies/     ← MoviesRoute
-  player/     ← PlayerRoute
-  search/     ← SearchRoute
-  series/     ← SeriesRoute
-  settings/   ← SettingsRoute
+  playback/   ← PlaybackRepository, PlaybackStreamResolver, PlaybackProgressRules,
+                PlaybackRequestFactory, PlaybackProgressRecorder
+  provider/   ← ProviderRepository, ProviderConfigurationModels, TestProviderConnectionUseCase
+domain/       ← Vivicast domain models; keep model-focused unless an approved plan requires otherwise
+feature/      ← each feature = Route + ViewModel + UiState (+ ViewModelFactory)
+  home/       ← HomeRoute, HomeViewModel, HomeUiState
+  live-tv/    ← LiveTvRoute, LiveTvViewModel, LiveTvUiState
+  movies/     ← MoviesRoute, MoviesViewModel, MoviesUiState
+  player/     ← PlayerRoute (realtime player; reads controller state via collectAsState)
+  search/     ← SearchRoute, SearchViewModel, SearchUiState
+  series/     ← SeriesRoute, SeriesViewModel, SeriesUiState
+  settings/   ← SettingsRoute, SettingsViewModel, SettingsUiState + panels
 iptv/
   m3u/        ← M3uParser + Contracts
   xmltv/      ← XmltvParser + Contracts
-  xtream/     ← XtreamParser, XtreamClient, XtreamTransport
-worker/       ← RefreshOrchestrator, RefreshWorker, RefreshScheduler
+  xtream/     ← XtreamParser, XtreamClient, XtreamTransport (injectable ioDispatcher)
+worker/       ← RefreshOrchestrator, RefreshWorker, RefreshScheduler (injectable ioDispatcher)
 ```
+
+## Mandatory Architecture Rules
+
+Follow these for all new/changed app code (they encode the completed remediation):
+
+- New screens: **ViewModel + immutable UiState + `StateFlow`**.
+- Routes read UI state via **`collectAsStateWithLifecycle`**.
+- **No** Repository Flows collected directly in Composables.
+- **No** Repository CRUD calls directly in Composables.
+- Navigation lives outside ViewModels.
+- Local UI state may stay in Composables: focus, D-Pad, dialog open/closed, input draft, local
+  localized messages, scroll/focus requesters.
+- ViewModels contain **no** Compose types, Context, Activity, Resources, localized strings, or navigation.
+- Data/business logic belongs in `:data` or matching services/UseCases.
+- `AppContainer` contains **no** business logic — only wiring/delegation.
+- Time logic uses an injectable clock; dispatcher logic uses an injectable `CoroutineDispatcher`
+  (default `Dispatchers.IO`).
+- **App-hoisted stays App-hoisted:** SAF/ActivityResult, Keystore/PIN/Security, Context/PackageManager/
+  Clipboard, WorkManager/Scheduler, Navigation, Locale/`recreate`, `playerController.play`, player
+  state loop / WatchNext / throttle map, Backup, Diagnostics export / support copy, Global Refresh,
+  Clear History, M3U file picker.
+- **Settings:** follow `docs/SETTINGS-APP-HOISTED-DECISIONS.md`.
+- **Playback:** `PlaybackRequestFactory` / `PlaybackProgressRecorder` in `:data:playback`;
+  `playerController.play` / `timeshiftConfig()` / WatchNext / `clearHistory` stay App-hoisted.
+- **Provider connection test:** `TestProviderConnectionUseCase` in `:data:provider`; the German UI
+  message mapping stays App-side.
+- **Designsystem:** `VivicastComponents.kt` no longer exists — components live in `VivicastSurfaces /
+  Layout / Badges / Panels / Dialogs / Inputs / Cards / Navigation / Player`.
+- Run `.\gradlew.bat detekt` before structural changes; don't grow the baseline without justification.
 
 ## Android Development
 
@@ -112,13 +179,20 @@ worker/       ← RefreshOrchestrator, RefreshWorker, RefreshScheduler
 - Run compile checkpoints after structural or behavior changes
 - Use Android Studio Compose Preview for visual iteration
 
+### Validation Commands
+
 ```powershell
 # Check environment
 .\scripts\check-environment.ps1
 
-# Build debug
+# Architecture / build / test gates (keep green for structural changes)
+.\gradlew.bat detekt
 .\gradlew.bat assembleDebug
+.\gradlew.bat test
 ```
+
+For playback/protection/WatchNext changes, also run the relevant smoke tests when an emulator is
+available: `M3uPlaybackSmokeTest`, `ProtectionGateTest`, `WatchNextIntegrationTest`.
 
 ## Git & Security
 
