@@ -100,25 +100,29 @@ import java.util.Date
 
 @Composable
 internal fun EpgSettingsPanel(
-    providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
     state: EpgSettingsState,
+    sources: List<EpgSource>,
+    providers: List<Provider>,
+    selectedProviderId: String?,
+    providerLinks: List<ProviderEpgSource>,
     onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
     onRunGlobalRefresh: () -> Unit,
+    onSelectProvider: (String) -> Unit,
+    onSaveEpgSource: suspend (EpgSourceEditRequest) -> Result<EpgSource>,
+    onDeleteEpgSource: suspend (String) -> Result<Unit>,
+    onLinkProvider: suspend (providerId: String, sourceId: String, priority: Int) -> Result<Unit>,
+    onUnlinkProvider: suspend (providerId: String, sourceId: String) -> Result<Unit>,
+    onMoveProviderLink: suspend (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Result<Unit>,
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val sources by epgSourceRepository.observeEpgSources().collectAsState(initial = emptyList())
-    val providers by remember { providerRepository.observeProviders() }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
-    var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(EpgSourceEditorState.newSource()) }
     var showEditor by remember { mutableStateOf(false) }
     var showManualMapping by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
-    val providerLinks by (selectedProviderId?.let { epgSourceRepository.observeProviderEpgSources(it) } ?: flowOf(emptyList()))
-        .collectAsState(initial = emptyList())
     val strEpgScheduled = stringResource(R.string.settings_epg_msg_scheduled)
     val strEpgSourceSaved = stringResource(R.string.settings_epg_msg_source_saved)
     val strEpgSourceAssigned = stringResource(R.string.settings_epg_msg_source_assigned)
@@ -141,12 +145,6 @@ internal fun EpgSettingsPanel(
             selectedSourceId = null
             editor = EpgSourceEditorState.newSource()
             showEditor = false
-        }
-    }
-
-    LaunchedEffect(providers) {
-        if (selectedProviderId != null && providers.none { it.id == selectedProviderId }) {
-            selectedProviderId = null
         }
     }
 
@@ -194,7 +192,7 @@ internal fun EpgSettingsPanel(
                 providerLinks = providerLinks,
                 repository = epgSourceRepository,
                 message = message,
-                onSelectProvider = { selectedProviderId = it },
+                onSelectProvider = onSelectProvider,
                 onMessage = { message = it },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -221,7 +219,7 @@ internal fun EpgSettingsPanel(
                     providerLinks = providerLinks,
                     message = message,
                     onEditorChange = { editor = it },
-                    onSelectProvider = { selectedProviderId = it },
+                    onSelectProvider = onSelectProvider,
                     onSave = {
                         val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
                         if (validationMessage != null) {
@@ -229,7 +227,7 @@ internal fun EpgSettingsPanel(
                             return@EpgSourceEditor
                         }
                         scope.launch {
-                            runCatching { epgSourceRepository.saveSource(editor.toEditRequest()) }
+                            onSaveEpgSource(editor.toEditRequest())
                                 .onSuccess { source ->
                                     selectedSourceId = source.id
                                     editor = EpgSourceEditorState.from(source)
@@ -246,7 +244,7 @@ internal fun EpgSettingsPanel(
                     },
                     onLinkProvider = { providerId, sourceId, priority ->
                         scope.launch {
-                            runCatching { epgSourceRepository.linkSourceToProvider(providerId, sourceId, priority) }
+                            onLinkProvider(providerId, sourceId, priority)
                                 .onSuccess { message = strEpgSourceAssigned }
                                 .onFailure { error ->
                                     message = strEpgLinkFailed.format(error.message ?: strUnknownError)
@@ -255,7 +253,7 @@ internal fun EpgSettingsPanel(
                     },
                     onUnlinkProvider = { providerId, sourceId ->
                         scope.launch {
-                            runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }
+                            onUnlinkProvider(providerId, sourceId)
                                 .onSuccess { message = strEpgSourceUnlinked }
                                 .onFailure { error ->
                                     message = strEpgUnlinkFailed.format(error.message ?: strUnknownError)
@@ -264,7 +262,7 @@ internal fun EpgSettingsPanel(
                     },
                     onMoveProviderLink = { providerId, sourceId, direction ->
                         scope.launch {
-                            runCatching { epgSourceRepository.moveSourcePriority(providerId, sourceId, direction) }
+                            onMoveProviderLink(providerId, sourceId, direction)
                                 .onSuccess { message = strEpgPriorityUpdated }
                                 .onFailure { error ->
                                     message = strEpgPriorityFailed.format(error.message ?: strUnknownError)
@@ -291,7 +289,7 @@ internal fun EpgSettingsPanel(
             onCancel = { pendingDelete = null },
             onDelete = {
                 scope.launch {
-                    runCatching { epgSourceRepository.deleteSource(source.id) }
+                    onDeleteEpgSource(source.id)
                         .onSuccess {
                             pendingDelete = null
                             selectedSourceId = null

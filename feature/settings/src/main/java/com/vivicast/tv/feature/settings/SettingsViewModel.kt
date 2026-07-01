@@ -11,10 +11,20 @@ import com.vivicast.tv.core.datastore.GeneralPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
+import com.vivicast.tv.data.epg.EpgSourceEditRequest
+import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
+import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.domain.model.EpgSource
+import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.ProviderEpgSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -26,9 +36,12 @@ import kotlinx.coroutines.launch
  * side effects (background-refresh scheduler, locale/recreate) stay in the composable/app layer.
  * [scope] lets unit tests inject a controlled scope; production uses [viewModelScope].
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class SettingsViewModel(
     private val userPreferencesStore: UserPreferencesStore,
     private val mediaCacheStore: MediaCacheStore,
+    private val epgSourceRepository: EpgSourceRepository,
+    private val providerRepository: ProviderRepository,
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -36,6 +49,12 @@ internal class SettingsViewModel(
 
     private var currentPreferences: UserPreferences = UserPreferences()
     private var currentCache: CacheSettingsState = CacheSettingsState()
+    private var currentEpgSources: List<EpgSource> = emptyList()
+    private var currentEpgProviders: List<Provider> = emptyList()
+    private var currentProviderEpgLinks: List<ProviderEpgSource> = emptyList()
+
+    /** Selected provider in the EPG area; keys the provider↔EPG-source link flow. */
+    private val selectedEpgProviderId = MutableStateFlow<String?>(null)
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -44,16 +63,52 @@ internal class SettingsViewModel(
         coroutineScope.launch {
             userPreferencesStore.values.collect { preferences ->
                 currentPreferences = preferences
-                _uiState.value = preferences.toSettingsUiState().copy(cache = currentCache)
+                recomposeState()
             }
         }
+        coroutineScope.launch {
+            epgSourceRepository.observeEpgSources().collect { sources ->
+                currentEpgSources = sources
+                recomposeState()
+            }
+        }
+        coroutineScope.launch {
+            providerRepository.observeProviders().collect { providers ->
+                currentEpgProviders = providers
+                if (selectedEpgProviderId.value != null && providers.none { it.id == selectedEpgProviderId.value }) {
+                    selectedEpgProviderId.value = null
+                }
+                recomposeState()
+            }
+        }
+        coroutineScope.launch {
+            selectedEpgProviderId
+                .flatMapLatest { providerId ->
+                    if (providerId == null) flowOf(emptyList()) else epgSourceRepository.observeProviderEpgSources(providerId)
+                }
+                .collect { links ->
+                    currentProviderEpgLinks = links
+                    recomposeState()
+                }
+        }
+    }
+
+    /** Rebuilds the immutable [SettingsUiState] from all currently held sources. */
+    private fun recomposeState() {
+        _uiState.value = currentPreferences.toSettingsUiState().copy(
+            cache = currentCache,
+            epgSources = currentEpgSources,
+            epgProviders = currentEpgProviders,
+            selectedEpgProviderId = selectedEpgProviderId.value,
+            providerEpgLinks = currentProviderEpgLinks,
+        )
     }
 
     /** Loads the media cache stats into the state (mirrors the original App reload). */
     fun onReloadCacheStats() {
         coroutineScope.launch {
             currentCache = mediaCacheStore.stats().toCacheSettingsState()
-            _uiState.value = _uiState.value.copy(cache = currentCache)
+            recomposeState()
         }
     }
 
@@ -62,9 +117,39 @@ internal class SettingsViewModel(
         coroutineScope.launch {
             mediaCacheStore.clear()
             currentCache = mediaCacheStore.stats().toCacheSettingsState()
-            _uiState.value = _uiState.value.copy(cache = currentCache)
+            recomposeState()
         }
     }
+
+    /** Selects the EPG-area provider whose links are observed (shared by editor + manual mapping). */
+    fun onEpgProviderSelected(providerId: String) {
+        selectedEpgProviderId.value = providerId
+        recomposeState()
+    }
+
+    /**
+     * EPG-source CRUD + provider-link actions run the repository call inside the ViewModel and
+     * return the outcome so the panel can keep its localized success/error messaging and its local
+     * editor/selection state (no localized strings in the ViewModel).
+     */
+    suspend fun saveEpgSource(request: EpgSourceEditRequest): Result<EpgSource> =
+        runCatching { epgSourceRepository.saveSource(request) }
+
+    suspend fun deleteEpgSource(sourceId: String): Result<Unit> =
+        runCatching { epgSourceRepository.deleteSource(sourceId) }
+
+    suspend fun linkEpgSourceToProvider(providerId: String, sourceId: String, priority: Int): Result<Unit> =
+        runCatching { epgSourceRepository.linkSourceToProvider(providerId, sourceId, priority) }
+
+    suspend fun unlinkEpgSourceFromProvider(providerId: String, sourceId: String): Result<Unit> =
+        runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }
+
+    suspend fun moveEpgSourcePriority(
+        providerId: String,
+        sourceId: String,
+        direction: EpgSourcePriorityDirection,
+    ): Result<Unit> =
+        runCatching { epgSourceRepository.moveSourcePriority(providerId, sourceId, direction) }
 
     fun onLaunchOnBootChanged(enabled: Boolean) = updateGeneral { it.copy(launchOnBoot = enabled) }
 

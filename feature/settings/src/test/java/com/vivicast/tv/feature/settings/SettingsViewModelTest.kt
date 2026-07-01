@@ -19,13 +19,32 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
+import com.vivicast.tv.data.epg.EpgSourceEditRequest
+import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
+import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.provider.ProviderCreateRequest
+import com.vivicast.tv.data.provider.ProviderCredentials
+import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.ProviderSaveResult
+import com.vivicast.tv.data.provider.ProviderUpdateRequest
+import com.vivicast.tv.domain.model.Channel
+import com.vivicast.tv.domain.model.EpgChannelMapping
+import com.vivicast.tv.domain.model.EpgProgram
+import com.vivicast.tv.domain.model.EpgSource
+import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.ProviderEpgSource
+import com.vivicast.tv.domain.model.ProviderStatus
+import com.vivicast.tv.domain.model.ProviderType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SettingsViewModelTest {
@@ -34,8 +53,10 @@ class SettingsViewModelTest {
         scope: CoroutineScope,
         store: FakeUserPreferencesStore,
         cacheStore: FakeMediaCacheStore = FakeMediaCacheStore(),
+        epgRepo: FakeEpgSourceRepository = FakeEpgSourceRepository(),
+        providerRepo: FakeProviderRepository = FakeProviderRepository(),
     ): SettingsViewModel =
-        SettingsViewModel(store, cacheStore, scope = scope)
+        SettingsViewModel(store, cacheStore, epgRepo, providerRepo, scope = scope)
 
     @Test
     fun initialState_mapsGeneralAppearancePlaybackFromPreferences() = runBlocking {
@@ -244,6 +265,111 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun initialState_containsEpgSourcesAndProviders() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(initialSources = listOf(epgSource("s1", "Source 1")))
+        val providerRepo = FakeProviderRepository(initialProviders = listOf(provider("p1", "Provider 1")))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo, providerRepo = providerRepo)
+
+        val state = vm.uiState.value
+        assertEquals(listOf("s1"), state.epgSources.map { it.id })
+        assertEquals(listOf("p1"), state.epgProviders.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun onEpgProviderSelected_exposesProviderLinks() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val link = ProviderEpgSource(id = "l1", providerId = "p1", epgSourceId = "s1", priority = 1)
+        val epgRepo = FakeEpgSourceRepository(links = mapOf("p1" to listOf(link)))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.onEpgProviderSelected("p1")
+
+        assertEquals("p1", vm.uiState.value.selectedEpgProviderId)
+        assertEquals(listOf("s1"), vm.uiState.value.providerEpgLinks.map { it.epgSourceId })
+        scope.cancel()
+    }
+
+    @Test
+    fun saveEpgSource_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        val result = vm.saveEpgSource(EpgSourceEditRequest(sourceId = null, name = "New", url = "http://x"))
+
+        assertTrue(result.isSuccess)
+        assertEquals("New", epgRepo.savedRequest?.name)
+        scope.cancel()
+    }
+
+    @Test
+    fun deleteEpgSource_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.deleteEpgSource("s1")
+
+        assertEquals("s1", epgRepo.deletedSourceId)
+        scope.cancel()
+    }
+
+    @Test
+    fun linkAndUnlinkEpgProvider_delegateToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.linkEpgSourceToProvider("p1", "s1", 2)
+        vm.unlinkEpgSourceFromProvider("p1", "s1")
+
+        assertEquals(Triple("p1", "s1", 2), epgRepo.linkCall)
+        assertEquals("p1" to "s1", epgRepo.unlinkCall)
+        scope.cancel()
+    }
+
+    @Test
+    fun moveEpgSourcePriority_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.moveEpgSourcePriority("p1", "s1", EpgSourcePriorityDirection.Up)
+
+        assertEquals(Triple("p1", "s1", EpgSourcePriorityDirection.Up), epgRepo.moveCall)
+        scope.cancel()
+    }
+
+    @Test
+    fun epgSourceFlowChange_updatesUiStateReactively() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository(initialSources = listOf(epgSource("s1", "Source 1")))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        assertEquals(listOf("s1"), vm.uiState.value.epgSources.map { it.id })
+        epgRepo.sourcesFlow.value = listOf(epgSource("s1", "Source 1"), epgSource("s2", "Source 2"))
+
+        assertEquals(listOf("s1", "s2"), vm.uiState.value.epgSources.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun providerRemoved_clearsSelectedEpgProvider() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val providerRepo = FakeProviderRepository(initialProviders = listOf(provider("p1", "Provider 1")))
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
+        vm.onEpgProviderSelected("p1")
+        assertEquals("p1", vm.uiState.value.selectedEpgProviderId)
+
+        providerRepo.providersFlow.value = emptyList()
+
+        assertEquals(null, vm.uiState.value.selectedEpgProviderId)
+        scope.cancel()
+    }
+
+    @Test
     fun onPlaybackSettingsChanged_writesPreference() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore()
@@ -315,4 +441,101 @@ private class FakeMediaCacheStore(
         currentStats = MediaCacheStats(totalSizeBytes = 0, fileCount = 0)
         return MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
     }
+}
+
+private fun epgSource(id: String, name: String): EpgSource =
+    EpgSource(id = id, name = name, sourceConfigKey = "cfg-$id", timeShiftMinutes = 0, isActive = true)
+
+private fun provider(id: String, name: String): Provider =
+    Provider(
+        id = id,
+        name = name,
+        type = ProviderType.M3u,
+        sourceConfigKey = "cfg-$id",
+        isActive = true,
+        status = ProviderStatus.Active,
+        includeLiveTv = true,
+        includeMovies = true,
+        includeSeries = true,
+        refreshIntervalHours = 24,
+        logoPriority = "playlist",
+        createdAt = 0L,
+        updatedAt = 0L,
+    )
+
+private class FakeEpgSourceRepository(
+    initialSources: List<EpgSource> = emptyList(),
+    private val links: Map<String, List<ProviderEpgSource>> = emptyMap(),
+) : EpgSourceRepository {
+    val sourcesFlow = MutableStateFlow(initialSources)
+    var savedRequest: EpgSourceEditRequest? = null
+        private set
+    var deletedSourceId: String? = null
+        private set
+    var linkCall: Triple<String, String, Int>? = null
+        private set
+    var unlinkCall: Pair<String, String>? = null
+        private set
+    var moveCall: Triple<String, String, EpgSourcePriorityDirection>? = null
+        private set
+
+    override fun observeEpgSources(): Flow<List<EpgSource>> = sourcesFlow
+    override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
+        flowOf(links[providerId] ?: emptyList())
+    override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = flowOf(emptyList())
+    override fun observeProgramsForChannel(
+        providerId: String,
+        channelId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<EpgProgram>> = flowOf(emptyList())
+    override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
+        flowOf(emptyList())
+    override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping =
+        throw UnsupportedOperationException()
+    override suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String) = Unit
+
+    override suspend fun saveSource(request: EpgSourceEditRequest): EpgSource {
+        savedRequest = request
+        return epgSource(request.sourceId ?: "generated-id", request.name)
+    }
+
+    override suspend fun deleteSource(sourceId: String) {
+        deletedSourceId = sourceId
+    }
+
+    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) {
+        linkCall = Triple(providerId, epgSourceId, priority)
+    }
+
+    override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {
+        unlinkCall = providerId to epgSourceId
+    }
+
+    override suspend fun moveSourcePriority(
+        providerId: String,
+        epgSourceId: String,
+        direction: EpgSourcePriorityDirection,
+    ) {
+        moveCall = Triple(providerId, epgSourceId, direction)
+    }
+}
+
+private class FakeProviderRepository(
+    initialProviders: List<Provider> = emptyList(),
+) : ProviderRepository {
+    val providersFlow = MutableStateFlow(initialProviders)
+
+    override fun observeProviders(): Flow<List<Provider>> = providersFlow
+    override suspend fun getProvider(providerId: String): Provider? = null
+    override suspend fun getCredentials(providerId: String): ProviderCredentials? = null
+    override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult =
+        ProviderSaveResult(provider = provider("p", "P"), hasDuplicateName = false)
+    override suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult =
+        ProviderSaveResult(provider = provider("p", "P"), hasDuplicateName = false)
+    override suspend fun saveProvider(provider: Provider) = Unit
+    override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) = Unit
+    override suspend fun setProviderActive(providerId: String, isActive: Boolean) = Unit
+    override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
+    override suspend fun deleteProvider(providerId: String) = Unit
 }

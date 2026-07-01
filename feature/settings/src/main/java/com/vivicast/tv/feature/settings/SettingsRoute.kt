@@ -146,7 +146,7 @@ fun SettingsRoute(
     onClearHistory: (HistoryClearTarget) -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore),
+        factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore, epgSourceRepository, providerRepository),
     )
     val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settingsSections = settingsSectionsList()
@@ -305,11 +305,20 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionEpg -> EpgSettingsPanel(
-                            providerRepository = providerRepository,
                             epgSourceRepository = epgSourceRepository,
                             state = settingsUiState.epg,
+                            sources = settingsUiState.epgSources,
+                            providers = settingsUiState.epgProviders,
+                            selectedProviderId = settingsUiState.selectedEpgProviderId,
+                            providerLinks = settingsUiState.providerEpgLinks,
                             onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
                             onRunGlobalRefresh = onRunGlobalRefresh,
+                            onSelectProvider = viewModel::onEpgProviderSelected,
+                            onSaveEpgSource = viewModel::saveEpgSource,
+                            onDeleteEpgSource = viewModel::deleteEpgSource,
+                            onLinkProvider = viewModel::linkEpgSourceToProvider,
+                            onUnlinkProvider = viewModel::unlinkEpgSourceFromProvider,
+                            onMoveProviderLink = viewModel::moveEpgSourcePriority,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionAppearance -> AppearanceSettingsPanel(
