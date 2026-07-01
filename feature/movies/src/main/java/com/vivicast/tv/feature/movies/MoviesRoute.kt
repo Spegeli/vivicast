@@ -19,12 +19,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,14 +43,13 @@ import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
-import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Provider
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.util.Locale
 
@@ -119,158 +116,74 @@ private fun RoomMoviesRoute(
     targetMovieId: String?,
     onTargetConsumed: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
+    val viewModel: MoviesViewModel = viewModel(
+        factory = MoviesViewModelFactory(
+            providerRepository = providerRepository,
+            mediaRepository = mediaRepository,
+            favoritesRepository = favoritesRepository,
+            playbackRepository = playbackRepository,
+        ),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     val trailerHintStr = stringResource(R.string.movies_trailer_hint)
     val strFavorites = stringResource(R.string.common_favorites)
     val strContinue = stringResource(R.string.movies_continue)
     val strMovieTypeBadge = stringResource(R.string.movies_type_badge)
-    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
-    var selectedProviderId by remember { mutableStateOf<String?>(null) }
-    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
+
+    // Pure-visual state kept in the composable layer.
     var selectedMovieId by remember { mutableStateOf<String?>(null) }
-    var detailMovieId by remember { mutableStateOf<String?>(null) }
-    var detailMovieProgress by remember { mutableStateOf<PlaybackProgress?>(null) }
     var trailerHint by remember { mutableStateOf<String?>(null) }
-    var moviePageCount by remember { mutableStateOf(1) }
 
-    BackHandler(enabled = detailMovieId != null) {
-        detailMovieId = null
+    LaunchedEffect(targetProviderId, targetCategoryId, targetMovieId) {
+        viewModel.onTarget(targetProviderId, targetCategoryId, targetMovieId)
     }
-
-    val movieProviders = remember(providers) { providers.filter { it.includeMovies } }
-
-    LaunchedEffect(providers, movieProviders) {
-        if (selectedProviderId == null || movieProviders.none { it.id == selectedProviderId }) {
-            selectedProviderId = movieProviders.firstOrNull { it.isActive }?.id
-                ?: movieProviders.firstOrNull()?.id
+    LaunchedEffect(uiState.consumedTargetMovieId) {
+        val consumed = uiState.consumedTargetMovieId
+        if (consumed != null && consumed == targetMovieId) {
+            selectedMovieId = consumed
+            onTargetConsumed()
         }
     }
-    LaunchedEffect(targetProviderId, targetCategoryId, targetMovieId) {
-        if (targetMovieId == null) return@LaunchedEffect
-        selectedProviderId = targetProviderId
-        selectedCategoryId = targetCategoryId
-    }
 
-    val categoriesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { mediaRepository.observeCategories(it, CategoryType.Movies) } ?: flowOf(emptyList())
-    }
-    val categories by categoriesFlow.collectAsState(initial = emptyList())
-    val favoritesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { favoritesRepository.observeFavorites(it, MediaType.Movie) } ?: flowOf(emptyList())
-    }
-    val favorites by favoritesFlow.collectAsState(initial = emptyList())
-    val favoriteMovieIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
-    val favoriteOrder = remember(favorites) { favorites.mapIndexed { index, favorite -> favorite.mediaId to index }.toMap() }
-    val continueFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { playbackRepository.observeContinueWatching(it) } ?: flowOf(emptyList())
-    }
-    val continueProgress by continueFlow.collectAsState(initial = emptyList())
-    val continueMovieProgress = remember(continueProgress) {
-        continueProgress
-            .filter { it.mediaType == MediaType.Movie }
-            .associateBy { it.mediaId }
-    }
-    val continueOrder = remember(continueMovieProgress) {
-        continueMovieProgress.values
-            .sortedByDescending { it.lastWatchedAt }
-            .mapIndexed { index, progress -> progress.mediaId to index }
-            .toMap()
-    }
-    val categoriesWithSpecials = remember(selectedProviderId, categories, continueMovieProgress) {
-        selectedProviderId?.let { providerId ->
+    val categoriesWithSpecials = remember(uiState.selectedProviderId, uiState.categories, uiState.hasContinueMovies, strFavorites, strContinue) {
+        val providerId = uiState.selectedProviderId
+        if (providerId != null) {
             buildList {
                 add(specialCategory(providerId, FAVORITES_CATEGORY_ID, strFavorites))
-                if (continueMovieProgress.isNotEmpty()) {
+                if (uiState.hasContinueMovies) {
                     add(specialCategory(providerId, CONTINUE_CATEGORY_ID, strContinue))
                 }
-                addAll(categories)
+                addAll(uiState.categories)
             }
-        } ?: categories
-    }
-
-    LaunchedEffect(selectedProviderId, categoriesWithSpecials, favoriteMovieIds, continueMovieProgress) {
-        if (selectedCategoryId == null || categoriesWithSpecials.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = categories.firstOrNull()?.id ?: categoriesWithSpecials.firstOrNull()?.id
+        } else {
+            uiState.categories
         }
     }
-    LaunchedEffect(selectedProviderId, selectedCategoryId) {
-        moviePageCount = 1
-    }
 
-    val moviesFlow = remember(selectedProviderId, selectedCategoryId, moviePageCount) {
-        selectedProviderId?.takeIf { selectedCategoryId !in SPECIAL_CATEGORY_IDS }?.let { providerId ->
-            mediaRepository.observeMoviesPage(
-                providerId = providerId,
-                categoryId = selectedCategoryId,
-                limit = moviePageCount * VOD_PAGE_SIZE,
-            )
-        } ?: flowOf(emptyList())
-    }
-    val observedMovies by moviesFlow.collectAsState(initial = emptyList())
-    val favoriteMovies by produceState<List<Movie>>(initialValue = emptyList(), mediaRepository, favorites) {
-        value = favorites.mapNotNull { mediaRepository.getMovie(it.providerId, it.mediaId) }
-    }
-    val continueMovies by produceState<List<Movie>>(initialValue = emptyList(), mediaRepository, continueMovieProgress) {
-        value = continueMovieProgress.values
-            .sortedByDescending { it.lastWatchedAt }
-            .mapNotNull { mediaRepository.getMovie(it.providerId, it.mediaId) }
-    }
-    val movies = remember(observedMovies, selectedCategoryId, favoriteMovies, favoriteOrder, continueMovies, continueOrder) {
-        when (selectedCategoryId) {
-            CONTINUE_CATEGORY_ID -> continueMovies
-                .sortedWith(compareBy<Movie> { continueOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
-            FAVORITES_CATEGORY_ID -> favoriteMovies
-                .sortedWith(compareBy<Movie> { favoriteOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
-            else -> observedMovies
-        }
-    }
+    val movies = uiState.movies
+    val favoriteMovieIds = uiState.favoriteMovieIds
+    val continueMovieProgress = uiState.continueProgressByMovieId
 
     LaunchedEffect(movies) {
         if (selectedMovieId == null || movies.none { it.id == selectedMovieId }) {
             selectedMovieId = movies.firstOrNull()?.id
         }
-        if (detailMovieId != null && movies.isNotEmpty() && movies.none { it.id == detailMovieId }) {
-            detailMovieId = null
-        }
-    }
-    LaunchedEffect(targetMovieId, movies) {
-        val movieId = targetMovieId ?: return@LaunchedEffect
-        if (movies.any { it.id == movieId } || targetProviderId?.let { mediaRepository.getMovie(it, movieId) } != null) {
-            selectedMovieId = movieId
-            detailMovieId = movieId
-            onTargetConsumed()
-        }
     }
 
     val selectedMovie = movies.firstOrNull { it.id == selectedMovieId }
-    val loadedDetailMovie by produceState<Movie?>(initialValue = null, mediaRepository, selectedProviderId, detailMovieId) {
-        val providerId = selectedProviderId
-        val movieId = detailMovieId
-        value = if (providerId != null && movieId != null) {
-            mediaRepository.getMovie(providerId, movieId)
-        } else {
-            null
-        }
-    }
-    val detailMovie = movies.firstOrNull { it.id == detailMovieId } ?: loadedDetailMovie
-    val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == selectedCategoryId }
+    val selectedProvider = uiState.selectedProvider
+    val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == uiState.selectedCategoryId }
     val selectedProgress = selectedMovie?.let { continueMovieProgress[it.id] }
-    val detailProgress = detailMovieProgress ?: detailMovie?.let { continueMovieProgress[it.id] }
+    val detailMovie = uiState.detailMovie
+    val detailProgress = uiState.detailProgress
     val backdropModel by produceState<Any?>(initialValue = null, selectedMovie?.id, selectedMovie?.backdropUrl) {
         value = selectedMovie?.let { resolveMovieBackdropModel(it) }
     }
-    val canLoadMoreMovies = selectedCategoryId !in SPECIAL_CATEGORY_IDS &&
-        observedMovies.size >= moviePageCount * VOD_PAGE_SIZE
+    val canLoadMoreMovies = uiState.canLoadMore
 
-    LaunchedEffect(selectedProviderId, detailMovieId) {
-        val providerId = selectedProviderId
-        val movieId = detailMovieId
-        detailMovieProgress = if (providerId != null && movieId != null) {
-            playbackRepository.getProgress(providerId, MediaType.Movie, movieId)
-        } else {
-            null
-        }
+    BackHandler(enabled = uiState.detailMovieId != null) {
+        viewModel.onCloseDetail()
     }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
@@ -283,48 +196,28 @@ private fun RoomMoviesRoute(
                     isFavorite = detailMovie.id in favoriteMovieIds,
                     progress = detailProgress,
                     onOpenPlayer = { resumeProgress -> onOpenPlayer(detailMovie, resumeProgress) },
-                    onToggleFavorite = {
-                        val providerId = selectedProviderId
-                        if (providerId != null) {
-                            scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Movie, detailMovie.id) }
-                        }
-                    },
-                    onMarkSeen = {
-                        val providerId = selectedProviderId ?: return@MovieDetailPage
-                        scope.launch {
-                            val now = System.currentTimeMillis()
-                            val completedProgress = detailMovie.completedProgress(detailProgress, now)
-                            playbackRepository.saveProgress(completedProgress)
-                            detailMovieProgress = completedProgress
-                        }
-                    },
-                    onMarkUnseen = {
-                        val providerId = selectedProviderId ?: return@MovieDetailPage
-                        scope.launch {
-                            playbackRepository.deleteProgress(providerId, MediaType.Movie, detailMovie.id)
-                            detailMovieProgress = null
-                        }
-                    },
+                    onToggleFavorite = { viewModel.onToggleFavorite(detailMovie.id) },
+                    onMarkSeen = { viewModel.onMarkSeen(detailMovie) },
+                    onMarkUnseen = { viewModel.onMarkUnseen(detailMovie) },
                     onOpenTrailer = {
                         trailerHint = if (openTrailer(detailMovie)) null else trailerHintStr
                     },
-                    onClose = { detailMovieId = null },
+                    onClose = { viewModel.onCloseDetail() },
                     trailerHint = trailerHint,
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
                     MovieCategoryColumn(
-                        providers = movieProviders,
-                        selectedProviderId = selectedProviderId,
+                        providers = uiState.providers,
+                        selectedProviderId = uiState.selectedProviderId,
                         categories = categoriesWithSpecials,
-                        selectedCategoryId = selectedCategoryId,
+                        selectedCategoryId = uiState.selectedCategoryId,
                         onProviderSelected = {
-                            selectedProviderId = it.id
-                            selectedCategoryId = null
+                            viewModel.onProviderSelected(it.id)
                             selectedMovieId = null
                         },
                         onCategorySelected = {
-                            selectedCategoryId = it.id
+                            viewModel.onCategorySelected(it.id)
                             selectedMovieId = null
                         },
                     )
@@ -337,13 +230,7 @@ private fun RoomMoviesRoute(
                             progress = selectedProgress,
                             showActions = false,
                             onOpenPlayer = { resumeProgress -> selectedMovie?.let { onOpenPlayer(it, resumeProgress) } },
-                            onToggleFavorite = {
-                                val providerId = selectedProviderId
-                                val movieId = selectedMovie?.id
-                                if (providerId != null && movieId != null) {
-                                    scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Movie, movieId) }
-                                }
-                            },
+                            onToggleFavorite = { selectedMovie?.id?.let { viewModel.onToggleFavorite(it) } },
                         )
                         SectionTitle(stringResource(R.string.nav_movies))
                         if (movies.isEmpty()) {
@@ -378,14 +265,14 @@ private fun RoomMoviesRoute(
                                             .semantics {
                                                 onClick {
                                                     selectedMovieId = movie.id
-                                                    detailMovieId = movie.id
+                                                    viewModel.onOpenDetail(movie.id)
                                                     true
                                                 }
                                             },
                                         onFocused = { selectedMovieId = movie.id },
                                         onClick = {
                                             selectedMovieId = movie.id
-                                            detailMovieId = movie.id
+                                            viewModel.onOpenDetail(movie.id)
                                         },
                                     )
                                 }
@@ -394,7 +281,7 @@ private fun RoomMoviesRoute(
                                         ActionPill(
                                             stringResource(R.string.common_load_more),
                                             modifier = Modifier.fillMaxWidth(),
-                                            onClick = { moviePageCount += 1 },
+                                            onClick = { viewModel.onLoadMore() },
                                         )
                                     }
                                 }
@@ -605,24 +492,6 @@ private fun Movie.detailBody(
         if (progress != null) append("\n$labelProgress: ${progress.progressPercent} %")
     }
 
-private fun Movie.completedProgress(existing: PlaybackProgress?, now: Long): PlaybackProgress =
-    PlaybackProgress(
-        id = existing?.id ?: playbackProgressId(providerId, MediaType.Movie, id),
-        providerId = providerId,
-        mediaType = MediaType.Movie,
-        mediaId = id,
-        positionMillis = existing?.durationMillis?.takeIf { it > 0L } ?: existing?.positionMillis?.takeIf { it > 0L } ?: 1L,
-        durationMillis = existing?.durationMillis?.takeIf { it > 0L } ?: 1L,
-        progressPercent = 100,
-        isCompleted = true,
-        lastWatchedAt = now,
-        createdAt = existing?.createdAt ?: now,
-        updatedAt = now,
-    )
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "progress-$providerId-${mediaType.name.lowercase(Locale.getDefault())}-$mediaId"
-
 private fun openMovieTrailer(context: Context, movie: Movie): Boolean {
     val trailerUri = movie.trailerUrl
         ?.takeIf { it.isYouTubeUrl() }
@@ -649,8 +518,3 @@ internal fun String.isYouTubeUrl(): Boolean {
 }
 
 internal fun moviePosterTag(movieId: String): String = "movie-poster-$movieId"
-
-private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
-private const val CONTINUE_CATEGORY_ID = "__CONTINUE__"
-private val SPECIAL_CATEGORY_IDS = setOf(FAVORITES_CATEGORY_ID, CONTINUE_CATEGORY_ID)
-private const val VOD_PAGE_SIZE = 80
