@@ -16,19 +16,17 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.HeroPanel
@@ -45,14 +43,10 @@ import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Episode
-import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
-import java.util.Locale
 
 @Composable
 fun SeriesRoute(
@@ -119,217 +113,61 @@ private fun RoomSeriesRoute(
     targetEpisodeId: String?,
     onTargetConsumed: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
+    val viewModel: SeriesViewModel = viewModel(
+        factory = SeriesViewModelFactory(
+            providerRepository = providerRepository,
+            mediaRepository = mediaRepository,
+            favoritesRepository = favoritesRepository,
+            playbackRepository = playbackRepository,
+        ),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     val strFavorites = stringResource(R.string.common_favorites)
     val strContinue = stringResource(R.string.series_continue)
     val strSeriesTypeBadge = stringResource(R.string.series_type_badge)
-    val providers by providerRepository.observeProviders().collectAsState(initial = emptyList())
-    var selectedProviderId by remember { mutableStateOf<String?>(null) }
-    var selectedCategoryId by remember { mutableStateOf<String?>(null) }
-    var selectedSeriesId by remember { mutableStateOf<String?>(null) }
-    var selectedSeasonId by remember { mutableStateOf<String?>(null) }
-    var selectedEpisodeId by remember { mutableStateOf<String?>(null) }
-    var detailSeriesId by remember { mutableStateOf<String?>(null) }
-    var selectedEpisodeProgress by remember { mutableStateOf<PlaybackProgress?>(null) }
-    var seriesPageCount by remember { mutableStateOf(1) }
 
-    BackHandler(enabled = detailSeriesId != null) {
-        detailSeriesId = null
+    LaunchedEffect(targetProviderId, targetCategoryId, targetSeriesId, targetSeasonId, targetEpisodeId) {
+        viewModel.onTarget(targetProviderId, targetCategoryId, targetSeriesId, targetSeasonId, targetEpisodeId)
     }
-
-    val seriesProviders = remember(providers) { providers.filter { it.includeSeries } }
-
-    LaunchedEffect(providers, seriesProviders) {
-        if (selectedProviderId == null || seriesProviders.none { it.id == selectedProviderId }) {
-            selectedProviderId = seriesProviders.firstOrNull { it.isActive }?.id
-                ?: seriesProviders.firstOrNull()?.id
-        }
-    }
-    LaunchedEffect(targetProviderId, targetCategoryId, targetSeriesId) {
-        if (targetSeriesId == null) return@LaunchedEffect
-        selectedProviderId = targetProviderId
-        selectedCategoryId = targetCategoryId
-    }
-
-    val categoriesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { mediaRepository.observeCategories(it, CategoryType.Series) } ?: flowOf(emptyList())
-    }
-    val categories by categoriesFlow.collectAsState(initial = emptyList())
-    val favoritesFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { favoritesRepository.observeFavorites(it, MediaType.Series) } ?: flowOf(emptyList())
-    }
-    val favorites by favoritesFlow.collectAsState(initial = emptyList())
-    val favoriteSeriesIds = remember(favorites) { favorites.mapTo(mutableSetOf()) { it.mediaId } }
-    val favoriteOrder = remember(favorites) { favorites.mapIndexed { index, favorite -> favorite.mediaId to index }.toMap() }
-    val continueFlow = remember(selectedProviderId) {
-        selectedProviderId?.let { playbackRepository.observeContinueWatching(it) } ?: flowOf(emptyList())
-    }
-    val continueProgress by continueFlow.collectAsState(initial = emptyList())
-    val continueSeriesTargets by produceState<Map<String, SeriesContinueTarget>>(
-        initialValue = emptyMap(),
-        selectedProviderId,
-        continueProgress,
-    ) {
-        value = continueProgress
-            .filter { it.mediaType == MediaType.Episode }
-            .sortedByDescending { it.lastWatchedAt }
-            .mapNotNull { progress ->
-                mediaRepository.getEpisode(progress.providerId, progress.mediaId)
-                    ?.takeIf { it.providerId == selectedProviderId }
-                    ?.let { episode -> episode.seriesId to SeriesContinueTarget(progress, episode) }
-            }
-            .distinctBy { it.first }
-            .toMap()
-    }
-    val continueOrder = remember(continueSeriesTargets) {
-        continueSeriesTargets.values
-            .sortedByDescending { it.progress.lastWatchedAt }
-            .mapIndexed { index, target -> target.episode.seriesId to index }
-            .toMap()
-    }
-    val categoriesWithSpecials = remember(selectedProviderId, categories, continueSeriesTargets) {
-        selectedProviderId?.let { providerId ->
-            buildList {
-                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, strFavorites))
-                if (continueSeriesTargets.isNotEmpty()) {
-                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, strContinue))
-                }
-                addAll(categories)
-            }
-        } ?: categories
-    }
-
-    LaunchedEffect(selectedProviderId, categoriesWithSpecials, favoriteSeriesIds, continueSeriesTargets) {
-        if (selectedCategoryId == null || categoriesWithSpecials.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = categories.firstOrNull()?.id ?: categoriesWithSpecials.firstOrNull()?.id
-        }
-    }
-    LaunchedEffect(selectedProviderId, selectedCategoryId) {
-        seriesPageCount = 1
-    }
-
-    val seriesFlow = remember(selectedProviderId, selectedCategoryId, seriesPageCount) {
-        selectedProviderId?.takeIf { selectedCategoryId !in SPECIAL_CATEGORY_IDS }?.let { providerId ->
-            mediaRepository.observeSeriesPage(
-                providerId = providerId,
-                categoryId = selectedCategoryId,
-                limit = seriesPageCount * VOD_PAGE_SIZE,
-            )
-        } ?: flowOf(emptyList())
-    }
-    val observedSeries by seriesFlow.collectAsState(initial = emptyList())
-    val favoriteSeries by produceState<List<Series>>(initialValue = emptyList(), mediaRepository, favorites) {
-        value = favorites.mapNotNull { mediaRepository.getSeries(it.providerId, it.mediaId) }
-    }
-    val continueSeries by produceState<List<Series>>(initialValue = emptyList(), mediaRepository, continueSeriesTargets) {
-        value = continueSeriesTargets.values
-            .sortedByDescending { it.progress.lastWatchedAt }
-            .mapNotNull { mediaRepository.getSeries(it.episode.providerId, it.episode.seriesId) }
-    }
-    val seriesItems = remember(observedSeries, selectedCategoryId, favoriteSeries, favoriteOrder, continueSeries, continueOrder) {
-        when (selectedCategoryId) {
-            CONTINUE_CATEGORY_ID -> continueSeries
-                .sortedWith(compareBy<Series> { continueOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
-            FAVORITES_CATEGORY_ID -> favoriteSeries
-                .sortedWith(compareBy<Series> { favoriteOrder[it.id] ?: Int.MAX_VALUE }.thenBy { it.name.lowercase(Locale.getDefault()) })
-            else -> observedSeries
-        }
-    }
-
-    LaunchedEffect(seriesItems) {
-        if (selectedSeriesId == null || seriesItems.none { it.id == selectedSeriesId }) {
-            selectedSeriesId = seriesItems.firstOrNull()?.id
-        }
-        if (detailSeriesId != null && seriesItems.isNotEmpty() && seriesItems.none { it.id == detailSeriesId }) {
-            detailSeriesId = null
-        }
-    }
-    LaunchedEffect(targetSeriesId, seriesItems) {
-        val seriesId = targetSeriesId ?: return@LaunchedEffect
-        if (seriesItems.any { it.id == seriesId } || targetProviderId?.let { mediaRepository.getSeries(it, seriesId) } != null) {
-            selectedSeriesId = seriesId
-            detailSeriesId = seriesId
-            if (targetSeasonId == null && targetEpisodeId == null) {
-                onTargetConsumed()
-            }
-        }
-    }
-
-    val loadedSelectedSeries by produceState<Series?>(initialValue = null, mediaRepository, selectedProviderId, selectedSeriesId) {
-        val providerId = selectedProviderId
-        val seriesId = selectedSeriesId
-        value = if (providerId != null && seriesId != null) {
-            mediaRepository.getSeries(providerId, seriesId)
-        } else {
-            null
-        }
-    }
-    val loadedDetailSeries by produceState<Series?>(initialValue = null, mediaRepository, selectedProviderId, detailSeriesId) {
-        val providerId = selectedProviderId
-        val seriesId = detailSeriesId
-        value = if (providerId != null && seriesId != null) {
-            mediaRepository.getSeries(providerId, seriesId)
-        } else {
-            null
-        }
-    }
-    val selectedSeries = seriesItems.firstOrNull { it.id == selectedSeriesId } ?: loadedSelectedSeries
-    val detailSeries = seriesItems.firstOrNull { it.id == detailSeriesId } ?: loadedDetailSeries
-    val selectedProvider = providers.firstOrNull { it.id == selectedProviderId }
-    val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == selectedCategoryId }
-    val detailContinueTarget = detailSeries?.let { continueSeriesTargets[it.id] }
-    val seasonsFlow = remember(selectedProviderId, selectedSeries?.id) {
-        val providerId = selectedProviderId
-        val seriesId = selectedSeries?.id
-        if (providerId == null || seriesId == null) flowOf(emptyList()) else mediaRepository.observeSeasons(providerId, seriesId)
-    }
-    val seasons by seasonsFlow.collectAsState(initial = emptyList())
-    LaunchedEffect(selectedSeries?.id, seasons) {
-        if (selectedSeasonId == null || seasons.none { it.id == selectedSeasonId }) {
-            selectedSeasonId = seasons.firstOrNull()?.id
-        }
-    }
-    LaunchedEffect(targetSeasonId, seasons) {
-        val seasonId = targetSeasonId ?: return@LaunchedEffect
-        if (seasons.any { it.id == seasonId }) {
-            selectedSeasonId = seasonId
-            if (targetEpisodeId == null) {
-                onTargetConsumed()
-            }
-        }
-    }
-    val episodesFlow = remember(selectedProviderId, selectedSeasonId) {
-        val providerId = selectedProviderId
-        val seasonId = selectedSeasonId
-        if (providerId == null || seasonId == null) flowOf(emptyList()) else mediaRepository.observeEpisodes(providerId, seasonId)
-    }
-    val episodes by episodesFlow.collectAsState(initial = emptyList())
-    LaunchedEffect(selectedSeasonId, episodes) {
-        if (selectedEpisodeId == null || episodes.none { it.id == selectedEpisodeId }) {
-            selectedEpisodeId = episodes.firstOrNull()?.id
-        }
-    }
-    LaunchedEffect(targetEpisodeId, episodes) {
-        val episodeId = targetEpisodeId ?: return@LaunchedEffect
-        if (episodes.any { it.id == episodeId }) {
-            selectedEpisodeId = episodeId
+    LaunchedEffect(uiState.consumedTargetSeriesId) {
+        val consumed = uiState.consumedTargetSeriesId
+        if (consumed != null && consumed == targetSeriesId) {
             onTargetConsumed()
         }
     }
-    val selectedEpisode = episodes.firstOrNull { it.id == selectedEpisodeId } ?: episodes.firstOrNull()
+
+    val categoriesWithSpecials = remember(uiState.selectedProviderId, uiState.categories, uiState.hasContinueSeries, strFavorites, strContinue) {
+        val providerId = uiState.selectedProviderId
+        if (providerId != null) {
+            buildList {
+                add(specialCategory(providerId, FAVORITES_CATEGORY_ID, strFavorites))
+                if (uiState.hasContinueSeries) {
+                    add(specialCategory(providerId, CONTINUE_CATEGORY_ID, strContinue))
+                }
+                addAll(uiState.categories)
+            }
+        } else {
+            uiState.categories
+        }
+    }
+
+    val seriesItems = uiState.seriesItems
+    val favoriteSeriesIds = uiState.favoriteSeriesIds
+    val continueSeriesTargets = uiState.continueTargetsBySeriesId
+    val selectedSeries = uiState.selectedSeries
+    val detailSeries = uiState.detailSeries
+    val selectedProvider = uiState.selectedProvider
+    val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == uiState.selectedCategoryId }
+    val selectedEpisode = uiState.selectedEpisode
+    val detailContinueTarget = detailSeries?.let { continueSeriesTargets[it.id] }
     val backdropModel by produceState<Any?>(initialValue = null, selectedSeries?.id, selectedSeries?.backdropUrl) {
         value = selectedSeries?.let { resolveSeriesBackdropModel(it) }
     }
-    val canLoadMoreSeries = selectedCategoryId !in SPECIAL_CATEGORY_IDS &&
-        observedSeries.size >= seriesPageCount * VOD_PAGE_SIZE
+    val canLoadMoreSeries = uiState.canLoadMore
 
-    LaunchedEffect(selectedProviderId, selectedEpisode?.id) {
-        val providerId = selectedProviderId
-        selectedEpisodeProgress = if (providerId != null && selectedEpisode != null) {
-            playbackRepository.getProgress(providerId, MediaType.Episode, selectedEpisode.id)
-        } else {
-            null
-        }
+    BackHandler(enabled = uiState.detailSeriesId != null) {
+        viewModel.onCloseDetail()
     }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
@@ -340,64 +178,33 @@ private fun RoomSeriesRoute(
                     provider = selectedProvider,
                     backdropModel = backdropModel,
                     isFavorite = detailSeries.id in favoriteSeriesIds,
-                    seasons = seasons,
-                    selectedSeasonId = selectedSeasonId,
-                    episodes = episodes,
-                    selectedEpisodeId = selectedEpisodeId,
-                    selectedEpisodeProgress = selectedEpisodeProgress,
+                    seasons = uiState.seasons,
+                    selectedSeasonId = uiState.selectedSeasonId,
+                    episodes = uiState.episodes,
+                    selectedEpisodeId = uiState.selectedEpisodeId,
+                    selectedEpisodeProgress = uiState.selectedEpisodeProgress,
                     continueTarget = detailContinueTarget,
-                    onSeasonSelected = {
-                        selectedSeasonId = it.id
-                        selectedEpisodeId = null
-                    },
-                    onEpisodeSelected = { selectedEpisodeId = it.id },
+                    onSeasonSelected = { viewModel.onSeasonSelected(it.id) },
+                    onEpisodeSelected = { viewModel.onEpisodeSelected(it.id) },
                     onEpisodePlay = onOpenPlayer,
                     onContinueEpisode = { target ->
-                        selectedSeasonId = target.episode.seasonId
-                        selectedEpisodeId = target.episode.id
+                        viewModel.onContinueEpisode(target)
                         onOpenPlayer(target.episode)
                     },
-                    onMarkEpisodeSeen = {
-                        val episode = selectedEpisode ?: return@SeriesDetailPage
-                        scope.launch {
-                            val now = System.currentTimeMillis()
-                            val completedProgress = episode.completedProgress(selectedEpisodeProgress, now)
-                            playbackRepository.saveProgress(completedProgress)
-                            selectedEpisodeProgress = completedProgress
-                        }
-                    },
-                    onMarkEpisodeUnseen = {
-                        val providerId = selectedProviderId ?: return@SeriesDetailPage
-                        val episode = selectedEpisode ?: return@SeriesDetailPage
-                        scope.launch {
-                            playbackRepository.deleteProgress(providerId, MediaType.Episode, episode.id)
-                            selectedEpisodeProgress = null
-                        }
-                    },
-                    onToggleFavorite = {
-                        val providerId = selectedProviderId
-                        if (providerId != null) {
-                            scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Series, detailSeries.id) }
-                        }
-                    },
-                    onClose = { detailSeriesId = null },
+                    onMarkEpisodeSeen = { viewModel.onMarkEpisodeSeen() },
+                    onMarkEpisodeUnseen = { viewModel.onMarkEpisodeUnseen() },
+                    onToggleFavorite = { viewModel.onToggleFavorite(detailSeries.id) },
+                    onClose = { viewModel.onCloseDetail() },
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
                     SeriesCategoryColumn(
-                        providers = seriesProviders,
-                        selectedProviderId = selectedProviderId,
+                        providers = uiState.providers,
+                        selectedProviderId = uiState.selectedProviderId,
                         categories = categoriesWithSpecials,
-                        selectedCategoryId = selectedCategoryId,
-                        onProviderSelected = {
-                            selectedProviderId = it.id
-                            selectedCategoryId = null
-                            selectedSeriesId = null
-                        },
-                        onCategorySelected = {
-                            selectedCategoryId = it.id
-                            selectedSeriesId = null
-                        },
+                        selectedCategoryId = uiState.selectedCategoryId,
+                        onProviderSelected = { viewModel.onProviderSelected(it.id) },
+                        onCategorySelected = { viewModel.onCategorySelected(it.id) },
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.weight(1f)) {
                         SeriesHero(
@@ -408,13 +215,7 @@ private fun RoomSeriesRoute(
                             episode = selectedEpisode,
                             showActions = false,
                             onOpenPlayer = { selectedEpisode?.let(onOpenPlayer) },
-                            onToggleFavorite = {
-                                val providerId = selectedProviderId
-                                val seriesId = selectedSeries?.id
-                                if (providerId != null && seriesId != null) {
-                                    scope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Series, seriesId) }
-                                }
-                            },
+                            onToggleFavorite = { selectedSeries?.id?.let { viewModel.onToggleFavorite(it) } },
                         )
                         SectionTitle(stringResource(R.string.nav_series))
                         if (seriesItems.isEmpty()) {
@@ -448,16 +249,12 @@ private fun RoomSeriesRoute(
                                             .testTag(seriesPosterTag(series.id))
                                             .semantics {
                                                 onClick {
-                                                    selectedSeriesId = series.id
-                                                    detailSeriesId = series.id
+                                                    viewModel.onOpenSeriesDetail(series.id)
                                                     true
                                                 }
                                             },
-                                        onFocused = { selectedSeriesId = series.id },
-                                        onClick = {
-                                            selectedSeriesId = series.id
-                                            detailSeriesId = series.id
-                                        },
+                                        onFocused = { viewModel.onSeriesFocused(series.id) },
+                                        onClick = { viewModel.onOpenSeriesDetail(series.id) },
                                     )
                                 }
                                 if (canLoadMoreSeries) {
@@ -465,7 +262,7 @@ private fun RoomSeriesRoute(
                                         ActionPill(
                                             stringResource(R.string.common_load_more),
                                             modifier = Modifier.fillMaxWidth(),
-                                            onClick = { seriesPageCount += 1 },
+                                            onClick = { viewModel.onLoadMore() },
                                         )
                                     }
                                 }
@@ -700,39 +497,8 @@ private val Series.heroMeta: String?
         year?.takeIf { it.isNotBlank() },
     ).joinToString(" | ").ifBlank { null }
 
-private data class SeriesContinueTarget(
-    val progress: PlaybackProgress,
-    val episode: Episode,
-)
-
-private val SeriesContinueTarget.cardMeta: String
-    get() = "${progress.progressPercent} % | S${episode.seasonNumber}E${episode.episodeNumber} ${episode.name}"
-
 internal fun seriesPosterTag(seriesId: String): String = "series-poster-$seriesId"
 
 internal fun seriesEpisodeTag(episodeId: String): String = "series-episode-$episodeId"
 
 internal fun seriesContinueActionTag(seriesId: String): String = "series-continue-$seriesId"
-
-private fun Episode.completedProgress(existing: PlaybackProgress?, now: Long): PlaybackProgress =
-    PlaybackProgress(
-        id = existing?.id ?: playbackProgressId(providerId, MediaType.Episode, id),
-        providerId = providerId,
-        mediaType = MediaType.Episode,
-        mediaId = id,
-        positionMillis = existing?.durationMillis?.takeIf { it > 0L } ?: existing?.positionMillis?.takeIf { it > 0L } ?: 1L,
-        durationMillis = existing?.durationMillis?.takeIf { it > 0L } ?: 1L,
-        progressPercent = 100,
-        isCompleted = true,
-        lastWatchedAt = now,
-        createdAt = existing?.createdAt ?: now,
-        updatedAt = now,
-    )
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "progress-$providerId-${mediaType.name.lowercase(Locale.getDefault())}-$mediaId"
-
-private const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
-private const val CONTINUE_CATEGORY_ID = "__CONTINUE__"
-private val SPECIAL_CATEGORY_IDS = setOf(FAVORITES_CATEGORY_ID, CONTINUE_CATEGORY_ID)
-private const val VOD_PAGE_SIZE = 80
