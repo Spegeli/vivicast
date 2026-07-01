@@ -1,5 +1,6 @@
 package com.vivicast.tv.iptv.xtream
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
@@ -98,9 +99,10 @@ class DefaultXtreamClient(
 
 class OkHttpXtreamTransport(
     private val client: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : XtreamTransport {
     override suspend fun get(url: String): String =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             val request = Request.Builder()
                 .url(url)
                 .get()

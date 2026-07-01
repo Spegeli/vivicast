@@ -22,6 +22,7 @@ import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.XtreamParser
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -307,9 +308,10 @@ interface TextFetcher {
 
 class OkHttpTextFetcher(
     private val client: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : TextFetcher {
     override suspend fun fetch(url: String): String =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -329,9 +331,10 @@ interface BinaryFetcher {
 
 class OkHttpBinaryFetcher(
     private val client: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : BinaryFetcher {
     override suspend fun fetch(url: String): ByteArray =
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             val request = Request.Builder()
                 .url(url)
                 .get()
