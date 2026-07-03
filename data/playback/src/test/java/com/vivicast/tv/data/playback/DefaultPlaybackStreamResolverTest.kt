@@ -260,6 +260,110 @@ class DefaultPlaybackStreamResolverTest {
     }
 
     @Test
+    fun resolvesM3uMovieUrlFromStreamReferenceStore() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf("movie:abc123" to M3uStreamReference(streamUrl = "http://example.test/movie/provider/user/100.mkv")),
+            )
+        }
+        val resolver = m3uResolver(streamReferenceStore)
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "movie-local-id",
+                mediaType = MediaType.Movie,
+                remoteId = "movie:abc123",
+            ),
+        )
+
+        val stream = (result as PlaybackStreamResult.Resolved).stream
+        assertEquals("http://example.test/movie/provider/user/100.mkv", stream.url)
+        assertEquals("movie-local-id", stream.mediaId)
+        assertEquals(PROVIDER_STABLE_KEY, stream.providerStableKey)
+    }
+
+    @Test
+    fun resolvesM3uEpisodeUrlFromStreamReferenceStore() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf("episode:def456" to M3uStreamReference(streamUrl = "http://example.test/series/provider/user/200.mp4")),
+            )
+        }
+        val resolver = m3uResolver(streamReferenceStore)
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "episode-local-id",
+                mediaType = MediaType.Episode,
+                remoteId = "episode:def456",
+            ),
+        )
+
+        assertEquals(
+            "http://example.test/series/provider/user/200.mp4",
+            (result as PlaybackStreamResult.Resolved).stream.url,
+        )
+    }
+
+    @Test
+    fun rejectsM3uMovieWhenStreamReferenceIsMissing() = runBlocking {
+        val resolver = m3uResolver(FakeM3uStreamReferenceStore())
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "movie-local-id",
+                mediaType = MediaType.Movie,
+                remoteId = "movie:missing",
+            ),
+        )
+
+        assertEquals(PlaybackStreamFailureReason.MissingStreamReference, (result as PlaybackStreamResult.Failed).reason)
+    }
+
+    @Test
+    fun rejectsM3uEpisodeWhenStreamReferenceIsMissing() = runBlocking {
+        val resolver = m3uResolver(FakeM3uStreamReferenceStore())
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "episode-local-id",
+                mediaType = MediaType.Episode,
+                remoteId = "episode:missing",
+            ),
+        )
+
+        assertEquals(PlaybackStreamFailureReason.MissingStreamReference, (result as PlaybackStreamResult.Failed).reason)
+    }
+
+    @Test
+    fun rejectsM3uSeriesAsUnsupported() = runBlocking {
+        val streamReferenceStore = FakeM3uStreamReferenceStore().apply {
+            replaceProviderReferences(
+                PROVIDER_ID,
+                mapOf("series:xyz789" to M3uStreamReference(streamUrl = "http://example.test/series/provider/user/300.mkv")),
+            )
+        }
+        val resolver = m3uResolver(streamReferenceStore)
+
+        val result = resolver.resolve(
+            PlaybackStreamRequest(
+                providerId = PROVIDER_ID,
+                mediaId = "series-local-id",
+                mediaType = MediaType.Series,
+                remoteId = "series:xyz789",
+            ),
+        )
+
+        assertEquals(PlaybackStreamFailureReason.UnsupportedMediaType, (result as PlaybackStreamResult.Failed).reason)
+    }
+
+    @Test
     fun rejectsInactiveProviderBeforeReadingCredentials() = runBlocking {
         val repository = FakeProviderRepository(
             provider = provider(type = ProviderType.Xtream, isActive = false),
@@ -317,6 +421,15 @@ class DefaultPlaybackStreamResolverTest {
                 ),
             ),
             m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
+        )
+
+    private fun m3uResolver(streamReferenceStore: M3uStreamReferenceStore): DefaultPlaybackStreamResolver =
+        DefaultPlaybackStreamResolver(
+            providerRepository = FakeProviderRepository(
+                provider = provider(type = ProviderType.M3u),
+                credentials = ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
+            ),
+            m3uStreamReferenceStore = streamReferenceStore,
         )
 
     private class FakeProviderRepository(

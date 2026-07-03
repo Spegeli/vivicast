@@ -88,7 +88,10 @@ class DefaultPlaybackStreamResolver(
     }
 
     private suspend fun resolveM3u(request: PlaybackStreamRequest, providerStableKey: String): PlaybackStreamResult {
-        if (request.mediaType != MediaType.Channel) {
+        // M3U resolves Channel, Movie and Episode from the stored direct stream reference, keyed by the
+        // entity remoteId exactly as imported (e.g. "movie:…"/"episode:…"). A Series has no playable
+        // stream of its own. Movie/Episode carry no catch-up window, so they take the direct-URL path.
+        if (request.mediaType == MediaType.Series) {
             return PlaybackStreamResult.Failed(PlaybackStreamFailureReason.UnsupportedMediaType)
         }
         val remoteId = request.remoteId.trim()
