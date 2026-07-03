@@ -13,6 +13,7 @@ import com.vivicast.tv.core.database.VivicastDatabaseFactory
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
 import com.vivicast.tv.core.datastore.DEFAULT_GLOBAL_USER_AGENT
 import com.vivicast.tv.core.datastore.UserPreferencesStore
+import com.vivicast.tv.BuildConfig
 import com.vivicast.tv.core.network.NetworkClientFactory
 import com.vivicast.tv.core.player.DefaultVivicastPlayerController
 import com.vivicast.tv.core.player.Media3PlaybackEngine
@@ -135,7 +136,13 @@ class AppContainer(
     }
 
     private val okHttpClient by lazy {
-        NetworkClientFactory().createOkHttpClient(userAgentPolicy::current)
+        // trustAllCertificates is BuildConfig.DEBUG-gated: release builds fold this to `false`, so TLS
+        // validation is always on in production. Debug builds skip validation so the emulator can reach
+        // hosts whose valid chain its trust store rejects.
+        NetworkClientFactory().createOkHttpClient(
+            userAgentProvider = userAgentPolicy::current,
+            trustAllCertificates = BuildConfig.DEBUG,
+        )
     }
 
     val catalogImportRepository: CatalogImportRepository by lazy {
