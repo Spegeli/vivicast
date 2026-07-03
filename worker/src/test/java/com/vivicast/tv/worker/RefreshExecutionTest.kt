@@ -419,7 +419,7 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
     var m3uProviderId: String? = null
     var m3uPlaylist: M3uPlaylist? = null
 
-    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
+    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
         m3uProviderId = providerId
         m3uPlaylist = playlist
         return CatalogImportResult(
@@ -432,6 +432,9 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
             skippedEntries = playlist.skippedEntries,
         )
     }
+
+    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult =
+        importM3uCatalog(providerId, playlist)
 
     override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult =
         XtreamCatalogImportResult(
