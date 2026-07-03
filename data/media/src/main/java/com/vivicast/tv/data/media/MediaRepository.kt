@@ -91,12 +91,15 @@ interface MediaRepository {
 
     suspend fun clearSearchHistory() = Unit
 
-    suspend fun searchAndroidTvSuggestions(query: String, limit: Int): List<AndroidTvSearchSuggestion> =
-        emptyList()
-
-    suspend fun rebuildAndroidTvSearchIndex(
+    /**
+     * System-search suggestions. Protection flags are applied at read time against the caller's current
+     * PIN state (the persisted index is a pure content mirror), so protected content never surfaces.
+     */
+    suspend fun searchAndroidTvSuggestions(
+        query: String,
+        limit: Int,
         protectMovies: Boolean,
         protectSeries: Boolean,
         protectAdultContent: Boolean,
-    ) = Unit
+    ): List<AndroidTvSearchSuggestion> = emptyList()
 }

@@ -20,5 +20,6 @@ data class AndroidTvSearchEntryEntity(
     val subtitle: String?,
     val imageUrl: String?,
     val deepLink: String,
+    val isAdult: Boolean,
     val updatedAt: Long,
 )

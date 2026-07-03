@@ -189,11 +189,20 @@ class RoomMediaRepository(
         searchDao.clearSearchHistory()
     }
 
-    override suspend fun searchAndroidTvSuggestions(query: String, limit: Int): List<AndroidTvSearchSuggestion> {
+    override suspend fun searchAndroidTvSuggestions(
+        query: String,
+        limit: Int,
+        protectMovies: Boolean,
+        protectSeries: Boolean,
+        protectAdultContent: Boolean,
+    ): List<AndroidTvSearchSuggestion> {
         val cleanedLimit = limit.coerceIn(1, MAX_ANDROID_TV_SEARCH_RESULTS)
         return androidTvSearchDao.searchEntries(
             queryPattern = query.likePattern(),
             prefixPattern = query.trim().escapeLike() + "%",
+            protectMovies = protectMovies,
+            protectSeries = protectSeries,
+            protectAdultContent = protectAdultContent,
             limit = cleanedLimit,
         ).map { entry ->
             AndroidTvSearchSuggestion(
@@ -204,18 +213,6 @@ class RoomMediaRepository(
                 deepLink = entry.deepLink,
             )
         }
-    }
-
-    override suspend fun rebuildAndroidTvSearchIndex(
-        protectMovies: Boolean,
-        protectSeries: Boolean,
-        protectAdultContent: Boolean,
-    ) {
-        androidTvSearchDao.rebuildEntries(
-            protectMovies = protectMovies,
-            protectSeries = protectSeries,
-            protectAdultContent = protectAdultContent,
-        )
     }
 }
 

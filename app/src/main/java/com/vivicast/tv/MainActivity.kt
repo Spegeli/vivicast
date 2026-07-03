@@ -694,19 +694,8 @@ private fun VivicastApp(
         pinSecurityLoaded = true
     }
 
-    LaunchedEffect(
-        pinSecurityLoaded,
-        pinSecurityState.protectMovies,
-        pinSecurityState.protectSeries,
-        pinSecurityState.protectAdultContent,
-    ) {
-        if (!pinSecurityLoaded) return@LaunchedEffect
-        appContainer.mediaRepository.rebuildAndroidTvSearchIndex(
-            protectMovies = pinSecurityState.protectMovies,
-            protectSeries = pinSecurityState.protectSeries,
-            protectAdultContent = pinSecurityState.protectAdultContent,
-        )
-    }
+    // Android-TV system-search protection is enforced at read time (AndroidTvSearchSuggestionProvider
+    // reads the live PIN flags, fail-closed), so no protection-triggered index rebuild is needed here.
 
     LaunchedEffect(appContainer) {
         appContainer.playerController.state.collectLatest { state ->

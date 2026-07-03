@@ -10,12 +10,22 @@ interface AndroidTvSearchDao {
     @Query("SELECT * FROM android_tv_search_entries ORDER BY mediaType, title COLLATE NOCASE")
     suspend fun getEntries(): List<AndroidTvSearchEntryEntity>
 
+    /**
+     * Read-time protection: the index is a pure content mirror, so protected/adult content is filtered
+     * here against the caller's *current* PIN flags — never baked into the persisted index. Callers must
+     * pass the live flags (fail-closed) so a protected item can never surface via system search.
+     */
     @Query(
         """
         SELECT * FROM android_tv_search_entries
-        WHERE :queryPattern = '%%'
+        WHERE (
+            :queryPattern = '%%'
             OR title LIKE :queryPattern ESCAPE '\'
             OR subtitle LIKE :queryPattern ESCAPE '\'
+        )
+        AND (:protectMovies = 0 OR mediaType != 'MOVIE')
+        AND (:protectSeries = 0 OR mediaType != 'SERIES')
+        AND (:protectAdultContent = 0 OR isAdult = 0)
         ORDER BY
             CASE WHEN title LIKE :prefixPattern ESCAPE '\' THEN 0 ELSE 1 END,
             mediaType,
@@ -26,6 +36,9 @@ interface AndroidTvSearchDao {
     suspend fun searchEntries(
         queryPattern: String,
         prefixPattern: String,
+        protectMovies: Boolean,
+        protectSeries: Boolean,
+        protectAdultContent: Boolean,
         limit: Int,
     ): List<AndroidTvSearchEntryEntity>
 
@@ -43,6 +56,7 @@ interface AndroidTvSearchDao {
             subtitle,
             imageUrl,
             deepLink,
+            isAdult,
             updatedAt
         )
         SELECT
@@ -54,6 +68,7 @@ interface AndroidTvSearchDao {
             'Live-TV',
             channels.logoUrl,
             'vivicast://channel/' || providers.stableKey || '/' || channels.stableKey,
+            0,
             MAX(providers.updatedAt, channels.updatedAt)
         FROM channels
         INNER JOIN providers ON providers.id = channels.providerId
@@ -75,6 +90,7 @@ interface AndroidTvSearchDao {
             subtitle,
             imageUrl,
             deepLink,
+            isAdult,
             updatedAt
         )
         SELECT
@@ -86,20 +102,16 @@ interface AndroidTvSearchDao {
             COALESCE(movies.year, 'Film'),
             COALESCE(movies.posterUrl, movies.backdropUrl),
             'vivicast://movie/' || providers.stableKey || '/' || movies.stableKey,
+            movies.isAdult,
             MAX(providers.updatedAt, movies.updatedAt)
         FROM movies
         INNER JOIN providers ON providers.id = movies.providerId
         WHERE providers.isActive = 1
             AND providers.status != 'DISABLED'
             AND providers.includeMovies = 1
-            AND :protectMovies = 0
-            AND (:protectAdultContent = 0 OR movies.isAdult = 0)
         """,
     )
-    suspend fun insertMovieEntries(
-        protectMovies: Boolean,
-        protectAdultContent: Boolean,
-    )
+    suspend fun insertMovieEntries()
 
     @Query(
         """
@@ -112,6 +124,7 @@ interface AndroidTvSearchDao {
             subtitle,
             imageUrl,
             deepLink,
+            isAdult,
             updatedAt
         )
         SELECT
@@ -123,30 +136,25 @@ interface AndroidTvSearchDao {
             COALESCE(series.year, 'Serie'),
             COALESCE(series.posterUrl, series.backdropUrl),
             'vivicast://series/' || providers.stableKey || '/' || series.stableKey,
+            series.isAdult,
             MAX(providers.updatedAt, series.updatedAt)
         FROM series
         INNER JOIN providers ON providers.id = series.providerId
         WHERE providers.isActive = 1
             AND providers.status != 'DISABLED'
             AND providers.includeSeries = 1
-            AND :protectSeries = 0
-            AND (:protectAdultContent = 0 OR series.isAdult = 0)
         """,
     )
-    suspend fun insertSeriesEntries(
-        protectSeries: Boolean,
-        protectAdultContent: Boolean,
-    )
+    suspend fun insertSeriesEntries()
 
+    // Rebuilds the index as a pure content mirror (all active/included Channels/Movies/Series incl.
+    // adult). Protection is applied at read time in [searchEntries], never here — so no rebuild trigger
+    // (import, refresh, background) can leak protected content.
     @Transaction
-    suspend fun rebuildEntries(
-        protectMovies: Boolean = false,
-        protectSeries: Boolean = false,
-        protectAdultContent: Boolean = false,
-    ) {
+    suspend fun rebuildEntries() {
         clearEntries()
         insertChannelEntries()
-        insertMovieEntries(protectMovies, protectAdultContent)
-        insertSeriesEntries(protectSeries, protectAdultContent)
+        insertMovieEntries()
+        insertSeriesEntries()
     }
 }

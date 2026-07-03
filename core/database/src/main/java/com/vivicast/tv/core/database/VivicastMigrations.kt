@@ -155,6 +155,15 @@ object VivicastMigrations {
             db.rebuildSearchEpgFts()
         }
     }
+
+    // Android-TV system-search index becomes a pure content mirror (adds isAdult); protection is now
+    // applied at read time, so the index no longer bakes in PIN state. Rebuild it as a full mirror.
+    val Migration6To7: Migration = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.addBooleanColumn("android_tv_search_entries", "isAdult")
+            db.rebuildAndroidTvSearchEntriesAsMirror()
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {
@@ -586,6 +595,85 @@ private fun SupportSQLiteDatabase.createAndroidTvSearchEntriesTable() {
         """
         CREATE UNIQUE INDEX IF NOT EXISTS `index_android_tv_search_entries_providerStableKey_mediaType_mediaStableKey`
         ON `android_tv_search_entries` (`providerStableKey`, `mediaType`, `mediaStableKey`)
+        """.trimIndent(),
+    )
+}
+
+// Pure-mirror rebuild (v7+): includes an isAdult column and does NOT exclude adult content — read-time
+// filtering in AndroidTvSearchDao.searchEntries applies protection. Kept separate from the historical
+// v4->5 rebuild (which has no isAdult column and must stay reproducible).
+private fun SupportSQLiteDatabase.rebuildAndroidTvSearchEntriesAsMirror() {
+    execSQL("DELETE FROM `android_tv_search_entries`")
+    execSQL(
+        """
+        INSERT INTO `android_tv_search_entries` (
+            `id`, `mediaType`, `providerStableKey`, `mediaStableKey`, `title`, `subtitle`,
+            `imageUrl`, `deepLink`, `isAdult`, `updatedAt`
+        )
+        SELECT
+            'CHANNEL:' || providers.`stableKey` || ':' || channels.`stableKey`,
+            'CHANNEL',
+            providers.`stableKey`,
+            channels.`stableKey`,
+            channels.`name`,
+            'Live-TV',
+            channels.`logoUrl`,
+            'vivicast://channel/' || providers.`stableKey` || '/' || channels.`stableKey`,
+            0,
+            MAX(providers.`updatedAt`, channels.`updatedAt`)
+        FROM `channels`
+        INNER JOIN `providers` ON providers.`id` = channels.`providerId`
+        WHERE providers.`isActive` = 1
+            AND providers.`status` != 'DISABLED'
+            AND providers.`includeLiveTv` = 1
+        """.trimIndent(),
+    )
+    execSQL(
+        """
+        INSERT INTO `android_tv_search_entries` (
+            `id`, `mediaType`, `providerStableKey`, `mediaStableKey`, `title`, `subtitle`,
+            `imageUrl`, `deepLink`, `isAdult`, `updatedAt`
+        )
+        SELECT
+            'MOVIE:' || providers.`stableKey` || ':' || movies.`stableKey`,
+            'MOVIE',
+            providers.`stableKey`,
+            movies.`stableKey`,
+            movies.`name`,
+            COALESCE(movies.`year`, 'Film'),
+            COALESCE(movies.`posterUrl`, movies.`backdropUrl`),
+            'vivicast://movie/' || providers.`stableKey` || '/' || movies.`stableKey`,
+            movies.`isAdult`,
+            MAX(providers.`updatedAt`, movies.`updatedAt`)
+        FROM `movies`
+        INNER JOIN `providers` ON providers.`id` = movies.`providerId`
+        WHERE providers.`isActive` = 1
+            AND providers.`status` != 'DISABLED'
+            AND providers.`includeMovies` = 1
+        """.trimIndent(),
+    )
+    execSQL(
+        """
+        INSERT INTO `android_tv_search_entries` (
+            `id`, `mediaType`, `providerStableKey`, `mediaStableKey`, `title`, `subtitle`,
+            `imageUrl`, `deepLink`, `isAdult`, `updatedAt`
+        )
+        SELECT
+            'SERIES:' || providers.`stableKey` || ':' || series.`stableKey`,
+            'SERIES',
+            providers.`stableKey`,
+            series.`stableKey`,
+            series.`name`,
+            COALESCE(series.`year`, 'Serie'),
+            COALESCE(series.`posterUrl`, series.`backdropUrl`),
+            'vivicast://series/' || providers.`stableKey` || '/' || series.`stableKey`,
+            series.`isAdult`,
+            MAX(providers.`updatedAt`, series.`updatedAt`)
+        FROM `series`
+        INNER JOIN `providers` ON providers.`id` = series.`providerId`
+        WHERE providers.`isActive` = 1
+            AND providers.`status` != 'DISABLED'
+            AND providers.`includeSeries` = 1
         """.trimIndent(),
     )
 }

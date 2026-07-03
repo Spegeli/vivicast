@@ -265,8 +265,13 @@ private class FakeMediaRepository(
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(channels = emptyList(), movies = emptyList(), series = emptyList(), epgPrograms = emptyList())
 
-    override suspend fun searchAndroidTvSuggestions(query: String, limit: Int): List<AndroidTvSearchSuggestion> =
-        emptyList()
+    override suspend fun searchAndroidTvSuggestions(
+        query: String,
+        limit: Int,
+        protectMovies: Boolean,
+        protectSeries: Boolean,
+        protectAdultContent: Boolean,
+    ): List<AndroidTvSearchSuggestion> = emptyList()
 }
 
 private class FakePlaybackRepository(

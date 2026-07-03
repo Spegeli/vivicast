@@ -30,8 +30,16 @@ class AndroidTvSearchSuggestionProvider : ContentProvider() {
         val limit = uri.getQueryParameter("limit")?.toIntOrNull()?.coerceIn(1, MAX_RESULTS)
             ?: DEFAULT_RESULTS
         val entries = runBlocking(Dispatchers.IO) {
-            (context?.applicationContext as VivicastApplication).appContainer.mediaRepository
-                .searchAndroidTvSuggestions(query = query, limit = limit)
+            val appContainer = (context?.applicationContext as VivicastApplication).appContainer
+            // Fail-closed: if the current PIN protection state can't be read, hide everything protectable.
+            val protection = runCatching { appContainer.pinSecurityStateStore.read() }.getOrNull()
+            appContainer.mediaRepository.searchAndroidTvSuggestions(
+                query = query,
+                limit = limit,
+                protectMovies = protection?.protectMovies ?: true,
+                protectSeries = protection?.protectSeries ?: true,
+                protectAdultContent = protection?.protectAdultContent ?: true,
+            )
         }
 
         return MatrixCursor(SUGGESTION_COLUMNS).apply {

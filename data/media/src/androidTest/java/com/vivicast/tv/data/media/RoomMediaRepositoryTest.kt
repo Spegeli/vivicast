@@ -205,22 +205,39 @@ class RoomMediaRepositoryTest {
     }
 
     @Test
-    fun rebuildsAndroidTvSearchIndexWithProtectionFilters() = runBlocking {
+    fun androidTvSuggestionsApplyProtectionFiltersAtReadTime() = runBlocking {
         seedCatalog()
         database.catalogDao().upsertMovies(listOf(adultMovieEntity()))
         database.catalogDao().upsertSeries(listOf(adultSeriesEntity()))
 
+        // Index is a pure content mirror: it always contains everything (incl. adult), no PIN state baked in.
         database.androidTvSearchDao().rebuildEntries()
         assertEquals(
             listOf("ARD HD", "Adult Movie", "Adult Series", "Dune Movie", "Dune Series", "Dune TV"),
             database.androidTvSearchDao().getEntries().map { it.title }.sorted(),
         )
 
-        database.androidTvSearchDao().rebuildEntries(protectAdultContent = true)
-        assertEquals(false, database.androidTvSearchDao().getEntries().any { it.title.startsWith("Adult") })
-
-        database.androidTvSearchDao().rebuildEntries(protectMovies = true, protectSeries = true)
-        assertEquals(listOf("CHANNEL", "CHANNEL"), database.androidTvSearchDao().getEntries().map { it.mediaType })
+        // Unprotected read returns everything.
+        assertEquals(
+            6,
+            repository.searchAndroidTvSuggestions(
+                "", limit = 50, protectMovies = false, protectSeries = false, protectAdultContent = false,
+            ).size,
+        )
+        // protectAdultContent hides only adult-flagged entries.
+        assertEquals(
+            false,
+            repository.searchAndroidTvSuggestions(
+                "", limit = 50, protectMovies = false, protectSeries = false, protectAdultContent = true,
+            ).any { it.title.startsWith("Adult") },
+        )
+        // protectMovies + protectSeries leaves only channels.
+        assertEquals(
+            listOf("CHANNEL", "CHANNEL"),
+            repository.searchAndroidTvSuggestions(
+                "", limit = 50, protectMovies = true, protectSeries = true, protectAdultContent = false,
+            ).map { it.mediaType },
+        )
     }
 
     @Test
@@ -231,7 +248,9 @@ class RoomMediaRepositoryTest {
         )
         database.androidTvSearchDao().rebuildEntries()
 
-        val suggestions = repository.searchAndroidTvSuggestions("dune", limit = 10)
+        val suggestions = repository.searchAndroidTvSuggestions(
+            "dune", limit = 10, protectMovies = false, protectSeries = false, protectAdultContent = false,
+        )
 
         assertEquals(listOf("CHANNEL", "MOVIE", "SERIES"), suggestions.map { it.mediaType }.sorted())
         assertEquals(false, suggestions.any { it.title == "Dune Special" })
