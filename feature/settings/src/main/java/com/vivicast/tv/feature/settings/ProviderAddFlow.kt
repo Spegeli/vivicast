@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -354,11 +355,21 @@ internal fun ProviderAddFlow(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                         BodyText(stringResource(R.string.settings_provider_import_section), maxLines = 1)
-                        VivicastButtonRow {
-                            ActionPill(stringResource(R.string.nav_live_tv), selected = editor.includeLiveTv, onClick = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv, connectionTestPassed = false)) })
-                            ActionPill(stringResource(R.string.nav_movies_label), selected = editor.includeMovies, onClick = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies, connectionTestPassed = false)) })
-                            ActionPill(stringResource(R.string.nav_series_label), selected = editor.includeSeries, onClick = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries, connectionTestPassed = false)) })
-                        }
+                        ImportCheckboxRow(
+                            label = stringResource(R.string.nav_live_tv),
+                            checked = editor.includeLiveTv,
+                            onToggle = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv, connectionTestPassed = false)) },
+                        )
+                        ImportCheckboxRow(
+                            label = stringResource(R.string.nav_movies_label),
+                            checked = editor.includeMovies,
+                            onToggle = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies, connectionTestPassed = false)) },
+                        )
+                        ImportCheckboxRow(
+                            label = stringResource(R.string.nav_series_label),
+                            checked = editor.includeSeries,
+                            onToggle = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries, connectionTestPassed = false)) },
+                        )
                     }
                 }
                 item {
@@ -457,6 +468,54 @@ private fun ConnectionTestButton(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = VivicastTypography.LabelMedium.copy(color = statusColor ?: VivicastColors.TextPrimary),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImportCheckboxRow(
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FocusPanel(
+        selected = checked,
+        onClick = onToggle,
+        modifier = modifier.fillMaxWidth(),
+    ) { _ ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(
+                        color = if (checked) VivicastColors.Accent else Color.Transparent,
+                        shape = RoundedCornerShape(VivicastShapes.RadiusSmall),
+                    )
+                    .border(
+                        width = if (checked) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                        color = if (checked) VivicastColors.Accent else VivicastColors.TextSecondary,
+                        shape = RoundedCornerShape(VivicastShapes.RadiusSmall),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (checked) {
+                    BasicText(
+                        text = "✓",
+                        style = VivicastTypography.LabelMedium.copy(color = Color.White),
+                    )
+                }
+            }
+            BasicText(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
             )
         }
     }

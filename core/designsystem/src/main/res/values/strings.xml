@@ -732,10 +732,10 @@
     <string name="settings_provider_movies_off">Filme aus</string>
     <string name="settings_provider_series_off">Serien aus</string>
 
-    <!-- Settings - Provider add flow form labels (required fields marked with *) -->
-    <string name="settings_provider_server_required">Server *</string>
-    <string name="settings_provider_username_required">Benutzername *</string>
-    <string name="settings_provider_password_required">Passwort *</string>
+    <!-- Settings - Provider add flow form labels -->
+    <string name="settings_provider_server_required">Server</string>
+    <string name="settings_provider_username_required">Benutzername</string>
+    <string name="settings_provider_password_required">Passwort</string>
     <string name="settings_provider_import_section">Importieren</string>
 
     <!-- Settings - Provider editor form labels -->
