@@ -141,6 +141,63 @@ class RoomCatalogImportRepositoryTest {
     }
 
     @Test
+    fun importM3uCatalogClassifiesLiveMovieAndSeries() = kotlinx.coroutines.runBlocking {
+        repository.importM3uCatalog(PROVIDER_ID, mixedPlaylist())
+
+        val channels = database.catalogDao().getChannels(PROVIDER_ID)
+        assertEquals(
+            listOf("24/7 VIKINGS", "Das Erste HD", "Sky Cinema Action HD"),
+            channels.map { it.name }.sorted(),
+        )
+
+        val movies = database.catalogDao().getMovies(PROVIDER_ID)
+        assertEquals(listOf("Example Feature One", "Example Feature Two"), movies.map { it.name }.sorted())
+        assertEquals("mkv", movies.first { it.name == "Example Feature One" }.containerExtension)
+
+        val series = database.catalogDao().getSeries(PROVIDER_ID)
+        val seasons = database.catalogDao().getSeasons(PROVIDER_ID)
+        val episodes = database.catalogDao().getEpisodes(PROVIDER_ID)
+        assertEquals(listOf("Example Show"), series.map { it.name })
+        assertEquals(listOf(1), seasons.map { it.seasonNumber })
+        assertEquals(listOf(1, 2), episodes.map { it.episodeNumber }.sorted())
+
+        // Categories are created with the correct type per bucket.
+        assertTrue(database.catalogDao().getCategories(PROVIDER_ID, "LIVE").isNotEmpty())
+        assertTrue(database.catalogDao().getCategories(PROVIDER_ID, "MOVIE").isNotEmpty())
+        assertTrue(database.catalogDao().getCategories(PROVIDER_ID, "SERIES").isNotEmpty())
+
+        // Stream references exist for channels, movies AND episodes, keyed by the entity remoteId.
+        channels.forEach { assertNotNull(streamReferenceStore.getStreamUrl(PROVIDER_ID, it.remoteId)) }
+        movies.forEach {
+            assertTrue(it.remoteId.startsWith("movie:"))
+            assertNotNull(streamReferenceStore.getStreamUrl(PROVIDER_ID, it.remoteId))
+        }
+        episodes.forEach {
+            assertTrue(it.remoteId.startsWith("episode:"))
+            assertNotNull(streamReferenceStore.getStreamUrl(PROVIDER_ID, it.remoteId))
+        }
+
+        // No raw stream URLs / tokens leak into ids or stableKeys.
+        (movies.map { it.remoteId } + movies.map { it.stableKey } + episodes.map { it.remoteId }).forEach { key ->
+            assertFalse(key.contains("example.test"))
+            assertFalse(key.contains("token"))
+        }
+    }
+
+    @Test
+    fun secondM3uCatalogImportIsIdempotent() = kotlinx.coroutines.runBlocking {
+        repository.importM3uCatalog(PROVIDER_ID, mixedPlaylist())
+        now = 2_000L
+        repository.importM3uCatalog(PROVIDER_ID, mixedPlaylist())
+
+        assertEquals(3, database.catalogDao().getChannels(PROVIDER_ID).size)
+        assertEquals(2, database.catalogDao().getMovies(PROVIDER_ID).size)
+        assertEquals(1, database.catalogDao().getSeries(PROVIDER_ID).size)
+        assertEquals(1, database.catalogDao().getSeasons(PROVIDER_ID).size)
+        assertEquals(2, database.catalogDao().getEpisodes(PROVIDER_ID).size)
+    }
+
+    @Test
     fun importXtreamCatalogAddsLiveVodSeriesSeasonsAndEpisodes() = kotlinx.coroutines.runBlocking {
         val result = repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
 
@@ -250,6 +307,28 @@ class RoomCatalogImportRepositoryTest {
         https://streams.example/ard.m3u8
         #EXTINF:-1 tvg-id="sport1.de" tvg-name="Sport 1" group-title="Sport",Sport 1
         https://streams.example/sport1.m3u8
+        """.trimIndent(),
+    )
+
+    // Sanitized mixed playlist: 3 live (.ts incl. 24/7 + Cinema), 2 movies (.mkv w/ /movie/, .mp4 w/ query),
+    // 2 episodes of the same series/season. example.test host only, dummy user/pass path segments.
+    private fun mixedPlaylist() = parser.parse(
+        """
+        #EXTM3U
+        #EXTINF:-1 tvg-name="Das Erste HD" group-title="News",Das Erste HD
+        http://example.test/live/user/pass/100.ts
+        #EXTINF:-1 tvg-name="24/7 VIKINGS" group-title="24/7",24/7 VIKINGS
+        http://example.test/live/user/pass/900.ts
+        #EXTINF:-1 tvg-name="Sky Cinema Action HD" group-title="Cinema",Sky Cinema Action HD
+        http://example.test/live/user/pass/300.ts
+        #EXTINF:-1 tvg-name="Example Feature One" group-title="Filme",Example Feature One
+        http://example.test/movie/user/pass/4242.mkv
+        #EXTINF:-1 tvg-name="Example Feature Two" group-title="Filme",Example Feature Two
+        http://example.test/vod/9000.mp4?token=abc
+        #EXTINF:-1 tvg-name="Example Show S01 E01" group-title="Serien",Example Show S01 E01
+        http://example.test/series/user/pass/s01e01.mkv
+        #EXTINF:-1 tvg-name="Example Show S01 E02" group-title="Serien",Example Show S01 E02
+        http://example.test/series/user/pass/s01e02.mkv
         """.trimIndent(),
     )
 

@@ -10,7 +10,9 @@ import com.vivicast.tv.core.database.model.EpisodeEntity
 import com.vivicast.tv.core.database.model.MovieEntity
 import com.vivicast.tv.core.database.model.SeasonEntity
 import com.vivicast.tv.core.database.model.SeriesEntity
+import com.vivicast.tv.iptv.m3u.DefaultM3uContentClassifier
 import com.vivicast.tv.iptv.m3u.M3uChannel
+import com.vivicast.tv.iptv.m3u.M3uContentClassifier
 import com.vivicast.tv.iptv.m3u.M3uPlaylist
 import com.vivicast.tv.iptv.xtream.XtreamCategory
 import com.vivicast.tv.iptv.xtream.XtreamEpisode
@@ -24,6 +26,7 @@ import java.security.MessageDigest
 class RoomCatalogImportRepository(
     private val database: VivicastDatabase,
     private val m3uStreamReferenceStore: M3uStreamReferenceStore,
+    private val classifier: M3uContentClassifier = DefaultM3uContentClassifier(),
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : CatalogImportRepository {
     private val catalogDao = database.catalogDao()
@@ -32,63 +35,63 @@ class RoomCatalogImportRepository(
     private val epgDao = database.epgDao()
     private val androidTvSearchDao = database.androidTvSearchDao()
 
-    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
+    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult =
+        importM3uCatalog(providerId, playlist)
+
+    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
         val now = clock()
-        val uniqueChannels = playlist.channels.associateBy { it.remoteId }
+        val classified = classifyM3uPlaylist(playlist, classifier)
+        val liveCategoryIds = classified.liveChannels.mapTo(mutableSetOf()) { it.categoryRemoteId() }
+        val movieCategoryIds = classified.vodItems.mapTo(mutableSetOf()) { it.categoryRemoteId() }
+        val seriesCategoryIds = classified.seriesItems.mapTo(mutableSetOf()) { it.categoryRemoteId() }
 
         val result = database.withTransaction {
-            val categoryResult = buildCategories(
-                providerId = providerId,
-                type = CATEGORY_TYPE_LIVE,
-                categories = uniqueChannels.values.map { channel ->
-                    XtreamCategory(
-                        remoteId = channel.categoryRemoteId(),
-                        name = if (channel.categoryRemoteId() == UNCATEGORIZED_REMOTE_ID) {
-                            UNCATEGORIZED_DISPLAY_NAME
-                        } else {
-                            channel.categoryRemoteId()
-                        },
-                    )
-                },
-                referencedRemoteIds = uniqueChannels.values.mapTo(mutableSetOf()) { it.categoryRemoteId() },
-                now = now,
-            )
+            val liveCategories = buildCategories(providerId, CATEGORY_TYPE_LIVE, m3uCategories(liveCategoryIds), liveCategoryIds, now)
+            val movieCategories = buildCategories(providerId, CATEGORY_TYPE_MOVIE, m3uCategories(movieCategoryIds), movieCategoryIds, now)
+            val seriesCategories = buildCategories(providerId, CATEGORY_TYPE_SERIES, m3uCategories(seriesCategoryIds), seriesCategoryIds, now)
+
             val existingChannels = catalogDao.getChannels(providerId).associateBy { it.remoteId }
-            val channels = uniqueChannels.values.map { channel ->
-                val existing = existingChannels[channel.remoteId]
+            val channels = classified.liveChannels.map { channel ->
                 channel.toEntity(
                     providerId = providerId,
                     categoryId = categoryId(providerId, CATEGORY_TYPE_LIVE, channel.categoryRemoteId()),
-                    existing = existing,
+                    existing = existingChannels[channel.remoteId],
                     now = now,
                 )
             }
             val channelCount = upsertChannels(providerId, channels, existingChannels)
-            deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, categoryResult.removedIds)
+            upsertMovies(providerId, classified.vodItems, now)
+            upsertSeries(providerId, classified.seriesItems, now)
+            val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
+            upsertSeasons(providerId, buildSeasons(providerId, classified.seriesInfos, seriesByRemoteId, now))
+            upsertEpisodes(providerId, buildEpisodes(providerId, classified.seriesInfos, seriesByRemoteId, now))
+
+            deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, liveCategories.removedIds)
+            deleteRemovedCategories(providerId, CATEGORY_TYPE_MOVIE, movieCategories.removedIds)
+            deleteRemovedCategories(providerId, CATEGORY_TYPE_SERIES, seriesCategories.removedIds)
             androidTvSearchDao.rebuildEntries()
 
             CatalogImportResult(
-                categoriesAdded = categoryResult.count.added,
-                categoriesUpdated = categoryResult.count.updated,
-                categoriesRemoved = categoryResult.count.removed,
+                categoriesAdded = liveCategories.count.added,
+                categoriesUpdated = liveCategories.count.updated,
+                categoriesRemoved = liveCategories.count.removed,
                 channelsAdded = channelCount.added,
                 channelsUpdated = channelCount.updated,
                 channelsRemoved = channelCount.removed,
                 skippedEntries = playlist.skippedEntries,
             )
         }
-        m3uStreamReferenceStore.replaceProviderReferences(
-            providerId = providerId,
-            references = uniqueChannels.values.associate { channel ->
-                channel.remoteId to M3uStreamReference(
-                    streamUrl = channel.streamUrl,
-                    catchupMode = channel.catchupMode,
-                    catchupSource = channel.catchupSource,
-                )
-            },
-        )
+        m3uStreamReferenceStore.replaceProviderReferences(providerId, classified.streamReferences)
         return result
     }
+
+    private fun m3uCategories(remoteIds: Set<String>): List<XtreamCategory> =
+        remoteIds.map { remoteId ->
+            XtreamCategory(
+                remoteId = remoteId,
+                name = if (remoteId == UNCATEGORIZED_REMOTE_ID) UNCATEGORIZED_DISPLAY_NAME else remoteId,
+            )
+        }
 
     override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult {
         val now = clock()

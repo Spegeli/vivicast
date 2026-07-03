@@ -8,6 +8,14 @@ import com.vivicast.tv.iptv.xtream.XtreamSeriesItem
 import com.vivicast.tv.iptv.xtream.XtreamVodItem
 
 interface CatalogImportRepository {
+    /**
+     * Imports a full M3U playlist, classifying each entry as Live / Movie / Series and persisting it
+     * into the matching catalog structures. The returned counts describe the Live/category portion;
+     * Movie/Series/Episode results are queried from the catalog directly.
+     */
+    suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult
+
+    /** Retained for API compatibility; delegates to [importM3uCatalog] (now content-aware). */
     suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult
 
     suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult

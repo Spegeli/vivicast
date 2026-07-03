@@ -151,7 +151,7 @@ class DefaultPlaylistRefresher(
         if (playlist.channels.isEmpty()) {
             throw RefreshImportException("M3U playlist contains no importable entries.")
         }
-        val result = catalogImportRepository.importM3uLiveChannels(provider.id, playlist)
+        val result = catalogImportRepository.importM3uCatalog(provider.id, playlist)
         if (!credentials.sourceMode.isAutomaticallyRefreshable) {
             TransientM3uSourceStore.clear(provider.id)
         }
