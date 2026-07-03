@@ -80,6 +80,9 @@ class GlobalRefreshOrchestrator(
             epgSourcesCollected = epgSources.size,
             epgSourcesSucceeded = epgOutcomes.count { it.success },
             epgSourcesFailed = epgOutcomes.count { !it.success },
+            seriesDetailsProviderIds = playlistOutcomes
+                .filter { it.success && it.needsSeriesDetailsRefresh }
+                .map { it.providerId },
         )
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.RefreshCompleted, "Global refresh completed."))
         return report
@@ -106,6 +109,15 @@ interface LogoRefresher {
     suspend fun refreshLogos()
 }
 
+interface SeriesDetailsRefresher {
+    suspend fun refresh(providerId: String): SeriesDetailsRefreshOutcome
+}
+
+data class SeriesDetailsRefreshOutcome(
+    val providerId: String,
+    val success: Boolean,
+)
+
 interface CacheCleaner {
     suspend fun cleanup()
 }
@@ -118,6 +130,7 @@ data class PlaylistRefreshOutcome(
     val providerId: String,
     val success: Boolean,
     val epgSourceIds: List<String>,
+    val needsSeriesDetailsRefresh: Boolean = false,
 )
 
 data class EpgRefreshTarget(
@@ -136,4 +149,5 @@ data class RefreshReport(
     val epgSourcesCollected: Int,
     val epgSourcesSucceeded: Int,
     val epgSourcesFailed: Int,
+    val seriesDetailsProviderIds: List<String> = emptyList(),
 )

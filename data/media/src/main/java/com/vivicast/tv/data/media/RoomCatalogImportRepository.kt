@@ -129,9 +129,19 @@ class RoomCatalogImportRepository(
             )
             val movieCount = upsertMovies(providerId, catalog.vodItems.associateBy { it.remoteId }.values.toList(), now)
             val seriesCount = upsertSeries(providerId, catalog.seriesItems.associateBy { it.remoteId }.values.toList(), now)
+            // Season/episode detail is imported separately via importXtreamSeriesDetails (background job).
+            // When seriesInfos is empty (the fast main refresh), leave existing seasons/episodes untouched
+            // instead of reconciling them away.
             val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
-            val seasonCount = upsertSeasons(providerId, buildSeasons(providerId, catalog.seriesInfos, seriesByRemoteId, now))
-            val episodeCount = upsertEpisodes(providerId, buildEpisodes(providerId, catalog.seriesInfos, seriesByRemoteId, now))
+            val seasonCount: ImportCount
+            val episodeCount: ImportCount
+            if (catalog.seriesInfos.isEmpty()) {
+                seasonCount = ImportCount(added = 0, updated = 0, removed = 0)
+                episodeCount = ImportCount(added = 0, updated = 0, removed = 0)
+            } else {
+                seasonCount = upsertSeasons(providerId, buildSeasons(providerId, catalog.seriesInfos, seriesByRemoteId, now))
+                episodeCount = upsertEpisodes(providerId, buildEpisodes(providerId, catalog.seriesInfos, seriesByRemoteId, now))
+            }
 
             deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, liveCategories.removedIds)
             deleteRemovedCategories(providerId, CATEGORY_TYPE_MOVIE, movieCategories.removedIds)
@@ -148,6 +158,19 @@ class RoomCatalogImportRepository(
                 seasons = seasonCount,
                 episodes = episodeCount,
             )
+        }
+    }
+
+    override suspend fun importXtreamSeriesDetails(
+        providerId: String,
+        seriesInfos: List<XtreamSeriesInfo>,
+    ): XtreamSeriesDetailsImportResult {
+        val now = clock()
+        return database.withTransaction {
+            val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
+            val seasonCount = upsertSeasons(providerId, buildSeasons(providerId, seriesInfos, seriesByRemoteId, now))
+            val episodeCount = upsertEpisodes(providerId, buildEpisodes(providerId, seriesInfos, seriesByRemoteId, now))
+            XtreamSeriesDetailsImportResult(seasons = seasonCount, episodes = episodeCount)
         }
     }
 

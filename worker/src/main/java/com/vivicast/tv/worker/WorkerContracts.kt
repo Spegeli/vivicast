@@ -6,6 +6,7 @@ object WorkerContracts {
     const val PROVIDER_REFRESH_WORK = "provider_refresh"
     const val PLAYLIST_REFRESH_WORK = "playlist_refresh"
     const val EPG_REFRESH_WORK = "epg_refresh"
+    const val SERIES_DETAILS_REFRESH_WORK = "series_details_refresh"
     const val LOGO_REFRESH_WORK = "logo_refresh"
     const val CACHE_CLEANUP_WORK = "cache_cleanup"
 
@@ -20,4 +21,7 @@ object WorkerContracts {
 
     fun uniqueEpgRefreshWork(epgSourceId: String): String =
         "$EPG_REFRESH_WORK:$epgSourceId"
+
+    fun uniqueSeriesDetailsRefreshWork(providerId: String): String =
+        "$SERIES_DETAILS_REFRESH_WORK:$providerId"
 }

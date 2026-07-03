@@ -228,6 +228,27 @@ class RoomCatalogImportRepositoryTest {
     }
 
     @Test
+    fun fastXtreamImportPreservesSeasonsAndEpisodesThenSeriesDetailsRepopulates() = kotlinx.coroutines.runBlocking {
+        // Full catalog import populates seasons/episodes.
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        val seasonsBefore = database.catalogDao().getSeasons(PROVIDER_ID).size
+        val episodesBefore = database.catalogDao().getEpisodes(PROVIDER_ID).size
+        assertTrue(seasonsBefore > 0)
+        assertTrue(episodesBefore > 0)
+
+        // Fast main refresh: same catalog but seriesInfos empty -> seasons/episodes MUST be preserved (no wipe).
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog().copy(seriesInfos = emptyList()))
+        assertEquals(seasonsBefore, database.catalogDao().getSeasons(PROVIDER_ID).size)
+        assertEquals(episodesBefore, database.catalogDao().getEpisodes(PROVIDER_ID).size)
+
+        // Background series-details import reconciles seasons/episodes from the (full) seriesInfos.
+        repository.importXtreamSeriesDetails(PROVIDER_ID, firstXtreamCatalog().seriesInfos)
+        assertEquals(seasonsBefore, database.catalogDao().getSeasons(PROVIDER_ID).size)
+        assertEquals(episodesBefore, database.catalogDao().getEpisodes(PROVIDER_ID).size)
+    }
+
+    @Test
     fun largeFixtureXtreamMetadataCommitStaysWithinPrd13Budget() = kotlinx.coroutines.runBlocking {
         lateinit var result: XtreamCatalogImportResult
         val catalog = largeXtreamCatalog()

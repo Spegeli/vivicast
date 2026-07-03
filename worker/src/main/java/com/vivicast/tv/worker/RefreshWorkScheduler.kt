@@ -26,6 +26,8 @@ interface RefreshWorkScheduler {
 
     fun enqueueEpgRefresh(epgSourceId: String)
 
+    fun enqueueSeriesDetailsRefresh(providerId: String)
+
     fun enqueueLogoRefresh()
 
     fun enqueueCacheCleanup()
@@ -71,6 +73,16 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
+    override fun enqueueSeriesDetailsRefresh(providerId: String) {
+        // REPLACE: a new refresh cycle restarts the (full) series-details fetch, superseding any
+        // still-running job from the previous cycle.
+        workManager.enqueueUniqueWork(
+            WorkerContracts.uniqueSeriesDetailsRefreshWork(providerId),
+            ExistingWorkPolicy.REPLACE,
+            RefreshWorkRequests.seriesDetailsRefresh(providerId),
+        )
+    }
+
     override fun enqueueLogoRefresh() {
         workManager.enqueueUniqueWork(
             WorkerContracts.LOGO_REFRESH_WORK,
@@ -113,6 +125,13 @@ internal object RefreshWorkRequests {
         networkOneTimeRequest<EpgRefreshWorker>(
             Data.Builder()
                 .putString(WorkerContracts.INPUT_EPG_SOURCE_ID, epgSourceId)
+                .build(),
+        )
+
+    fun seriesDetailsRefresh(providerId: String): OneTimeWorkRequest =
+        networkOneTimeRequest<SeriesDetailsRefreshWorker>(
+            Data.Builder()
+                .putString(WorkerContracts.INPUT_PROVIDER_ID, providerId)
                 .build(),
         )
 

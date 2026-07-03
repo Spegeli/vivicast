@@ -81,6 +81,54 @@ class RefreshExecutionTest {
     }
 
     @Test
+    fun seriesDetailsRefresherImportsForActiveXtreamProvider() = runBlocking {
+        val xtreamProvider = provider(id = "xtream", type = ProviderType.Xtream)
+        val catalog = FakeCatalogImportRepository()
+        val refresher = DefaultSeriesDetailsRefresher(
+            providerRepository = FakeProviderRepository(
+                providers = listOf(xtreamProvider),
+                credentials = mapOf(
+                    xtreamProvider.id to ProviderCredentials.Xtream(
+                        serverUrl = "https://xtream.example",
+                        username = "user",
+                        password = "pass",
+                    ),
+                ),
+            ),
+            catalogImportRepository = catalog,
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = StubXtreamParser(seriesCount = 2),
+        )
+
+        val outcome = refresher.refresh(xtreamProvider.id)
+
+        assertEquals(true, outcome.success)
+        assertEquals(xtreamProvider.id, catalog.seriesDetailsProviderId)
+        // One getSeriesInfo per series -> all infos handed to the (background) series-details import.
+        assertEquals(2, catalog.seriesDetailsInfos?.size)
+    }
+
+    @Test
+    fun seriesDetailsRefresherSkipsNonXtreamProviderWithoutImporting() = runBlocking {
+        val m3uProvider = provider(id = "m3u", type = ProviderType.M3u)
+        val catalog = FakeCatalogImportRepository()
+        val refresher = DefaultSeriesDetailsRefresher(
+            providerRepository = FakeProviderRepository(
+                providers = listOf(m3uProvider),
+                credentials = mapOf(m3uProvider.id to ProviderCredentials.M3u(url = "https://playlist.example/list.m3u")),
+            ),
+            catalogImportRepository = catalog,
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = StubXtreamParser(seriesCount = 0),
+        )
+
+        val outcome = refresher.refresh(m3uProvider.id)
+
+        assertEquals(true, outcome.success)
+        assertEquals(null, catalog.seriesDetailsProviderId)
+    }
+
+    @Test
     fun activeProviderPlaylistSourceSkipsManualM3uSources() = runBlocking {
         val urlProvider = provider(id = "m3u-url", type = ProviderType.M3u)
         val fileProvider = provider(id = "m3u-file", type = ProviderType.M3u)
@@ -447,6 +495,37 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
             seasons = ImportCount(0, 0, 0),
             episodes = ImportCount(0, 0, 0),
         )
+
+    var seriesDetailsProviderId: String? = null
+    var seriesDetailsInfos: List<com.vivicast.tv.iptv.xtream.XtreamSeriesInfo>? = null
+
+    override suspend fun importXtreamSeriesDetails(
+        providerId: String,
+        seriesInfos: List<com.vivicast.tv.iptv.xtream.XtreamSeriesInfo>,
+    ): com.vivicast.tv.data.media.XtreamSeriesDetailsImportResult {
+        seriesDetailsProviderId = providerId
+        seriesDetailsInfos = seriesInfos
+        return com.vivicast.tv.data.media.XtreamSeriesDetailsImportResult(
+            seasons = ImportCount(0, 0, 0),
+            episodes = ImportCount(0, 0, 0),
+        )
+    }
+}
+
+private class StubXtreamParser(private val seriesCount: Int) : com.vivicast.tv.iptv.xtream.XtreamParser {
+    override fun parseCategories(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamCategory>()
+    override fun parseLiveStreams(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamLiveStream>()
+    override fun parseVodItems(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamVodItem>()
+    override fun parseSeries(json: String) = (1..seriesCount).map {
+        com.vivicast.tv.iptv.xtream.XtreamSeriesItem(
+            remoteId = "s$it", name = "Series $it", categoryRemoteId = null, posterUrl = null,
+            backdropUrl = null, rating = null, year = null, genre = null, director = null,
+            cast = null, plot = null, addedAtSeconds = null,
+        )
+    }
+
+    override fun parseSeriesInfo(seriesRemoteId: String, json: String) =
+        com.vivicast.tv.iptv.xtream.XtreamSeriesInfo(seriesRemoteId = seriesRemoteId, seasons = emptyList(), episodes = emptyList())
 }
 
 private class FakeEpgImportRepository : EpgImportRepository {

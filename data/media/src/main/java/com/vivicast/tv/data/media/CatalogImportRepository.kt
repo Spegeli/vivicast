@@ -19,7 +19,23 @@ interface CatalogImportRepository {
     suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult
 
     suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult
+
+    /**
+     * Imports only the season/episode detail for the given series (from getSeriesInfo). Run separately
+     * from [importXtreamCatalog] so the heavy per-series fetch does not block the main catalog refresh.
+     * Reconciles seasons/episodes globally against the passed set — pass ALL of a provider's series
+     * per run. Does not touch channels/movies/series/categories.
+     */
+    suspend fun importXtreamSeriesDetails(
+        providerId: String,
+        seriesInfos: List<XtreamSeriesInfo>,
+    ): XtreamSeriesDetailsImportResult
 }
+
+data class XtreamSeriesDetailsImportResult(
+    val seasons: ImportCount,
+    val episodes: ImportCount,
+)
 
 data class CatalogImportResult(
     val categoriesAdded: Int,

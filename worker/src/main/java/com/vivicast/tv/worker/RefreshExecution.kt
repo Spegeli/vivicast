@@ -33,13 +33,17 @@ class DefaultRefreshWorkerRunner(
     private val orchestrator: GlobalRefreshOrchestrator,
     private val playlistRefresher: PlaylistRefresher,
     private val epgRefresher: EpgRefresher,
+    private val seriesDetailsRefresher: SeriesDetailsRefresher,
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
+    private val scheduler: RefreshWorkScheduler,
 ) : RefreshWorkerRunner {
     override suspend fun runGlobalRefresh(): RefreshWorkerResult =
         runCatching { orchestrator.refresh() }
             .fold(
                 onSuccess = { report ->
+                    // Heavy per-series detail fetch runs as a separate background job per provider.
+                    report.seriesDetailsProviderIds.forEach { scheduler.enqueueSeriesDetailsRefresh(it) }
                     if (report.playlistsSucceeded == 0 && report.playlistsFailed > 0) {
                         RefreshWorkerResult.Retry
                     } else {
@@ -53,6 +57,20 @@ class DefaultRefreshWorkerRunner(
         val target = providerId?.takeIf { it.isNotBlank() }?.let(::PlaylistRefreshTarget)
             ?: return RefreshWorkerResult.Failure
         return runCatching { playlistRefresher.refresh(target) }
+            .fold(
+                onSuccess = { outcome ->
+                    if (outcome.success && outcome.needsSeriesDetailsRefresh) {
+                        scheduler.enqueueSeriesDetailsRefresh(target.providerId)
+                    }
+                    if (outcome.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry
+                },
+                onFailure = { RefreshWorkerResult.Retry },
+            )
+    }
+
+    override suspend fun runSeriesDetailsRefresh(providerId: String?): RefreshWorkerResult {
+        val id = providerId?.takeIf { it.isNotBlank() } ?: return RefreshWorkerResult.Failure
+        return runCatching { seriesDetailsRefresher.refresh(id) }
             .fold(
                 onSuccess = { if (it.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry },
                 onFailure = { RefreshWorkerResult.Retry },
@@ -130,6 +148,7 @@ class DefaultPlaylistRefresher(
                     providerId = provider.id,
                     success = true,
                     epgSourceIds = epgSourceReader.getActiveSourceIdsForProvider(provider.id),
+                    needsSeriesDetailsRefresh = provider.type == ProviderType.Xtream && provider.includeSeries,
                 )
             }.getOrElse { error ->
                 providerRepository.setProviderStatus(provider.id, error.toProviderStatus())
@@ -198,12 +217,45 @@ class DefaultPlaylistRefresher(
                 emptyList()
             },
             seriesItems = seriesItems,
-            seriesInfos = seriesItems.map { series ->
-                xtreamParser.parseSeriesInfo(series.remoteId, xtreamClient.getSeriesInfo(xtreamCredentials, series.remoteId))
-            },
+            // Season/episode detail (one getSeriesInfo per series) is intentionally NOT fetched here —
+            // it is scheduled as a separate background job (SeriesDetailsRefreshWorker) so the heavy
+            // per-series loop does not block/kill the main catalog refresh. See needsSeriesDetailsRefresh.
+            seriesInfos = emptyList(),
         )
         catalogImportRepository.importXtreamCatalog(provider.id, catalog)
         return ProviderStatus.Active
+    }
+}
+
+class DefaultSeriesDetailsRefresher(
+    private val providerRepository: ProviderRepository,
+    private val catalogImportRepository: CatalogImportRepository,
+    private val xtreamClient: XtreamClient,
+    private val xtreamParser: XtreamParser,
+) : SeriesDetailsRefresher {
+    override suspend fun refresh(providerId: String): SeriesDetailsRefreshOutcome {
+        val provider = providerRepository.getProvider(providerId)
+            ?: return SeriesDetailsRefreshOutcome(providerId, success = false)
+        if (provider.type != ProviderType.Xtream || !provider.includeSeries ||
+            !provider.isActive || provider.status == ProviderStatus.Disabled
+        ) {
+            return SeriesDetailsRefreshOutcome(providerId, success = true)
+        }
+        val credentials = providerRepository.getCredentials(providerId) as? ProviderCredentials.Xtream
+            ?: return SeriesDetailsRefreshOutcome(providerId, success = false)
+        val xtreamCredentials = XtreamCredentials(
+            serverUrl = credentials.serverUrl,
+            username = credentials.username,
+            password = credentials.password,
+        )
+        val seriesItems = xtreamParser.parseSeries(xtreamClient.getSeries(xtreamCredentials))
+        // Full per cycle: fetch getSeriesInfo for every series (sequential — 1-connection-safe), then
+        // import all season/episode detail in one reconciling call.
+        val seriesInfos = seriesItems.map { series ->
+            xtreamParser.parseSeriesInfo(series.remoteId, xtreamClient.getSeriesInfo(xtreamCredentials, series.remoteId))
+        }
+        catalogImportRepository.importXtreamSeriesDetails(providerId, seriesInfos)
+        return SeriesDetailsRefreshOutcome(providerId, success = true)
     }
 }
 

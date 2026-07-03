@@ -11,6 +11,8 @@ interface RefreshWorkerRunner {
 
     suspend fun runEpgRefresh(epgSourceId: String?): RefreshWorkerResult
 
+    suspend fun runSeriesDetailsRefresh(providerId: String?): RefreshWorkerResult
+
     suspend fun runLogoRefresh(): RefreshWorkerResult
 
     suspend fun runCacheCleanup(): RefreshWorkerResult
@@ -73,6 +75,14 @@ class EpgRefreshWorker(
 ) : DelegatingRefreshWorker(appContext, params) {
     override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
         runEpgRefresh(inputData.getString(WorkerContracts.INPUT_EPG_SOURCE_ID))
+}
+
+class SeriesDetailsRefreshWorker(
+    appContext: Context,
+    params: WorkerParameters,
+) : DelegatingRefreshWorker(appContext, params) {
+    override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
+        runSeriesDetailsRefresh(inputData.getString(WorkerContracts.INPUT_PROVIDER_ID))
 }
 
 class LogoRefreshWorker(

@@ -61,6 +61,7 @@ import com.vivicast.tv.worker.DefaultEpgRefresher
 import com.vivicast.tv.worker.DefaultLogoRefresher
 import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
+import com.vivicast.tv.worker.DefaultSeriesDetailsRefresher
 import com.vivicast.tv.worker.GlobalRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
@@ -259,6 +260,12 @@ class AppContainer(
             epgPastRetentionDaysProvider = { userPreferencesStore.values.first().epg.pastRetentionDays },
             epgFutureRetentionDaysProvider = { userPreferencesStore.values.first().epg.futureRetentionDays },
         )
+        val seriesDetailsRefresher = DefaultSeriesDetailsRefresher(
+            providerRepository = providerRepository,
+            catalogImportRepository = catalogImportRepository,
+            xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
+            xtreamParser = DefaultXtreamParser(),
+        )
         val logoRefresher = DefaultLogoRefresher(
             mediaImageRefreshSource = RoomMediaImageRefreshSource(database),
             mediaCacheStore = mediaCacheStore,
@@ -280,8 +287,10 @@ class AppContainer(
             orchestrator = orchestrator,
             playlistRefresher = playlistRefresher,
             epgRefresher = epgRefresher,
+            seriesDetailsRefresher = seriesDetailsRefresher,
             logoRefresher = logoRefresher,
             cacheCleaner = cacheCleaner,
+            scheduler = refreshWorkScheduler,
         )
     }
 

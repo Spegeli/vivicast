@@ -64,6 +64,18 @@ der WorkManager-Ausführungslimits (~10 min) → Teil-/kein Refresh der Serien. 
 *Owner-Entscheidung (D-09):* z. B. begrenzte Parallelität, Lazy-Laden von Seasons/Episodes erst bei
 Serien-Detail, oder Cap/Backoff — ändert Import-/Playback-Verhalten → Owner-Entscheidung.
 
+**F11-Status: ✅ BEHOBEN (2026-07-03, Variante C „Folge-Hintergrundjob", Owner-freigegeben, „voll pro
+Zyklus").** Der Haupt-Xtream-Refresh importiert jetzt nur Live+Filme+Serien-Liste **schnell** (kein
+`getSeriesInfo` mehr inline) und meldet sofort Erfolg. Season/Episode-Detail läuft in einem **separaten**
+`SeriesDetailsRefreshWorker` pro Provider (sequenziell, 1-Verbindungs-sicher), enqueued nach erfolgreichem
+Playlist-Refresh (Standalone + Global). Import-Split ohne Datenverlust: `importXtreamCatalog` mit leeren
+`seriesInfos` lässt bestehende Seasons/Episoden unangetastet; neues `importXtreamSeriesDetails` reconciled
+sie global aus allen Serien. Verifiziert: `test`+`detekt` grün, Worker-Unit-Tests, **instrumentierter
+No-Wipe-/Repopulate-Test grün**, App startet ohne Crash. **Bekannte Grenze (dokumentiert, konsistent mit
+akzeptierter Skalierung):** der Hintergrund-Job ist nicht chunk-resumabel — wird er (WorkManager-Limit)
+gekillt, holt der Retry alle Serien neu; bei sehr großen Katalogen (~20k) kann ein Zyklus lange dauern.
+Follow-up-Option: Chunk-Offset-Resumability.
+
 **F4 — Private Xtream (D): Refresh fehlgeschlagen (P2, Follow-up).**
 `refresh=false`, 0/0/0 importiert, obwohl dieselbe Source Minuten zuvor als M3U (F3) erfolgreich war.
 Ursache **nicht isoliert** (Diagnose-Logging standardmäßig aus, keine Exception im App-Log-Tag; kein
