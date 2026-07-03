@@ -49,6 +49,21 @@ klassifiziert. Sample **Channel + Movie + Episode je RESOLVED** (http). Damit si
 (Classifier), B (Import-Routing) und C (Movie/Episode-Playback-Resolver) auf **echten** Daten
 end-to-end bestätigt. Import (9,2 MB / ~29k Einträge) lief ohne Crash; Provider danach gelöscht.
 
+**F4-Update (2026-07-03, D-04-Diagnose, GELÖST):** Kein Xtream-Fehler. Isolierter Diagnose-Lauf
+(sanitisiert): Connection-Test **OK**, **alle** Endpunkte OK (liveCategories/liveStreams/vodCategories/
+vodStreams/seriesCategories/series/seriesInfo). Root Cause des früheren `refresh=false`: der damalige
+Audit-Harness hatte `withTimeout(180_000)` um `runPlaylistRefresh`, während der volle Xtream-Refresh
+**N+1 sequentielle `getSeriesInfo`-Calls** macht (**1469 Serien** × ~0,5–1 s ≈ 15–25 min) → Timeout →
+false/0/0/0; zusätzlich lief er direkt nach dem großen Same-Source-M3U-Import (1-Verbindungs-Cooldown).
+Der reale WorkManager-Refresh hat kein 180-s-Limit, aber siehe **F11**.
+
+**F11 — Xtream-Serien-Import ist N+1 (P2, Perf/Robustheit, NEU aus D-04).**
+`RefreshExecution.refreshXtreamProvider` ruft `getSeriesInfo` **einmal pro Serie** sequentiell
+(`seriesItems.map { … }`). Bei 1469 Serien ~15–25 min Refresh; bei großen Providern droht Überschreitung
+der WorkManager-Ausführungslimits (~10 min) → Teil-/kein Refresh der Serien. *Schwere:* mittel.
+*Owner-Entscheidung (D-09):* z. B. begrenzte Parallelität, Lazy-Laden von Seasons/Episodes erst bei
+Serien-Detail, oder Cap/Backoff — ändert Import-/Playback-Verhalten → Owner-Entscheidung.
+
 **F4 — Private Xtream (D): Refresh fehlgeschlagen (P2, Follow-up).**
 `refresh=false`, 0/0/0 importiert, obwohl dieselbe Source Minuten zuvor als M3U (F3) erfolgreich war.
 Ursache **nicht isoliert** (Diagnose-Logging standardmäßig aus, keine Exception im App-Log-Tag; kein
@@ -153,7 +168,7 @@ Security-/Import-Verhalten → Owner-Entscheidung.
 | D-01 | **Jetzt fixen** | ✅ **erledigt** — `:worker`-Test-Fake auf `importM3uCatalog` umgestellt, `test`+`detekt` grün. (`test` deckt `:worker` bereits ab — Stufe-B-Lehre: bei Cross-Modul-Interface-Änderungen volles `test` statt nur Ziel-Tasks laufen.) |
 | D-02 | **Bypass behalten + Checkliste** | Release-Checklisten-/ADR-014-Notiz „Bypass vor Release entfernen/prüfen" |
 | D-03 | **Clipboard aus v1 streichen + Docs** | M3U-Clipboard nicht bauen; `../vivicast-docs` angleichen (Doc-Freigabe nötig) |
-| D-04 | **Diagnose-Lauf** | Xtream-Fehler mit Diagnose-Logging (1 Verbindung, sequenziell) untersuchen |
+| D-04 | **Diagnose-Lauf** | ✅ **erledigt** — kein Xtream-Fehler; früheres false = Harness-180-s-Timeout auf N+1 `getSeriesInfo` (1469 Serien) + M3U-Cooldown. Siehe **F11/D-09**. |
 | D-05 | **Docs ergänzen** | M3U-VOD-Klassifizierung (A–C) in PRD/ADR dokumentieren (Doc-Freigabe nötig) |
 | D-06 | **v1 nur lokal** | SMB/Drive nicht in v1; ungenutzte Enums + Docs bereinigen (Doc-Freigabe nötig) |
 | D-07 | **Code an Docs angleichen** | 75 % entfernen + Akzentfarben ergänzen; **zuerst Optik-Panel visuell verifizieren** |
@@ -216,7 +231,8 @@ GPLv3 (OwnTV) und Non-Commercial (StreamVault): nur Muster abstrahieren, eigenen
 ## 6. Priorisierte Roadmap (Vorschlag, final nach D-XX)
 
 - **P1 — Stabilität/Security:** D-01 (`:worker`-Tests grün) ✅ · **D-08 (F10 Systemsuche-Leak) ✅ behoben
-  (Read-Time-Filter, DB v7)** · D-04 (Xtream-Fehler klären, offen). Hinweis: `test` deckt `:worker` bereits ab.
+  (Read-Time-Filter, DB v7)** · D-04 (Xtream-Fehler geklärt ✅ — kein Bug, siehe F11). Hinweis: `test` deckt `:worker` bereits ab.
+- **NEU P2 — D-09 (F11):** Xtream-Serien-Import N+1 (`getSeriesInfo` pro Serie) → Refresh-Perf/WorkManager-Limit.
 - **P2 — UX-/PRD-Angleichung:** F5 (Dialog-Fokus) · D-07 (Transparenz/Akzent) · D-03-Entscheid ·
   Backup-i18n-Fix (`StandardBackupRestorer.kt:45` dt. hartkodiert) · TV-System-Search PIN-Filter verifizieren.
 - **P3 — Schulden/Perf:** F9 Line-Streaming-Parser + leichter Verbindungstest · ungenutzte
