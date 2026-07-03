@@ -256,8 +256,11 @@ GPLv3 (OwnTV) und Non-Commercial (StreamVault): nur Muster abstrahieren, eigenen
   ersetzt); D-02 TLS-Debug-Bypass-Notiz in ADR-014; D-03 Clipboard als M3U-Eingabeart entfernt
   (04+05, richtet Docs an Code aus); D-06 Backup-Ziele in v1 auf „lokaler Speicher" beschränkt
   (04+05+06-data-model; SMB/Google Drive als post-v1 markiert). `../vivicast-docs` ist kein Git-Repo →
-  reine Dateiänderungen, kein Commit. **Offen (D-06 Code):** `BackupTargetPreference`-Enum + Backup-UI
-  bieten noch Smb/GoogleDrive — Persistenz-berührend, separater Schritt.
+  reine Dateiänderungen, kein Commit.
+- **D-06 Code (2026-07-03 erledigt):** Backup bietet in v1 nur „Lokaler Speicher". Abwärtskompatibel:
+  `toSettingsBackupTargetMode` coerct persistiertes Smb/GoogleDrive → LocalStorage; Backup-Ziel-Row
+  wechselt nicht mehr zu Nicht-Lokal (`BackupTargetMode.next()` bleibt LocalStorage). Enums bleiben als
+  post-v1-Reserve erhalten (kein Persistenz-/Restore-Bruch). Gates grün.
 
 ## 7. Git-Status (Ende des Laufs)
 

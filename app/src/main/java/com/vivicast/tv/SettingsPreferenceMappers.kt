@@ -151,8 +151,9 @@ internal fun SettingsLanguage.toLocaleKey(): String =
 internal fun BackupTargetPreference.toSettingsBackupTargetMode(): BackupTargetMode =
     when (this) {
         BackupTargetPreference.LocalStorage -> BackupTargetMode.LocalStorage
-        BackupTargetPreference.Smb -> BackupTargetMode.Smb
-        BackupTargetPreference.GoogleDrive -> BackupTargetMode.GoogleDrive
+        // v1 supports only local backup; SMB/Google Drive are reserved for post-v1. Coerce any older
+        // persisted value to local so an unsupported target never surfaces (backwards-compatible read).
+        BackupTargetPreference.Smb, BackupTargetPreference.GoogleDrive -> BackupTargetMode.LocalStorage
     }
 
 internal fun BackupTargetMode.toDataStoreBackupTargetPreference(): BackupTargetPreference =

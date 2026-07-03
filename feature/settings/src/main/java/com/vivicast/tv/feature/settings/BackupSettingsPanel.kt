@@ -192,12 +192,8 @@ private fun BackupTargetMode.label(): String = when (this) {
     BackupTargetMode.GoogleDrive -> "Google Drive"
 }
 
-private fun BackupTargetMode.next(): BackupTargetMode =
-    when (this) {
-        BackupTargetMode.LocalStorage -> BackupTargetMode.Smb
-        BackupTargetMode.Smb -> BackupTargetMode.GoogleDrive
-        BackupTargetMode.GoogleDrive -> BackupTargetMode.LocalStorage
-    }
+// v1 offers only local backup (SMB/Google Drive are post-v1), so the target stays at LocalStorage.
+private fun BackupTargetMode.next(): BackupTargetMode = BackupTargetMode.LocalStorage
 
 internal fun Long.toBackupTimestamp(): String =
     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(this))
