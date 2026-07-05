@@ -1,5 +1,6 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -110,6 +111,7 @@ internal fun ProviderSettingsPanel(
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
+    onParkFocusBeforeEditor: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
@@ -119,13 +121,14 @@ internal fun ProviderSettingsPanel(
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Provider?>(null) }
     var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    // Where focus should land once the overview returns after leaving the inline editor.
+    var pendingOverviewFocus by remember { mutableStateOf<OverviewFocusTarget?>(null) }
     val strProviderSaved = stringResource(R.string.settings_provider_msg_playlist_saved)
     val strProviderEnabled = stringResource(R.string.settings_provider_msg_enabled)
     val strProviderDisabled = stringResource(R.string.settings_provider_msg_disabled)
     val strProviderSaveFailed = stringResource(R.string.settings_provider_msg_save_failed)
     val strProviderStatusFailed = stringResource(R.string.settings_provider_msg_status_failed)
     val strProviderDeleteFailed = stringResource(R.string.settings_provider_msg_delete_failed)
-    val strProviderDeleted = stringResource(R.string.settings_provider_msg_deleted)
     val strProviderChecking = stringResource(R.string.settings_provider_msg_checking)
     val strProviderConnected = stringResource(R.string.settings_provider_msg_connected)
     val strProviderDuplicate = stringResource(R.string.settings_provider_msg_name_check)
@@ -182,7 +185,7 @@ internal fun ProviderSettingsPanel(
         null
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+    if (!(showEditor && editor.isEditing)) Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
         ProviderOverviewPanel(
             providers = providers,
             message = message,
@@ -210,6 +213,9 @@ internal fun ProviderSettingsPanel(
                 }
             },
             onOpenProvider = { provider ->
+                // Move focus off the card (which is about to be removed) onto a node that survives
+                // the swap; otherwise focus escapes to the top nav bar and navigates to Home.
+                onParkFocusBeforeEditor()
                 selectedProviderId = provider.id
                 editor = ProviderEditorState.from(provider)
                 editorStep = ProviderEditorStep.Edit
@@ -222,25 +228,30 @@ internal fun ProviderSettingsPanel(
                     }
                 }
             },
+            pendingFocus = pendingOverviewFocus,
+            onFocusHandled = { pendingOverviewFocus = null },
             modifier = Modifier.fillMaxSize(),
         )
     }
 
-    if (showEditor) {
-        val dismissEditor: () -> Unit = {
-            selectedProviderId = null
-            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-            editorStep = ProviderEditorStep.Name
-            showEditor = false
-            message = null
-        }
+    val dismissEditor: () -> Unit = {
+        // Park focus before the inline editor is removed, else focus escapes to the top nav bar.
+        onParkFocusBeforeEditor()
+        pendingOverviewFocus = editor.providerId?.let(OverviewFocusTarget::Card)
+        selectedProviderId = null
+        editor = ProviderEditorState.newProvider(ProviderType.M3u)
+        editorStep = ProviderEditorStep.Name
+        showEditor = false
+        message = null
+    }
+
+    if (showEditor && !editor.isEditing) {
         VivicastDialog(
             onDismiss = dismissEditor,
             width = VivicastDialogWidth.Wide,
             heightCap = 560.dp,
             modifier = Modifier.testTag("settings-provider-editor-dialog"),
         ) {
-            if (!editor.isEditing) {
                     ProviderAddFlow(
                         editor = editor,
                         step = editorStep,
@@ -331,8 +342,12 @@ internal fun ProviderSettingsPanel(
                         onPickM3uFile = onPickM3uFile,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                } else {
-                ProviderEditor(
+        }
+    }
+
+    if (showEditor && editor.isEditing) {
+        BackHandler(onBack = dismissEditor)
+        ProviderEditor(
                     editor = editor,
                     duplicateName = duplicateName,
                     message = message,
@@ -377,6 +392,8 @@ internal fun ProviderSettingsPanel(
                             onCreateProvider(editor.toCreateRequest())
                         }
                         saveResult.onSuccess { result ->
+                            onParkFocusBeforeEditor()
+                            pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
                             editorStep = ProviderEditorStep.Name
@@ -403,11 +420,9 @@ internal fun ProviderSettingsPanel(
                     pendingDelete = providers.firstOrNull { it.id == editor.providerId }
                     },
                     onPickM3uFile = onPickM3uFile,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                 )
-                }
-            }
-        }
+    }
 
     pendingDelete?.let { provider ->
         DeleteProviderDialog(
@@ -417,11 +432,19 @@ internal fun ProviderSettingsPanel(
                 scope.launch {
                     onDeleteProvider(provider.id)
                         .onSuccess {
+                            onParkFocusBeforeEditor()
+                            // Focus the next playlist (or the previous one), or the add button if none remain.
+                            val deletedIndex = providers.indexOfFirst { it.id == provider.id }
+                            val neighborId = providers.getOrNull(deletedIndex + 1)?.id
+                                ?: providers.getOrNull(deletedIndex - 1)?.id
+                            pendingOverviewFocus = neighborId?.let(OverviewFocusTarget::Card)
+                                ?: OverviewFocusTarget.AddButton
                             pendingDelete = null
                             selectedProviderId = null
                             editor = ProviderEditorState.newProvider(ProviderType.M3u)
                             showEditor = false
-                            message = strProviderDeleted
+                            // No "deleted" note — the playlist disappearing is feedback enough.
+                            message = null
                         }
                         .onFailure { error ->
                             pendingDelete = null
@@ -441,8 +464,23 @@ private fun ProviderOverviewPanel(
     onAddProvider: () -> Unit,
     onRefreshAll: () -> Unit,
     onOpenProvider: (Provider) -> Unit,
+    pendingFocus: OverviewFocusTarget?,
+    onFocusHandled: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val addRequester = remember { FocusRequester() }
+    val cardRequesters = remember(providers) { providers.associate { it.id to FocusRequester() } }
+    // When returning from the inline editor, move focus onto the requested card (or the add button).
+    LaunchedEffect(pendingFocus, providers) {
+        val target = pendingFocus ?: return@LaunchedEffect
+        awaitFrame()
+        val requester = when (target) {
+            is OverviewFocusTarget.Card -> cardRequesters[target.providerId] ?: addRequester
+            OverviewFocusTarget.AddButton -> addRequester
+        }
+        runCatching { requester.requestFocus() }
+        onFocusHandled()
+    }
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
@@ -453,18 +491,22 @@ private fun ProviderOverviewPanel(
                 help = stringResource(R.string.settings_provider_help_add),
                 value = stringResource(R.string.about_open_value),
                 modifier = firstFocusModifier
+                    .focusRequester(addRequester)
                     .testTag("settings-playlist-add-action")
                     ,
                 onClick = onAddProvider,
             )
         }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_playlist_refresh_all),
-                help = stringResource(R.string.settings_provider_help_refresh_all),
-                value = stringResource(R.string.settings_playlist_refresh_value),
-                onClick = onRefreshAll,
-            )
+        // Nothing to refresh without a playlist, so hide the action until one exists.
+        if (providers.isNotEmpty()) {
+            item {
+                VivicastSettingsRow(
+                    title = stringResource(R.string.settings_playlist_refresh_all),
+                    help = stringResource(R.string.settings_provider_help_refresh_all),
+                    value = stringResource(R.string.settings_playlist_refresh_value),
+                    onClick = onRefreshAll,
+                )
+            }
         }
         if (message != null) {
             item {
@@ -488,7 +530,9 @@ private fun ProviderOverviewPanel(
                 ProviderSourceCard(
                     provider = provider,
                     onClick = { onOpenProvider(provider) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(cardRequesters.getValue(provider.id)),
                 )
             }
         }
@@ -534,6 +578,13 @@ private fun ProviderSourceCard(
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
                 BodyText(stringResource(R.string.settings_provider_updated_format, provider.updatedAt.toBackupTimestamp()), maxLines = 1)
+                // Xtream account info (Detailinformationen, design screen 08) — shown only when known.
+                provider.xtreamExpiresAtMillis?.let { expiresAt ->
+                    BodyText(stringResource(R.string.settings_provider_expiry_format, expiresAt.toBackupTimestamp()), maxLines = 1)
+                }
+                provider.xtreamMaxConnections?.let { maxConnections ->
+                    BodyText(stringResource(R.string.settings_provider_max_connections_format, maxConnections), maxLines = 1)
+                }
             }
         }
     }
@@ -597,6 +648,12 @@ private fun ProviderList(
 }
 
 private data class ProviderUrlEntry(val providerId: String?, val url: String, val name: String)
+
+/** Where focus should land in the provider overview after the inline editor closes. */
+private sealed interface OverviewFocusTarget {
+    data class Card(val providerId: String) : OverviewFocusTarget
+    data object AddButton : OverviewFocusTarget
+}
 
 internal val ProviderType.label: String
     get() = when (this) {

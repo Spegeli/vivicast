@@ -4,6 +4,7 @@ import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.iptv.m3u.M3uParser
 import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
+import com.vivicast.tv.iptv.xtream.XtreamParser
 
 /**
  * Verifies that a provider's connection details actually resolve to a usable playlist / API before
@@ -16,6 +17,7 @@ import com.vivicast.tv.iptv.xtream.XtreamCredentials
 class TestProviderConnectionUseCase(
     private val m3uParser: M3uParser,
     private val xtreamClient: XtreamClient,
+    private val xtreamParser: XtreamParser,
     private val fetchText: suspend (url: String) -> String,
 ) {
     /** Throws on any failure; returns normally when the connection is usable. */
@@ -50,17 +52,19 @@ class TestProviderConnectionUseCase(
             password = request.xtreamPassword?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException(),
         )
-        val response = when {
-            request.includeLiveTv -> xtreamClient.getLiveCategories(credentials)
-            request.includeMovies -> xtreamClient.getVodCategories(credentials)
-            request.includeSeries -> xtreamClient.getSeriesCategories(credentials)
-            else -> throw IllegalArgumentException()
+        if (!(request.includeLiveTv || request.includeMovies || request.includeSeries)) {
+            throw IllegalArgumentException()
         }
-        if (!response.trimStart().startsWith("[")) {
-            throw ProviderConnectionResponseException()
+        // Canonical Xtream login check: player_api.php (no action) returns user_info.auth.
+        val userInfo = xtreamParser.parseUserInfo(xtreamClient.getUserInfo(credentials))
+        if (!userInfo.authenticated) {
+            throw ProviderInvalidCredentialsException()
         }
     }
 }
 
 /** Signals that the source responded but the payload was empty / not in a usable format. */
 class ProviderConnectionResponseException : RuntimeException()
+
+/** Xtream server accepted the request but reported the credentials as invalid (user_info.auth != 1). */
+class ProviderInvalidCredentialsException : RuntimeException()

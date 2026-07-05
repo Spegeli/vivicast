@@ -103,7 +103,6 @@ internal fun GeneralSettingsPanel(
     onLaunchOnBootChanged: (Boolean) -> Unit,
     onDoubleBackToExitChanged: (Boolean) -> Unit,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
-    onRememberSortingChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit,
     onGlobalUserAgentChanged: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
@@ -112,7 +111,6 @@ internal fun GeneralSettingsPanel(
     val toggleLaunchOnBoot = { onLaunchOnBootChanged(!state.launchOnBoot) }
     val toggleBackgroundRefresh = { onBackgroundRefreshChanged(!state.backgroundRefreshEnabled) }
     val toggleDoubleBack = { onDoubleBackToExitChanged(!state.doubleBackToExit) }
-    val toggleRememberSorting = { onRememberSortingChanged(!state.rememberSorting) }
     var showLanguagePicker by remember { mutableStateOf(false) }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
@@ -157,17 +155,6 @@ internal fun GeneralSettingsPanel(
                 modifier = Modifier,
                 icon = { SettingsRowIcon("refresh") },
                 onClick = toggleBackgroundRefresh,
-            )
-        }
-
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_remember_sorting),
-                help = stringResource(R.string.settings_help_remember_sorting),
-                value = if (state.rememberSorting) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
-                icon = { SettingsRowIcon("sort") },
-                onClick = toggleRememberSorting,
             )
         }
 

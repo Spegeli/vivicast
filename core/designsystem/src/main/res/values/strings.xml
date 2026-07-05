@@ -28,7 +28,6 @@
     <string name="settings_double_back">Doppelte Zurück-Taste zum Beenden</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_background_refresh">Hintergrundaktualisierung erlauben</string>
-    <string name="settings_remember_sorting">Sortierung merken</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->
@@ -446,7 +445,6 @@
     <string name="settings_help_double_back">Erfordert aus der Top Navigation eine zweite Zurück-Bestätigung.</string>
     <string name="settings_help_language">Systemstandard oder feste App-Sprache.</string>
     <string name="settings_help_background_refresh">Playlists und EPG im Hintergrund aktualisieren.</string>
-    <string name="settings_help_remember_sorting">Lokale Listenreihenfolge pro Ansicht beibehalten.</string>
     <string name="settings_help_user_agent">Gilt appweit für HTTP-Anfragen. Leer nutzt den App-Standard.</string>
 
     <!-- Settings - Playback help texts -->
@@ -703,9 +701,10 @@
     <string name="settings_provider_file_import_only">Datei wird nur importiert. Es wird keine dauerhafte Kopie gespeichert.</string>
     <string name="settings_provider_file_ready_test">Datei bereit. Prüfen und speichern.</string>
     <string name="settings_provider_file_pick">Datei auswählen</string>
-    <string name="settings_provider_file_selected">%1$s • %2$d Sender</string>
     <string name="settings_provider_file_label_empty">Datei:</string>
-    <string name="settings_provider_file_label">Datei: %1$s • %2$d Sender</string>
+    <string name="settings_provider_file_label">Datei: %1$s • %2$d Kanäle, %3$d Filme, %4$d Serien</string>
+    <string name="settings_provider_file_needs_check">Datei: %1$s • »Datei prüfen« für Details</string>
+    <string name="settings_provider_file_analyzing">Datei: %1$s • analysiere…</string>
     <string name="settings_provider_file_test">Datei prüfen</string>
     <string name="settings_provider_file_test_ok">Datei gültig</string>
     <string name="settings_provider_file_test_fail">Datei ungültig</string>
@@ -728,6 +727,8 @@
     <string name="settings_provider_name_placeholder">Name der Wiedergabeliste</string>
     <string name="settings_provider_url_required">URL</string>
     <string name="settings_provider_updated_format">Aktualisiert: %1$s</string>
+    <string name="settings_provider_expiry_format">Läuft ab: %1$s</string>
+    <string name="settings_provider_max_connections_format">Max. Verbindungen: %1$d</string>
     <string name="settings_provider_live_tv_off">Live-TV aus</string>
     <string name="settings_provider_movies_off">Filme aus</string>
     <string name="settings_provider_series_off">Serien aus</string>

@@ -104,6 +104,7 @@ internal fun ProviderTextField(
     placeholder: String,
     onValueChange: (String) -> Unit,
     secret: Boolean = false,
+    allowReveal: Boolean = false,
     singleLine: Boolean = true,
     height: Dp = 58.dp,
     trailingActionLabel: String? = null,
@@ -115,9 +116,12 @@ internal fun ProviderTextField(
     VivicastTextField(
         value = value,
         onValueChange = onValueChange,
-        label = label,
+        // ponytail: dialogs stay compact — no label row above the field; the placeholder carries the
+        // hint. The `label` param is kept so call sites document each field's purpose in code.
+        label = null,
         placeholder = placeholder,
         secret = secret,
+        allowReveal = allowReveal,
         singleLine = singleLine,
         height = height,
         focusRequester = focusRequester,

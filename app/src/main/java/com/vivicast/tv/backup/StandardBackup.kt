@@ -172,7 +172,6 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("launchOnBoot", general.launchOnBoot)
             .put("doubleBackToExit", general.doubleBackToExit)
             .put("backgroundRefreshEnabled", general.backgroundRefreshEnabled)
-            .put("rememberSorting", general.rememberSorting)
             .put("globalUserAgent", general.globalUserAgent))
         .put("appearance", JSONObject()
             .put("backgroundColor", appearance.backgroundColor.name)

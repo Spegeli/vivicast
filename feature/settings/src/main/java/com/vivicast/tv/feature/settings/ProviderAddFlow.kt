@@ -78,6 +78,8 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.M3uContentSummary
+import com.vivicast.tv.data.provider.M3uContentSummarizer
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -94,7 +96,9 @@ import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -116,6 +120,11 @@ internal fun ProviderAddFlow(
 ) {
     val firstFocus = remember { FocusRequester() }
     var nameError by remember { mutableStateOf(false) }
+    // M3U file classification is deferred to "Check file" and runs off the main thread, so picking a
+    // large file returns to the app instantly instead of blocking on the parse+classify.
+    var fileSummary by remember(editor.m3uContent) { mutableStateOf<M3uContentSummary?>(null) }
+    var summarizingFile by remember(editor.m3uContent) { mutableStateOf(false) }
+    val summaryScope = rememberCoroutineScope()
     LaunchedEffect(step) {
         runCatching { firstFocus.requestFocus() }
     }
@@ -265,15 +274,23 @@ internal fun ProviderAddFlow(
             }
             ProviderEditorStep.M3uFile -> {
                 item {
+                    val currentSummary = fileSummary
                     BodyText(
-                        if (editor.m3uContent.isNotBlank() && editor.m3uFileName.isNotBlank()) {
-                            stringResource(
-                                R.string.settings_provider_file_label,
-                                editor.m3uFileName,
-                                m3uChannelCount(editor.m3uContent),
-                            )
-                        } else {
-                            stringResource(R.string.settings_provider_file_label_empty)
+                        when {
+                            editor.m3uContent.isBlank() || editor.m3uFileName.isBlank() ->
+                                stringResource(R.string.settings_provider_file_label_empty)
+                            summarizingFile ->
+                                stringResource(R.string.settings_provider_file_analyzing, editor.m3uFileName)
+                            currentSummary != null ->
+                                stringResource(
+                                    R.string.settings_provider_file_label,
+                                    editor.m3uFileName,
+                                    currentSummary.channels,
+                                    currentSummary.movies,
+                                    currentSummary.series,
+                                )
+                            else ->
+                                stringResource(R.string.settings_provider_file_needs_check, editor.m3uFileName)
                         },
                     )
                 }
@@ -304,7 +321,18 @@ internal fun ProviderAddFlow(
                                 else -> stringResource(R.string.settings_provider_file_test)
                             },
                             selected = connectionTestStatus == ConnectionTestStatus.Passed,
-                            onClick = onTestConnection,
+                            onClick = {
+                                onTestConnection()
+                                val content = editor.m3uContent
+                                if (content.isNotBlank()) {
+                                    summarizingFile = true
+                                    summaryScope.launch {
+                                        val computed = withContext(Dispatchers.Default) { m3uContentSummary(content) }
+                                        fileSummary = computed
+                                        summarizingFile = false
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -346,6 +374,7 @@ internal fun ProviderAddFlow(
                         placeholder = stringResource(R.string.settings_provider_password_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
                         secret = true,
+                        allowReveal = true,
                         maxLength = 100,
                     )
                 }
@@ -415,9 +444,10 @@ private fun ProviderFlowActions(
     )
 }
 
-// ponytail: Näherung über #EXTINF-Zeilen; exakte Zahl liefert der Parser erst beim Import.
-internal fun m3uChannelCount(content: String): Int =
-    content.lineSequence().count { it.trimStart().startsWith("#EXTINF", ignoreCase = true) }
+private val m3uContentSummarizer = M3uContentSummarizer()
+
+/** Classifies M3U content into channels/movies/series for the add/edit preview. Memoize on [content]. */
+internal fun m3uContentSummary(content: String): M3uContentSummary = m3uContentSummarizer.summarize(content)
 
 internal enum class ConnectionTestStatus { Idle, Testing, Passed, Failed }
 

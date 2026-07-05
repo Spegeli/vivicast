@@ -39,6 +39,7 @@ import com.vivicast.tv.data.playback.PlaybackRequestFactory
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.provider.ProviderConnectionResponseException
+import com.vivicast.tv.data.provider.ProviderInvalidCredentialsException
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.RoomProviderRepository
@@ -64,6 +65,7 @@ import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
 import com.vivicast.tv.worker.DefaultSeriesDetailsRefresher
 import com.vivicast.tv.worker.GlobalRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
+import com.vivicast.tv.worker.M3uSourceTooLargeException
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
@@ -322,6 +324,7 @@ class AppContainer(
         TestProviderConnectionUseCase(
             m3uParser = DefaultM3uParser(),
             xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
+            xtreamParser = DefaultXtreamParser(),
             fetchText = { url -> OkHttpTextFetcher(okHttpClient).fetch(url) },
         )
     }
@@ -361,6 +364,8 @@ private fun Throwable.toProviderConnectionMessage(): String =
         } else {
             "Quelle nicht erreichbar."
         }
+        is M3uSourceTooLargeException -> "Wiedergabeliste zu groß."
+        is ProviderInvalidCredentialsException -> "Zugangsdaten ungültig."
         is ProviderConnectionResponseException -> "Antwortformat nicht nutzbar."
         is IllegalArgumentException -> "Adresse oder Zugangsdaten sind ungültig."
         else -> "Quelle nicht erreichbar."

@@ -28,7 +28,6 @@
     <string name="settings_double_back">Doppelte Zurück-Taste zum Beenden</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_background_refresh">Hintergrundaktualisierung erlauben</string>
-    <string name="settings_remember_sorting">Sortierung merken</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->

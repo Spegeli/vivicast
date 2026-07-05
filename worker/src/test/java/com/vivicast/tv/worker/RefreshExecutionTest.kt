@@ -35,6 +35,7 @@ import com.vivicast.tv.iptv.xtream.XtreamLiveStream
 import com.vivicast.tv.iptv.xtream.XtreamParser
 import com.vivicast.tv.iptv.xtream.XtreamSeriesInfo
 import com.vivicast.tv.iptv.xtream.XtreamSeriesItem
+import com.vivicast.tv.iptv.xtream.XtreamUserInfo
 import com.vivicast.tv.iptv.xtream.XtreamVodItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -460,6 +461,8 @@ private class FakeProviderRepository(
 
     override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
 
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) = Unit
+
     override suspend fun deleteProvider(providerId: String) = Unit
 }
 
@@ -513,6 +516,8 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
 }
 
 private class StubXtreamParser(private val seriesCount: Int) : com.vivicast.tv.iptv.xtream.XtreamParser {
+    override fun parseUserInfo(json: String) =
+        com.vivicast.tv.iptv.xtream.XtreamUserInfo(authenticated = true, expiresAtSeconds = null, maxConnections = null)
     override fun parseCategories(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamCategory>()
     override fun parseLiveStreams(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamLiveStream>()
     override fun parseVodItems(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamVodItem>()
@@ -638,6 +643,7 @@ private class FakeEpgSourceReader(
 
 private object EmptyXtreamClient : XtreamClient {
     override suspend fun getLiveCategories(credentials: XtreamCredentials): String = "[]"
+    override suspend fun getUserInfo(credentials: XtreamCredentials): String = "{}"
     override suspend fun getLiveStreams(credentials: XtreamCredentials, categoryId: String?): String = "[]"
     override suspend fun getVodCategories(credentials: XtreamCredentials): String = "[]"
     override suspend fun getVodStreams(credentials: XtreamCredentials, categoryId: String?): String = "[]"
@@ -647,6 +653,8 @@ private object EmptyXtreamClient : XtreamClient {
 }
 
 private object EmptyXtreamParser : XtreamParser {
+    override fun parseUserInfo(json: String): XtreamUserInfo =
+        XtreamUserInfo(authenticated = true, expiresAtSeconds = null, maxConnections = null)
     override fun parseCategories(json: String): List<XtreamCategory> = emptyList()
     override fun parseLiveStreams(json: String): List<XtreamLiveStream> = emptyList()
     override fun parseVodItems(json: String): List<XtreamVodItem> = emptyList()

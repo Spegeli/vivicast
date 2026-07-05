@@ -15,6 +15,8 @@ data class Provider(
     val createdAt: Long,
     val updatedAt: Long,
     val stableKey: String = id,
+    val xtreamExpiresAtMillis: Long? = null,
+    val xtreamMaxConnections: Int? = null,
 )
 
 enum class ProviderType { M3u, Xtream }

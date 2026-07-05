@@ -23,5 +23,8 @@ interface ProviderRepository {
 
     suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean)
 
+    /** Persists the latest Xtream account snapshot (expiry + max connections). No-op for M3U providers. */
+    suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?)
+
     suspend fun deleteProvider(providerId: String)
 }

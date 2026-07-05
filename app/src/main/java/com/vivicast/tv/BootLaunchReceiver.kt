@@ -10,7 +10,8 @@ import kotlinx.coroutines.launch
 
 class BootLaunchReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        // Manche (ältere/günstige) TV-Boxen feuern QUICKBOOT statt BOOT_COMPLETED.
+        if (intent.action !in BOOT_ACTIONS) return
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
@@ -27,5 +28,13 @@ class BootLaunchReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    private companion object {
+        val BOOT_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            "android.intent.action.QUICKBOOT_POWERON",
+            "com.htc.intent.action.QUICKBOOT_POWERON",
+        )
     }
 }

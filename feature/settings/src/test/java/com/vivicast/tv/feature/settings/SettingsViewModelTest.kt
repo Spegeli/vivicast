@@ -111,17 +111,6 @@ class SettingsViewModelTest {
         scope.cancel()
     }
 
-    @Test
-    fun onRememberSortingChanged_writesPreference() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val store = FakeUserPreferencesStore()
-        val vm = newViewModel(scope, store)
-
-        vm.onRememberSortingChanged(false)
-
-        assertEquals(false, store.flow.value.general.rememberSorting)
-        scope.cancel()
-    }
 
     @Test
     fun onGlobalUserAgentChanged_writesPreference() = runBlocking {
@@ -794,6 +783,7 @@ private class FakeProviderRepository(
     override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) {
         setEnabledCall = providerId to isEnabled
     }
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) { }
     override suspend fun deleteProvider(providerId: String) {
         deletedProviderId = providerId
     }

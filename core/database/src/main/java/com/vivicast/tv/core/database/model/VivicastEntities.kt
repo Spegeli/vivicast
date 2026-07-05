@@ -29,6 +29,9 @@ data class ProviderEntity(
     val logoPriority: String,
     val createdAt: Long,
     val updatedAt: Long,
+    // Xtream account info (from player_api.php user_info), refreshed on each import. Null for M3U.
+    @ColumnInfo(defaultValue = "NULL") val xtreamExpiresAtMillis: Long? = null,
+    @ColumnInfo(defaultValue = "NULL") val xtreamMaxConnections: Int? = null,
 )
 
 @Entity(

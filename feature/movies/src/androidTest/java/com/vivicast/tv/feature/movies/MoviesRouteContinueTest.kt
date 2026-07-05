@@ -97,6 +97,7 @@ private class FakeProviderRepository : ProviderRepository {
     override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) = Unit
     override suspend fun setProviderActive(providerId: String, isActive: Boolean) = Unit
     override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) = Unit
     override suspend fun deleteProvider(providerId: String) = Unit
 }
 

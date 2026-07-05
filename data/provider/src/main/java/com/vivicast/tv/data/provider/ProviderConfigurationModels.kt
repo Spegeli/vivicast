@@ -60,7 +60,9 @@ enum class M3uSourceMode {
 val M3uSourceMode.isAutomaticallyRefreshable: Boolean
     get() = this == M3uSourceMode.Url
 
-const val MAX_M3U_INLINE_SOURCE_CHARS = 5_000_000
+// ~32 MB (aligned with the URL M3U byte cap). Content is held in RAM as a String during add/import,
+// so ~2x this in heap; raise only alongside a streaming import path. 1 char ≈ 1 byte for ASCII M3U.
+const val MAX_M3U_INLINE_SOURCE_CHARS = 32 * 1024 * 1024
 const val DEFAULT_REFRESH_INTERVAL_HOURS = 12
 
 object TransientM3uSourceStore {

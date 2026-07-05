@@ -6,6 +6,9 @@ import com.vivicast.tv.iptv.m3u.M3uParser
 import com.vivicast.tv.iptv.m3u.M3uPlaylist
 import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
+import com.vivicast.tv.iptv.xtream.XtreamParser
+import com.vivicast.tv.iptv.xtream.XtreamSeriesInfo
+import com.vivicast.tv.iptv.xtream.XtreamUserInfo
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -66,31 +69,20 @@ class TestProviderConnectionUseCaseTest {
     // --- Xtream ---
 
     @Test
-    fun xtream_succeedsWithJsonArrayResponse() = runBlocking {
-        val client = FakeXtreamClient(response = "[{\"category_id\":\"1\"}]")
-        val useCase = useCase(xtream = client)
+    fun xtream_succeedsWhenAuthenticated() = runBlocking {
+        val client = FakeXtreamClient(response = "{}")
+        val useCase = useCase(xtream = client, xtreamParser = FakeXtreamParser(authenticated = true))
 
-        useCase.test(xtreamRequest())
+        useCase.test(xtreamRequest()) // no throw = success
 
-        assertEquals("live", client.lastCalled) // includeLiveTv default true → live categories
+        assertEquals("userInfo", client.lastCalled) // canonical player_api.php handshake
     }
 
     @Test
-    fun xtream_dispatchesByEnabledContent() = runBlocking {
-        val moviesClient = FakeXtreamClient(response = "[]")
-        useCase(xtream = moviesClient).test(xtreamRequest(includeLiveTv = false, includeMovies = true))
-        assertEquals("vod", moviesClient.lastCalled)
+    fun xtream_failsWhenNotAuthenticated() = runBlocking {
+        val useCase = useCase(xtream = FakeXtreamClient(response = "{}"), xtreamParser = FakeXtreamParser(authenticated = false))
 
-        val seriesClient = FakeXtreamClient(response = "[]")
-        useCase(xtream = seriesClient).test(xtreamRequest(includeLiveTv = false, includeMovies = false, includeSeries = true))
-        assertEquals("series", seriesClient.lastCalled)
-    }
-
-    @Test
-    fun xtream_failsWhenResponseNotJsonArray() = runBlocking {
-        val useCase = useCase(xtream = FakeXtreamClient(response = "Invalid credentials"))
-
-        assertThrows<ProviderConnectionResponseException> {
+        assertThrows<ProviderInvalidCredentialsException> {
             useCase.test(xtreamRequest())
         }
     }
@@ -127,8 +119,9 @@ class TestProviderConnectionUseCaseTest {
     private fun useCase(
         m3u: M3uParser = FakeM3uParser(channels = 1),
         xtream: XtreamClient = FakeXtreamClient(response = "[]"),
+        xtreamParser: XtreamParser = FakeXtreamParser(authenticated = true),
         fetchText: FakeFetcher = FakeFetcher(result = "#EXTM3U"),
-    ) = TestProviderConnectionUseCase(m3u, xtream, fetchText::fetch)
+    ) = TestProviderConnectionUseCase(m3u, xtream, xtreamParser, fetchText::fetch)
 
     private fun m3uRequest(
         mode: M3uSourceMode = M3uSourceMode.Url,
@@ -181,6 +174,17 @@ private class FakeM3uParser(private val channels: Int) : M3uParser {
     )
 }
 
+private class FakeXtreamParser(private val authenticated: Boolean) : XtreamParser {
+    override fun parseUserInfo(json: String) =
+        XtreamUserInfo(authenticated = authenticated, expiresAtSeconds = null, maxConnections = null)
+    override fun parseCategories(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamCategory>()
+    override fun parseLiveStreams(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamLiveStream>()
+    override fun parseVodItems(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamVodItem>()
+    override fun parseSeries(json: String) = emptyList<com.vivicast.tv.iptv.xtream.XtreamSeriesItem>()
+    override fun parseSeriesInfo(seriesRemoteId: String, json: String) =
+        XtreamSeriesInfo(seriesRemoteId = seriesRemoteId, seasons = emptyList(), episodes = emptyList())
+}
+
 private class FakeXtreamClient(
     private val response: String = "[]",
     private val error: Throwable? = null,
@@ -188,6 +192,7 @@ private class FakeXtreamClient(
     var lastCalled: String? = null
         private set
 
+    override suspend fun getUserInfo(credentials: XtreamCredentials): String = respond("userInfo")
     override suspend fun getLiveCategories(credentials: XtreamCredentials): String = respond("live")
     override suspend fun getVodCategories(credentials: XtreamCredentials): String = respond("vod")
     override suspend fun getSeriesCategories(credentials: XtreamCredentials): String = respond("series")

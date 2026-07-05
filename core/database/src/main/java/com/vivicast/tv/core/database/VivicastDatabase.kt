@@ -68,4 +68,4 @@ abstract class VivicastDatabase : RoomDatabase() {
     abstract fun androidTvSearchDao(): AndroidTvSearchDao
 }
 
-const val VIVICAST_DATABASE_VERSION = 7
+const val VIVICAST_DATABASE_VERSION = 8

@@ -28,7 +28,6 @@
     <string name="settings_double_back">Double back to exit</string>
     <string name="settings_language">Language</string>
     <string name="settings_background_refresh">Allow background refresh</string>
-    <string name="settings_remember_sorting">Remember sorting</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->

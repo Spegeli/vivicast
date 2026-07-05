@@ -32,6 +32,16 @@ interface ProviderDao {
     @Query("UPDATE providers SET isActive = :isActive, updatedAt = :updatedAt WHERE id = :providerId")
     suspend fun setProviderActive(providerId: String, isActive: Boolean, updatedAt: Long)
 
+    @Query(
+        "UPDATE providers SET xtreamExpiresAtMillis = :expiresAtMillis, " +
+            "xtreamMaxConnections = :maxConnections WHERE id = :providerId",
+    )
+    suspend fun updateXtreamAccountInfo(
+        providerId: String,
+        expiresAtMillis: Long?,
+        maxConnections: Int?,
+    )
+
     @Query("DELETE FROM providers WHERE id = :providerId")
     suspend fun deleteProvider(providerId: String)
 }

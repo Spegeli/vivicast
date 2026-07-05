@@ -18,7 +18,7 @@ Netzwerk-Connection-Test) und gehören dort auch hin. Es verbleibt nur eine **ko
 
 | Bereich | Status | Datenquelle | Bemerkung |
 |--------|--------|-------------|-----------|
-| General (LaunchOnBoot, DoubleBack, RememberSorting, GlobalUserAgent, BackgroundRefresh-Pref, SelectedSection) | ✅ vollständig | `UserPreferencesStore` | f1; BackgroundRefresh-**Scheduler** bleibt App |
+| General (LaunchOnBoot, DoubleBack, GlobalUserAgent, BackgroundRefresh-Pref, SelectedSection) | ✅ vollständig | `UserPreferencesStore` | f1; BackgroundRefresh-**Scheduler** bleibt App |
 | Appearance (Theme/Accent/Transparency/FontScale/AnimationSpeed, Language-Pref) | ✅ vollständig | `UserPreferencesStore` | f1; Locale/`recreate()` bleibt App |
 | Playback (13 Felder) | ✅ vollständig | `UserPreferencesStore` | f1 |
 | EPG-global (Retention/Refresh-Intervall/Flags) | ✅ vollständig | `UserPreferencesStore` | f2a |

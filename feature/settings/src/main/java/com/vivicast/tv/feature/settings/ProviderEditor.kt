@@ -77,6 +77,7 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.M3uContentSummary
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -93,7 +94,9 @@ import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -111,7 +114,17 @@ internal fun ProviderEditor(
     modifier: Modifier = Modifier,
 ) {
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
+    // Inline panel (no dialog window): wait one frame so the field is placed before requesting focus,
+    // otherwise focus escapes to the top nav bar and navigates away.
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
+    // M3U file classification runs off the main thread and only on "Verbindung testen", so picking a
+    // large file in the edit dialog returns instantly instead of freezing on the parse+classify.
+    var fileSummary by remember(editor.m3uContent) { mutableStateOf<M3uContentSummary?>(null) }
+    var summarizingFile by remember(editor.m3uContent) { mutableStateOf(false) }
+    val summaryScope = rememberCoroutineScope()
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
@@ -237,13 +250,25 @@ internal fun ProviderEditor(
                                     }
                                 },
                             )
-                            if (editor.m3uContent.isNotBlank() && editor.m3uFileName.isNotBlank()) {
+                            val currentSummary = fileSummary
+                            if (editor.m3uFileName.isNotBlank()) {
                                 BodyText(
-                                    stringResource(
-                                        R.string.settings_provider_file_selected,
-                                        editor.m3uFileName,
-                                        m3uChannelCount(editor.m3uContent),
-                                    ),
+                                    when {
+                                        editor.m3uContent.isBlank() ->
+                                            stringResource(R.string.settings_provider_file_label_empty)
+                                        summarizingFile ->
+                                            stringResource(R.string.settings_provider_file_analyzing, editor.m3uFileName)
+                                        currentSummary != null ->
+                                            stringResource(
+                                                R.string.settings_provider_file_label,
+                                                editor.m3uFileName,
+                                                currentSummary.channels,
+                                                currentSummary.movies,
+                                                currentSummary.series,
+                                            )
+                                        else ->
+                                            stringResource(R.string.settings_provider_file_needs_check, editor.m3uFileName)
+                                    },
                                 )
                             }
                         }
@@ -279,6 +304,7 @@ internal fun ProviderEditor(
                         placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_password_label),
                         onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
                         secret = true,
+                        allowReveal = true,
                         maxLength = 100,
                     )
                 }
@@ -365,7 +391,18 @@ internal fun ProviderEditor(
                 ActionPill(
                     label = stringResource(R.string.settings_provider_test_connection),
                     selected = editor.connectionTestPassed,
-                    onClick = onTestConnection,
+                    onClick = {
+                        onTestConnection()
+                        val content = editor.m3uContent
+                        if (content.isNotBlank()) {
+                            summarizingFile = true
+                            summaryScope.launch {
+                                val computed = withContext(Dispatchers.Default) { m3uContentSummary(content) }
+                                fileSummary = computed
+                                summarizingFile = false
+                            }
+                        }
+                    },
                 )
                 ActionPill(label = stringResource(R.string.common_save), onClick = onSave)
                 if (editor.isEditing) {

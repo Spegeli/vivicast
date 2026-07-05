@@ -3,6 +3,7 @@ package com.vivicast.tv.core.network
 import android.util.Log
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
@@ -22,6 +23,12 @@ class NetworkClientFactory {
         trustAllCertificates: Boolean = false,
     ): OkHttpClient {
         val builder = OkHttpClient.Builder()
+            // Explicit timeouts: dead host fails at connect; a stalled but trickling
+            // transfer trips the read timeout instead of hanging. No callTimeout on
+            // purpose — it would kill legitimate large playlist/EPG downloads.
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val request = chain.request()
                     .newBuilder()
@@ -67,3 +74,6 @@ private fun String.normalizedUserAgent(): String =
 
 private const val USER_AGENT_HEADER = "User-Agent"
 private const val DEFAULT_USER_AGENT = "Vivicast/1.0"
+private const val CONNECT_TIMEOUT_SECONDS = 15L
+private const val READ_TIMEOUT_SECONDS = 30L
+private const val WRITE_TIMEOUT_SECONDS = 30L

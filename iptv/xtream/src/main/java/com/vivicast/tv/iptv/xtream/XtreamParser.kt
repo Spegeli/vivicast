@@ -4,6 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 interface XtreamParser {
+    fun parseUserInfo(json: String): XtreamUserInfo
+
     fun parseCategories(json: String): List<XtreamCategory>
 
     fun parseLiveStreams(json: String): List<XtreamLiveStream>
@@ -16,6 +18,15 @@ interface XtreamParser {
 }
 
 class DefaultXtreamParser : XtreamParser {
+    override fun parseUserInfo(json: String): XtreamUserInfo {
+        val userInfo = JSONObject(json).optJSONObject("user_info")
+        return XtreamUserInfo(
+            authenticated = userInfo?.int("auth") == 1,
+            expiresAtSeconds = userInfo?.long("exp_date"),
+            maxConnections = userInfo?.int("max_connections"),
+        )
+    }
+
     override fun parseCategories(json: String): List<XtreamCategory> =
         JSONArray(json).objects().mapNotNull { item ->
             val id = item.string("category_id") ?: return@mapNotNull null

@@ -27,7 +27,6 @@ class SettingsGeneralPanelTest {
                 onLaunchOnBootChanged = {},
                 onDoubleBackToExitChanged = {},
                 onBackgroundRefreshChanged = {},
-                onRememberSortingChanged = {},
                 onLanguageChanged = {},
                 onGlobalUserAgentChanged = {},
             )
@@ -37,7 +36,6 @@ class SettingsGeneralPanelTest {
         compose.onAllNodesWithText("Doppelte Zurück-Taste zum Beenden").assertCountEquals(1)
         compose.onAllNodesWithText("Sprache").assertCountEquals(1)
         compose.onAllNodesWithText("Hintergrundaktualisierung erlauben").assertCountEquals(1)
-        compose.onAllNodesWithText("Sortierung merken").assertCountEquals(1)
         compose.onAllNodesWithText("User-Agent").assertCountEquals(1)
         compose.onAllNodesWithText("Jetzt aktualisieren").assertCountEquals(0)
         compose.onAllNodesWithText("Vorbereitet").assertCountEquals(0)
@@ -53,7 +51,6 @@ class SettingsGeneralPanelTest {
                 onLaunchOnBootChanged = {},
                 onDoubleBackToExitChanged = {},
                 onBackgroundRefreshChanged = {},
-                onRememberSortingChanged = {},
                 onLanguageChanged = {},
                 onGlobalUserAgentChanged = { submitted = it },
             )

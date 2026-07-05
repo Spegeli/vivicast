@@ -28,7 +28,6 @@ class DataStoreUserPreferencesStore(
                     launchOnBoot = preferences[Keys.LaunchOnBoot] ?: false,
                     doubleBackToExit = preferences[Keys.DoubleBackToExit] ?: true,
                     backgroundRefreshEnabled = preferences[Keys.BackgroundRefreshEnabled] ?: true,
-                    rememberSorting = preferences[Keys.RememberSorting] ?: true,
                     globalUserAgent = preferences[Keys.GlobalUserAgent]?.takeIf { it.isNotBlank() }
                         ?: DEFAULT_GLOBAL_USER_AGENT,
                     lastSettingsSection = preferences[Keys.LastSettingsSection],
@@ -109,7 +108,6 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.LaunchOnBoot] = general.launchOnBoot
             preferences[Keys.DoubleBackToExit] = general.doubleBackToExit
             preferences[Keys.BackgroundRefreshEnabled] = general.backgroundRefreshEnabled
-            preferences[Keys.RememberSorting] = general.rememberSorting
             preferences[Keys.GlobalUserAgent] = general.globalUserAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
             preferences.setNullable(Keys.LastSettingsSection, general.lastSettingsSection)
         }
@@ -220,7 +218,6 @@ class DataStoreUserPreferencesStore(
         val LaunchOnBoot = booleanPreferencesKey("launch_on_boot")
         val DoubleBackToExit = booleanPreferencesKey("double_back_to_exit")
         val BackgroundRefreshEnabled = booleanPreferencesKey("background_refresh_enabled")
-        val RememberSorting = booleanPreferencesKey("remember_sorting")
         val GlobalUserAgent = stringPreferencesKey("global_user_agent")
         val LastSettingsSection = stringPreferencesKey("last_settings_section")
 

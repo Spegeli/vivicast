@@ -164,6 +164,14 @@ object VivicastMigrations {
             db.rebuildAndroidTvSearchEntriesAsMirror()
         }
     }
+
+    // Xtream account info persisted on the provider (expiry + max connections), refreshed on import.
+    val Migration7To8: Migration = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.addNullableIntegerColumn("providers", "xtreamExpiresAtMillis")
+            db.addNullableIntegerColumn("providers", "xtreamMaxConnections")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {
@@ -172,6 +180,10 @@ private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: S
 
 private fun SupportSQLiteDatabase.addBooleanColumn(tableName: String, columnName: String) {
     execSQL("ALTER TABLE $tableName ADD COLUMN $columnName INTEGER NOT NULL DEFAULT 0")
+}
+
+private fun SupportSQLiteDatabase.addNullableIntegerColumn(tableName: String, columnName: String) {
+    execSQL("ALTER TABLE $tableName ADD COLUMN $columnName INTEGER DEFAULT NULL")
 }
 
 private fun SupportSQLiteDatabase.migrateSourceConfigNames() {

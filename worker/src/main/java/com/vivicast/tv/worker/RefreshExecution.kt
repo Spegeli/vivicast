@@ -24,10 +24,12 @@ import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.XtreamParser
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.IOException
 
 class DefaultRefreshWorkerRunner(
     private val orchestrator: GlobalRefreshOrchestrator,
@@ -223,9 +225,21 @@ class DefaultPlaylistRefresher(
             seriesInfos = emptyList(),
         )
         catalogImportRepository.importXtreamCatalog(provider.id, catalog)
+        // Best-effort account snapshot (expiry + max connections). A user_info failure must NOT
+        // fail the catalog refresh that already succeeded, so it is isolated in runCatching.
+        runCatching {
+            val userInfo = xtreamParser.parseUserInfo(xtreamClient.getUserInfo(xtreamCredentials))
+            providerRepository.updateXtreamAccountInfo(
+                providerId = provider.id,
+                expiresAtMillis = userInfo.expiresAtSeconds?.let { it * MILLIS_PER_SECOND },
+                maxConnections = userInfo.maxConnections,
+            )
+        }
         return ProviderStatus.Active
     }
 }
+
+private const val MILLIS_PER_SECOND = 1_000L
 
 class DefaultSeriesDetailsRefresher(
     private val providerRepository: ProviderRepository,
@@ -364,15 +378,28 @@ class OkHttpTextFetcher(
 ) : TextFetcher {
     override suspend fun fetch(url: String): String =
         withContext(ioDispatcher) {
-            val request = Request.Builder()
-                .url(url)
-                .get()
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw RefreshHttpException(response.code)
+            withFetchRetry {
+                val request = Request.Builder()
+                    .url(url)
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw RefreshHttpException(response.code)
+                    }
+                    val body = response.body
+                    // Fast-fail on declared size; -1 (unknown) skips this branch.
+                    if (body.contentLength() > MAX_M3U_URL_BYTES) {
+                        throw M3uSourceTooLargeException(body.contentLength())
+                    }
+                    val source = body.source()
+                    // Buffer at most cap+1 bytes; if the source can serve that many, the
+                    // body exceeds the cap and we abort before downloading the rest.
+                    if (source.request(MAX_M3U_URL_BYTES + 1)) {
+                        throw M3uSourceTooLargeException(source.buffer.size)
+                    }
+                    body.string()
                 }
-                response.body.string()
             }
         }
 }
@@ -483,6 +510,38 @@ class RefreshImportException(message: String) : RuntimeException(message)
 class RefreshHttpException(
     val statusCode: Int,
 ) : RuntimeException("Refresh request failed with HTTP status $statusCode.")
+
+/** URL M3U playlist exceeds [MAX_M3U_URL_BYTES]; aborted before fully downloading. */
+class M3uSourceTooLargeException(
+    val byteCount: Long,
+) : RuntimeException("M3U playlist exceeds the $MAX_M3U_URL_BYTES byte limit (got $byteCount).")
+
+// ponytail: 32MB cap + full-in-RAM parse; upgrade to a streaming parser if mega-playlists OOM.
+private const val MAX_M3U_URL_BYTES: Long = 32L * 1024 * 1024
+
+private const val MAX_FETCH_ATTEMPTS = 2
+private const val RETRY_BASE_DELAY_MS = 750L
+private const val RETRY_MAX_DELAY_MS = 3_000L
+
+/**
+ * Retries transient failures only: [IOException] (timeouts/connect) and HTTP 5xx.
+ * 4xx (credentials/not-found) and non-transient errors (e.g. too-large) propagate
+ * immediately. CancellationException is neither type, so it is never swallowed.
+ */
+private suspend fun <T> withFetchRetry(block: suspend () -> T): T {
+    var attempt = 1
+    while (true) {
+        try {
+            return block()
+        } catch (e: IOException) {
+            if (attempt >= MAX_FETCH_ATTEMPTS) throw e
+        } catch (e: RefreshHttpException) {
+            if (e.statusCode < 500 || attempt >= MAX_FETCH_ATTEMPTS) throw e
+        }
+        delay((RETRY_BASE_DELAY_MS * attempt).coerceAtMost(RETRY_MAX_DELAY_MS))
+        attempt++
+    }
+}
 
 private fun Throwable.toProviderStatus(): ProviderStatus =
     when (this) {

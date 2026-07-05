@@ -12,6 +12,28 @@ class DefaultXtreamParserTest {
     private val parser = DefaultXtreamParser()
 
     @Test
+    fun parseUserInfoReadsAuthExpiryAndConnections() {
+        val info = parser.parseUserInfo(
+            """
+            {"user_info":{"auth":1,"status":"Active","exp_date":"1735689600","max_connections":"2","active_cons":"1"}}
+            """.trimIndent(),
+        )
+
+        assertTrue(info.authenticated)
+        assertEquals(1735689600L, info.expiresAtSeconds)
+        assertEquals(2, info.maxConnections)
+    }
+
+    @Test
+    fun parseUserInfoTreatsAuthZeroAsUnauthenticatedWithNullableFields() {
+        val info = parser.parseUserInfo("""{"user_info":{"auth":0}}""")
+
+        assertFalse(info.authenticated)
+        assertEquals(null, info.expiresAtSeconds)
+        assertEquals(null, info.maxConnections)
+    }
+
+    @Test
     fun parseCategoriesReadsIdsAndNames() {
         val categories = parser.parseCategories(
             """

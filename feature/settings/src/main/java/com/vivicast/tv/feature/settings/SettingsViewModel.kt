@@ -247,8 +247,6 @@ internal class SettingsViewModel(
 
     fun onDoubleBackToExitChanged(enabled: Boolean) = updateGeneral { it.copy(doubleBackToExit = enabled) }
 
-    fun onRememberSortingChanged(enabled: Boolean) = updateGeneral { it.copy(rememberSorting = enabled) }
-
     fun onGlobalUserAgentChanged(userAgent: String) = updateGeneral { it.copy(globalUserAgent = userAgent) }
 
     /** Persists the preference only; the scheduler side effect stays in the app layer. */
@@ -332,7 +330,6 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
         launchOnBoot = general.launchOnBoot,
         doubleBackToExit = general.doubleBackToExit,
         backgroundRefreshEnabled = general.backgroundRefreshEnabled,
-        rememberSorting = general.rememberSorting,
         appLanguage = appearance.language.toSettingsLanguage(),
         globalUserAgent = general.globalUserAgent,
     ),

@@ -461,6 +461,8 @@ class DefaultPlaybackStreamResolverTest {
 
         override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
 
+        override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) = Unit
+
         override suspend fun deleteProvider(providerId: String) = Unit
     }
 

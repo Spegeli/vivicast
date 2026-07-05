@@ -28,7 +28,6 @@
     <string name="settings_double_back">Double back to exit</string>
     <string name="settings_language">Language</string>
     <string name="settings_background_refresh">Allow background refresh</string>
-    <string name="settings_remember_sorting">Remember sorting</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->
@@ -445,7 +444,6 @@
     <string name="settings_help_double_back">Requires a second back confirmation from the top navigation.</string>
     <string name="settings_help_language">System default or fixed app language.</string>
     <string name="settings_help_background_refresh">Refresh playlists and EPG in the background.</string>
-    <string name="settings_help_remember_sorting">Retain local list order per view.</string>
     <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty uses the app default.</string>
 
     <!-- Settings - Playback help texts -->
@@ -702,9 +700,10 @@
     <string name="settings_provider_file_import_only">File is import-only. No permanent copy is stored.</string>
     <string name="settings_provider_file_ready_test">File ready. Check and save.</string>
     <string name="settings_provider_file_pick">Select file</string>
-    <string name="settings_provider_file_selected">%1$s • %2$d channels</string>
     <string name="settings_provider_file_label_empty">File:</string>
-    <string name="settings_provider_file_label">File: %1$s • %2$d channels</string>
+    <string name="settings_provider_file_label">File: %1$s • %2$d channels, %3$d movies, %4$d series</string>
+    <string name="settings_provider_file_needs_check">File: %1$s • press Check file for details</string>
+    <string name="settings_provider_file_analyzing">File: %1$s • analyzing…</string>
     <string name="settings_provider_file_test">Check file</string>
     <string name="settings_provider_file_test_ok">File valid</string>
     <string name="settings_provider_file_test_fail">File invalid</string>
@@ -727,6 +726,8 @@
     <string name="settings_provider_name_placeholder">Playlist name</string>
     <string name="settings_provider_url_required">URL</string>
     <string name="settings_provider_updated_format">Updated: %1$s</string>
+    <string name="settings_provider_expiry_format">Expires: %1$s</string>
+    <string name="settings_provider_max_connections_format">Max. connections: %1$d</string>
     <string name="settings_provider_live_tv_off">Live TV Off</string>
     <string name="settings_provider_movies_off">Movies Off</string>
     <string name="settings_provider_series_off">Series Off</string>

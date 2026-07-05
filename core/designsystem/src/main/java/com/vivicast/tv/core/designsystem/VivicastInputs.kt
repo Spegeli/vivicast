@@ -1,5 +1,6 @@
 package com.vivicast.tv.core.designsystem
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -87,6 +92,7 @@ fun VivicastTextField(
     label: String? = null,
     placeholder: String = "",
     secret: Boolean = false,
+    allowReveal: Boolean = false,
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     height: Dp = 58.dp,
@@ -97,6 +103,7 @@ fun VivicastTextField(
     onTrailingAction: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf(false) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         if (label != null) {
             BasicText(
@@ -108,51 +115,106 @@ fun VivicastTextField(
                 ),
             )
         }
-        BasicTextField(
-            value = value,
-            onValueChange = { if (maxLength != null) onValueChange(it.take(maxLength)) else onValueChange(it) },
-            singleLine = singleLine,
-            keyboardOptions = keyboardOptions,
-            textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
-            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .then(fieldModifier)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
-                .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
-                .border(
-                    width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                    color = when {
-                        isError -> VivicastColors.Error
-                        focused -> VivicastColors.FocusRing
-                        else -> Color(0x66344A62)
-                    },
-                    shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
-                )
-                .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
-            decorationBox = { innerTextField ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty() && placeholder.isNotEmpty()) {
-                        BasicText(
-                            text = placeholder,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
-                        )
+        val field: @Composable (Modifier) -> Unit = { widthModifier ->
+            BasicTextField(
+                value = value,
+                onValueChange = { if (maxLength != null) onValueChange(it.take(maxLength)) else onValueChange(it) },
+                singleLine = singleLine,
+                keyboardOptions = keyboardOptions,
+                textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
+                visualTransformation = if (secret && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
+                modifier = widthModifier
+                    .height(height)
+                    .then(fieldModifier)
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { focused = it.isFocused }
+                    .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
+                    .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
+                    .border(
+                        width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                        color = when {
+                            isError -> VivicastColors.Error
+                            focused -> VivicastColors.FocusRing
+                            else -> Color(0x66344A62)
+                        },
+                        shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
+                    )
+                    .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty() && placeholder.isNotEmpty()) {
+                            BasicText(
+                                text = placeholder,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
+                            )
+                        }
+                        innerTextField()
                     }
-                    innerTextField()
-                }
-            },
-        )
+                },
+            )
+        }
+        if (secret && allowReveal) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            ) {
+                field(Modifier.weight(1f))
+                PasswordRevealToggle(revealed = revealed, onClick = { revealed = !revealed }, boxSize = height)
+            }
+        } else {
+            field(Modifier.fillMaxWidth())
+        }
         if (trailingActionLabel != null) {
             ActionPill(
                 label = trailingActionLabel,
                 modifier = Modifier.width(150.dp),
                 onClick = onTrailingAction,
             )
+        }
+    }
+}
+
+/** Focusable eye toggle that reveals/hides a secret text field. Slash overlay = currently hidden. */
+@Composable
+private fun PasswordRevealToggle(
+    revealed: Boolean,
+    onClick: () -> Unit,
+    boxSize: Dp,
+) {
+    VivicastFocusSurface(
+        modifier = Modifier.size(boxSize),
+        onClick = onClick,
+        contentPadding = VivicastSpacing.Space2,
+        shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
+        focusScale = VivicastFocusDefaults.ScaleButton,
+    ) { focused ->
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.size(22.dp)) {
+                val color = if (focused) Color.White else VivicastColors.TextSecondary
+                val sw = 1.8f
+                val stroke = Stroke(width = sw, cap = StrokeCap.Round)
+                val w = size.width
+                val h = size.height
+                drawOval(
+                    color = color,
+                    topLeft = Offset(w * 0.08f, h * 0.30f),
+                    size = Size(w * 0.84f, h * 0.40f),
+                    style = stroke,
+                )
+                drawCircle(color = color, radius = w * 0.13f, center = Offset(w * 0.50f, h * 0.50f), style = stroke)
+                if (!revealed) {
+                    drawLine(
+                        color = color,
+                        start = Offset(w * 0.16f, h * 0.18f),
+                        end = Offset(w * 0.84f, h * 0.82f),
+                        strokeWidth = sw,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
         }
     }
 }

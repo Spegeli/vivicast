@@ -279,6 +279,10 @@ private fun VivicastApp(
                     text.isNullOrBlank() -> Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
                     text.length > MAX_M3U_INLINE_SOURCE_CHARS ->
                         Toast.makeText(context, context.getString(R.string.main_m3u_file_too_large), Toast.LENGTH_SHORT).show()
+                    // Cheap structure sanity check on pick; full channel/movie/series classification runs
+                    // later on "Check file". A valid M3U has at least one #EXTINF entry.
+                    !text.contains("#EXTINF", ignoreCase = true) ->
+                        Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
                     else -> {
                         onContent(fileName, text)
                         Toast.makeText(context, context.getString(R.string.main_m3u_file_imported), Toast.LENGTH_SHORT).show()

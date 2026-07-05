@@ -5,6 +5,13 @@ data class XtreamCategory(
     val name: String,
 )
 
+/** Parsed `user_info` from `player_api.php`. `expiresAtSeconds` is Unix seconds; null = unlimited/unknown. */
+data class XtreamUserInfo(
+    val authenticated: Boolean,
+    val expiresAtSeconds: Long?,
+    val maxConnections: Int?,
+)
+
 data class XtreamLiveStream(
     val remoteId: String,
     val name: String,

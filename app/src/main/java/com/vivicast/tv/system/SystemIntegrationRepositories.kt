@@ -116,6 +116,10 @@ class SystemIntegrationProviderRepository(
         syncWatchNextSafely()
     }
 
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) {
+        delegate.updateXtreamAccountInfo(providerId, expiresAtMillis, maxConnections)
+    }
+
     override suspend fun deleteProvider(providerId: String) {
         delegate.deleteProvider(providerId)
         syncWatchNextSafely()

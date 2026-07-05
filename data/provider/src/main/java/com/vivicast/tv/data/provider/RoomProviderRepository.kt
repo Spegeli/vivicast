@@ -167,6 +167,10 @@ class RoomProviderRepository(
         }
     }
 
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) {
+        providerDao.updateXtreamAccountInfo(providerId, expiresAtMillis, maxConnections)
+    }
+
     override suspend fun deleteProvider(providerId: String) {
         val existing = providerDao.getProvider(providerId)
         database.withTransaction {
@@ -292,6 +296,8 @@ private fun ProviderEntity.toDomain(): Provider =
         logoPriority = logoPriority,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        xtreamExpiresAtMillis = xtreamExpiresAtMillis,
+        xtreamMaxConnections = xtreamMaxConnections,
     )
 
 private fun Provider.toEntity(): ProviderEntity =
@@ -310,6 +316,8 @@ private fun Provider.toEntity(): ProviderEntity =
         logoPriority = logoPriority,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        xtreamExpiresAtMillis = xtreamExpiresAtMillis,
+        xtreamMaxConnections = xtreamMaxConnections,
     )
 
 private val ProviderType.storageValue: String

@@ -36,7 +36,6 @@ data class GeneralPreferences(
     val launchOnBoot: Boolean = false,
     val doubleBackToExit: Boolean = true,
     val backgroundRefreshEnabled: Boolean = true,
-    val rememberSorting: Boolean = true,
     val globalUserAgent: String = DEFAULT_GLOBAL_USER_AGENT,
     val lastSettingsSection: String? = null,
 )

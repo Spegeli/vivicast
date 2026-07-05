@@ -288,7 +288,6 @@ fun SettingsRoute(
                                 viewModel.onBackgroundRefreshChanged(enabled)
                                 onBackgroundRefreshChanged(enabled)
                             },
-                            onRememberSortingChanged = viewModel::onRememberSortingChanged,
                             onLanguageChanged = { language ->
                                 viewModel.onLanguageChanged(language)
                                 onLanguageChanged(language)
@@ -307,6 +306,11 @@ fun SettingsRoute(
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
                             firstFocusModifier = detailFirstFocusModifier,
+                            // Park focus on the (always-present) section button before the overview
+                            // swaps to the inline editor, so focus can't escape to the top nav bar.
+                            onParkFocusBeforeEditor = {
+                                runCatching { sectionFocusRequesters.getValue(sectionPlaylists).requestFocus() }
+                            },
                         )
                         sectionEpg -> EpgSettingsPanel(
                             state = settingsUiState.epg,
