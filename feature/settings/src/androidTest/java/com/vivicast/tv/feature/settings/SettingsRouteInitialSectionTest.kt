@@ -26,6 +26,7 @@ import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -67,13 +68,16 @@ class SettingsRouteInitialSectionTest {
     }
 
     @Test
-    fun playlistAddActionOpensNameStep() {
+    fun playlistAddActionOpensInlineForm() {
         setSettingsRouteContent(initialSelectedSection = "Wiedergabelisten")
 
         compose.onNodeWithTag("settings-playlist-add-action").performClick()
 
-        compose.onNodeWithText("Name *").assertIsDisplayed()
-        compose.onNodeWithText("Weiter").assertIsDisplayed()
+        // Inline single-page form (no step wizard): all three source types are offered at once,
+        // which the old Name -> Type -> ... step flow never showed together.
+        compose.onNodeWithText("M3U URL").assertIsDisplayed()
+        compose.onNodeWithText("M3U Datei").assertIsDisplayed()
+        compose.onNodeWithText("Xtream Codes").assertIsDisplayed()
     }
 
     @Test
@@ -92,7 +96,7 @@ class SettingsRouteInitialSectionTest {
                 mediaCacheStore = EmptyMediaCacheStore,
                 aboutAppState = AboutAppState(),
                 initialSelectedSection = initialSelectedSection,
-                onTestProviderConnection = { null },
+                onTestProviderConnection = { ProviderConnectionTestResult(errorMessage = null, summary = null) },
                 onProviderSaved = {},
                 onBackgroundRefreshChanged = {},
                 onRunGlobalRefresh = {},

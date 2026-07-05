@@ -103,6 +103,7 @@ internal fun ProviderTextField(
     value: String,
     placeholder: String,
     onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
     secret: Boolean = false,
     allowReveal: Boolean = false,
     singleLine: Boolean = true,
@@ -116,6 +117,7 @@ internal fun ProviderTextField(
     VivicastTextField(
         value = value,
         onValueChange = onValueChange,
+        modifier = modifier,
         // ponytail: dialogs stay compact — no label row above the field; the placeholder carries the
         // hint. The `label` param is kept so call sites document each field's purpose in code.
         label = null,

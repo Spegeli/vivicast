@@ -78,8 +78,10 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.M3uContentSummary
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
+import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -107,7 +109,7 @@ internal fun ProviderSettingsPanel(
     onUpdateProvider: suspend (ProviderUpdateRequest) -> Result<ProviderSaveResult>,
     onSetProviderEnabled: suspend (String, Boolean) -> Result<Unit>,
     onDeleteProvider: suspend (String) -> Result<Unit>,
-    onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
+    onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
@@ -116,22 +118,21 @@ internal fun ProviderSettingsPanel(
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf(ProviderEditorState.newProvider(ProviderType.M3u)) }
-    var editorStep by remember { mutableStateOf(ProviderEditorStep.Name) }
     var showEditor by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Provider?>(null) }
     var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    // M3U content breakdown from the last passed test — previews the URL just like the file check.
+    var connectionSummary by remember { mutableStateOf<M3uContentSummary?>(null) }
+    // Reason a test failed, shown as a red hint under the source fields (never a note).
+    var connectionError by remember { mutableStateOf<String?>(null) }
     // Where focus should land once the overview returns after leaving the inline editor.
     var pendingOverviewFocus by remember { mutableStateOf<OverviewFocusTarget?>(null) }
-    val strProviderSaved = stringResource(R.string.settings_provider_msg_playlist_saved)
     val strProviderEnabled = stringResource(R.string.settings_provider_msg_enabled)
     val strProviderDisabled = stringResource(R.string.settings_provider_msg_disabled)
     val strProviderSaveFailed = stringResource(R.string.settings_provider_msg_save_failed)
     val strProviderStatusFailed = stringResource(R.string.settings_provider_msg_status_failed)
     val strProviderDeleteFailed = stringResource(R.string.settings_provider_msg_delete_failed)
-    val strProviderChecking = stringResource(R.string.settings_provider_msg_checking)
-    val strProviderConnected = stringResource(R.string.settings_provider_msg_connected)
-    val strProviderDuplicate = stringResource(R.string.settings_provider_msg_name_check)
     val strProviderSectionBody = stringResource(R.string.settings_provider_section_body)
     val strValidationNameMissing = stringResource(R.string.validation_name_missing)
     val strValidationContentType = stringResource(R.string.validation_content_type_required)
@@ -147,7 +148,7 @@ internal fun ProviderSettingsPanel(
         strValidationConnTest, strValidationM3uUrl, strValidationM3uFile,
     )
     fun ProviderEditorState.connectionTestRequestMessageResolved() = connectionTestRequestMessage(
-        strValidationNameMissing, strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
+        strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
         strValidationM3uUrl, strValidationM3uFile,
     )
 
@@ -185,15 +186,17 @@ internal fun ProviderSettingsPanel(
         null
     }
 
-    if (!(showEditor && editor.isEditing)) Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+    if (!showEditor) Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
         ProviderOverviewPanel(
             providers = providers,
             message = message,
             firstFocusModifier = firstFocusModifier,
             onAddProvider = {
+                // Park focus on the (always-present) section button before the overview — and with it
+                // the focused add row — is removed, else focus escapes to the top nav bar (jumps Home).
+                onParkFocusBeforeEditor()
                 selectedProviderId = null
                 editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                editorStep = ProviderEditorStep.Name
                 showEditor = true
                 message = null
                 connectionTestStatus = ConnectionTestStatus.Idle
@@ -218,9 +221,9 @@ internal fun ProviderSettingsPanel(
                 onParkFocusBeforeEditor()
                 selectedProviderId = provider.id
                 editor = ProviderEditorState.from(provider)
-                editorStep = ProviderEditorStep.Edit
                 showEditor = true
                 message = null
+                connectionTestStatus = ConnectionTestStatus.Idle
                 scope.launch {
                     val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
                     if (selectedProviderId == provider.id) {
@@ -237,191 +240,151 @@ internal fun ProviderSettingsPanel(
     val dismissEditor: () -> Unit = {
         // Park focus before the inline editor is removed, else focus escapes to the top nav bar.
         onParkFocusBeforeEditor()
-        pendingOverviewFocus = editor.providerId?.let(OverviewFocusTarget::Card)
+        // Return focus to the card just edited, or the add button when adding (no providerId yet).
+        pendingOverviewFocus = editor.providerId?.let(OverviewFocusTarget::Card) ?: OverviewFocusTarget.AddButton
         selectedProviderId = null
         editor = ProviderEditorState.newProvider(ProviderType.M3u)
-        editorStep = ProviderEditorStep.Name
         showEditor = false
         message = null
+        connectionTestStatus = ConnectionTestStatus.Idle
     }
 
-    if (showEditor && !editor.isEditing) {
-        VivicastDialog(
-            onDismiss = dismissEditor,
-            width = VivicastDialogWidth.Wide,
-            heightCap = 560.dp,
-            modifier = Modifier.testTag("settings-provider-editor-dialog"),
-        ) {
-                    ProviderAddFlow(
-                        editor = editor,
-                        step = editorStep,
-                        duplicateName = duplicateName,
-                        duplicateUrlName = duplicateUrlName,
-                        message = message,
-                        onStepChange = {
-                            editorStep = it
-                            connectionTestStatus = ConnectionTestStatus.Idle
-                        },
-                        onEditorChange = {
-                            editor = it
-                            message = null
-                            connectionTestStatus = ConnectionTestStatus.Idle
-                        },
-                        connectionTestStatus = connectionTestStatus,
-                        onTestConnection = {
-                            val validationMessage = editor.connectionTestRequestMessageResolved()
-                            when {
-                                duplicateName -> message = strProviderDuplicate
-                                duplicateUrlName != null -> Unit
-                                validationMessage != null -> message = validationMessage
-                                else -> {
-                                    message = null
-                                    connectionTestStatus = ConnectionTestStatus.Testing
-                                    scope.launch {
-                                        val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
-                                        if (errorMessage == null) {
-                                            editor = editor.copy(connectionTestPassed = true)
-                                            connectionTestStatus = ConnectionTestStatus.Passed
-                                            message = null
-                                        } else {
-                                            editor = editor.copy(connectionTestPassed = false)
-                                            connectionTestStatus = ConnectionTestStatus.Failed
-                                            message = errorMessage
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        onSave = {
-                            if (duplicateName) {
-                                message = strProviderDuplicate
-                                return@ProviderAddFlow
-                            }
-                            if (duplicateUrlName != null) {
-                                return@ProviderAddFlow
-                            }
-                            val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
-                            if (validationMessage != null) {
-                                message = validationMessage
-                                return@ProviderAddFlow
-                            }
-                            scope.launch {
-                                connectionTestStatus = ConnectionTestStatus.Testing
-                                message = null
-                                val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
-                                if (errorMessage != null) {
-                                    editor = editor.copy(connectionTestPassed = false)
-                                    connectionTestStatus = ConnectionTestStatus.Failed
-                                    message = errorMessage
-                                    return@launch
-                                }
+    if (showEditor) {
+        BackHandler(onBack = dismissEditor)
+        ProviderEditor(
+            editor = editor,
+            duplicateName = duplicateName,
+            duplicateUrlName = duplicateUrlName,
+            message = message,
+            connectionTestStatus = connectionTestStatus,
+            connectionSummary = connectionSummary,
+            connectionError = connectionError.takeIf { connectionTestStatus == ConnectionTestStatus.Failed },
+            actions = ProviderEditorActions(
+            onEditorChange = {
+                editor = it
+                message = null
+                connectionTestStatus = ConnectionTestStatus.Idle
+                connectionSummary = null
+            },
+            onTestConnection = {
+                // Test only checks the connection — name/URL duplicates are irrelevant here (they are
+                // flagged inline on the fields and enforced at Save). Ignore repeat taps while running.
+                if (connectionTestStatus != ConnectionTestStatus.Testing) {
+                    val validationMessage = editor.connectionTestRequestMessageResolved()
+                    if (validationMessage != null) {
+                        message = validationMessage
+                    } else {
+                        message = null
+                        connectionTestStatus = ConnectionTestStatus.Testing
+                        scope.launch {
+                            val result = onTestProviderConnection(editor.toConnectionTestRequest())
+                            if (result.errorMessage == null) {
                                 editor = editor.copy(connectionTestPassed = true)
                                 connectionTestStatus = ConnectionTestStatus.Passed
-                                onCreateProvider(editor.toCreateRequest())
+                                connectionSummary = result.summary
+                                connectionError = null
+                                message = null
+                            } else {
+                                editor = editor.copy(connectionTestPassed = false)
+                                connectionTestStatus = ConnectionTestStatus.Failed
+                                connectionSummary = null
+                                connectionError = result.errorMessage
+                                message = null
+                            }
+                        }
+                    }
+                }
+            },
+            onSave = {
+                // Duplicate name/URL are guarded in ProviderEditor (it jumps focus to the bad field),
+                // so a save that reaches here is free of duplicate conflicts.
+                when {
+                    connectionTestStatus == ConnectionTestStatus.Testing -> Unit
+                    editor.isEditing -> {
+                        val validationMessage = editor.validationMessageResolved(requireConnectionTest = true)
+                        if (validationMessage != null) {
+                            message = validationMessage
+                        } else {
+                            scope.launch {
+                                onUpdateProvider(editor.toUpdateRequest())
                                     .onSuccess { result ->
-                                        selectedProviderId = result.provider.id
-                                        editor = ProviderEditorState.from(result.provider)
-                                        editorStep = ProviderEditorStep.Edit
-                                        connectionTestStatus = ConnectionTestStatus.Idle
+                                        onParkFocusBeforeEditor()
+                                        pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
+                                        selectedProviderId = null
+                                        editor = ProviderEditorState.newProvider(ProviderType.M3u)
                                         showEditor = false
+                                        connectionTestStatus = ConnectionTestStatus.Idle
                                         onProviderSaved(result.provider.id)
+                                        message = null
                                     }
                                     .onFailure { error ->
                                         message = strProviderSaveFailed.format(error.message ?: "?")
                                     }
                             }
-                        },
-                        onCancel = {
-                            selectedProviderId = null
-                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                            editorStep = ProviderEditorStep.Name
-                            connectionTestStatus = ConnectionTestStatus.Idle
-                            showEditor = false
-                            message = null
-                        },
-                        onPickM3uFile = onPickM3uFile,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-        }
-    }
-
-    if (showEditor && editor.isEditing) {
-        BackHandler(onBack = dismissEditor)
-        ProviderEditor(
-                    editor = editor,
-                    duplicateName = duplicateName,
-                    message = message,
-                    onEditorChange = {
-                        editor = it
-                        message = null
-                    },
-                    onTestConnection = {
-                        val validationMessage = editor.connectionTestRequestMessageResolved()
-                        when {
-                            duplicateName -> message = strProviderDuplicate
-                            validationMessage != null -> message = validationMessage
-                            else -> {
-                                message = strProviderChecking
-                                scope.launch {
-                                    val errorMessage = onTestProviderConnection(editor.toConnectionTestRequest())
-                                    if (errorMessage == null) {
-                                        editor = editor.copy(connectionTestPassed = true)
-                                        message = strProviderConnected
-                                    } else {
-                                        editor = editor.copy(connectionTestPassed = false)
-                                        message = errorMessage
-                                    }
+                        }
+                    }
+                    else -> {
+                        // Add: no prior manual test required. Save validates, tests implicitly, then
+                        // creates. Only the active source type is sent; the repository writes credentials
+                        // by request.type + m3uSourceMode, so drafts of the other types never persist.
+                        val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
+                        if (validationMessage != null) {
+                            message = validationMessage
+                        } else {
+                            scope.launch {
+                                connectionTestStatus = ConnectionTestStatus.Testing
+                                message = null
+                                val result = onTestProviderConnection(editor.toConnectionTestRequest())
+                                if (result.errorMessage != null) {
+                                    editor = editor.copy(connectionTestPassed = false)
+                                    connectionTestStatus = ConnectionTestStatus.Failed
+                                    connectionSummary = null
+                                    connectionError = result.errorMessage
+                                    message = null
+                                } else {
+                                    editor = editor.copy(connectionTestPassed = true)
+                                    connectionTestStatus = ConnectionTestStatus.Passed
+                                    connectionSummary = result.summary
+                                    connectionError = null
+                                    onCreateProvider(editor.toCreateRequest())
+                                        .onSuccess { result ->
+                                            onParkFocusBeforeEditor()
+                                            pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
+                                            selectedProviderId = null
+                                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                                            showEditor = false
+                                            connectionTestStatus = ConnectionTestStatus.Idle
+                                            onProviderSaved(result.provider.id)
+                                            message = null
+                                        }
+                                        .onFailure { error ->
+                                            message = strProviderSaveFailed.format(error.message ?: "?")
+                                        }
                                 }
                             }
                         }
-                    },
-                    onSave = {
-                    if (duplicateName) {
-                        message = strProviderDuplicate
-                        return@ProviderEditor
                     }
-                    val validationMessage = editor.validationMessageResolved(requireConnectionTest = true)
-                    if (validationMessage != null) {
-                        message = validationMessage
-                        return@ProviderEditor
-                    }
-                    scope.launch {
-                        val saveResult = if (editor.isEditing) {
-                            onUpdateProvider(editor.toUpdateRequest())
-                        } else {
-                            onCreateProvider(editor.toCreateRequest())
+                }
+            },
+            onCancel = dismissEditor,
+            onToggleEnabled = toggleEnabled@{
+                val provider = providers.firstOrNull { it.id == editor.providerId } ?: return@toggleEnabled
+                scope.launch {
+                    val enabled = !provider.isActive
+                    onSetProviderEnabled(provider.id, enabled)
+                        .onSuccess {
+                            message = if (enabled) strProviderEnabled else strProviderDisabled
                         }
-                        saveResult.onSuccess { result ->
-                            onParkFocusBeforeEditor()
-                            pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
-                            selectedProviderId = null
-                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                            editorStep = ProviderEditorStep.Name
-                            showEditor = false
-                            onProviderSaved(result.provider.id)
-                            message = strProviderSaved
-                        }.onFailure { error ->
-                            message = strProviderSaveFailed.format(error.message ?: "?")
-                        }
-                    }
-                    },
-                    onToggleEnabled = {
-                    val provider = providers.firstOrNull { it.id == editor.providerId } ?: return@ProviderEditor
-                    scope.launch {
-                        val enabled = !provider.isActive
-                        onSetProviderEnabled(provider.id, enabled)
-                            .onSuccess {
-                                message = if (enabled) strProviderEnabled else strProviderDisabled
-                            }
-                            .onFailure { error -> message = strProviderStatusFailed.format(error.message ?: "?") }
-                    }
-                    },
-                    onDelete = {
-                    pendingDelete = providers.firstOrNull { it.id == editor.providerId }
-                    },
-                    onPickM3uFile = onPickM3uFile,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                        .onFailure { error -> message = strProviderStatusFailed.format(error.message ?: "?") }
+                }
+            },
+            onDelete = {
+                pendingDelete = providers.firstOrNull { it.id == editor.providerId }
+            },
+            onPickM3uFile = onPickM3uFile,
+            ),
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 
     pendingDelete?.let { provider ->

@@ -39,6 +39,15 @@ data class ProviderSaveResult(
     val hasDuplicateName: Boolean,
 )
 
+/**
+ * Outcome of a connection test. [errorMessage] non-null means it failed (already localized by the App
+ * layer). On success [summary] carries the M3U content breakdown to preview (null for Xtream).
+ */
+data class ProviderConnectionTestResult(
+    val errorMessage: String?,
+    val summary: M3uContentSummary?,
+)
+
 sealed interface ProviderCredentials {
     data class M3u(
         val url: String? = null,

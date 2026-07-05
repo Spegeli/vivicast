@@ -22,11 +22,13 @@ class TestProviderConnectionUseCaseTest {
     @Test
     fun m3u_urlMode_succeedsWithNonEmptyPlaylist() = runBlocking {
         val fetcher = FakeFetcher(result = "#EXTM3U")
-        val useCase = useCase(m3u = FakeM3uParser(channels = 1), fetchText = fetcher)
+        val useCase = useCase(m3u = FakeM3uParser(channels = 3), fetchText = fetcher)
 
-        useCase.test(m3uRequest(url = "http://list.m3u")) // no throw = success
+        val summary = useCase.test(m3uRequest(url = "http://list.m3u")) // no throw = success
 
         assertEquals("http://list.m3u", fetcher.lastUrl)
+        // Fake channels carry no movie/series markers, so all classify as live channels.
+        assertEquals(3, summary?.channels)
     }
 
     @Test

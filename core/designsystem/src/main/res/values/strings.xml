@@ -519,7 +519,7 @@
     <string name="settings_provider_title_edit">Wiedergabeliste bearbeiten</string>
     <string name="settings_provider_title_new">Wiedergabeliste hinzufügen</string>
     <string name="settings_provider_msg_name_exists">Name existiert bereits.</string>
-    <string name="settings_provider_msg_checking">Verbindung wird geprüft.</string>
+    <string name="settings_provider_msg_checking">Wird getestet…</string>
     <string name="settings_provider_msg_connected">Verbindung erfolgreich.</string>
     <string name="settings_provider_msg_playlist_saved">Wiedergabeliste gespeichert. Import wurde gestartet.</string>
     <string name="settings_provider_msg_enabled">Wiedergabeliste aktiviert.</string>
@@ -701,8 +701,10 @@
     <string name="settings_provider_file_import_only">Datei wird nur importiert. Es wird keine dauerhafte Kopie gespeichert.</string>
     <string name="settings_provider_file_ready_test">Datei bereit. Prüfen und speichern.</string>
     <string name="settings_provider_file_pick">Datei auswählen</string>
+    <string name="settings_provider_file_name">Datei: %1$s</string>
     <string name="settings_provider_file_label_empty">Datei:</string>
     <string name="settings_provider_file_label">Datei: %1$s • %2$d Kanäle, %3$d Filme, %4$d Serien</string>
+    <string name="settings_provider_url_label">In dieser Wiedergabeliste gefunden: %1$d Kanäle, %2$d Filme, %3$d Serien</string>
     <string name="settings_provider_file_needs_check">Datei: %1$s • »Datei prüfen« für Details</string>
     <string name="settings_provider_file_analyzing">Datei: %1$s • analysiere…</string>
     <string name="settings_provider_file_test">Datei prüfen</string>
@@ -748,9 +750,9 @@
     <string name="settings_provider_content_section">Inhalte</string>
     <string name="settings_provider_interval_label">Intervall</string>
     <string name="settings_provider_update_title">Aktualisierung</string>
-    <string name="settings_provider_test_connection">Verbindung testen</string>
-    <string name="settings_provider_test_ok">Verbunden</string>
-    <string name="settings_provider_test_fail">Nicht erreichbar</string>
+    <string name="settings_provider_test_connection">Testen</string>
+    <string name="settings_provider_test_ok">Erfolgreich</string>
+    <string name="settings_provider_test_fail">Nicht erfolgreich</string>
     <string name="settings_provider_toggle_enabled">Aktiv/Aus</string>
     <string name="settings_provider_no_content">Keine Inhalte ausgewählt</string>
 

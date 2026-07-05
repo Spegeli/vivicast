@@ -518,7 +518,7 @@
     <string name="settings_provider_title_edit">Edit playlist</string>
     <string name="settings_provider_title_new">Add playlist</string>
     <string name="settings_provider_msg_name_exists">Name already exists.</string>
-    <string name="settings_provider_msg_checking">Checking connection.</string>
+    <string name="settings_provider_msg_checking">Testing…</string>
     <string name="settings_provider_msg_connected">Connection successful.</string>
     <string name="settings_provider_msg_playlist_saved">Playlist saved. Import has started.</string>
     <string name="settings_provider_msg_enabled">Playlist enabled.</string>
@@ -700,8 +700,10 @@
     <string name="settings_provider_file_import_only">File is import-only. No permanent copy is stored.</string>
     <string name="settings_provider_file_ready_test">File ready. Check and save.</string>
     <string name="settings_provider_file_pick">Select file</string>
+    <string name="settings_provider_file_name">File: %1$s</string>
     <string name="settings_provider_file_label_empty">File:</string>
     <string name="settings_provider_file_label">File: %1$s • %2$d channels, %3$d movies, %4$d series</string>
+    <string name="settings_provider_url_label">Found in this playlist: %1$d channels, %2$d movies, %3$d series</string>
     <string name="settings_provider_file_needs_check">File: %1$s • press Check file for details</string>
     <string name="settings_provider_file_analyzing">File: %1$s • analyzing…</string>
     <string name="settings_provider_file_test">Check file</string>
@@ -747,9 +749,9 @@
     <string name="settings_provider_content_section">Content</string>
     <string name="settings_provider_interval_label">Interval</string>
     <string name="settings_provider_update_title">Update</string>
-    <string name="settings_provider_test_connection">Test Connection</string>
-    <string name="settings_provider_test_ok">Connected</string>
-    <string name="settings_provider_test_fail">Not reachable</string>
+    <string name="settings_provider_test_connection">Test</string>
+    <string name="settings_provider_test_ok">Successful</string>
+    <string name="settings_provider_test_fail">Not successful</string>
     <string name="settings_provider_toggle_enabled">Enable/Disable</string>
     <string name="settings_provider_no_content">No content selected</string>
 

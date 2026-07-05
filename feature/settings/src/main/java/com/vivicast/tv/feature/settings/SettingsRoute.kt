@@ -84,6 +84,7 @@ import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
+import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
@@ -124,7 +125,7 @@ fun SettingsRoute(
     backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
     initialSelectedSection: String? = null,
-    onTestProviderConnection: suspend (ProviderCreateRequest) -> String?,
+    onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     onBackgroundRefreshChanged: (Boolean) -> Unit,

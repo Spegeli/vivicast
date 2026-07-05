@@ -19,16 +19,22 @@ class TestProviderConnectionUseCase(
     private val xtreamClient: XtreamClient,
     private val xtreamParser: XtreamParser,
     private val fetchText: suspend (url: String) -> String,
+    private val m3uContentSummarizer: M3uContentSummarizer = M3uContentSummarizer(),
 ) {
-    /** Throws on any failure; returns normally when the connection is usable. */
-    suspend fun test(request: ProviderCreateRequest) {
+    /**
+     * Throws on any failure; on success returns the M3U content breakdown (channels/movies/series) so
+     * the caller can preview it — same counts as the file check. Xtream has no such preview: returns null.
+     */
+    suspend fun test(request: ProviderCreateRequest): M3uContentSummary? =
         when (request.type) {
             ProviderType.M3u -> testM3u(request)
-            ProviderType.Xtream -> testXtream(request)
+            ProviderType.Xtream -> {
+                testXtream(request)
+                null
+            }
         }
-    }
 
-    private suspend fun testM3u(request: ProviderCreateRequest) {
+    private suspend fun testM3u(request: ProviderCreateRequest): M3uContentSummary {
         val source = if (request.m3uSourceMode.isAutomaticallyRefreshable) {
             val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException()
@@ -37,10 +43,11 @@ class TestProviderConnectionUseCase(
             request.m3uContent?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException()
         }
-        val playlist = m3uParser.parse(source)
-        if (playlist.channels.isEmpty()) {
+        val channels = m3uParser.parse(source).channels
+        if (channels.isEmpty()) {
             throw ProviderConnectionResponseException()
         }
+        return m3uContentSummarizer.summarizeChannels(channels)
     }
 
     private suspend fun testXtream(request: ProviderCreateRequest) {

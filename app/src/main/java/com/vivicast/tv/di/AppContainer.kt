@@ -43,6 +43,7 @@ import com.vivicast.tv.data.provider.ProviderInvalidCredentialsException
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.RoomProviderRepository
+import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.TestProviderConnectionUseCase
 import com.vivicast.tv.system.AndroidTvWatchNextPublisher
 import com.vivicast.tv.system.SystemIntegrationPlaybackRepository
@@ -77,7 +78,9 @@ import com.vivicast.tv.worker.RoomEpgSourceReader
 import com.vivicast.tv.worker.RoomMediaImageRefreshSource
 import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 class AppContainer(
     context: Context,
@@ -329,11 +332,12 @@ class AppContainer(
         )
     }
 
-    suspend fun testProviderConnection(request: ProviderCreateRequest): String? =
-        runCatching { testProviderConnectionUseCase.test(request) }
+    suspend fun testProviderConnection(request: ProviderCreateRequest): ProviderConnectionTestResult =
+        // Off the main thread: URL fetch is blocking I/O and file mode parses the whole playlist.
+        runCatching { withContext(Dispatchers.IO) { testProviderConnectionUseCase.test(request) } }
             .fold(
-                onSuccess = { null },
-                onFailure = { it.toProviderConnectionMessage() },
+                onSuccess = { summary -> ProviderConnectionTestResult(errorMessage = null, summary = summary) },
+                onFailure = { ProviderConnectionTestResult(errorMessage = it.toProviderConnectionMessage(), summary = null) },
             )
 
     private companion object {
