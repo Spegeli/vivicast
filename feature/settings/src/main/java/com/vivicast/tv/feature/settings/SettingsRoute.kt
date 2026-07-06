@@ -64,6 +64,7 @@ import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
 import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastFocusSurface
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogError
@@ -757,26 +758,48 @@ internal fun AdjustableSettingsRow(
     FocusPanel(
         modifier = modifier
             .fillMaxWidth()
-            .height(VivicastCardSizes.SettingsRowHeight),
-        contentPadding = VivicastSpacing.Space4,
+            .height(VivicastCardSizes.CompactSettingsRowHeight),
+        contentPadding = 0.dp,
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space4),
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1),
+            // help intentionally not rendered — single-line row, same height as the other settings rows.
+            BasicText(
+                title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelLarge,
                 modifier = Modifier.weight(1f),
-            ) {
-                BasicText(title, style = VivicastTypography.LabelLarge)
-                BodyText(help, maxLines = 1)
-            }
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
-                ActionPill("-", modifier = Modifier.width(64.dp), onClick = onDecrease)
+                StepperButton(plus = false, onClick = onDecrease)
                 BasicText(value, style = VivicastTypography.LabelLarge)
-                ActionPill("+", modifier = Modifier.width(64.dp), onClick = onIncrease)
+                StepperButton(plus = true, onClick = onIncrease)
             }
+        }
+    }
+}
+
+/** Compact +/- stepper pill. Draws the glyph as a vector so it's centered regardless of font metrics. */
+@Composable
+private fun StepperButton(plus: Boolean, onClick: () -> Unit) {
+    VivicastFocusSurface(
+        onClick = onClick,
+        modifier = Modifier.width(56.dp).height(28.dp),
+        contentPadding = 0.dp,
+        shape = VivicastShapes.PillRadius,
+    ) { focused ->
+        val color = if (focused) Color.White else VivicastColors.TextSecondary
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val arm = 6.dp.toPx()
+            val sw = 2.dp.toPx()
+            drawLine(color, Offset(cx - arm, cy), Offset(cx + arm, cy), strokeWidth = sw, cap = StrokeCap.Round)
+            if (plus) drawLine(color, Offset(cx, cy - arm), Offset(cx, cy + arm), strokeWidth = sw, cap = StrokeCap.Round)
         }
     }
 }

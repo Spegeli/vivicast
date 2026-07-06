@@ -45,7 +45,7 @@ data class ProviderSaveResult(
  */
 data class ProviderConnectionTestResult(
     val errorMessage: String?,
-    val summary: M3uContentSummary?,
+    val summary: ContentSummary?,
 )
 
 sealed interface ProviderCredentials {

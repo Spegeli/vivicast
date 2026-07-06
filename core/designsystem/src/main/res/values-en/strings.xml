@@ -730,9 +730,6 @@
     <string name="settings_provider_updated_format">Updated: %1$s</string>
     <string name="settings_provider_expiry_format">Expires: %1$s</string>
     <string name="settings_provider_max_connections_format">Max. connections: %1$d</string>
-    <string name="settings_provider_live_tv_off">Live TV Off</string>
-    <string name="settings_provider_movies_off">Movies Off</string>
-    <string name="settings_provider_series_off">Series Off</string>
 
     <!-- Settings - Provider add flow form labels -->
     <string name="settings_provider_server_required">Server</string>
@@ -753,6 +750,13 @@
     <string name="settings_provider_test_ok">Successful</string>
     <string name="settings_provider_test_fail">Not successful</string>
     <string name="settings_provider_toggle_enabled">Enable/Disable</string>
+    <string name="settings_provider_active_label">Enable</string>
+    <string name="settings_provider_saving">Saving…</string>
+    <string name="settings_provider_conn_failed_title">Warning</string>
+    <string name="settings_provider_conn_failed_body">Could not connect to the playlist.</string>
+    <string name="settings_provider_correct">Fix</string>
+    <string name="settings_provider_save_anyway">Save anyway</string>
+    <string name="settings_provider_save_and_disable">Save &amp; disable</string>
     <string name="settings_provider_no_content">No content selected</string>
 
     <!-- Settings - M3U source mode labels -->

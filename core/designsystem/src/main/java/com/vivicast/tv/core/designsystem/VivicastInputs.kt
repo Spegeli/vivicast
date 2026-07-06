@@ -22,13 +22,17 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -51,31 +55,69 @@ fun ActionPill(
     label: String,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    height: Dp = VivicastCardSizes.ActionPillHeight,
     onClick: () -> Unit = {},
 ) {
     VivicastFocusSurface(
-        modifier = modifier.widthIn(min = 80.dp, max = 260.dp).height(VivicastCardSizes.ActionPillHeight),
+        modifier = modifier.widthIn(min = 80.dp, max = 300.dp).height(height)
+            .then(if (enabled) Modifier else Modifier.alpha(0.5f)),
         selected = selected,
-        onClick = onClick,
-        contentPadding = VivicastSpacing.Space2,
+        onClick = { if (enabled && !loading) onClick() },
+        contentPadding = 0.dp,
         shape = VivicastShapes.PillRadius,
         focusScale = VivicastFocusDefaults.ScaleButton,
     ) { focused ->
-        Box(
+        val contentColor = if (focused || selected) Color.White else VivicastColors.TextSecondary
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = VivicastSpacing.Space2),
-            contentAlignment = Alignment.Center,
+                .fillMaxSize()
+                .padding(horizontal = VivicastSpacing.Space4),
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (loading) VivicastSpinner(size = 18.dp, color = contentColor)
             Text(
                 text = label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = VivicastTypography.LabelMedium.copy(
-                    color = if (focused || selected) Color.White else VivicastColors.TextSecondary,
-                ),
+                style = VivicastTypography.LabelMedium.copy(color = contentColor),
             )
         }
+    }
+}
+
+/** Small indeterminate spinner (a rotating arc) for showing background work, e.g. an in-flight save. */
+@Composable
+fun VivicastSpinner(
+    modifier: Modifier = Modifier,
+    size: Dp = 18.dp,
+    color: Color = VivicastColors.FocusRing,
+    strokeWidth: Dp = 2.dp,
+) {
+    // Driven by the raw frame clock (not an animation spec) so it still spins when the device has
+    // system animations disabled — a progress spinner must indicate work regardless of that setting.
+    var angle by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val startNanos = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { now ->
+                angle = ((now - startNanos) / 1_000_000f / 900f * 360f) % 360f
+            }
+        }
+    }
+    Canvas(modifier = modifier.size(size).rotate(angle)) {
+        val stroke = strokeWidth.toPx()
+        drawArc(
+            color = color,
+            startAngle = 0f,
+            sweepAngle = 270f,
+            useCenter = false,
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
+            topLeft = Offset(stroke / 2f, stroke / 2f),
+            size = Size(this.size.width - stroke, this.size.height - stroke),
+        )
     }
 }
 
@@ -234,13 +276,25 @@ fun VivicastButtonRow(
             return@Layout layout(constraints.maxWidth, 0) {}
         }
         val gapPx = spacing.roundToPx()
-        val target = measurables.maxOf { it.maxIntrinsicWidth(constraints.maxHeight) }
-            .coerceAtMost(constraints.maxWidth)
-        val childConstraints = constraints.copy(minWidth = target, maxWidth = target)
-        val placeables = measurables.map { it.measure(childConstraints) }
+        val totalGap = gapPx * (measurables.size - 1)
+        val avail = constraints.maxWidth
+        val intrinsics = measurables.map { it.maxIntrinsicWidth(constraints.maxHeight) }
+        // Prefer equal-width (widest label) for symmetry; if that overflows the row, fall back to each
+        // button's own width; if even that overflows, shrink all to an equal share (labels ellipsize).
+        val widest = intrinsics.max()
+        val placeables = when {
+            widest * measurables.size + totalGap <= avail ->
+                measurables.map { it.measure(constraints.copy(minWidth = widest, maxWidth = widest)) }
+            intrinsics.sum() + totalGap <= avail ->
+                measurables.mapIndexed { i, m -> m.measure(constraints.copy(minWidth = intrinsics[i], maxWidth = intrinsics[i])) }
+            else -> {
+                val share = ((avail - totalGap) / measurables.size).coerceAtLeast(0)
+                measurables.map { it.measure(constraints.copy(minWidth = share, maxWidth = share)) }
+            }
+        }
         val rowHeight = placeables.maxOf { it.height }
-        val totalWidth = placeables.sumOf { it.width } + gapPx * (placeables.size - 1)
-        val startX = ((constraints.maxWidth - totalWidth) / 2).coerceAtLeast(0)
+        val totalWidth = placeables.sumOf { it.width } + totalGap
+        val startX = ((avail - totalWidth) / 2).coerceAtLeast(0)
         layout(constraints.maxWidth, rowHeight) {
             var x = startX
             placeables.forEach { placeable ->
@@ -274,7 +328,7 @@ fun VivicastSettingsRow(
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space3),
         ) {
             if (icon != null) {
                 icon()
@@ -319,9 +373,9 @@ fun VivicastSettingsRow(
         Box(
             modifier = modifier
                 .fillMaxWidth()
+                .height(VivicastCardSizes.CompactSettingsRowHeight)
                 .clip(VivicastShapes.CardRadius)
-                .background(VivicastColors.SurfaceDisabled)
-                .padding(horizontal = VivicastSpacing.Space3, vertical = VivicastSpacing.Space3),
+                .background(VivicastColors.SurfaceDisabled),
             contentAlignment = Alignment.CenterStart,
         ) {
             RowContent(focused = false)
@@ -331,8 +385,8 @@ fun VivicastSettingsRow(
 
     VivicastFocusSurface(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = VivicastSpacing.Space3,
+        modifier = modifier.fillMaxWidth().height(VivicastCardSizes.CompactSettingsRowHeight),
+        contentPadding = 0.dp,
         focusScale = 1.0f,
     ) { focused ->
         RowContent(focused = focused)

@@ -72,6 +72,7 @@ import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastSpinner
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
@@ -80,7 +81,7 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
-import com.vivicast.tv.data.provider.M3uContentSummary
+import com.vivicast.tv.data.provider.ContentSummary
 import com.vivicast.tv.data.provider.M3uContentSummarizer
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
@@ -107,12 +108,12 @@ import java.util.Date
 @Composable
 internal fun ProviderEditor(
     editor: ProviderEditorState,
-    duplicateName: Boolean,
-    duplicateUrlName: String?,
+    duplicates: ProviderDuplicateInfo,
     message: String?,
     connectionTestStatus: ConnectionTestStatus,
-    connectionSummary: M3uContentSummary?,
+    connectionSummary: ContentSummary?,
     connectionError: String?,
+    signals: ProviderEditorSignals,
     actions: ProviderEditorActions,
     modifier: Modifier = Modifier,
 ) {
@@ -130,32 +131,34 @@ internal fun ProviderEditor(
     val serverFocus = remember { FocusRequester() }
     val userFocus = remember { FocusRequester() }
     val passFocus = remember { FocusRequester() }
+    val toggleFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
-    // Inline panel (no dialog window): wait one frame so the field is placed before requesting focus,
-    // otherwise focus escapes to the top nav bar and navigates away.
+    // Wait one frame before requesting focus, else it escapes to the top nav bar. Add starts on the
+    // name field; edit starts on the enable toggle (the first item).
     LaunchedEffect(Unit) {
         awaitFrame()
-        runCatching { firstFocus.requestFocus() }
+        runCatching { (if (editor.isEditing) toggleFocus else firstFocus).requestFocus() }
     }
-    val focusByError = remember {
-        mapOf(
-            ProviderEditorErrorFocus.Name to firstFocus, ProviderEditorErrorFocus.Url to urlFocus,
-            ProviderEditorErrorFocus.File to fileFocus, ProviderEditorErrorFocus.Server to serverFocus,
-            ProviderEditorErrorFocus.User to userFocus, ProviderEditorErrorFocus.Pass to passFocus,
-            ProviderEditorErrorFocus.Import to importFocus,
-        )
-    }
-    // A blocked action moves focus to the first bad field (and reddens it) instead of showing a note.
+    val focusByError = mapOf(
+        ProviderEditorErrorFocus.Name to firstFocus, ProviderEditorErrorFocus.Url to urlFocus,
+        ProviderEditorErrorFocus.File to fileFocus, ProviderEditorErrorFocus.Server to serverFocus,
+        ProviderEditorErrorFocus.User to userFocus, ProviderEditorErrorFocus.Pass to passFocus, ProviderEditorErrorFocus.Import to importFocus,
+    )
     var pendingErrorFocus by remember { mutableStateOf<ProviderEditorErrorFocus?>(null) }
     LaunchedEffect(pendingErrorFocus) {
         val target = pendingErrorFocus ?: return@LaunchedEffect
         // Name/URL sit at the top; scroll there first so the field is composed before focusing.
-        if (target == ProviderEditorErrorFocus.Name || target == ProviderEditorErrorFocus.Url) {
+        if (target in topFocusTargets) {
             listState.scrollToItem(0)
         }
         awaitFrame()
         runCatching { focusByError[target]?.requestFocus() }
         pendingErrorFocus = null
+    }
+    // Panel bumps this to jump focus to the source field: on manual-test failure and on the
+    // "Korrigieren" button of the save-time failure dialog (save failure itself shows the dialog).
+    LaunchedEffect(signals.focusSource) {
+        pendingErrorFocus = editor.sourceFocusTarget().takeIf { signals.focusSource > 0 }
     }
     // Empty required fields turn red only after an attempt. Name is checked on save only; the source
     // field is also checked on test (which is name-independent), so they use separate flags.
@@ -188,6 +191,9 @@ internal fun ProviderEditor(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
+        // Enable/disable toggle above the name — flips the playlist immediately (edit only, no save).
+        providerActiveToggleItem(editor, toggleFocus, onToggleEnabled)
+
         // Name field stays the first item with a stable key so inserting the duplicate warnings below
         // it never re-creates the focused field (which would let focus escape to the top nav bar).
         item(key = "name") {
@@ -198,13 +204,13 @@ internal fun ProviderEditor(
                     placeholder = stringResource(R.string.settings_provider_name_placeholder),
                     onValueChange = { onEditorChange(editor.copy(name = it)) },
                     focusRequester = firstFocus,
-                    isError = duplicateName || (showNameBlankError && nameBlank),
+                    isError = duplicates.name || (showNameBlankError && nameBlank),
                     maxLength = 25,
                 )
                 // Red inline error (no separate hint panel), rendered in the same item so the focused
                 // field stays mounted and keeps focus while the duplicate check flips.
                 VivicastDialogError(
-                    if (duplicateName) stringResource(R.string.settings_provider_name_exists_body) else null,
+                    if (duplicates.name) stringResource(R.string.settings_provider_name_exists_body) else null,
                 )
             }
         }
@@ -214,7 +220,7 @@ internal fun ProviderEditor(
         when (editor.type) {
             ProviderType.M3u -> providerM3uCredentialItems(
                 editor = editor,
-                duplicateUrlName = duplicateUrlName,
+                duplicateUrlName = duplicates.urlName,
                 sourceBlankError = sourceBlankError,
                 sourceFocus = M3uSourceFocus(urlFocus, fileFocus),
                 // Only preview the breakdown right after a passed test, so stale counts never linger.
@@ -227,6 +233,7 @@ internal fun ProviderEditor(
             ProviderType.Xtream -> providerXtreamCredentialItems(
                 editor = editor,
                 fields = xtreamFields,
+                contentSummary = connectionSummary?.takeIf { connectionTestStatus == ConnectionTestStatus.Passed },
                 connectionTestStatus = connectionTestStatus,
                 onTestClick = onTestClick,
                 onEditorChange = onEditorChange,
@@ -234,11 +241,7 @@ internal fun ProviderEditor(
         }
 
         // Failed-test reason as a red hint (no note), shown just under the source fields.
-        if (connectionError != null) {
-            item(key = "conn-error") {
-                VivicastDialogError(connectionError)
-            }
-        }
+        if (connectionError != null) item(key = "conn-error") { VivicastDialogError(connectionError) }
 
         providerImportItem(editor, importFocus, onEditorChange)
 
@@ -259,13 +262,14 @@ internal fun ProviderEditor(
 
         item(key = "actions") {
             VivicastButtonRow {
-                ActionPill(label = stringResource(R.string.common_cancel), onClick = onCancel)
+                ActionPill(label = stringResource(R.string.common_cancel), enabled = !signals.saving, onClick = onCancel)
                 ActionPill(
-                    label = stringResource(R.string.common_save),
+                    label = stringResource(saveLabelRes(signals.saving)),
+                    loading = signals.saving,
                     onClick = {
                         // A blocked save jumps focus to the first bad field (name → URL → import) and
                         // reddens it, instead of the real save raising a note.
-                        val error = firstSaveError(editor, duplicateName, duplicateUrlName, nameBlank, urlBlank, fileBlank, serverBlank, userBlank, passBlank)
+                        val error = firstSaveError(editor, duplicates.name, duplicates.urlName, nameBlank, urlBlank, fileBlank, serverBlank, userBlank, passBlank)
                         if (error == null) {
                             onSave()
                         } else {
@@ -278,13 +282,21 @@ internal fun ProviderEditor(
                     },
                 )
                 if (editor.isEditing) {
-                    ActionPill(label = stringResource(R.string.settings_provider_toggle_enabled), onClick = onToggleEnabled)
-                    ActionPill(label = stringResource(R.string.settings_delete), onClick = onDelete)
+                    ActionPill(label = stringResource(R.string.settings_delete), enabled = !signals.saving, onClick = onDelete)
                 }
             }
         }
     }
 }
+
+/** Duplicate-name / duplicate-URL flags, bundled to keep the editor under the arg limit. */
+internal class ProviderDuplicateInfo(val name: Boolean, val urlName: String?)
+
+/** Transient panel signals driving the editor UI: focus-jump trigger + save-in-progress flag. */
+internal class ProviderEditorSignals(val focusSource: Int, val saving: Boolean)
+
+private fun saveLabelRes(saving: Boolean): Int =
+    if (saving) R.string.settings_provider_saving else R.string.common_save
 
 /** Callbacks the inline provider editor raises. Bundled so the composable stays under the arg limit. */
 internal class ProviderEditorActions(
@@ -296,6 +308,24 @@ internal class ProviderEditorActions(
     val onDelete: () -> Unit,
     val onPickM3uFile: ((String, String) -> Unit) -> Unit,
 )
+
+/** Edit mode only: an enable/disable toggle that flips the playlist immediately (no save needed). */
+private fun LazyListScope.providerActiveToggleItem(
+    editor: ProviderEditorState,
+    focusRequester: FocusRequester,
+    onToggle: () -> Unit,
+) {
+    if (!editor.isEditing) return
+    item(key = "active") {
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_provider_active_label),
+            help = "",
+            value = if (editor.isActive) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+            onClick = onToggle,
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+        )
+    }
+}
 
 /** Add mode only: the single-choice source-type row (M3U URL | M3U File | Xtream Codes). */
 private fun LazyListScope.providerSourceChoiceItem(
@@ -336,7 +366,7 @@ private fun LazyListScope.providerM3uCredentialItems(
     duplicateUrlName: String?,
     sourceBlankError: Boolean,
     sourceFocus: M3uSourceFocus,
-    contentSummary: M3uContentSummary?,
+    contentSummary: ContentSummary?,
     connectionTestStatus: ConnectionTestStatus,
     onTestClick: () -> Unit,
     onEditorChange: (ProviderEditorState) -> Unit,
@@ -388,8 +418,8 @@ private fun LazyListScope.providerM3uCredentialItems(
                         },
                         modifier = Modifier.weight(1f),
                         focusRequester = sourceFocus.url,
-                        secret = editor.isEditing,
-                        isError = duplicateUrlName != null || sourceBlankError,
+                        secret = false,
+                        isError = duplicateUrlName != null || sourceBlankError || connectionTestStatus == ConnectionTestStatus.Failed,
                         maxLength = 250,
                     )
                     ConnectionTestButton(status = connectionTestStatus, onClick = onTestClick)
@@ -422,6 +452,7 @@ private fun LazyListScope.providerM3uCredentialItems(
 private fun LazyListScope.providerXtreamCredentialItems(
     editor: ProviderEditorState,
     fields: XtreamFieldState,
+    contentSummary: ContentSummary?,
     connectionTestStatus: ConnectionTestStatus,
     onTestClick: () -> Unit,
     onEditorChange: (ProviderEditorState) -> Unit,
@@ -433,8 +464,8 @@ private fun LazyListScope.providerXtreamCredentialItems(
             placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://server.example",
             onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it, connectionTestPassed = false)) },
             focusRequester = fields.serverFocus,
-            secret = editor.isEditing,
-            isError = fields.serverError,
+            secret = false,
+            isError = fields.serverError || connectionTestStatus == ConnectionTestStatus.Failed,
             maxLength = 250,
         )
     }
@@ -445,8 +476,8 @@ private fun LazyListScope.providerXtreamCredentialItems(
             placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_username_label),
             onValueChange = { onEditorChange(editor.copy(xtreamUsername = it, connectionTestPassed = false)) },
             focusRequester = fields.userFocus,
-            secret = editor.isEditing,
-            isError = fields.userError,
+            secret = false,
+            isError = fields.userError || connectionTestStatus == ConnectionTestStatus.Failed,
             maxLength = 100,
         )
     }
@@ -459,13 +490,16 @@ private fun LazyListScope.providerXtreamCredentialItems(
             focusRequester = fields.passFocus,
             secret = true,
             allowReveal = true,
-            isError = fields.passError,
+            isError = fields.passError || connectionTestStatus == ConnectionTestStatus.Failed,
             maxLength = 100,
         )
     }
     item(key = "xtream-test") {
-        VivicastButtonRow {
-            ConnectionTestButton(status = connectionTestStatus, onClick = onTestClick)
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            VivicastButtonRow {
+                ConnectionTestButton(status = connectionTestStatus, onClick = onTestClick)
+            }
+            ProviderContentSummary(contentSummary)
         }
     }
 }
@@ -475,7 +509,7 @@ private fun ProviderM3uFilePicker(
     editor: ProviderEditorState,
     blankError: Boolean,
     fileFocusRequester: FocusRequester,
-    contentSummary: M3uContentSummary?,
+    contentSummary: ContentSummary?,
     connectionTestStatus: ConnectionTestStatus,
     onTestClick: () -> Unit,
     onEditorChange: (ProviderEditorState) -> Unit,
@@ -516,7 +550,7 @@ private fun ProviderM3uFilePicker(
 
 /** Verbose channels/movies/series breakdown shown after a passed M3U test (URL and file alike). */
 @Composable
-private fun ProviderContentSummary(summary: M3uContentSummary?) {
+private fun ProviderContentSummary(summary: ContentSummary?) {
     if (summary != null) {
         BodyText(
             stringResource(
@@ -581,24 +615,28 @@ private fun LazyListScope.providerRefreshItems(
     if (editor.isAutomaticallyRefreshable) {
         item(key = "refresh") {
             FocusPanel(
-                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
-                contentPadding = VivicastSpacing.Space4,
+                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.CompactSettingsRowHeight),
+                contentPadding = 0.dp,
             ) {
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space4),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
-                        BasicText(stringResource(R.string.settings_provider_interval_label), style = VivicastTypography.LabelLarge)
-                        BodyText(stringResource(R.string.settings_provider_body_refresh), maxLines = 1)
-                    }
+                    // help intentionally not rendered — single-line row, same height as the other rows.
+                    BasicText(
+                        stringResource(R.string.settings_provider_interval_label),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = VivicastTypography.LabelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
-                        ActionPill("-6h", modifier = Modifier.width(88.dp), onClick = {
+                        ActionPill("-6h", modifier = Modifier.width(80.dp), height = 28.dp, onClick = {
                             onEditorChange(editor.copy(refreshIntervalHours = (editor.refreshIntervalHours - 6).coerceAtLeast(1)))
                         })
                         BasicText("${editor.refreshIntervalHours} h", style = VivicastTypography.LabelLarge)
-                        ActionPill("+6h", modifier = Modifier.width(88.dp), onClick = {
+                        ActionPill("+6h", modifier = Modifier.width(80.dp), height = 28.dp, onClick = {
                             onEditorChange(editor.copy(refreshIntervalHours = (editor.refreshIntervalHours + 6).coerceAtMost(168)))
                         })
                     }
@@ -634,6 +672,7 @@ internal data class ProviderEditorState(
     val refreshIntervalHours: Int,
     val connectionTestPassed: Boolean,
     val m3uFileName: String = "",
+    val isActive: Boolean = true,
 ) {
     val isEditing: Boolean get() = providerId != null
     val isAutomaticallyRefreshable: Boolean
@@ -764,24 +803,29 @@ internal data class ProviderEditorState(
                 connectionTestPassed = false,
             )
 
-        fun from(provider: Provider, credentials: ProviderCredentials? = null): ProviderEditorState =
-            ProviderEditorState(
+        fun from(provider: Provider, credentials: ProviderCredentials? = null): ProviderEditorState {
+            // Pre-fill the editor with the stored credentials so editing shows the current values.
+            val m3u = credentials as? ProviderCredentials.M3u
+            val xtream = credentials as? ProviderCredentials.Xtream
+            return ProviderEditorState(
                 providerId = provider.id,
                 type = provider.type,
                 name = provider.name,
-                m3uSourceMode = (credentials as? ProviderCredentials.M3u)?.sourceMode ?: M3uSourceMode.Url,
-                m3uUrl = "",
-                m3uContent = "",
+                m3uSourceMode = m3u?.sourceMode ?: M3uSourceMode.Url,
+                m3uUrl = m3u?.url.orEmpty(),
+                m3uContent = m3u?.inlineContent.orEmpty(),
                 m3uHasExistingSource = credentials is ProviderCredentials.M3u,
-                xtreamServerUrl = "",
-                xtreamUsername = "",
-                xtreamPassword = "",
+                xtreamServerUrl = xtream?.serverUrl.orEmpty(),
+                xtreamUsername = xtream?.username.orEmpty(),
+                xtreamPassword = xtream?.password.orEmpty(),
                 includeLiveTv = provider.includeLiveTv,
                 includeMovies = provider.includeMovies,
                 includeSeries = provider.includeSeries,
                 refreshIntervalHours = provider.refreshIntervalHours,
                 connectionTestPassed = true,
+                isActive = provider.isActive,
             )
+        }
     }
 }
 
@@ -833,6 +877,16 @@ private fun firstSaveError(
         !editor.includeLiveTv && !editor.includeMovies && !editor.includeSeries -> ProviderEditorErrorFocus.Import
         else -> null
     }
+}
+
+/** Error targets that live at the top of the list, so a jump to them scrolls to item 0 first. */
+private val topFocusTargets = setOf(ProviderEditorErrorFocus.Name, ProviderEditorErrorFocus.Url)
+
+/** The source field to focus when a test fails (M3U URL/file, or the Xtream server). */
+private fun ProviderEditorState.sourceFocusTarget(): ProviderEditorErrorFocus = when {
+    type == ProviderType.Xtream -> ProviderEditorErrorFocus.Server
+    m3uSourceMode == M3uSourceMode.File -> ProviderEditorErrorFocus.File
+    else -> ProviderEditorErrorFocus.Url
 }
 
 /** Blank source field to jump to when testing (URL or file), or null when the test may run. */
@@ -931,6 +985,9 @@ private fun ConnectionTestButton(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
+            if (status == ConnectionTestStatus.Testing) {
+                VivicastSpinner(size = 16.dp, color = VivicastColors.TextPrimary)
+            }
             if (glyph != null) {
                 BasicText(
                     text = glyph,

@@ -71,13 +71,17 @@ class TestProviderConnectionUseCaseTest {
     // --- Xtream ---
 
     @Test
-    fun xtream_succeedsWhenAuthenticated() = runBlocking {
+    fun xtream_succeedsWhenAuthenticatedAndReturnsCounts() = runBlocking {
         val client = FakeXtreamClient(response = "{}")
         val useCase = useCase(xtream = client, xtreamParser = FakeXtreamParser(authenticated = true))
 
-        useCase.test(xtreamRequest()) // no throw = success
+        val summary = useCase.test(xtreamRequest())
 
-        assertEquals("userInfo", client.lastCalled) // canonical player_api.php handshake
+        assertTrue(client.calls.contains("userInfo")) // canonical player_api.php handshake
+        // Fake parser returns empty lists, so all three counts are 0 (real counts come from the parser).
+        assertEquals(0, summary?.channels)
+        assertEquals(0, summary?.movies)
+        assertEquals(0, summary?.series)
     }
 
     @Test
@@ -99,12 +103,14 @@ class TestProviderConnectionUseCaseTest {
     }
 
     @Test
-    fun xtream_failsWhenNoContentSelected() = runBlocking {
+    fun xtream_testIgnoresContentSelection() = runBlocking {
         val useCase = useCase(xtream = FakeXtreamClient(response = "[]"))
 
-        assertThrows<IllegalArgumentException> {
-            useCase.test(xtreamRequest(includeLiveTv = false, includeMovies = false, includeSeries = false))
-        }
+        // The test probes all three content types regardless of the import checkboxes, so no selection
+        // is required — it just returns the counts (0 here, from the fake parser).
+        val summary = useCase.test(xtreamRequest(includeLiveTv = false, includeMovies = false, includeSeries = false))
+
+        assertEquals(0, summary?.channels)
     }
 
     @Test
@@ -193,6 +199,7 @@ private class FakeXtreamClient(
 ) : XtreamClient {
     var lastCalled: String? = null
         private set
+    val calls = mutableListOf<String>()
 
     override suspend fun getUserInfo(credentials: XtreamCredentials): String = respond("userInfo")
     override suspend fun getLiveCategories(credentials: XtreamCredentials): String = respond("live")
@@ -205,6 +212,7 @@ private class FakeXtreamClient(
 
     private fun respond(tag: String): String {
         lastCalled = tag
+        calls.add(tag)
         error?.let { throw it }
         return response
     }

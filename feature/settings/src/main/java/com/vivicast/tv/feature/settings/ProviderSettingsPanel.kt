@@ -78,7 +78,7 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
-import com.vivicast.tv.data.provider.M3uContentSummary
+import com.vivicast.tv.data.provider.ContentSummary
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderConnectionTestResult
@@ -123,15 +123,18 @@ internal fun ProviderSettingsPanel(
     var pendingDelete by remember { mutableStateOf<Provider?>(null) }
     var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
     // M3U content breakdown from the last passed test — previews the URL just like the file check.
-    var connectionSummary by remember { mutableStateOf<M3uContentSummary?>(null) }
+    var connectionSummary by remember { mutableStateOf<ContentSummary?>(null) }
     // Reason a test failed, shown as a red hint under the source fields (never a note).
     var connectionError by remember { mutableStateOf<String?>(null) }
     // Where focus should land once the overview returns after leaving the inline editor.
     var pendingOverviewFocus by remember { mutableStateOf<OverviewFocusTarget?>(null) }
-    val strProviderEnabled = stringResource(R.string.settings_provider_msg_enabled)
-    val strProviderDisabled = stringResource(R.string.settings_provider_msg_disabled)
+    // Save-time test failure → confirm dialog ("Korrigieren" / force-save). Only on Save, never a note.
+    var pendingSaveTestFailure by remember { mutableStateOf(false) }
+    // Bumped to make ProviderEditor jump focus to the source field (manual-test fail / "Korrigieren").
+    var focusSourceSignal by remember { mutableStateOf(0) }
+    // Save in progress (test + write): drives the Save-button spinner; the test button stays idle.
+    var saving by remember { mutableStateOf(false) }
     val strProviderSaveFailed = stringResource(R.string.settings_provider_msg_save_failed)
-    val strProviderStatusFailed = stringResource(R.string.settings_provider_msg_status_failed)
     val strProviderDeleteFailed = stringResource(R.string.settings_provider_msg_delete_failed)
     val strProviderSectionBody = stringResource(R.string.settings_provider_section_body)
     val strValidationNameMissing = stringResource(R.string.validation_name_missing)
@@ -200,6 +203,10 @@ internal fun ProviderSettingsPanel(
                 showEditor = true
                 message = null
                 connectionTestStatus = ConnectionTestStatus.Idle
+                connectionSummary = null
+                connectionError = null
+                focusSourceSignal = 0
+                saving = false
             },
             onRefreshAll = {
                 scope.launch {
@@ -224,6 +231,10 @@ internal fun ProviderSettingsPanel(
                 showEditor = true
                 message = null
                 connectionTestStatus = ConnectionTestStatus.Idle
+                connectionSummary = null
+                connectionError = null
+                focusSourceSignal = 0
+                saving = false
                 scope.launch {
                     val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
                     if (selectedProviderId == provider.id) {
@@ -249,16 +260,44 @@ internal fun ProviderSettingsPanel(
         connectionTestStatus = ConnectionTestStatus.Idle
     }
 
+    // Writes the editor (update/create), applies the active toggle, closes. Shared by the passed-test
+    // save path and the "trotzdem speichern" force-save; assumes the source is already decided.
+    suspend fun persistEditor() {
+        val saveResult = if (editor.isEditing) {
+            onUpdateProvider(editor.toUpdateRequest())
+        } else {
+            onCreateProvider(editor.toCreateRequest())
+        }
+        saveResult
+            .onSuccess { saved ->
+                // Apply the deferred active toggle only if it changed.
+                if (editor.isActive != saved.provider.isActive) {
+                    onSetProviderEnabled(saved.provider.id, editor.isActive)
+                }
+                onParkFocusBeforeEditor()
+                pendingOverviewFocus = OverviewFocusTarget.Card(saved.provider.id)
+                selectedProviderId = null
+                editor = ProviderEditorState.newProvider(ProviderType.M3u)
+                showEditor = false
+                connectionTestStatus = ConnectionTestStatus.Idle
+                onProviderSaved(saved.provider.id)
+                message = null
+            }
+            .onFailure { error ->
+                message = strProviderSaveFailed.format(error.message ?: "?")
+            }
+    }
+
     if (showEditor) {
         BackHandler(onBack = dismissEditor)
         ProviderEditor(
             editor = editor,
-            duplicateName = duplicateName,
-            duplicateUrlName = duplicateUrlName,
+            duplicates = ProviderDuplicateInfo(duplicateName, duplicateUrlName),
             message = message,
             connectionTestStatus = connectionTestStatus,
             connectionSummary = connectionSummary,
             connectionError = connectionError.takeIf { connectionTestStatus == ConnectionTestStatus.Failed },
+            signals = ProviderEditorSignals(focusSource = focusSourceSignal, saving = saving),
             actions = ProviderEditorActions(
             onEditorChange = {
                 editor = it
@@ -290,93 +329,49 @@ internal fun ProviderSettingsPanel(
                                 connectionSummary = null
                                 connectionError = result.errorMessage
                                 message = null
+                                // Manual test: jump focus to the source field (save uses a dialog instead).
+                                focusSourceSignal++
                             }
                         }
                     }
                 }
             },
             onSave = {
-                // Duplicate name/URL are guarded in ProviderEditor (it jumps focus to the bad field),
-                // so a save that reaches here is free of duplicate conflicts.
+                // Duplicates are guarded in ProviderEditor. Save always tests the source; on failure a
+                // confirm dialog offers "Korrigieren" or force-save (which deactivates). Ignore while testing.
                 when {
-                    connectionTestStatus == ConnectionTestStatus.Testing -> Unit
-                    editor.isEditing -> {
-                        val validationMessage = editor.validationMessageResolved(requireConnectionTest = true)
-                        if (validationMessage != null) {
-                            message = validationMessage
-                        } else {
-                            scope.launch {
-                                onUpdateProvider(editor.toUpdateRequest())
-                                    .onSuccess { result ->
-                                        onParkFocusBeforeEditor()
-                                        pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
-                                        selectedProviderId = null
-                                        editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                                        showEditor = false
-                                        connectionTestStatus = ConnectionTestStatus.Idle
-                                        onProviderSaved(result.provider.id)
-                                        message = null
-                                    }
-                                    .onFailure { error ->
-                                        message = strProviderSaveFailed.format(error.message ?: "?")
-                                    }
-                            }
-                        }
-                    }
+                    saving || connectionTestStatus == ConnectionTestStatus.Testing -> Unit
                     else -> {
-                        // Add: no prior manual test required. Save validates, tests implicitly, then
-                        // creates. Only the active source type is sent; the repository writes credentials
-                        // by request.type + m3uSourceMode, so drafts of the other types never persist.
                         val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
                         if (validationMessage != null) {
                             message = validationMessage
                         } else {
                             scope.launch {
-                                connectionTestStatus = ConnectionTestStatus.Testing
                                 message = null
+                                saving = true
                                 val result = onTestProviderConnection(editor.toConnectionTestRequest())
-                                if (result.errorMessage != null) {
+                                if (result.errorMessage == null) {
+                                    editor = editor.copy(connectionTestPassed = true)
+                                    connectionSummary = result.summary
+                                    connectionError = null
+                                    persistEditor()
+                                } else {
                                     editor = editor.copy(connectionTestPassed = false)
                                     connectionTestStatus = ConnectionTestStatus.Failed
                                     connectionSummary = null
                                     connectionError = result.errorMessage
-                                    message = null
-                                } else {
-                                    editor = editor.copy(connectionTestPassed = true)
-                                    connectionTestStatus = ConnectionTestStatus.Passed
-                                    connectionSummary = result.summary
-                                    connectionError = null
-                                    onCreateProvider(editor.toCreateRequest())
-                                        .onSuccess { result ->
-                                            onParkFocusBeforeEditor()
-                                            pendingOverviewFocus = OverviewFocusTarget.Card(result.provider.id)
-                                            selectedProviderId = null
-                                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                                            showEditor = false
-                                            connectionTestStatus = ConnectionTestStatus.Idle
-                                            onProviderSaved(result.provider.id)
-                                            message = null
-                                        }
-                                        .onFailure { error ->
-                                            message = strProviderSaveFailed.format(error.message ?: "?")
-                                        }
+                                    pendingSaveTestFailure = true
                                 }
+                                saving = false
                             }
                         }
                     }
                 }
             },
             onCancel = dismissEditor,
-            onToggleEnabled = toggleEnabled@{
-                val provider = providers.firstOrNull { it.id == editor.providerId } ?: return@toggleEnabled
-                scope.launch {
-                    val enabled = !provider.isActive
-                    onSetProviderEnabled(provider.id, enabled)
-                        .onSuccess {
-                            message = if (enabled) strProviderEnabled else strProviderDisabled
-                        }
-                        .onFailure { error -> message = strProviderStatusFailed.format(error.message ?: "?") }
-                }
+            onToggleEnabled = {
+                // Draft only — the active state is applied on Save, not immediately.
+                editor = editor.copy(isActive = !editor.isActive)
             },
             onDelete = {
                 pendingDelete = providers.firstOrNull { it.id == editor.providerId }
@@ -413,6 +408,27 @@ internal fun ProviderSettingsPanel(
                             pendingDelete = null
                             message = strProviderDeleteFailed.format(error.message ?: "?")
                         }
+                }
+            },
+        )
+    }
+
+    if (pendingSaveTestFailure) {
+        ProviderConnectionFailedDialog(
+            reason = connectionError,
+            isActive = editor.isActive,
+            onCorrect = {
+                pendingSaveTestFailure = false
+                focusSourceSignal++
+            },
+            onSaveAnyway = {
+                pendingSaveTestFailure = false
+                // A broken source is never saved active — force-save always deactivates.
+                editor = editor.copy(isActive = false)
+                scope.launch {
+                    saving = true
+                    persistEditor()
+                    saving = false
                 }
             },
         )
@@ -528,15 +544,12 @@ private fun ProviderSourceCard(
                         style = VivicastTypography.LabelLarge,
                     )
                     StatusBadge(provider.status.localizedLabel(), tone = provider.status.tone)
-                    if (!provider.isActive) {
-                        StatusBadge(stringResource(R.string.common_inactive), tone = VivicastColors.Warning)
-                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                     StatusBadge(provider.type.label)
-                    StatusBadge(if (provider.includeLiveTv) stringResource(R.string.nav_live_tv) else stringResource(R.string.settings_provider_live_tv_off), tone = if (provider.includeLiveTv) VivicastColors.Info else VivicastColors.SurfaceHigh)
-                    StatusBadge(if (provider.includeMovies) stringResource(R.string.nav_movies_label) else stringResource(R.string.settings_provider_movies_off), tone = if (provider.includeMovies) VivicastColors.Info else VivicastColors.SurfaceHigh)
-                    StatusBadge(if (provider.includeSeries) stringResource(R.string.nav_series_label) else stringResource(R.string.settings_provider_series_off), tone = if (provider.includeSeries) VivicastColors.Info else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_live_tv), tone = if (provider.includeLiveTv) VivicastColors.Info else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_movies_label), tone = if (provider.includeMovies) VivicastColors.Info else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_series_label), tone = if (provider.includeSeries) VivicastColors.Info else VivicastColors.SurfaceHigh)
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
@@ -599,9 +612,6 @@ private fun ProviderList(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                         StatusBadge(provider.status.localizedLabel(), tone = provider.status.tone)
-                        if (!provider.isActive) {
-                            StatusBadge(stringResource(R.string.common_inactive), tone = VivicastColors.Warning)
-                        }
                     }
                     BodyText(provider.importSummary(), maxLines = 1)
                 }
@@ -644,7 +654,7 @@ private val ProviderStatus.tone: Color
         ProviderStatus.ConnectionError -> VivicastColors.Warning
         ProviderStatus.InvalidCredentials -> VivicastColors.Error
         ProviderStatus.Expired -> VivicastColors.Warning
-        ProviderStatus.Disabled -> VivicastColors.SurfaceHigh
+        ProviderStatus.Disabled -> VivicastColors.Warning
         ProviderStatus.CredentialsRequired -> VivicastColors.Error
     }
 

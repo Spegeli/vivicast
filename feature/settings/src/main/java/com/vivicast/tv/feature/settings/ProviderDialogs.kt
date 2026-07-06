@@ -129,6 +129,42 @@ fun DeleteProviderDialog(
     }
 }
 
+/**
+ * Save-time connection-test failure. Lets the user go back and fix the source, or force-save it —
+ * which always deactivates (a broken source is never persisted as active). Only shown on Save, not
+ * on the manual test button.
+ */
+@Composable
+fun ProviderConnectionFailedDialog(
+    reason: String?,
+    isActive: Boolean,
+    onCorrect: () -> Unit,
+    onSaveAnyway: () -> Unit,
+) {
+    val correctFocusRequester = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onCorrect,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = correctFocusRequester,
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.settings_provider_conn_failed_title),
+            body = stringResource(R.string.settings_provider_conn_failed_body),
+            badge = reason,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(
+                if (isActive) R.string.settings_provider_save_and_disable else R.string.settings_provider_save_anyway,
+            ),
+            onPrimary = onSaveAnyway,
+            secondaryLabel = stringResource(R.string.settings_provider_correct),
+            onSecondary = onCorrect,
+            secondaryFocusRequester = correctFocusRequester,
+        )
+    }
+}
+
 fun deleteProviderDialogTag(providerId: String): String = "settings-delete-provider-dialog-$providerId"
 fun deleteProviderCancelTag(providerId: String): String = "settings-delete-provider-cancel-$providerId"
 fun deleteProviderConfirmTag(providerId: String): String = "settings-delete-provider-confirm-$providerId"

@@ -194,6 +194,8 @@ object VivicastCardSizes {
     val PlayerTimelineHeight = 50.dp
     val SettingsNavItemHeight = 48.dp
     val SettingsRowHeight = 58.dp
+    // Uniform single-line settings-row height (toggle + text + stepper rows all match this).
+    val CompactSettingsRowHeight = 43.dp
 }
 
 object VivicastMotion {

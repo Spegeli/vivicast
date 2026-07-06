@@ -7,8 +7,8 @@ import com.vivicast.tv.iptv.m3u.M3uContentClassification
 import com.vivicast.tv.iptv.m3u.M3uContentClassifier
 import com.vivicast.tv.iptv.m3u.M3uParser
 
-/** Preview counts for raw M3U content: live channels, movies, and distinct series (not episodes). */
-data class M3uContentSummary(
+/** Preview counts for a provider's content: live channels, movies, and distinct series (not episodes). */
+data class ContentSummary(
     val channels: Int = 0,
     val movies: Int = 0,
     val series: Int = 0,
@@ -26,13 +26,13 @@ class M3uContentSummarizer(
     private val parser: M3uParser = DefaultM3uParser(),
     private val classifier: M3uContentClassifier = DefaultM3uContentClassifier(),
 ) {
-    fun summarize(content: String): M3uContentSummary {
-        if (content.isBlank()) return M3uContentSummary()
+    fun summarize(content: String): ContentSummary {
+        if (content.isBlank()) return ContentSummary()
         return summarizeChannels(parser.parse(content).channels)
     }
 
     /** Same counts from an already-parsed channel list — lets the connection test avoid a re-parse. */
-    fun summarizeChannels(channels: List<M3uChannel>): M3uContentSummary {
+    fun summarizeChannels(channels: List<M3uChannel>): ContentSummary {
         var channelCount = 0
         var movies = 0
         val seriesTitles = HashSet<String>()
@@ -44,6 +44,6 @@ class M3uContentSummarizer(
                     seriesTitles.add(classification.info.seriesTitleRaw.trim().lowercase())
             }
         }
-        return M3uContentSummary(channels = channelCount, movies = movies, series = seriesTitles.size)
+        return ContentSummary(channels = channelCount, movies = movies, series = seriesTitles.size)
     }
 }
