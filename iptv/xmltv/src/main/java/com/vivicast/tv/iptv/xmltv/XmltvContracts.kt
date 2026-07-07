@@ -10,6 +10,19 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 interface XmltvParser {
     fun parse(content: String): XmltvDocument
+
+    /**
+     * Streams an XMLTV document (SAX, constant memory) and pushes each channel/programme to [handler].
+     * gzip bodies (magic bytes 0x1F 0x8B) are transparently decompressed. Returns the number of skipped
+     * programmes. Use this for large feeds instead of [parse], which builds the whole DOM tree in memory.
+     */
+    fun parseStreaming(input: java.io.InputStream, handler: XmltvStreamHandler): Int
+}
+
+/** Sink for the streaming parser; called once per channel and once per resolved programme. */
+interface XmltvStreamHandler {
+    fun onChannel(channel: XmltvChannel)
+    fun onProgram(program: XmltvProgram)
 }
 
 data class XmltvDocument(
@@ -96,6 +109,9 @@ class DefaultXmltvParser : XmltvParser {
             skippedPrograms = skippedPrograms,
         )
     }
+
+    override fun parseStreaming(input: java.io.InputStream, handler: XmltvStreamHandler): Int =
+        streamXmltv(input, handler)
 
     private fun parseXmltvTime(value: String): Long? {
         val normalized = value.trim()

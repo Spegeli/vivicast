@@ -75,6 +75,7 @@ import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import com.vivicast.tv.data.epg.EpgConnectionTestResult
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -126,7 +127,10 @@ fun SettingsRoute(
     backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
     initialSelectedSection: String? = null,
+    focusLanguageRowOnEnter: Boolean = false,
+    onInitialLanguageFocusApplied: () -> Unit = {},
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
+    onTestEpgConnection: suspend (String) -> EpgConnectionTestResult = { EpgConnectionTestResult(null, null) },
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
@@ -182,7 +186,14 @@ fun SettingsRoute(
     LaunchedEffect(Unit) {
         viewModel.onReloadCacheStats()
         awaitFrame()
-        selectedSectionFocusRequester.requestFocus()
+        if (focusLanguageRowOnEnter && selectedSection == sectionGeneral) {
+            // Post language-change entry: land on the language row (detailFirstFocusModifier is moved
+            // onto it below) instead of the section rail.
+            detailFocusRequester.requestFocus()
+            onInitialLanguageFocusApplied()
+        } else {
+            selectedSectionFocusRequester.requestFocus()
+        }
     }
     LaunchedEffect(selectedSection, pendingDetailFocus) {
         if (pendingDetailFocus) {
@@ -296,6 +307,7 @@ fun SettingsRoute(
                             },
                             onGlobalUserAgentChanged = viewModel::onGlobalUserAgentChanged,
                             firstFocusModifier = detailFirstFocusModifier,
+                            focusLanguageInsteadOfFirst = focusLanguageRowOnEnter,
                         )
                         sectionPlaylists -> ProviderSettingsPanel(
                             providers = settingsUiState.providers,
@@ -335,7 +347,14 @@ fun SettingsRoute(
                             onResetManualMappingChannel = viewModel::onManualMappingReset,
                             onSetManualMapping = viewModel::setManualChannelMapping,
                             onClearManualMapping = viewModel::clearManualChannelMapping,
+                            onGetEpgSourceUrl = viewModel::getEpgSourceUrl,
+                            onTestEpgConnection = onTestEpgConnection,
                             firstFocusModifier = detailFirstFocusModifier,
+                            // Park focus on the (always-present) section button before the overview swaps
+                            // to the inline editor, so focus can't escape to the top nav bar (jumps Home).
+                            onParkFocusBeforeEditor = {
+                                runCatching { sectionFocusRequesters.getValue(sectionEpg).requestFocus() }
+                            },
                         )
                         sectionAppearance -> AppearanceSettingsPanel(
                             state = settingsUiState.appearance,

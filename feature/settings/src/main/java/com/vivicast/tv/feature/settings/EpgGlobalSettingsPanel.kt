@@ -102,6 +102,7 @@ internal fun EpgGlobalSettings(
     preferences: EpgSettingsState,
     onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
     onRunGlobalRefresh: () -> Unit,
+    canRefreshNow: Boolean = true,
     firstFocusModifier: Modifier = Modifier,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
@@ -173,13 +174,16 @@ internal fun EpgGlobalSettings(
                 )
             },
         )
-        VivicastSettingsRow(
-            title = stringResource(R.string.settings_epg_now),
-            help = stringResource(R.string.settings_epg_help_run_now),
-            value = stringResource(R.string.settings_epg_now_value),
-            icon = { SettingsRowIcon("refresh") },
-            onClick = onRunGlobalRefresh,
-        )
+        // Nothing to refresh without an EPG source, so hide the action until one exists.
+        if (canRefreshNow) {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_epg_now),
+                help = stringResource(R.string.settings_epg_help_run_now),
+                value = stringResource(R.string.settings_epg_now_value),
+                icon = { SettingsRowIcon("refresh") },
+                onClick = onRunGlobalRefresh,
+            )
+        }
     }
 }
 

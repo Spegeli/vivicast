@@ -106,6 +106,7 @@ internal fun GeneralSettingsPanel(
     onLanguageChanged: (SettingsLanguage) -> Unit,
     onGlobalUserAgentChanged: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
+    focusLanguageInsteadOfFirst: Boolean = false,
 ) {
     var showUserAgentDialog by remember { mutableStateOf(false) }
     val toggleLaunchOnBoot = { onLaunchOnBootChanged(!state.launchOnBoot) }
@@ -119,7 +120,7 @@ internal fun GeneralSettingsPanel(
                 title = stringResource(R.string.settings_launch_on_boot),
                 help = stringResource(R.string.settings_help_launch_on_boot),
                 value = if (state.launchOnBoot) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = firstFocusModifier,
+                modifier = if (focusLanguageInsteadOfFirst) Modifier else firstFocusModifier,
                 icon = { SettingsRowIcon("power") },
                 onClick = toggleLaunchOnBoot,
             )
@@ -141,7 +142,7 @@ internal fun GeneralSettingsPanel(
                 title = stringResource(R.string.settings_language),
                 help = stringResource(R.string.settings_help_language),
                 value = state.appLanguage.label(),
-                modifier = Modifier,
+                modifier = if (focusLanguageInsteadOfFirst) firstFocusModifier else Modifier,
                 icon = { SettingsRowIcon("language") },
                 onClick = { showLanguagePicker = true },
             )

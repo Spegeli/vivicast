@@ -22,8 +22,11 @@ import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.core.security.SecureValuePinSecurityStateStore
+import com.vivicast.tv.data.epg.EpgConnectionResponseException
+import com.vivicast.tv.data.epg.EpgConnectionTestResult
 import com.vivicast.tv.data.epg.EpgImportRepository
 import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.epg.TestEpgSourceConnectionUseCase
 import com.vivicast.tv.data.epg.RoomEpgRepository
 import com.vivicast.tv.data.epg.SecureEpgSourceRepository
 import com.vivicast.tv.data.favorites.FavoritesRepository
@@ -68,6 +71,8 @@ import com.vivicast.tv.worker.GlobalRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
 import com.vivicast.tv.worker.M3uSourceTooLargeException
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
+import com.vivicast.tv.worker.EpgSourceTooLargeException
+import com.vivicast.tv.worker.OkHttpEpgStreamSource
 import com.vivicast.tv.worker.OkHttpTextFetcher
 import com.vivicast.tv.worker.RefreshDiagnostics
 import com.vivicast.tv.worker.RefreshHttpException
@@ -259,7 +264,7 @@ class AppContainer(
         val epgRefresher = DefaultEpgRefresher(
             epgSourceReader = epgSourceReader,
             providerRepository = providerRepository,
-            textFetcher = textFetcher,
+            epgStreamSource = OkHttpEpgStreamSource(okHttpClient),
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = epgImportRepository,
             epgPastRetentionDaysProvider = { userPreferencesStore.values.first().epg.pastRetentionDays },
@@ -340,6 +345,18 @@ class AppContainer(
                 onFailure = { ProviderConnectionTestResult(errorMessage = it.toProviderConnectionMessage(), summary = null) },
             )
 
+    private val testEpgSourceConnectionUseCase: TestEpgSourceConnectionUseCase by lazy {
+        TestEpgSourceConnectionUseCase(streamSource = OkHttpEpgStreamSource(okHttpClient))
+    }
+
+    suspend fun testEpgSourceConnection(url: String): EpgConnectionTestResult =
+        // Off the main thread: URL fetch is blocking I/O and XMLTV parsing walks the whole document.
+        runCatching { withContext(Dispatchers.IO) { testEpgSourceConnectionUseCase.test(url) } }
+            .fold(
+                onSuccess = { summary -> EpgConnectionTestResult(errorMessage = null, summary = summary) },
+                onFailure = { EpgConnectionTestResult(errorMessage = it.toEpgConnectionMessage(), summary = null) },
+            )
+
     private companion object {
         const val DEFAULT_MEDIA_CACHE_SIZE_BYTES = 500L * 1024L * 1024L
     }
@@ -373,4 +390,18 @@ private fun Throwable.toProviderConnectionMessage(): String =
         is ProviderConnectionResponseException -> "Antwortformat nicht nutzbar."
         is IllegalArgumentException -> "Adresse oder Zugangsdaten sind ungültig."
         else -> "Quelle nicht erreichbar."
+    }
+
+private fun Throwable.toEpgConnectionMessage(): String =
+    when (this) {
+        is RefreshHttpException -> if (statusCode == 401 || statusCode == 403) {
+            "Zugangsdaten ungültig."
+        } else {
+            "Quelle nicht erreichbar."
+        }
+        is IllegalArgumentException -> "Adresse ist ungültig."
+        is EpgSourceTooLargeException -> "EPG-Datei zu groß (max. 200 MB)."
+        // Empty document or a parser exception (malformed XML) — the file is not usable XMLTV.
+        is EpgConnectionResponseException -> "Keine gültige EPG-Datei (XMLTV)."
+        else -> "Keine gültige EPG-Datei (XMLTV)."
     }

@@ -361,6 +361,12 @@
     <string name="main_external_dialog_body">Play movie or episode externally? External players do not return automatic progress.</string>
     <string name="settings_no_options">No options for this area.</string>
     <string name="settings_epg_add_source">Add EPG source</string>
+    <string name="settings_epg_help_add_source">Add a new EPG source from an XMLTV URL.</string>
+    <string name="settings_epg_test_summary">Found EPG for %1$d channels</string>
+    <string name="settings_epg_program_count">%1$d programmes</string>
+    <string name="settings_epg_name_placeholder">EPG source name</string>
+    <string name="settings_epg_name_exists_body">The name must be unique. An EPG source with this name already exists.</string>
+    <string name="settings_epg_url_exists">This URL is already used by the EPG source \"%1$s\".</string>
     <string name="settings_epg_manual_delete">Delete manually</string>
     <string name="settings_epg_delete_confirm">Really delete EPG source?</string>
     <string name="settings_delete">Delete</string>

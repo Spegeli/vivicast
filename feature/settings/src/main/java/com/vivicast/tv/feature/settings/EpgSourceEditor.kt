@@ -70,6 +70,7 @@ import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import com.vivicast.tv.data.epg.EpgContentSummary
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -98,58 +99,6 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-internal fun EpgSourceList(
-    sources: List<EpgSource>,
-    selectedSourceId: String?,
-    onSelectSource: (EpgSource) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (sources.isEmpty()) {
-        InfoPanel(
-            title = stringResource(R.string.settings_epg_no_sources),
-            body = stringResource(R.string.settings_epg_no_sources_body),
-            modifier = modifier,
-        )
-        return
-    }
-
-    LazyColumn(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
-    ) {
-        items(sources, key = { it.id }) { source ->
-            FocusPanel(
-                selected = source.id == selectedSourceId,
-                onClick = { onSelectSource(source) },
-                onFocused = { onSelectSource(source) },
-                modifier = Modifier.fillMaxWidth().height(116.dp),
-                contentPadding = VivicastSpacing.Space4,
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        BasicText(
-                            text = source.name,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = VivicastTypography.LabelLarge,
-                        )
-                        Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
-                        StatusBadge(if (source.isActive) stringResource(R.string.common_active) else stringResource(R.string.common_inactive), tone = if (source.isActive) VivicastColors.Success else VivicastColors.SurfaceHigh)
-                    }
-                    BodyText(stringResource(R.string.settings_epg_timeshift_format, source.timeShiftMinutes), maxLines = 1)
-                    BodyText(stringResource(R.string.settings_epg_assignment_info), maxLines = 1)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 internal fun EpgSourceEditor(
     editor: EpgSourceEditorState,
     providers: List<Provider>,
@@ -159,42 +108,114 @@ internal fun EpgSourceEditor(
     onEditorChange: (EpgSourceEditorState) -> Unit,
     onSelectProvider: (String) -> Unit,
     onSave: () -> Unit,
+    onCancel: () -> Unit,
     onDelete: () -> Unit,
     onLinkProvider: (providerId: String, sourceId: String, priority: Int) -> Unit,
     onUnlinkProvider: (providerId: String, sourceId: String) -> Unit,
     onMoveProviderLink: (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Unit,
+    duplicateName: Boolean = false,
+    duplicateUrlName: String? = null,
+    connectionTestStatus: ConnectionTestStatus = ConnectionTestStatus.Idle,
+    connectionSummary: EpgContentSummary? = null,
+    connectionError: String? = null,
+    onTestConnection: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    // Blank name reddens only after a save attempt (mirrors the playlist editor).
+    var showNameBlankError by remember { mutableStateOf(false) }
+    val nameBlank = editor.name.isBlank()
+    // Start focus on the name field (like the playlist editor). Wait one frame, else focus escapes to
+    // the top nav bar during the overview→editor swap.
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
+    // A blank URL is only required for a new source (edit keeps the stored one). Reddens after a save
+    // attempt, mirroring the name field / playlist editor.
+    val urlFocus = remember { FocusRequester() }
+    var showUrlBlankError by remember { mutableStateOf(false) }
+    val urlBlank = !editor.isEditing && editor.url.isBlank()
+    // On a blocked save, jump focus to the first bad field (name → URL), like the playlist editor.
+    var pendingErrorFocus by remember { mutableStateOf<EpgEditorErrorFocus?>(null) }
+    LaunchedEffect(pendingErrorFocus) {
+        val target = pendingErrorFocus ?: return@LaunchedEffect
+        awaitFrame()
+        runCatching { (if (target == EpgEditorErrorFocus.Name) firstFocus else urlFocus).requestFocus() }
+        pendingErrorFocus = null
+    }
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
-        item {
-            InfoPanel(
-                title = if (editor.isEditing) stringResource(R.string.settings_epg_source_edit_title) else stringResource(R.string.settings_epg_source_new_title),
-                body = if (editor.isEditing) stringResource(R.string.settings_epg_source_edit_body) else stringResource(R.string.settings_epg_source_new_body),
-                badge = if (editor.isActive) stringResource(R.string.common_active) else stringResource(R.string.common_inactive),
-                modifier = Modifier.fillMaxWidth(),
-            )
+        // Enable/disable toggle above the name (edit only, like the playlist editor). A new source is
+        // active by default, so add mode needs no toggle.
+        if (editor.isEditing) {
+            item(key = "active") {
+                VivicastSettingsRow(
+                    title = stringResource(R.string.settings_provider_active_label),
+                    help = "",
+                    value = if (editor.isActive) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+                    onClick = { onEditorChange(editor.copy(isActive = !editor.isActive)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        // Name field stays the first item with a stable key so inserting the duplicate warning below it
+        // never re-creates the focused field (which would let focus escape to the top nav bar).
+        item(key = "name") {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                ProviderTextField(
+                    label = stringResource(R.string.settings_provider_name_label),
+                    value = editor.name,
+                    placeholder = stringResource(R.string.settings_epg_name_placeholder),
+                    onValueChange = { onEditorChange(editor.copy(name = it)) },
+                    focusRequester = firstFocus,
+                    isError = duplicateName || (showNameBlankError && nameBlank),
+                    maxLength = 25,
+                )
+                VivicastDialogError(
+                    if (duplicateName) stringResource(R.string.settings_epg_name_exists_body) else null,
+                )
+            }
         }
 
         item {
-            ProviderTextField(
-                label = stringResource(R.string.settings_provider_name_label),
-                value = editor.name,
-                placeholder = stringResource(R.string.settings_epg_source_section),
-                onValueChange = { onEditorChange(editor.copy(name = it)) },
-            )
-        }
-
-        item {
-            ProviderTextField(
-                label = stringResource(R.string.m3u_source_url),
-                value = editor.url,
-                placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://...",
-                onValueChange = { onEditorChange(editor.copy(url = it)) },
-                secret = editor.isEditing,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                // URL field and its connection-test button share one row (mirrors the playlist editor).
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    ProviderTextField(
+                        label = stringResource(R.string.m3u_source_url),
+                        value = editor.url,
+                        placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://...",
+                        onValueChange = { onEditorChange(editor.copy(url = it)) },
+                        modifier = Modifier.weight(1f),
+                        focusRequester = urlFocus,
+                        secret = editor.isEditing,
+                        isError = connectionTestStatus == ConnectionTestStatus.Failed ||
+                            duplicateUrlName != null ||
+                            (showUrlBlankError && urlBlank),
+                        maxLength = 250,
+                    )
+                    ConnectionTestButton(status = connectionTestStatus, onClick = onTestConnection)
+                }
+                // Missing / duplicate URL — red inline hint (no note); .gz/.xz ignored for duplicates.
+                when {
+                    showUrlBlankError && urlBlank -> VivicastDialogError(stringResource(R.string.validation_epg_url_missing))
+                    duplicateUrlName != null -> VivicastDialogError(stringResource(R.string.settings_epg_url_exists, duplicateUrlName))
+                }
+                // Failed-test reason as a red inline hint (no note).
+                if (connectionError != null) VivicastDialogError(connectionError)
+                // Parsed breakdown after a passed test, so stale counts never linger.
+                if (connectionTestStatus == ConnectionTestStatus.Passed && connectionSummary != null) {
+                    // Same styling as the playlist "Found in this playlist" summary (default BodyText color).
+                    BodyText(stringResource(R.string.settings_epg_test_summary, connectionSummary.channels))
+                }
+            }
         }
 
         item {
@@ -225,14 +246,36 @@ internal fun EpgSourceEditor(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3, Alignment.CenterHorizontally),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 ActionPill(
-                    label = if (editor.isActive) stringResource(R.string.common_active) else stringResource(R.string.common_inactive),
+                    label = stringResource(R.string.common_cancel),
                     modifier = Modifier.width(132.dp),
-                    selected = editor.isActive,
-                    onClick = { onEditorChange(editor.copy(isActive = !editor.isActive)) },
+                    onClick = onCancel,
                 )
-                ActionPill(label = stringResource(R.string.common_save), modifier = Modifier.width(150.dp), selected = true, onClick = onSave)
+                ActionPill(
+                    label = stringResource(R.string.common_save),
+                    modifier = Modifier.width(150.dp),
+                    selected = true,
+                    onClick = {
+                        // A blocked save reddens the offending field and jumps focus to it
+                        // (name → URL), like the playlist editor.
+                        val errorFocus = when {
+                            nameBlank || duplicateName -> EpgEditorErrorFocus.Name
+                            urlBlank || duplicateUrlName != null -> EpgEditorErrorFocus.Url
+                            else -> null
+                        }
+                        if (errorFocus == null) {
+                            onSave()
+                        } else {
+                            showNameBlankError = true
+                            showUrlBlankError = true
+                            pendingErrorFocus = errorFocus
+                        }
+                    },
+                )
                 if (editor.isEditing) {
                     ActionPill(label = stringResource(R.string.settings_delete), modifier = Modifier.width(140.dp), onClick = onDelete)
                 }
@@ -395,6 +438,8 @@ fun DeleteEpgSourceDialog(
 fun deleteEpgSourceDialogTag(sourceId: String): String = "settings-delete-epg-source-dialog-$sourceId"
 fun deleteEpgSourceCancelTag(sourceId: String): String = "settings-delete-epg-source-cancel-$sourceId"
 fun deleteEpgSourceConfirmTag(sourceId: String): String = "settings-delete-epg-source-confirm-$sourceId"
+
+private enum class EpgEditorErrorFocus { Name, Url }
 
 internal data class EpgSourceEditorState(
     val sourceId: String?,

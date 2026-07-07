@@ -227,6 +227,10 @@ internal class SettingsViewModel(
     suspend fun saveEpgSource(request: EpgSourceEditRequest): Result<EpgSource> =
         runCatching { epgSourceRepository.saveSource(request) }
 
+    /** Reads an existing source's stored URL so the editor can flag duplicate URLs. */
+    suspend fun getEpgSourceUrl(sourceId: String): String? =
+        runCatching { epgSourceRepository.getSourceUrl(sourceId) }.getOrNull()
+
     suspend fun deleteEpgSource(sourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.deleteSource(sourceId) }
 

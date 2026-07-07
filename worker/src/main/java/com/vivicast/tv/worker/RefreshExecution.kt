@@ -7,6 +7,7 @@ import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.data.epg.EpgImportRepository
+import com.vivicast.tv.data.epg.EpgStreamSource
 import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.XtreamCatalog
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -17,7 +18,11 @@ import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.iptv.m3u.M3uParser
+import com.vivicast.tv.iptv.xmltv.XmltvChannel
+import com.vivicast.tv.iptv.xmltv.XmltvDocument
 import com.vivicast.tv.iptv.xmltv.XmltvParser
+import com.vivicast.tv.iptv.xmltv.XmltvProgram
+import com.vivicast.tv.iptv.xmltv.XmltvStreamHandler
 import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
@@ -29,7 +34,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 
 class DefaultRefreshWorkerRunner(
     private val orchestrator: GlobalRefreshOrchestrator,
@@ -307,7 +314,7 @@ class RoomEpgSourceReader(
 class DefaultEpgRefresher(
     private val epgSourceReader: EpgSourceReader,
     private val providerRepository: ProviderRepository,
-    private val textFetcher: TextFetcher,
+    private val epgStreamSource: EpgStreamSource,
     private val xmltvParser: XmltvParser,
     private val epgImportRepository: EpgImportRepository,
     private val epgPastRetentionDaysProvider: suspend () -> Int = { 1 },
@@ -323,10 +330,24 @@ class DefaultEpgRefresher(
         }
 
         try {
-            val document = xmltvParser.parse(textFetcher.fetch(source.url))
-            if (document.programs.isEmpty()) {
+            // Stream the feed (SAX, constant memory) and collect channels + programmes instead of
+            // building a DOM tree of the whole document. gzip bodies are decompressed by the parser.
+            val channels = ArrayList<XmltvChannel>()
+            val programs = ArrayList<XmltvProgram>()
+            var skippedPrograms = 0
+            epgStreamSource.open(source.url) { input ->
+                skippedPrograms = xmltvParser.parseStreaming(
+                    input,
+                    object : XmltvStreamHandler {
+                        override fun onChannel(channel: XmltvChannel) { channels.add(channel) }
+                        override fun onProgram(program: XmltvProgram) { programs.add(program) }
+                    },
+                )
+            }
+            if (programs.isEmpty()) {
                 throw RefreshImportException("XMLTV document contains no importable programs.")
             }
+            val document = XmltvDocument(channels = channels, programs = programs, skippedPrograms = skippedPrograms)
             val activeProviderIds = source.providerIds.filter { providerId ->
                 providerRepository.getProvider(providerId)?.isActive == true
             }
@@ -403,6 +424,53 @@ class OkHttpTextFetcher(
             }
         }
 }
+
+/**
+ * Streams an EPG source body (constant memory) instead of buffering it as a String like [TextFetcher].
+ * EPG feeds are commonly tens of MB, so this enforces a much larger cap ([MAX_EPG_URL_BYTES]) and hands
+ * the raw body stream to the caller, who parses it incrementally (gzip is detected by the parser).
+ */
+class OkHttpEpgStreamSource(
+    private val client: OkHttpClient,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : EpgStreamSource {
+    override suspend fun open(url: String, block: (InputStream) -> Unit) {
+        withContext(ioDispatcher) {
+            val request = Request.Builder().url(url).get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw RefreshHttpException(response.code)
+                }
+                val body = response.body
+                // Fast-fail on declared size; -1 (unknown) skips this branch and the stream cap catches it.
+                if (body.contentLength() > MAX_EPG_URL_BYTES) {
+                    throw EpgSourceTooLargeException(body.contentLength())
+                }
+                block(CappedInputStream(body.byteStream(), MAX_EPG_URL_BYTES))
+            }
+        }
+    }
+}
+
+/** Aborts mid-stream once more than [cap] bytes have been read, so an unbounded body can't exhaust heap. */
+private class CappedInputStream(delegate: InputStream, private val cap: Long) : FilterInputStream(delegate) {
+    private var readSoFar = 0L
+
+    override fun read(): Int = super.read().also { if (it >= 0) count(1) }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int =
+        super.read(b, off, len).also { if (it > 0) count(it.toLong()) }
+
+    private fun count(bytes: Long) {
+        readSoFar += bytes
+        if (readSoFar > cap) throw EpgSourceTooLargeException(readSoFar)
+    }
+}
+
+/** URL EPG document exceeds [MAX_EPG_URL_BYTES]; aborted before fully downloading. */
+class EpgSourceTooLargeException(
+    val byteCount: Long,
+) : RuntimeException("EPG document exceeds the $MAX_EPG_URL_BYTES byte limit (got $byteCount).")
 
 interface BinaryFetcher {
     suspend fun fetch(url: String): ByteArray
@@ -518,6 +586,10 @@ class M3uSourceTooLargeException(
 
 // ponytail: 32MB cap + full-in-RAM parse; upgrade to a streaming parser if mega-playlists OOM.
 private const val MAX_M3U_URL_BYTES: Long = 32L * 1024 * 1024
+
+// EPG/XMLTV feeds are commonly tens of MB (compressed or not); a much larger cap than M3U, still a guard
+// against a runaway/unbounded body. Streaming keeps memory flat regardless of the actual size.
+private const val MAX_EPG_URL_BYTES: Long = 200L * 1024 * 1024
 
 private const val MAX_FETCH_ATTEMPTS = 2
 private const val RETRY_BASE_DELAY_MS = 750L

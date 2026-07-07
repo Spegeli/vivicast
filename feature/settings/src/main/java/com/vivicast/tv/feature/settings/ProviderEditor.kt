@@ -947,7 +947,7 @@ private fun firstBlankXtreamFocus(
 }
 
 @Composable
-private fun ConnectionTestButton(
+internal fun ConnectionTestButton(
     status: ConnectionTestStatus,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

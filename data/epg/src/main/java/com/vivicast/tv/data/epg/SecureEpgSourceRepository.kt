@@ -15,6 +15,9 @@ import java.util.UUID
 interface EpgSourceRepository : EpgRepository {
     suspend fun saveSource(request: EpgSourceEditRequest): EpgSource
 
+    /** The (securely stored) URL of an existing source, for duplicate detection in the editor. */
+    suspend fun getSourceUrl(sourceId: String): String?
+
     suspend fun deleteSource(sourceId: String)
 
     suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int)
@@ -62,6 +65,11 @@ class SecureEpgSourceRepository(
                 isActive = request.isActive,
             ),
         )
+    }
+
+    override suspend fun getSourceUrl(sourceId: String): String? {
+        val source = database.epgDao().getEpgSource(sourceId) ?: return null
+        return secureValueStore.read(SecureKey(source.sourceConfigKey))
     }
 
     override suspend fun deleteSource(sourceId: String) {

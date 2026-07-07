@@ -1,5 +1,6 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -49,7 +49,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
@@ -70,6 +69,8 @@ import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import com.vivicast.tv.data.epg.EpgConnectionTestResult
+import com.vivicast.tv.data.epg.EpgContentSummary
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -119,7 +120,10 @@ internal fun EpgSettingsPanel(
     onResetManualMappingChannel: () -> Unit,
     onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
     onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
+    onGetEpgSourceUrl: suspend (String) -> String? = { null },
+    onTestEpgConnection: suspend (String) -> EpgConnectionTestResult = { EpgConnectionTestResult(null, null) },
     firstFocusModifier: Modifier = Modifier,
+    onParkFocusBeforeEditor: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
@@ -128,12 +132,17 @@ internal fun EpgSettingsPanel(
     var showManualMapping by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
+    // Where focus lands once the overview returns after leaving the inline editor / manual mapping.
+    var pendingOverviewFocus by remember { mutableStateOf<EpgOverviewFocusTarget?>(null) }
+    // EPG-source URL connection test (fetch + XMLTV parse), mirroring the playlist editor test.
+    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    var connectionSummary by remember { mutableStateOf<EpgContentSummary?>(null) }
+    var connectionError by remember { mutableStateOf<String?>(null) }
     val strEpgScheduled = stringResource(R.string.settings_epg_msg_scheduled)
     val strEpgSourceSaved = stringResource(R.string.settings_epg_msg_source_saved)
     val strEpgSourceAssigned = stringResource(R.string.settings_epg_msg_source_assigned)
     val strEpgSourceUnlinked = stringResource(R.string.settings_epg_msg_source_unlinked)
     val strEpgSourceDeleted = stringResource(R.string.settings_epg_msg_source_deleted)
-    val strEpgSourceSelect = stringResource(R.string.settings_epg_msg_source_select)
     val strEpgPriorityUpdated = stringResource(R.string.settings_epg_msg_priority_updated)
     val strValidationEpgNameMissing = stringResource(R.string.validation_name_missing)
     val strValidationEpgUrlMissing = stringResource(R.string.validation_epg_url_missing)
@@ -143,6 +152,7 @@ internal fun EpgSettingsPanel(
     val strEpgUnlinkFailed = stringResource(R.string.settings_epg_msg_remove_failed)
     val strEpgPriorityFailed = stringResource(R.string.settings_epg_msg_priority_failed)
     val strEpgDeleteFailed = stringResource(R.string.settings_epg_msg_source_delete_failed)
+    val strEpgTestUrlMissing = stringResource(R.string.validation_epg_url_missing)
 
     LaunchedEffect(sources) {
         val selectedSource = selectedSourceId?.let { id -> sources.firstOrNull { it.id == id } }
@@ -153,49 +163,164 @@ internal fun EpgSettingsPanel(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-        EpgGlobalSettings(
-            preferences = state,
-            onEpgPreferencesChanged = onEpgPreferencesChanged,
-            onRunGlobalRefresh = {
-                onRunGlobalRefresh()
-                message = strEpgScheduled
-            },
-            firstFocusModifier = firstFocusModifier,
-        )
+    // Existing source URLs (from the secure store) for duplicate detection. The .gz/.xz compression
+    // suffix is ignored so the same file with a different extension counts as a duplicate.
+    var existingEpgUrls by remember { mutableStateOf<List<EpgUrlEntry>>(emptyList()) }
+    LaunchedEffect(sources) {
+        existingEpgUrls = sources.mapNotNull { source ->
+            onGetEpgSourceUrl(source.id)?.trim()?.takeIf { it.isNotBlank() }
+                ?.let { EpgUrlEntry(source.id, normalizeEpgUrl(it), source.name) }
+        }
+    }
+    val duplicateEpgUrl: String? = editor.url.trim().takeIf { it.isNotBlank() }?.let { url ->
+        val normalized = normalizeEpgUrl(url)
+        existingEpgUrls.firstOrNull { it.sourceId != editor.sourceId && it.normalizedUrl == normalized }?.name
+    }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), verticalAlignment = Alignment.CenterVertically) {
-            ActionPill(
-                label = stringResource(R.string.settings_epg_add_source),
-                modifier = Modifier.width(250.dp),
-                selected = showEditor && !editor.isEditing,
-                onClick = {
-                    selectedSourceId = null
-                    editor = EpgSourceEditorState.newSource()
-                    showEditor = true
-                    showManualMapping = false
-                    message = null
+    val resetConnectionTest: () -> Unit = {
+        connectionTestStatus = ConnectionTestStatus.Idle
+        connectionSummary = null
+        connectionError = null
+    }
+    val openEditorForNew: () -> Unit = {
+        onParkFocusBeforeEditor()
+        selectedSourceId = null
+        editor = EpgSourceEditorState.newSource()
+        showEditor = true
+        showManualMapping = false
+        message = null
+        resetConnectionTest()
+    }
+    val dismissEditor: () -> Unit = {
+        // Park focus before the inline editor is removed, else focus escapes to the top nav bar (Home).
+        onParkFocusBeforeEditor()
+        pendingOverviewFocus = editor.sourceId?.let(EpgOverviewFocusTarget::Source) ?: EpgOverviewFocusTarget.AddButton
+        selectedSourceId = null
+        editor = EpgSourceEditorState.newSource()
+        showEditor = false
+        message = null
+    }
+    val dismissManualMapping: () -> Unit = {
+        onParkFocusBeforeEditor()
+        pendingOverviewFocus = EpgOverviewFocusTarget.ManualButton
+        showManualMapping = false
+        message = null
+    }
+
+    // Full-width infill swap (like the Playlists panel): overview, source editor and manual mapping
+    // are mutually exclusive, so none can be pushed off-screen by a shared column.
+    when {
+        showEditor -> {
+            BackHandler(onBack = dismissEditor)
+            EpgSourceEditor(
+                editor = editor,
+                providers = providers,
+                selectedProviderId = selectedProviderId,
+                providerLinks = providerLinks,
+                message = message,
+                onEditorChange = {
+                    editor = it
+                    // Any field edit invalidates a previous test result (mirrors the playlist editor).
+                    connectionTestStatus = ConnectionTestStatus.Idle
+                    connectionSummary = null
+                    connectionError = null
                 },
-            )
-            ActionPill(
-                label = stringResource(R.string.settings_epg_manual_mapping),
-                modifier = Modifier.width(230.dp),
-                selected = showManualMapping,
-                onClick = {
-                    // Re-opening the manual-mapping view drops the channel selection, mirroring the
-                    // pre-P1-04f3b panel-remount reset. Guarded so re-clicking while already open
-                    // (no remount previously) does not reset.
-                    if (!showManualMapping) {
-                        onResetManualMappingChannel()
+                onSelectProvider = onSelectProvider,
+                onSave = {
+                    val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
+                    if (validationMessage != null) {
+                        message = validationMessage
+                        return@EpgSourceEditor
                     }
-                    showManualMapping = true
-                    showEditor = false
-                    message = null
+                    scope.launch {
+                        onSaveEpgSource(editor.toEditRequest())
+                            .onSuccess { source ->
+                                // Close the editor and return to the overview focused on the saved
+                                // source (like the playlist editor), instead of leaving focus on a
+                                // control that recomposition removes → escaping to the top nav (Home).
+                                onParkFocusBeforeEditor()
+                                pendingOverviewFocus = EpgOverviewFocusTarget.Source(source.id)
+                                selectedSourceId = null
+                                editor = EpgSourceEditorState.newSource()
+                                showEditor = false
+                                resetConnectionTest()
+                                message = strEpgSourceSaved
+                            }
+                            .onFailure { error ->
+                                message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
+                            }
+                    }
                 },
+                onCancel = dismissEditor,
+                onDelete = {
+                    pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
+                },
+                onLinkProvider = { providerId, sourceId, priority ->
+                    scope.launch {
+                        onLinkProvider(providerId, sourceId, priority)
+                            .onSuccess { message = strEpgSourceAssigned }
+                            .onFailure { error ->
+                                message = strEpgLinkFailed.format(error.message ?: strUnknownError)
+                            }
+                    }
+                },
+                onUnlinkProvider = { providerId, sourceId ->
+                    scope.launch {
+                        onUnlinkProvider(providerId, sourceId)
+                            .onSuccess { message = strEpgSourceUnlinked }
+                            .onFailure { error ->
+                                message = strEpgUnlinkFailed.format(error.message ?: strUnknownError)
+                            }
+                    }
+                },
+                onMoveProviderLink = { providerId, sourceId, direction ->
+                    scope.launch {
+                        onMoveProviderLink(providerId, sourceId, direction)
+                            .onSuccess { message = strEpgPriorityUpdated }
+                            .onFailure { error ->
+                                message = strEpgPriorityFailed.format(error.message ?: strUnknownError)
+                            }
+                    }
+                },
+                duplicateName = editor.name.isNotBlank() && sources.any {
+                    it.id != editor.sourceId && it.name.trim().equals(editor.name.trim(), ignoreCase = true)
+                },
+                duplicateUrlName = duplicateEpgUrl,
+                connectionTestStatus = connectionTestStatus,
+                connectionSummary = connectionSummary,
+                connectionError = connectionError,
+                onTestConnection = {
+                    if (connectionTestStatus != ConnectionTestStatus.Testing) {
+                        val url = editor.url.trim()
+                        if (url.isBlank()) {
+                            connectionSummary = null
+                            connectionError = strEpgTestUrlMissing
+                            connectionTestStatus = ConnectionTestStatus.Failed
+                        } else {
+                            connectionTestStatus = ConnectionTestStatus.Testing
+                            connectionError = null
+                            connectionSummary = null
+                            scope.launch {
+                                val result = onTestEpgConnection(url)
+                                if (result.summary != null) {
+                                    connectionSummary = result.summary
+                                    connectionError = null
+                                    connectionTestStatus = ConnectionTestStatus.Passed
+                                } else {
+                                    connectionSummary = null
+                                    connectionError = result.errorMessage
+                                    connectionTestStatus = ConnectionTestStatus.Failed
+                                }
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
-        if (showManualMapping) {
+        showManualMapping -> {
+            BackHandler(onBack = dismissManualMapping)
             ManualEpgMappingPanel(
                 providers = providers,
                 sources = sources,
@@ -212,89 +337,89 @@ internal fun EpgSettingsPanel(
                 onMessage = { message = it },
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-            EpgSourceList(
-                sources = sources,
-                selectedSourceId = selectedSourceId,
-                onSelectSource = { source ->
-                    selectedSourceId = source.id
-                    editor = EpgSourceEditorState.from(source)
-                    showEditor = true
-                    showManualMapping = false
-                    message = null
-                },
-                modifier = Modifier.weight(0.42f).fillMaxHeight(),
-            )
+        }
 
-            if (showEditor) {
-                EpgSourceEditor(
-                    editor = editor,
-                    providers = providers,
-                    selectedProviderId = selectedProviderId,
-                    providerLinks = providerLinks,
-                    message = message,
-                    onEditorChange = { editor = it },
-                    onSelectProvider = onSelectProvider,
-                    onSave = {
-                        val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
-                        if (validationMessage != null) {
-                            message = validationMessage
-                            return@EpgSourceEditor
-                        }
-                        scope.launch {
-                            onSaveEpgSource(editor.toEditRequest())
-                                .onSuccess { source ->
-                                    selectedSourceId = source.id
-                                    editor = EpgSourceEditorState.from(source)
-                                    showEditor = true
-                                    message = strEpgSourceSaved
-                                }
-                                .onFailure { error ->
-                                    message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
-                                }
-                        }
-                    },
-                    onDelete = {
-                        pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
-                    },
-                    onLinkProvider = { providerId, sourceId, priority ->
-                        scope.launch {
-                            onLinkProvider(providerId, sourceId, priority)
-                                .onSuccess { message = strEpgSourceAssigned }
-                                .onFailure { error ->
-                                    message = strEpgLinkFailed.format(error.message ?: strUnknownError)
-                                }
-                        }
-                    },
-                    onUnlinkProvider = { providerId, sourceId ->
-                        scope.launch {
-                            onUnlinkProvider(providerId, sourceId)
-                                .onSuccess { message = strEpgSourceUnlinked }
-                                .onFailure { error ->
-                                    message = strEpgUnlinkFailed.format(error.message ?: strUnknownError)
-                                }
-                        }
-                    },
-                    onMoveProviderLink = { providerId, sourceId, direction ->
-                        scope.launch {
-                            onMoveProviderLink(providerId, sourceId, direction)
-                                .onSuccess { message = strEpgPriorityUpdated }
-                                .onFailure { error ->
-                                    message = strEpgPriorityFailed.format(error.message ?: strUnknownError)
-                                }
-                        }
-                    },
-                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                )
-            } else {
-                InfoPanel(
-                    title = stringResource(R.string.settings_epg_panel_title),
-                    body = message ?: strEpgSourceSelect,
-                    badge = "Phase 04",
-                    modifier = Modifier.weight(0.58f).fillMaxHeight(),
-                )
+        else -> {
+            val addRequester = remember { FocusRequester() }
+            val manualRequester = remember { FocusRequester() }
+            val sourceRequesters = remember(sources) { sources.associate { it.id to FocusRequester() } }
+            // Return focus onto the add/manual row or the source card just left, else it escapes to top nav.
+            LaunchedEffect(pendingOverviewFocus, sources) {
+                val target = pendingOverviewFocus ?: return@LaunchedEffect
+                awaitFrame()
+                val requester = when (target) {
+                    EpgOverviewFocusTarget.AddButton -> addRequester
+                    EpgOverviewFocusTarget.ManualButton -> manualRequester
+                    is EpgOverviewFocusTarget.Source -> sourceRequesters[target.sourceId] ?: addRequester
+                }
+                runCatching { requester.requestFocus() }
+                pendingOverviewFocus = null
             }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+            ) {
+                item {
+                    EpgGlobalSettings(
+                        preferences = state,
+                        onEpgPreferencesChanged = onEpgPreferencesChanged,
+                        onRunGlobalRefresh = {
+                            onRunGlobalRefresh()
+                            message = strEpgScheduled
+                        },
+                        canRefreshNow = sources.isNotEmpty(),
+                        firstFocusModifier = firstFocusModifier,
+                    )
+                }
+                item {
+                    VivicastSettingsRow(
+                        title = stringResource(R.string.settings_epg_add_source),
+                        help = stringResource(R.string.settings_epg_help_add_source),
+                        value = stringResource(R.string.about_open_value),
+                        modifier = Modifier.focusRequester(addRequester),
+                        onClick = openEditorForNew,
+                    )
+                }
+                item {
+                    VivicastSettingsRow(
+                        title = stringResource(R.string.settings_epg_manual_mapping),
+                        help = stringResource(R.string.settings_epg_manual_mapping_body),
+                        value = stringResource(R.string.about_open_value),
+                        modifier = Modifier.focusRequester(manualRequester),
+                        onClick = {
+                            onParkFocusBeforeEditor()
+                            onResetManualMappingChannel()
+                            showManualMapping = true
+                            showEditor = false
+                            message = null
+                        },
+                    )
+                }
+                if (sources.isEmpty()) {
+                    item {
+                        InfoPanel(
+                            title = stringResource(R.string.settings_epg_no_sources),
+                            body = stringResource(R.string.settings_epg_no_sources_body),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else {
+                    items(sources, key = { it.id }) { source ->
+                        EpgSourceOverviewCard(
+                            source = source,
+                            modifier = Modifier.focusRequester(sourceRequesters.getValue(source.id)),
+                            onClick = {
+                                onParkFocusBeforeEditor()
+                                selectedSourceId = source.id
+                                editor = EpgSourceEditorState.from(source)
+                                showEditor = true
+                                showManualMapping = false
+                                message = null
+                                resetConnectionTest()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -307,10 +432,19 @@ internal fun EpgSettingsPanel(
                 scope.launch {
                     onDeleteEpgSource(source.id)
                         .onSuccess {
+                            // Return focus to the next (or previous) source, or the add button if none
+                            // remain — else focus escapes to the top nav (Home). Mirrors the playlist editor.
+                            onParkFocusBeforeEditor()
+                            val deletedIndex = sources.indexOfFirst { it.id == source.id }
+                            val neighborId = sources.getOrNull(deletedIndex + 1)?.id
+                                ?: sources.getOrNull(deletedIndex - 1)?.id
+                            pendingOverviewFocus = neighborId?.let(EpgOverviewFocusTarget::Source)
+                                ?: EpgOverviewFocusTarget.AddButton
                             pendingDelete = null
                             selectedSourceId = null
                             editor = EpgSourceEditorState.newSource()
                             showEditor = false
+                            resetConnectionTest()
                             message = strEpgSourceDeleted
                         }
                         .onFailure { error ->
@@ -322,4 +456,66 @@ internal fun EpgSettingsPanel(
         )
     }
 }
+
+/** A single EPG-source card in the overview list; opening it swaps in the full-width editor. */
+@Composable
+private fun EpgSourceOverviewCard(
+    source: EpgSource,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FocusPanel(
+        selected = false,
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = VivicastSpacing.Space4,
+    ) {
+        // Same layout as the playlist provider card: name + status badge inline on the left, a badge row
+        // below, and the last-refresh / programme-count block right-aligned.
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.weight(1f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                    BasicText(
+                        text = source.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = VivicastTypography.LabelLarge,
+                    )
+                    StatusBadge(
+                        if (source.isActive) stringResource(R.string.common_active) else stringResource(R.string.common_inactive),
+                        tone = if (source.isActive) VivicastColors.Success else VivicastColors.SurfaceHigh,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+                    StatusBadge("EPG")
+                    StatusBadge(stringResource(R.string.settings_epg_timeshift_format, source.timeShiftMinutes))
+                }
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+                source.lastRefreshAt?.let { refreshedAt ->
+                    BodyText(stringResource(R.string.settings_provider_updated_format, refreshedAt.toBackupTimestamp()), maxLines = 1)
+                }
+                if (source.lastProgramCount > 0) {
+                    BodyText(stringResource(R.string.settings_epg_program_count, source.lastProgramCount), maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+private sealed interface EpgOverviewFocusTarget {
+    data object AddButton : EpgOverviewFocusTarget
+    data object ManualButton : EpgOverviewFocusTarget
+    data class Source(val sourceId: String) : EpgOverviewFocusTarget
+}
+
+private data class EpgUrlEntry(val sourceId: String, val normalizedUrl: String, val name: String)
+
+/** Ignore the compression suffix so e.g. `epg-de.xml` and `epg-de.xml.gz` count as the same URL. */
+private fun normalizeEpgUrl(url: String): String =
+    url.trim().removeSuffix(".gz").removeSuffix(".xz")
 

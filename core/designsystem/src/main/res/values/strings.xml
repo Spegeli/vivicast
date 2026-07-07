@@ -361,6 +361,12 @@
     <string name="main_external_dialog_body">Film oder Episode extern abspielen? Externe Player liefern keinen automatischen Fortschritt zurück.</string>
     <string name="settings_no_options">Keine Optionen für diesen Bereich.</string>
     <string name="settings_epg_add_source">EPG Quelle hinzufügen</string>
+    <string name="settings_epg_help_add_source">Neue EPG-Quelle aus einer XMLTV-URL.</string>
+    <string name="settings_epg_test_summary">EPG für %1$d Kanäle gefunden</string>
+    <string name="settings_epg_program_count">%1$d Sendungen</string>
+    <string name="settings_epg_name_placeholder">Name der EPG-Quelle</string>
+    <string name="settings_epg_name_exists_body">Der Name muss eindeutig sein. Eine EPG-Quelle mit diesem Namen existiert bereits.</string>
+    <string name="settings_epg_url_exists">Diese URL wird bereits von der EPG-Quelle „%1$s“ verwendet.</string>
     <string name="settings_epg_manual_delete">Manuell löschen</string>
     <string name="settings_epg_delete_confirm">EPG Quelle wirklich löschen?</string>
     <string name="settings_delete">Löschen</string>

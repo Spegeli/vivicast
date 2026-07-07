@@ -2,6 +2,7 @@ package com.vivicast.tv.worker
 
 import com.vivicast.tv.data.epg.EpgImportRepository
 import com.vivicast.tv.data.epg.EpgImportResult
+import com.vivicast.tv.data.epg.EpgStreamSource
 import com.vivicast.tv.data.epg.EpgSourceSaveRequest
 import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.CatalogImportResult
@@ -285,7 +286,7 @@ class RefreshExecutionTest {
                 ),
             ),
             providerRepository = FakeProviderRepository(listOf(activeProvider, disabledProvider)),
-            textFetcher = FakeTextFetcher(
+            epgStreamSource = FakeEpgStreamSource(
                 "https://epg.example/file.xml?token=secret" to """
                     <tv>
                       <channel id="ard.de"><display-name>ARD</display-name></channel>
@@ -322,7 +323,7 @@ class RefreshExecutionTest {
                 ),
             ),
             providerRepository = FakeProviderRepository(listOf(provider)),
-            textFetcher = FakeTextFetcher(
+            epgStreamSource = FakeEpgStreamSource(
                 "https://epg.example/file.xml" to """
                     <tv>
                       <channel id="ard.de"><display-name>ARD</display-name></channel>
@@ -569,6 +570,18 @@ private class FakeTextFetcher(
     override suspend fun fetch(url: String): String {
         urls += url
         return responseMap.getValue(url)
+    }
+}
+
+private class FakeEpgStreamSource(
+    private vararg val responses: Pair<String, String>,
+) : EpgStreamSource {
+    private val responseMap = responses.toMap()
+    val urls = mutableListOf<String>()
+
+    override suspend fun open(url: String, block: (java.io.InputStream) -> Unit) {
+        urls += url
+        block(java.io.ByteArrayInputStream(responseMap.getValue(url).toByteArray()))
     }
 }
 

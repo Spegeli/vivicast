@@ -726,6 +726,8 @@ private class FakeEpgSourceRepository(
         return epgSource(request.sourceId ?: "generated-id", request.name)
     }
 
+    override suspend fun getSourceUrl(sourceId: String): String? = null
+
     override suspend fun deleteSource(sourceId: String) {
         deletedSourceId = sourceId
     }

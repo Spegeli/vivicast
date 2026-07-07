@@ -209,6 +209,15 @@ private fun VivicastApp(
     val topNavigationFocusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val activity = context as? Activity
+    // Consumed once per Activity instance: recreate() (from a language change) reuses the same Intent,
+    // so this is true right after the recreate and false on every normal launch.
+    var reopenLanguageSettings by remember {
+        mutableStateOf(
+            (activity?.intent?.getBooleanExtra(EXTRA_REOPEN_LANGUAGE_SETTINGS, false) == true).also { flagged ->
+                if (flagged) activity?.intent?.removeExtra(EXTRA_REOPEN_LANGUAGE_SETTINGS)
+            },
+        )
+    }
     val scope = rememberCoroutineScope()
     val externalPlayerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -675,8 +684,14 @@ private fun VivicastApp(
         val currentPreferences = loadedPreferences ?: return@LaunchedEffect
         if (regularStartApplied || explicitSystemTargetSeen || !pinSecurityLoaded) return@LaunchedEffect
         regularStartApplied = true
-        selectRoute(ROUTE_HOME)
-        topNavigationFocusRequester.requestFocus()
+        if (reopenLanguageSettings) {
+            // Language just changed: go back into Settings (protection still enforced by selectRoute)
+            // instead of the default Home start. SettingsRoute focuses the language row on entry.
+            selectRoute(ROUTE_SETTINGS)
+        } else {
+            selectRoute(ROUTE_HOME)
+            topNavigationFocusRequester.requestFocus()
+        }
     }
 
     LaunchedEffect(preferences.general.backgroundRefreshEnabled) {
@@ -847,8 +862,13 @@ private fun VivicastApp(
                 ),
                 aboutAppState = context.aboutAppState(),
                 initialSelectedSection = preferences.general.lastSettingsSection,
+                focusLanguageRowOnEnter = reopenLanguageSettings,
+                onInitialLanguageFocusApplied = { reopenLanguageSettings = false },
                 onTestProviderConnection = { request ->
                     appContainer.testProviderConnection(request)
+                },
+                onTestEpgConnection = { url ->
+                    appContainer.testEpgSourceConnection(url)
                 },
                 onPickM3uFile = { onContent: (String, String) -> Unit ->
                     if (hasRealDocumentPicker(context.packageManager)) {
@@ -873,6 +893,8 @@ private fun VivicastApp(
                 onLanguageChanged = { language ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only Locale/recreate stay here.
                     LocaleHelper.save(context, language.toLocaleKey())
+                    // Flag the reused Intent so the post-recreate start lands back on Settings (language row).
+                    activity?.intent?.putExtra(EXTRA_REOPEN_LANGUAGE_SETTINGS, true)
                     activity?.recreate()
                 },
                 onDiagnosticsSettingsChanged = { diagnostics ->
@@ -1074,18 +1096,23 @@ private fun VivicastApp(
                 .padding(horizontal = VivicastSpacing.ScreenHorizontal, vertical = VivicastSpacing.ScreenVertical),
             verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
         ) {
-            VivicastTopNavigation(
-                brand = "VIVICAST",
-                items = destinations.map { it.label },
-                selectedIndex = selectedIndex,
-                selectedFocusRequester = topNavigationFocusRequester,
-                onItemFocusChanged = { focused -> topNavigationFocused = focused },
-                onSelected = { index -> selectRoute(destinations[index].route) },
-                onFocused = { index -> focusRoute(destinations[index].route) },
-            )
+            // Language-change handoff: selectedRoute is still Home until the start effect routes to
+            // Settings (through the protection gate). Render nothing focusable for that frame so neither
+            // Home content nor the Home nav item flashes/steals focus before Settings appears.
+            if (!(reopenLanguageSettings && !regularStartApplied)) {
+                VivicastTopNavigation(
+                    brand = "VIVICAST",
+                    items = destinations.map { it.label },
+                    selectedIndex = selectedIndex,
+                    selectedFocusRequester = topNavigationFocusRequester,
+                    onItemFocusChanged = { focused -> topNavigationFocused = focused },
+                    onSelected = { index -> selectRoute(destinations[index].route) },
+                    onFocused = { index -> focusRoute(destinations[index].route) },
+                )
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                selectedDestination.content()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    selectedDestination.content()
+                }
             }
         }
     }
@@ -1311,5 +1338,9 @@ private fun Int.floorMod(modulus: Int): Int =
     ((this % modulus) + modulus) % modulus
 
 private const val ROUTE_HOME = "home"
+private const val ROUTE_SETTINGS = "settings"
+// One-shot flag carried across the language-change recreate() so we land back on Settings with the
+// language row focused instead of the default Home start.
+private const val EXTRA_REOPEN_LANGUAGE_SETTINGS = "com.vivicast.tv.REOPEN_LANGUAGE_SETTINGS"
 internal const val PIN_LENGTH = 4
 private const val EXIT_CONFIRMATION_WINDOW_MILLIS = 2_000L
