@@ -44,6 +44,7 @@ class VivicastDatabaseMigrationTest {
             VivicastMigrations.Migration9To10,
             VivicastMigrations.Migration10To11,
             VivicastMigrations.Migration11To12,
+            VivicastMigrations.Migration12To13,
         )
 
         migrated.use {
@@ -79,6 +80,7 @@ class VivicastDatabaseMigrationTest {
         validateMigrationStep("migration-9-10.db", 9, 10, VivicastMigrations.Migration9To10)
         validateMigrationStep("migration-10-11.db", 10, 11, VivicastMigrations.Migration10To11)
         validateMigrationStep("migration-11-12.db", 11, 12, VivicastMigrations.Migration11To12)
+        validateMigrationStep("migration-12-13.db", 12, 13, VivicastMigrations.Migration12To13)
     }
 
     private fun validateMigrationStep(

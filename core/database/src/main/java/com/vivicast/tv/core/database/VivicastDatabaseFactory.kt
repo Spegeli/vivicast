@@ -25,6 +25,7 @@ object VivicastDatabaseFactory {
                 VivicastMigrations.Migration9To10,
                 VivicastMigrations.Migration10To11,
                 VivicastMigrations.Migration11To12,
+                VivicastMigrations.Migration12To13,
             )
             .build()
 }

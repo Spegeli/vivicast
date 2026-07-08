@@ -204,6 +204,16 @@ object VivicastMigrations {
             db.execSQL("ALTER TABLE epg_sources ADD COLUMN refreshIntervalHours INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    // Per-provider last-refresh timestamp — one persisted clock that both the foreground interval loop
+    // and the background periodic phase read from. NULL = never refreshed.
+    val Migration12To13: Migration = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // DEFAULT NULL to match the entity's @ColumnInfo(defaultValue = "NULL"), else Room's schema
+            // validation rejects the migration (as the other nullable provider columns do).
+            db.execSQL("ALTER TABLE providers ADD COLUMN lastRefreshAt INTEGER DEFAULT NULL")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

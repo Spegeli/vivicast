@@ -22,6 +22,9 @@ data class Provider(
     val userAgent: String? = null,
     // Whether this playlist is refreshed once when the app starts (independent of the interval).
     val refreshOnAppStartEnabled: Boolean = true,
+    // Wall-clock millis of the last successful refresh; null = never refreshed. Drives interval-based
+    // auto-refresh (foreground loop + background periodic phase). Not set by enabling/editing.
+    val lastRefreshAt: Long? = null,
 )
 
 enum class ProviderType { M3u, Xtream }

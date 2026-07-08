@@ -138,6 +138,7 @@ import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
 import com.vivicast.tv.worker.isRefreshDue
+import com.vivicast.tv.worker.refreshDelayMillis
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -417,9 +418,6 @@ private fun VivicastApp(
     var pinSecurityState by remember { mutableStateOf(PinSecurityState()) }
     var pinSecurityLoaded by remember { mutableStateOf(false) }
     val automaticProgressSaveTimes = remember { mutableMapOf<String, Long>() }
-    // In-app foreground refresh clock: item id (provider / EPG source) → last foreground refresh millis.
-    // The foreground interval loop uses it so intervals are measured from app open, not from epoch.
-    val foregroundRefreshedAt = remember { mutableMapOf<String, Long>() }
     val lifecycleOwner = LocalLifecycleOwner.current
     var nextAutoNextEpisode by remember { mutableStateOf<Episode?>(null) }
 
@@ -720,17 +718,26 @@ private fun VivicastApp(
             appContainer.appStartRefreshTriggered = true
             // Clear any "refreshing" state a cancelled/killed refresh left stuck (else the badge lingers).
             appContainer.recoverStuckRefreshState()
-            val now = System.currentTimeMillis()
-            val providers = appContainer.providerRepository.observeProviders().first()
-            val epgSources = appContainer.epgSourceRepository.observeEpgSources().first()
-            // Seed the foreground interval clock for every active item so the loop measures each item's
-            // interval from app open (items with refresh-on-start off still get a start reference).
-            providers.filter { it.isActive }.forEach { foregroundRefreshedAt[it.id] = now }
-            epgSources.filter { it.isActive }.forEach { foregroundRefreshedAt[it.id] = now }
-            providers.filter { it.isActive && it.refreshOnAppStartEnabled }
-                .forEach { scheduler.enqueuePlaylistRefresh(it.id) }
+            // "Refresh on app start" one-shots (cold start only, switch-independent). Interval-based
+            // refresh is driven separately by the foreground loop / background periodics off each item's
+            // persisted lastRefreshAt — so this does NOT touch items whose interval simply elapsed.
+            val startProviders = appContainer.providerRepository.observeProviders().first()
+                .filter { it.isActive && it.refreshOnAppStartEnabled }
+            startProviders.forEach { scheduler.enqueuePlaylistRefresh(it.id) }
             if (currentPreferences.epg.refreshOnAppStartEnabled) {
-                epgSources.filter { it.isActive }.forEach { scheduler.enqueueEpgRefresh(it.id) }
+                // Sources linked to a starting playlist will be refreshed by "refresh EPG on playlist
+                // change" (correctly, after the channels update) — skip them here to avoid a double
+                // refresh against stale channels. If that trigger is off, app-start must cover them.
+                val coveredByPlaylistChange = if (currentPreferences.epg.refreshOnPlaylistChangeEnabled) {
+                    startProviders.flatMap { provider ->
+                        appContainer.epgSourceRepository.observeProviderEpgSources(provider.id).first().map { it.epgSourceId }
+                    }.toSet()
+                } else {
+                    emptySet()
+                }
+                appContainer.epgSourceRepository.observeEpgSources().first()
+                    .filter { it.isActive && it.id !in coveredByPlaylistChange }
+                    .forEach { scheduler.enqueueEpgRefresh(it.id) }
             }
         }
     }
@@ -750,42 +757,47 @@ private fun VivicastApp(
             appContainer.epgSourceRepository.observeEpgSources().first().forEach { scheduler.cancelEpgPeriodic(it.id) }
             try {
                 while (true) {
+                    // Due-check reads each item's PERSISTED lastRefreshAt (written by the worker on success),
+                    // so a recently-refreshed item is not re-refreshed just because a new session started
+                    // (respects "refresh on app start = off"), and a background refresh is visible here too.
                     val now = System.currentTimeMillis()
                     appContainer.providerRepository.observeProviders().first()
                         .filter { it.isActive }
                         .forEach { provider ->
-                            if (isRefreshDue(now, foregroundRefreshedAt[provider.id] ?: 0L, provider.refreshIntervalHours)) {
+                            if (isRefreshDue(now, provider.lastRefreshAt ?: 0L, provider.refreshIntervalHours)) {
                                 scheduler.enqueuePlaylistRefresh(provider.id)
-                                foregroundRefreshedAt[provider.id] = now
                             }
                         }
                     appContainer.epgSourceRepository.observeEpgSources().first()
                         .filter { it.isActive }
                         .forEach { source ->
-                            if (isRefreshDue(now, foregroundRefreshedAt[source.id] ?: 0L, source.refreshIntervalHours)) {
+                            if (isRefreshDue(now, source.lastRefreshAt ?: 0L, source.refreshIntervalHours)) {
                                 scheduler.enqueueEpgRefresh(source.id)
-                                foregroundRefreshedAt[source.id] = now
                             }
                         }
                     delay(FOREGROUND_REFRESH_CHECK_INTERVAL_MS)
                 }
             } finally {
                 // Leaving foreground: hand intervals back to WorkManager periodics, gated by the switch
-                // (read fresh here so a mid-session toggle is honoured).
+                // (read fresh here so a mid-session toggle is honoured). The first run is phased to the
+                // remaining time since lastRefreshAt, so opening the app doesn't reset the countdown.
                 withContext(NonCancellable) {
                     val master = appContainer.userPreferencesStore.values.first().general.backgroundRefreshEnabled
+                    val now = System.currentTimeMillis()
                     val providers = appContainer.providerRepository.observeProviders().first()
                     val epgSources = appContainer.epgSourceRepository.observeEpgSources().first()
                     providers.forEach { provider ->
                         if (master && provider.isActive && provider.refreshIntervalHours > 0) {
-                            scheduler.enqueuePlaylistPeriodic(provider.id, provider.refreshIntervalHours)
+                            val delayMs = refreshDelayMillis(now, provider.lastRefreshAt ?: 0L, provider.refreshIntervalHours)
+                            scheduler.enqueuePlaylistPeriodic(provider.id, provider.refreshIntervalHours, delayMs)
                         } else {
                             scheduler.cancelPlaylistPeriodic(provider.id)
                         }
                     }
                     epgSources.forEach { source ->
                         if (master && source.isActive && source.refreshIntervalHours > 0) {
-                            scheduler.enqueueEpgPeriodic(source.id, source.refreshIntervalHours)
+                            val delayMs = refreshDelayMillis(now, source.lastRefreshAt ?: 0L, source.refreshIntervalHours)
+                            scheduler.enqueueEpgPeriodic(source.id, source.refreshIntervalHours, delayMs)
                         } else {
                             scheduler.cancelEpgPeriodic(source.id)
                         }
@@ -977,11 +989,10 @@ private fun VivicastApp(
                     }
                 },
                 onProviderSaved = { providerId ->
-                    // Saving is a foreground action: refresh once now and restart this playlist's
-                    // foreground interval clock. Its background periodic (with the possibly just-changed
-                    // interval) is (re)applied when the app next goes to the background.
+                    // Saving is a foreground action: refresh once now (stamps lastRefreshAt on success, so
+                    // the interval clock restarts from the save). The background periodic — with the
+                    // possibly just-changed interval — is (re)applied when the app next goes to background.
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
-                    foregroundRefreshedAt[providerId] = System.currentTimeMillis()
                 },
                 onBackgroundRefreshChanged = { enabled ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.
@@ -1153,11 +1164,9 @@ private fun VivicastApp(
                     }
                 },
                 onRefreshEpgSource = { sourceId ->
-                    // Per-source EPG refresh (like per-provider playlist refresh), not the monolithic
-                    // global refresh whose single long-running unique work blocks repeat button presses.
-                    // Also restarts this source's foreground interval clock so the loop doesn't re-refresh.
+                    // Per-source EPG refresh (like per-provider playlist refresh). Stamps lastRefreshAt on
+                    // success, so the interval clock restarts and the loop won't immediately re-refresh.
                     appContainer.refreshWorkScheduler.enqueueEpgRefresh(sourceId)
-                    foregroundRefreshedAt[sourceId] = System.currentTimeMillis()
                 },
                 onClearHistory = { target ->
                     scope.launch {

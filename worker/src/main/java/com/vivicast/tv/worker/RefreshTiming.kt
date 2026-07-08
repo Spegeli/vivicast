@@ -12,4 +12,16 @@ fun isRefreshDue(nowMillis: Long, lastRefreshMillis: Long, intervalHours: Int): 
     return nowMillis - lastRefreshMillis >= intervalHours.toLong() * MILLIS_PER_HOUR
 }
 
+/**
+ * Millis until the next interval refresh is due, given the last refresh time. 0 = due now (or overdue,
+ * or never refreshed). Used to preserve a background periodic's phase across a cancel+re-enqueue: the
+ * re-enqueued periodic's initial delay is the remaining time, so opening the app doesn't reset the
+ * countdown. [intervalHours] `<= 0` returns 0 (caller should not schedule an "off" item).
+ */
+fun refreshDelayMillis(nowMillis: Long, lastRefreshMillis: Long, intervalHours: Int): Long {
+    if (intervalHours <= 0) return 0L
+    val remaining = intervalHours.toLong() * MILLIS_PER_HOUR - (nowMillis - lastRefreshMillis)
+    return remaining.coerceAtLeast(0L)
+}
+
 private const val MILLIS_PER_HOUR = 60L * 60L * 1000L

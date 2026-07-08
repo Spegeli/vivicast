@@ -143,7 +143,9 @@ class RoomProviderRepository(
             // updatedAt nur bei erfolgreichem Refresh bumpen; Start (Refreshing) und Fehler-Status
             // lassen "Updated" unverändert.
             if (status == ProviderStatus.Active || status == ProviderStatus.ActiveWithPartialErrors) {
-                providerDao.setProviderStatus(providerId, status.storageValue, clock())
+                // Only a successful refresh reaches this branch (the refresher's success status), so stamp
+                // lastRefreshAt here too. Enabling a provider goes through providerDao directly and does not.
+                providerDao.setProviderRefreshed(providerId, status.storageValue, clock())
             } else {
                 providerDao.setProviderStatusOnly(providerId, status.storageValue)
             }
@@ -304,6 +306,7 @@ private fun ProviderEntity.toDomain(): Provider =
         xtreamMaxConnections = xtreamMaxConnections,
         userAgent = userAgent,
         refreshOnAppStartEnabled = refreshOnAppStartEnabled,
+        lastRefreshAt = lastRefreshAt,
     )
 
 private fun Provider.toEntity(): ProviderEntity =
@@ -326,6 +329,7 @@ private fun Provider.toEntity(): ProviderEntity =
         xtreamMaxConnections = xtreamMaxConnections,
         userAgent = userAgent,
         refreshOnAppStartEnabled = refreshOnAppStartEnabled,
+        lastRefreshAt = lastRefreshAt,
     )
 
 private val ProviderType.storageValue: String

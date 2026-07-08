@@ -36,6 +36,8 @@ data class ProviderEntity(
     @ColumnInfo(defaultValue = "NULL") val userAgent: String? = null,
     // Refresh this playlist once on app start (independent of the hourly interval).
     @ColumnInfo(defaultValue = "1") val refreshOnAppStartEnabled: Boolean = true,
+    // Wall-clock millis of the last successful refresh; NULL = never. Drives interval auto-refresh.
+    @ColumnInfo(defaultValue = "NULL") val lastRefreshAt: Long? = null,
 )
 
 @Entity(
