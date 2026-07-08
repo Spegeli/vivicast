@@ -72,7 +72,6 @@ import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgConnectionTestResult
 import com.vivicast.tv.data.epg.EpgContentSummary
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
@@ -113,9 +112,6 @@ internal fun EpgSettingsPanel(
     onSelectProvider: (String) -> Unit,
     onSaveEpgSource: suspend (EpgSourceEditRequest) -> Result<EpgSource>,
     onDeleteEpgSource: suspend (String) -> Result<Unit>,
-    onLinkProvider: suspend (providerId: String, sourceId: String, priority: Int) -> Result<Unit>,
-    onUnlinkProvider: suspend (providerId: String, sourceId: String) -> Result<Unit>,
-    onMoveProviderLink: suspend (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Result<Unit>,
     onSelectManualMappingChannel: (String) -> Unit,
     onResetManualMappingChannel: () -> Unit,
     onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
@@ -141,17 +137,11 @@ internal fun EpgSettingsPanel(
     var connectionError by remember { mutableStateOf<String?>(null) }
     val strEpgScheduled = stringResource(R.string.settings_epg_msg_scheduled)
     val strEpgSourceSaved = stringResource(R.string.settings_epg_msg_source_saved)
-    val strEpgSourceAssigned = stringResource(R.string.settings_epg_msg_source_assigned)
-    val strEpgSourceUnlinked = stringResource(R.string.settings_epg_msg_source_unlinked)
     val strEpgSourceDeleted = stringResource(R.string.settings_epg_msg_source_deleted)
-    val strEpgPriorityUpdated = stringResource(R.string.settings_epg_msg_priority_updated)
     val strValidationEpgNameMissing = stringResource(R.string.validation_name_missing)
     val strValidationEpgUrlMissing = stringResource(R.string.validation_epg_url_missing)
     val strUnknownError = stringResource(R.string.common_unknown_error)
     val strEpgSrcSaveFailed = stringResource(R.string.settings_epg_source_save_failed)
-    val strEpgLinkFailed = stringResource(R.string.settings_epg_msg_mapping_failed)
-    val strEpgUnlinkFailed = stringResource(R.string.settings_epg_msg_remove_failed)
-    val strEpgPriorityFailed = stringResource(R.string.settings_epg_msg_priority_failed)
     val strEpgDeleteFailed = stringResource(R.string.settings_epg_msg_source_delete_failed)
     val strEpgTestUrlMissing = stringResource(R.string.validation_epg_url_missing)
 
@@ -229,9 +219,6 @@ internal fun EpgSettingsPanel(
             BackHandler(onBack = dismissEditor)
             EpgSourceEditor(
                 editor = editor,
-                providers = providers,
-                selectedProviderId = selectedProviderId,
-                providerLinks = providerLinks,
                 message = message,
                 onEditorChange = {
                     editor = it
@@ -240,7 +227,6 @@ internal fun EpgSettingsPanel(
                     connectionSummary = null
                     connectionError = null
                 },
-                onSelectProvider = onSelectProvider,
                 onSave = {
                     val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
                     if (validationMessage != null) {
@@ -272,33 +258,6 @@ internal fun EpgSettingsPanel(
                 onCancel = dismissEditor,
                 onDelete = {
                     pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
-                },
-                onLinkProvider = { providerId, sourceId, priority ->
-                    scope.launch {
-                        onLinkProvider(providerId, sourceId, priority)
-                            .onSuccess { message = strEpgSourceAssigned }
-                            .onFailure { error ->
-                                message = strEpgLinkFailed.format(error.message ?: strUnknownError)
-                            }
-                    }
-                },
-                onUnlinkProvider = { providerId, sourceId ->
-                    scope.launch {
-                        onUnlinkProvider(providerId, sourceId)
-                            .onSuccess { message = strEpgSourceUnlinked }
-                            .onFailure { error ->
-                                message = strEpgUnlinkFailed.format(error.message ?: strUnknownError)
-                            }
-                    }
-                },
-                onMoveProviderLink = { providerId, sourceId, direction ->
-                    scope.launch {
-                        onMoveProviderLink(providerId, sourceId, direction)
-                            .onSuccess { message = strEpgPriorityUpdated }
-                            .onFailure { error ->
-                                message = strEpgPriorityFailed.format(error.message ?: strUnknownError)
-                            }
-                    }
                 },
                 duplicateName = editor.name.isNotBlank() && sources.any {
                     it.id != editor.sourceId && it.name.trim().equals(editor.name.trim(), ignoreCase = true)

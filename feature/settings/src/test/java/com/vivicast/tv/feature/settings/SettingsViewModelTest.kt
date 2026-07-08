@@ -20,7 +20,6 @@ import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.provider.M3uSourceMode
@@ -334,17 +333,6 @@ class SettingsViewModelTest {
         scope.cancel()
     }
 
-    @Test
-    fun moveEpgSourcePriority_delegatesToRepository() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val epgRepo = FakeEpgSourceRepository()
-        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
-
-        vm.moveEpgSourcePriority("p1", "s1", EpgSourcePriorityDirection.Up)
-
-        assertEquals(Triple("p1", "s1", EpgSourcePriorityDirection.Up), epgRepo.moveCall)
-        scope.cancel()
-    }
 
     @Test
     fun epgSourceFlowChange_updatesUiStateReactively() = runBlocking {
@@ -693,8 +681,6 @@ private class FakeEpgSourceRepository(
         private set
     var unlinkCall: Pair<String, String>? = null
         private set
-    var moveCall: Triple<String, String, EpgSourcePriorityDirection>? = null
-        private set
     var setMappingRequest: ManualEpgChannelMappingRequest? = null
         private set
     var clearMappingCall: Triple<String, String, String>? = null
@@ -740,13 +726,6 @@ private class FakeEpgSourceRepository(
         unlinkCall = providerId to epgSourceId
     }
 
-    override suspend fun moveSourcePriority(
-        providerId: String,
-        epgSourceId: String,
-        direction: EpgSourcePriorityDirection,
-    ) {
-        moveCall = Triple(providerId, epgSourceId, direction)
-    }
 }
 
 private class FakeProviderRepository(

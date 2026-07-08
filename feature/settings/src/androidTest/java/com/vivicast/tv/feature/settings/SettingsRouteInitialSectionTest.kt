@@ -23,7 +23,6 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.provider.ProviderConnectionTestResult
@@ -184,10 +183,5 @@ private object EmptyEpgSourceRepository : EpgSourceRepository {
     override suspend fun deleteSource(sourceId: String) = Unit
     override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) = Unit
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) = Unit
-    override suspend fun moveSourcePriority(
-        providerId: String,
-        epgSourceId: String,
-        direction: EpgSourcePriorityDirection,
-    ) = Unit
 }
 

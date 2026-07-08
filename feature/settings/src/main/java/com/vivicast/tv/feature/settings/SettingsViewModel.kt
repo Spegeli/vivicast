@@ -12,7 +12,6 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.provider.ProviderCreateRequest
@@ -239,13 +238,6 @@ internal class SettingsViewModel(
 
     suspend fun unlinkEpgSourceFromProvider(providerId: String, sourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }
-
-    suspend fun moveEpgSourcePriority(
-        providerId: String,
-        sourceId: String,
-        direction: EpgSourcePriorityDirection,
-    ): Result<Unit> =
-        runCatching { epgSourceRepository.moveSourcePriority(providerId, sourceId, direction) }
 
     fun onLaunchOnBootChanged(enabled: Boolean) = updateGeneral { it.copy(launchOnBoot = enabled) }
 

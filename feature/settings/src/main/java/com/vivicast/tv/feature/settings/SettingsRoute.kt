@@ -77,7 +77,6 @@ import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgConnectionTestResult
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
@@ -354,9 +353,6 @@ fun SettingsRoute(
                             onSelectProvider = viewModel::onEpgProviderSelected,
                             onSaveEpgSource = viewModel::saveEpgSource,
                             onDeleteEpgSource = viewModel::deleteEpgSource,
-                            onLinkProvider = viewModel::linkEpgSourceToProvider,
-                            onUnlinkProvider = viewModel::unlinkEpgSourceFromProvider,
-                            onMoveProviderLink = viewModel::moveEpgSourcePriority,
                             onSelectManualMappingChannel = viewModel::onManualMappingChannelSelected,
                             onResetManualMappingChannel = viewModel::onManualMappingReset,
                             onSetManualMapping = viewModel::setManualChannelMapping,

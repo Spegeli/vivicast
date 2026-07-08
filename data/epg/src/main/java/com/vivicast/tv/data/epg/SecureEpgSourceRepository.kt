@@ -23,13 +23,6 @@ interface EpgSourceRepository : EpgRepository {
     suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int)
 
     suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String)
-
-    suspend fun moveSourcePriority(providerId: String, epgSourceId: String, direction: EpgSourcePriorityDirection)
-}
-
-enum class EpgSourcePriorityDirection {
-    Up,
-    Down,
 }
 
 data class EpgSourceEditRequest(
@@ -100,32 +93,6 @@ class SecureEpgSourceRepository(
 
             database.epgDao().deleteProviderEpgSource(providerId, epgSourceId)
             rewritePriorities(remaining)
-        }
-    }
-
-    override suspend fun moveSourcePriority(
-        providerId: String,
-        epgSourceId: String,
-        direction: EpgSourcePriorityDirection,
-    ) {
-        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
-        require(epgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
-
-        database.withTransaction {
-            val links = database.epgDao().getProviderEpgSources(providerId).toMutableList()
-            val currentIndex = links.indexOfFirst { it.epgSourceId == epgSourceId }
-            if (currentIndex == -1) return@withTransaction
-
-            val targetIndex = when (direction) {
-                EpgSourcePriorityDirection.Up -> currentIndex - 1
-                EpgSourcePriorityDirection.Down -> currentIndex + 1
-            }
-            if (targetIndex !in links.indices) return@withTransaction
-
-            val moved = links[currentIndex]
-            links[currentIndex] = links[targetIndex]
-            links[targetIndex] = moved
-            rewritePriorities(links)
         }
     }
 

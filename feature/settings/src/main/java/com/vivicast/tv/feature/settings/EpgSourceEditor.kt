@@ -68,7 +68,6 @@ import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgContentSummary
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourcePriorityDirection
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
@@ -96,18 +95,11 @@ import java.util.Date
 @Composable
 internal fun EpgSourceEditor(
     editor: EpgSourceEditorState,
-    providers: List<Provider>,
-    selectedProviderId: String?,
-    providerLinks: List<ProviderEpgSource>,
     message: String?,
     onEditorChange: (EpgSourceEditorState) -> Unit,
-    onSelectProvider: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
-    onLinkProvider: (providerId: String, sourceId: String, priority: Int) -> Unit,
-    onUnlinkProvider: (providerId: String, sourceId: String) -> Unit,
-    onMoveProviderLink: (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Unit,
     duplicateName: Boolean = false,
     isDuplicateName: (String) -> Boolean = { false },
     duplicateUrlName: String? = null,
@@ -305,11 +297,6 @@ internal fun EpgSourceEditor(
                 }
             }
         }
-
-        // Provider-assignment UI intentionally removed from the EPG source editor (not used here). The
-        // callbacks (onSelectProvider / onLinkProvider / onUnlinkProvider / onMoveProviderLink) and the
-        // providers/providerLinks/selectedProviderId params are kept wired so the block can be re-added
-        // elsewhere without re-plumbing the repository + ViewModel flow.
 
         if (message != null) {
             item {
