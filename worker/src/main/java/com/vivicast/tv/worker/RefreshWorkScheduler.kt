@@ -15,7 +15,7 @@ import androidx.work.WorkRequest
 import java.util.concurrent.TimeUnit
 
 interface RefreshWorkScheduler {
-    fun setBackgroundRefreshEnabled(
+    fun setMaintenancePeriodicEnabled(
         enabled: Boolean,
         repeatIntervalHours: Long = WorkerContracts.DEFAULT_GLOBAL_REFRESH_INTERVAL_HOURS,
     )
@@ -50,7 +50,7 @@ interface RefreshWorkScheduler {
 class WorkManagerRefreshWorkScheduler(
     private val workManager: WorkManager,
 ) : RefreshWorkScheduler {
-    override fun setBackgroundRefreshEnabled(enabled: Boolean, repeatIntervalHours: Long) {
+    override fun setMaintenancePeriodicEnabled(enabled: Boolean, repeatIntervalHours: Long) {
         if (!enabled) {
             workManager.cancelUniqueWork(WorkerContracts.PERIODIC_GLOBAL_REFRESH_WORK)
             return
@@ -59,7 +59,7 @@ class WorkManagerRefreshWorkScheduler(
         workManager.enqueueUniquePeriodicWork(
             WorkerContracts.PERIODIC_GLOBAL_REFRESH_WORK,
             ExistingPeriodicWorkPolicy.UPDATE,
-            RefreshWorkRequests.periodicGlobalRefresh(repeatIntervalHours),
+            RefreshWorkRequests.periodicMaintenanceRefresh(repeatIntervalHours),
         )
     }
 
@@ -131,10 +131,10 @@ class WorkManagerRefreshWorkScheduler(
 }
 
 internal object RefreshWorkRequests {
-    fun periodicGlobalRefresh(repeatIntervalHours: Long): PeriodicWorkRequest {
+    fun periodicMaintenanceRefresh(repeatIntervalHours: Long): PeriodicWorkRequest {
         val safeInterval = repeatIntervalHours
             .coerceAtLeast(WorkerContracts.MIN_GLOBAL_REFRESH_INTERVAL_HOURS)
-        return PeriodicWorkRequestBuilder<GlobalRefreshWorker>(safeInterval, TimeUnit.HOURS)
+        return PeriodicWorkRequestBuilder<MaintenanceRefreshWorker>(safeInterval, TimeUnit.HOURS)
             .setConstraints(networkConstraints())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
             .addTag(WorkerContracts.GLOBAL_REFRESH_WORK)

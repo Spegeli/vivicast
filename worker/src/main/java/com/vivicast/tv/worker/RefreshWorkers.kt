@@ -6,7 +6,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
 
 interface RefreshWorkerRunner {
-    suspend fun runGlobalRefresh(): RefreshWorkerResult
+    suspend fun runMaintenanceRefresh(): RefreshWorkerResult
 
     suspend fun runPlaylistRefresh(providerId: String?): RefreshWorkerResult
 
@@ -54,12 +54,12 @@ abstract class DelegatingRefreshWorker(
     protected abstract suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult
 }
 
-class GlobalRefreshWorker(
+class MaintenanceRefreshWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : DelegatingRefreshWorker(appContext, params) {
     override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
-        runGlobalRefresh()
+        runMaintenanceRefresh()
 }
 
 class PlaylistRefreshWorker(

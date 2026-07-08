@@ -167,10 +167,7 @@ internal fun ProviderSettingsPanel(
         }
     }
 
-    val duplicateName = editor.name.isNotBlank() &&
-        providers.any { provider ->
-            provider.id != editor.providerId && provider.name.equals(editor.name.trim(), ignoreCase = true)
-        }
+    val duplicateName = isDuplicateNameOf(editor.name, editor.providerId, providers, { it.id }, { it.name })
 
     var existingM3uUrls by remember { mutableStateOf<List<ProviderUrlEntry>>(emptyList()) }
     LaunchedEffect(providers) {
@@ -181,13 +178,14 @@ internal fun ProviderSettingsPanel(
                 ?.url
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-                ?.let { ProviderUrlEntry(provider.id, it, provider.name) }
+                ?.let { ProviderUrlEntry(provider.id, normalizeSourceUrl(it), provider.name) }
         }
     }
     val duplicateUrlName = if (editor.type == ProviderType.M3u &&
         editor.m3uSourceMode == M3uSourceMode.Url && editor.m3uUrl.isNotBlank()
     ) {
-        existingM3uUrls.firstOrNull { it.providerId != editor.providerId && it.url == editor.m3uUrl.trim() }?.name
+        val normalized = normalizeSourceUrl(editor.m3uUrl)
+        existingM3uUrls.firstOrNull { it.providerId != editor.providerId && it.url == normalized }?.name
     } else {
         null
     }
@@ -302,7 +300,7 @@ internal fun ProviderSettingsPanel(
             editor = editor,
             duplicates = ProviderDuplicateInfo(duplicateName, duplicateUrlName),
             isDuplicateName = { candidate ->
-                providers.any { it.id != editor.providerId && it.name.trim().equals(candidate.trim(), ignoreCase = true) }
+                isDuplicateNameOf(candidate, editor.providerId, providers, { it.id }, { it.name })
             },
             message = message,
             connectionTestStatus = connectionTestStatus,

@@ -1,6 +1,6 @@
 package com.vivicast.tv.worker
 
-class GlobalRefreshOrchestrator(
+class MaintenanceRefreshOrchestrator(
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
     private val diagnostics: RefreshDiagnostics,

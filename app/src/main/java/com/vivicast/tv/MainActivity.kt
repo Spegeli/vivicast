@@ -711,7 +711,7 @@ private fun VivicastApp(
         val currentPreferences = loadedPreferences ?: return@LaunchedEffect
         val master = currentPreferences.general.backgroundRefreshEnabled
         val scheduler = appContainer.refreshWorkScheduler
-        scheduler.setBackgroundRefreshEnabled(enabled = master)
+        scheduler.setMaintenancePeriodicEnabled(enabled = master)
         // Cold start only: appStartRefreshTriggered lives on the process-scoped AppContainer, so an
         // Activity recreate (e.g. language change) does not re-trigger it — only a real relaunch does.
         if (!appContainer.appStartRefreshTriggered) {
@@ -997,7 +997,7 @@ private fun VivicastApp(
                 onBackgroundRefreshChanged = { enabled ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.
                     scope.launch {
-                        appContainer.refreshWorkScheduler.setBackgroundRefreshEnabled(enabled)
+                        appContainer.refreshWorkScheduler.setMaintenancePeriodicEnabled(enabled)
                     }
                 },
                 onLanguageChanged = { language ->

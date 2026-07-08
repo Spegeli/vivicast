@@ -34,10 +34,10 @@ class RefreshWorkRequestsTest {
     }
 
     @Test
-    fun periodicGlobalRefreshClampsTooSmallIntervals() {
-        val request = RefreshWorkRequests.periodicGlobalRefresh(0)
+    fun periodicMaintenanceRefreshClampsTooSmallIntervals() {
+        val request = RefreshWorkRequests.periodicMaintenanceRefresh(0)
 
-        assertEquals(GlobalRefreshWorker::class.java.name, request.workSpec.workerClassName)
+        assertEquals(MaintenanceRefreshWorker::class.java.name, request.workSpec.workerClassName)
         assertEquals(NetworkType.CONNECTED, request.workSpec.constraints.requiredNetworkType)
         assertEquals(
             WorkerContracts.MIN_GLOBAL_REFRESH_INTERVAL_HOURS * 60L * 60L * 1000L,

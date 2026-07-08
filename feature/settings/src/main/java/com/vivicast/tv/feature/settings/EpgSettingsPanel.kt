@@ -160,11 +160,11 @@ internal fun EpgSettingsPanel(
     LaunchedEffect(sources) {
         existingEpgUrls = sources.mapNotNull { source ->
             onGetEpgSourceUrl(source.id)?.trim()?.takeIf { it.isNotBlank() }
-                ?.let { EpgUrlEntry(source.id, normalizeEpgUrl(it), source.name) }
+                ?.let { EpgUrlEntry(source.id, normalizeSourceUrl(it), source.name) }
         }
     }
     val duplicateEpgUrl: String? = editor.url.trim().takeIf { it.isNotBlank() }?.let { url ->
-        val normalized = normalizeEpgUrl(url)
+        val normalized = normalizeSourceUrl(url)
         existingEpgUrls.firstOrNull { it.sourceId != editor.sourceId && it.normalizedUrl == normalized }?.name
     }
 
@@ -259,11 +259,9 @@ internal fun EpgSettingsPanel(
                 onDelete = {
                     pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
                 },
-                duplicateName = editor.name.isNotBlank() && sources.any {
-                    it.id != editor.sourceId && it.name.trim().equals(editor.name.trim(), ignoreCase = true)
-                },
+                duplicateName = isDuplicateNameOf(editor.name, editor.sourceId, sources, { it.id }, { it.name }),
                 isDuplicateName = { candidate ->
-                    sources.any { it.id != editor.sourceId && it.name.trim().equals(candidate.trim(), ignoreCase = true) }
+                    isDuplicateNameOf(candidate, editor.sourceId, sources, { it.id }, { it.name })
                 },
                 duplicateUrlName = duplicateEpgUrl,
                 connectionTestStatus = connectionTestStatus,
@@ -545,7 +543,4 @@ private sealed interface EpgOverviewFocusTarget {
 
 private data class EpgUrlEntry(val sourceId: String, val normalizedUrl: String, val name: String)
 
-/** Ignore the compression suffix so e.g. `epg-de.xml` and `epg-de.xml.gz` count as the same URL. */
-private fun normalizeEpgUrl(url: String): String =
-    url.trim().removeSuffix(".gz").removeSuffix(".xz")
 

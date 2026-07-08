@@ -47,7 +47,7 @@ Compose-Typen, keine Navigation, keine SAF/Keystore/Scheduler/Netzwerk-Logik.
 | **Provider Connection-Test** (`onTestProviderConnection`) | `AppContainer.testProviderConnection` (Netzwerk). | Netzwerk-I/O; explizit aus P1-04 ausgeklammert | P2-07 Connection-Test-UseCase (empfohlen, nicht P1-04) |
 | **M3U-Dateipicker/SAF** (`onPickM3uFile`) | SAF DocumentPicker + `hasRealDocumentPicker`. | ActivityResult/SAF | Belassen |
 | **Locale/Recreate** (`onLanguageChanged`) | `LocaleHelper.save` + `activity.recreate()`. Language-**Pref** ist im VM; nur der System-Effekt bleibt App. | Activity-Recreate | Belassen |
-| **BackgroundRefresh-Scheduler** (`onBackgroundRefreshChanged`) | `refreshWorkScheduler.setBackgroundRefreshEnabled`. Pref ist im VM; nur Scheduler bleibt App. | Scheduler | Belassen |
+| **BackgroundRefresh-Scheduler** (`onBackgroundRefreshChanged`) | `refreshWorkScheduler.setMaintenancePeriodicEnabled` (steuert nur die Logos+Cache-Maintenance-Periodic; Playlist/EPG-Periodics werden vom C1-Modell in MainActivity gated). Pref ist im VM; nur Scheduler bleibt App. | Scheduler | Belassen |
 | **ProviderSaved/Scheduler** (`onProviderSaved`) | `refreshWorkScheduler.enqueuePlaylistRefresh`. Reiner Seiteneffekt **nach** VM-Save; speichert selbst nicht. | Scheduler | Belassen |
 
 ## Noch vorhandene direkte Calls in Settings-Composables

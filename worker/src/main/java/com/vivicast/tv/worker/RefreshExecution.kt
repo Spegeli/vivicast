@@ -40,7 +40,7 @@ import java.io.IOException
 import java.io.InputStream
 
 class DefaultRefreshWorkerRunner(
-    private val orchestrator: GlobalRefreshOrchestrator,
+    private val orchestrator: MaintenanceRefreshOrchestrator,
     private val playlistRefresher: PlaylistRefresher,
     private val epgRefresher: EpgRefresher,
     private val seriesDetailsRefresher: SeriesDetailsRefresher,
@@ -49,7 +49,7 @@ class DefaultRefreshWorkerRunner(
     private val scheduler: RefreshWorkScheduler,
     private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
 ) : RefreshWorkerRunner {
-    override suspend fun runGlobalRefresh(): RefreshWorkerResult =
+    override suspend fun runMaintenanceRefresh(): RefreshWorkerResult =
         runCancellableCatching { orchestrator.refresh() }
             .fold(
                 onSuccess = { report ->

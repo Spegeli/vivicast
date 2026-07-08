@@ -6,14 +6,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Test
 
-class GlobalRefreshOrchestratorTest {
+class MaintenanceRefreshOrchestratorTest {
     // The global periodic refresh covers logos + cache only; playlists and EPG sources refresh via their
     // own per-item workers, so the orchestrator has no playlist or EPG stage.
 
     @Test
     fun refreshPropagatesCancellationAndStopsRemainingStages() = runBlocking {
         val calls = mutableListOf<String>()
-        val orchestrator = GlobalRefreshOrchestrator(
+        val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = object : LogoRefresher {
                 // Simulates WorkManager stopping the worker mid-refresh.
                 override suspend fun refreshLogos() { throw CancellationException("stopped") }
@@ -37,7 +37,7 @@ class GlobalRefreshOrchestratorTest {
     fun refreshRunsLogosThenCache() = runBlocking {
         val calls = mutableListOf<String>()
         val diagnostics = InMemoryRefreshDiagnostics()
-        val orchestrator = GlobalRefreshOrchestrator(
+        val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = object : LogoRefresher {
                 override suspend fun refreshLogos() { calls += "refresh-logos" }
             },

@@ -67,7 +67,7 @@ import com.vivicast.tv.worker.DefaultLogoRefresher
 import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
 import com.vivicast.tv.worker.DefaultSeriesDetailsRefresher
-import com.vivicast.tv.worker.GlobalRefreshOrchestrator
+import com.vivicast.tv.worker.MaintenanceRefreshOrchestrator
 import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
 import com.vivicast.tv.worker.M3uSourceTooLargeException
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
@@ -290,7 +290,7 @@ class AppContainer(
         val cacheCleaner = DefaultCacheCleaner(mediaCacheStore) {
             DEFAULT_MEDIA_CACHE_SIZE_BYTES
         }
-        val orchestrator = GlobalRefreshOrchestrator(
+        val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = logoRefresher,
             cacheCleaner = cacheCleaner,
             diagnostics = refreshDiagnostics,
