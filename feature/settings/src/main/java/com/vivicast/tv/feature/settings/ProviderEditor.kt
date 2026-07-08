@@ -891,10 +891,23 @@ internal data class ProviderEditorState(
     val isActive: Boolean = true,
     val userAgent: String = "",
     val refreshOnAppStartEnabled: Boolean = true,
+    // Signature of the source (URL/file/Xtream creds) as loaded when editing; blank for a new provider.
+    // Lets Save skip the connection test when the source didn't change (see isSourceUnchanged).
+    val pristineSource: String = "",
 ) {
     val isEditing: Boolean get() = providerId != null
     val isAutomaticallyRefreshable: Boolean
         get() = type == ProviderType.Xtream || (type == ProviderType.M3u && m3uSourceMode.isAutomaticallyRefreshable)
+
+    /** A stable signature of the current source fields, compared against [pristineSource]. */
+    fun sourceSignature(): String = when (type) {
+        ProviderType.M3u -> "M3U|$m3uSourceMode|${m3uUrl.trim()}|${m3uContent.trim()}"
+        ProviderType.Xtream -> "XT|${xtreamServerUrl.trim()}|${xtreamUsername.trim()}|${xtreamPassword.trim()}"
+    }
+
+    /** Editing an existing provider without having changed its source — Save may skip the connection test. */
+    val isSourceUnchanged: Boolean
+        get() = isEditing && pristineSource.isNotEmpty() && pristineSource == sourceSignature()
 
     fun validationMessage(
         requireConnectionTest: Boolean,
@@ -1037,7 +1050,10 @@ internal data class ProviderEditorState(
                 m3uSourceMode = m3u?.sourceMode ?: M3uSourceMode.Url,
                 m3uUrl = m3u?.url.orEmpty(),
                 m3uContent = m3u?.inlineContent.orEmpty(),
-                m3uHasExistingSource = credentials is ProviderCredentials.M3u,
+                // Tied to the provider type, not the loaded credentials: an M3U provider still HAS a stored
+                // source even if the (async, secure) credential load failed — so a blank field means "keep
+                // the stored source", not "source missing", and Save isn't blocked on a transient read error.
+                m3uHasExistingSource = provider.type == ProviderType.M3u,
                 xtreamServerUrl = xtream?.serverUrl.orEmpty(),
                 xtreamUsername = xtream?.username.orEmpty(),
                 xtreamPassword = xtream?.password.orEmpty(),
@@ -1049,7 +1065,7 @@ internal data class ProviderEditorState(
                 isActive = provider.isActive,
                 userAgent = provider.userAgent.orEmpty(),
                 refreshOnAppStartEnabled = provider.refreshOnAppStartEnabled,
-            )
+            ).let { it.copy(pristineSource = it.sourceSignature()) }
         }
     }
 }

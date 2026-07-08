@@ -349,14 +349,23 @@ internal fun ProviderSettingsPanel(
                 }
             },
             onSave = {
-                // Duplicates are guarded in ProviderEditor. Save always tests the source; on failure a
-                // confirm dialog offers "Korrigieren" or force-save (which deactivates). Ignore while testing.
+                // Duplicates are guarded in ProviderEditor. Save tests the source; on failure a confirm
+                // dialog offers "Korrigieren" or force-save (which deactivates). A metadata-only edit
+                // (source unchanged) skips the test entirely, so an offline blip can't force-deactivate a
+                // working playlist. Ignore while testing.
                 when {
                     saving || connectionTestStatus == ConnectionTestStatus.Testing -> Unit
                     else -> {
                         val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
                         if (validationMessage != null) {
                             message = validationMessage
+                        } else if (editor.isSourceUnchanged) {
+                            scope.launch {
+                                message = null
+                                saving = true
+                                persistEditor()
+                                saving = false
+                            }
                         } else {
                             scope.launch {
                                 message = null

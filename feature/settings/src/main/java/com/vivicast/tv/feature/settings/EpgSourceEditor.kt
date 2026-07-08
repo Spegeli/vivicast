@@ -128,11 +128,11 @@ internal fun EpgSourceEditor(
         awaitFrame()
         runCatching { (if (editor.isEditing) toggleFocus else firstFocus).requestFocus() }
     }
-    // URL is required in both add and edit (edit pre-fills the stored URL, so clearing it must block the
-    // save). Reddens only after a save attempt, mirroring the M3U URL field.
+    // URL is required in both add and edit; clearing a pre-filled URL blocks save, but a failed async
+    // pre-fill (blank + hasExistingUrl) does not. Reddens only after a save attempt, mirroring M3U.
     val urlFocus = remember { FocusRequester() }
     var showUrlBlankError by remember { mutableStateOf(false) }
-    val urlBlank = editor.url.isBlank()
+    val urlBlank = editor.urlRequiredMissing
     // On a blocked save, jump focus to the first bad field (name → URL), like the playlist editor.
     var pendingErrorFocus by remember { mutableStateOf<EpgEditorErrorFocus?>(null) }
     // Update-interval picker popup (reuses the playlist editor's dialog).
@@ -189,7 +189,9 @@ internal fun EpgSourceEditor(
                         label = stringResource(R.string.m3u_source_url),
                         value = editor.url,
                         placeholder = "https://...",
-                        onValueChange = { onEditorChange(editor.copy(url = it)) },
+                        // Editing the field means the user is setting a new URL — stop falling back to the
+                        // stored one, so an empty field is then a required-field error.
+                        onValueChange = { onEditorChange(editor.copy(url = it, hasExistingUrl = false)) },
                         modifier = Modifier.weight(1f),
                         focusRequester = urlFocus,
                         // Show the pre-filled URL in plaintext when editing (mirrors the playlist M3U field).
@@ -204,7 +206,8 @@ internal fun EpgSourceEditor(
                     ConnectionTestButton(
                         status = connectionTestStatus,
                         onClick = {
-                            if (urlBlank) {
+                            // Can't test an empty field (even if a stored URL exists) — redden + focus.
+                            if (editor.url.isBlank()) {
                                 showUrlBlankError = true
                                 pendingErrorFocus = EpgEditorErrorFocus.Url
                             } else {
@@ -389,14 +392,22 @@ internal data class EpgSourceEditorState(
     val timeShiftMinutes: Int,
     val isActive: Boolean,
     val refreshIntervalHours: Int,
+    // True when editing a source that has a stored URL, until the user edits the field. A blank field
+    // then means "keep the stored URL" (so a failed async URL pre-fill doesn't block save), while
+    // actively clearing it (which flips this false) is a required-field error.
+    val hasExistingUrl: Boolean = false,
 ) {
     val isEditing: Boolean get() = sourceId != null
 
+    /** URL missing in a way that blocks save: blank AND not falling back to a stored URL. */
+    val urlRequiredMissing: Boolean get() = url.isBlank() && !hasExistingUrl
+
     fun validationMessage(msgNameMissing: String, msgUrlMissing: String): String? {
         if (name.isBlank()) return msgNameMissing
-        // URL is required in both add and edit (edit pre-fills the stored URL; clearing it blocks save),
-        // consistent with the Save-button pre-check. Intentionally stricter than the M3U editor (D2).
-        if (url.isBlank()) return msgUrlMissing
+        // URL required in both add and edit (clearing a pre-filled URL blocks save), consistent with the
+        // Save-button pre-check. Intentionally stricter than the M3U editor (D2). A failed pre-fill keeps
+        // hasExistingUrl, so it's not treated as missing.
+        if (urlRequiredMissing) return msgUrlMissing
         return null
     }
 
@@ -429,6 +440,8 @@ internal data class EpgSourceEditorState(
                 timeShiftMinutes = source.timeShiftMinutes,
                 isActive = source.isActive,
                 refreshIntervalHours = source.refreshIntervalHours,
+                // Editing: there is a stored URL (even if the async pre-fill returned blank on failure).
+                hasExistingUrl = true,
             )
     }
 }
