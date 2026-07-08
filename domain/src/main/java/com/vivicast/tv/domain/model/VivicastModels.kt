@@ -146,8 +146,6 @@ data class EpgSource(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
-    // Hours between automatic refreshes; 0 = off (no periodic auto-refresh for this source).
-    val refreshIntervalHours: Int = 0,
     val lastRefreshAt: Long? = null,
     val lastProgramCount: Int = 0,
     val lastChannelCount: Int = 0,

@@ -534,6 +534,17 @@ class RoomEpgRepositoryTest {
     }
 
     private suspend fun seedLargeEpgFixture(channelCount: Int, days: Int) {
+        // Active EPG source for the programmes below — observeProgramsForChannel INNER JOINs epg_sources
+        // on isActive=1, so the programmes are only visible when their source exists and is active.
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(
+                sourceId = "epg-large",
+                name = "Large EPG",
+                sourceConfigKey = "secure:epg-large",
+                timeShiftMinutes = 0,
+                isActive = true,
+            ),
+        )
         val categoryId = "$PROVIDER_ID-large-live"
         database.catalogDao().upsertCategories(
             listOf(

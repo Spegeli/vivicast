@@ -214,6 +214,54 @@ object VivicastMigrations {
             db.execSQL("ALTER TABLE providers ADD COLUMN lastRefreshAt INTEGER DEFAULT NULL")
         }
     }
+
+    val Migration13To14: Migration = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // The per-source EPG refresh interval is gone (interval is global again); drop the column.
+            // SQLite has no simple DROP COLUMN across all supported versions, so recreate the table.
+            db.execSQL("DROP INDEX IF EXISTS `index_epg_sources_stableKey`")
+            db.execSQL("DROP INDEX IF EXISTS `index_epg_sources_name`")
+            db.execSQL("DROP INDEX IF EXISTS `index_epg_sources_sourceConfigKey`")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `epg_sources_new` (
+                    `id` TEXT NOT NULL,
+                    `stableKey` TEXT NOT NULL DEFAULT '',
+                    `name` TEXT NOT NULL,
+                    `sourceConfigKey` TEXT NOT NULL,
+                    `timeShiftMinutes` INTEGER NOT NULL,
+                    `isActive` INTEGER NOT NULL,
+                    `lastRefreshAt` INTEGER,
+                    `lastProgramCount` INTEGER NOT NULL DEFAULT 0,
+                    `lastChannelCount` INTEGER NOT NULL DEFAULT 0,
+                    `isRefreshing` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO `epg_sources_new` (
+                    `id`, `stableKey`, `name`, `sourceConfigKey`, `timeShiftMinutes`, `isActive`,
+                    `lastRefreshAt`, `lastProgramCount`, `lastChannelCount`, `isRefreshing`,
+                    `createdAt`, `updatedAt`
+                )
+                SELECT
+                    `id`, `stableKey`, `name`, `sourceConfigKey`, `timeShiftMinutes`, `isActive`,
+                    `lastRefreshAt`, `lastProgramCount`, `lastChannelCount`, `isRefreshing`,
+                    `createdAt`, `updatedAt`
+                FROM `epg_sources`
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE `epg_sources`")
+            db.execSQL("ALTER TABLE `epg_sources_new` RENAME TO `epg_sources`")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_epg_sources_stableKey` ON `epg_sources` (`stableKey`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_sources_name` ON `epg_sources` (`name`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_epg_sources_sourceConfigKey` ON `epg_sources` (`sourceConfigKey`)")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

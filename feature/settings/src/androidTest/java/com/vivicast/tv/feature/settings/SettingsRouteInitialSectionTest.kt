@@ -180,6 +180,7 @@ private object EmptyEpgSourceRepository : EpgSourceRepository {
         error("No EPG mapping in this test.")
     override suspend fun clearManualChannelMapping(providerId: String, channelId: String, epgSourceId: String) = Unit
     override suspend fun saveSource(request: EpgSourceEditRequest): EpgSource = error("No EPG source in this test.")
+    override suspend fun getSourceUrl(sourceId: String): String? = null
     override suspend fun deleteSource(sourceId: String) = Unit
     override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) = Unit
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) = Unit

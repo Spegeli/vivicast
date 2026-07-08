@@ -266,6 +266,7 @@ internal class SettingsViewModel(
 
     fun onEpgSettingsChanged(epg: EpgSettingsState) = updateEpg {
         it.copy(
+            refreshIntervalHours = epg.refreshIntervalHours,
             pastRetentionDays = epg.pastRetentionDays,
             refreshOnAppStartEnabled = epg.refreshOnAppStartEnabled,
             refreshOnPlaylistChangeEnabled = epg.refreshOnPlaylistChangeEnabled,
@@ -350,6 +351,7 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
         autoNextCountdownSeconds = playback.autoNextCountdownSeconds,
     ),
     epg = EpgSettingsState(
+        refreshIntervalHours = epg.refreshIntervalHours,
         pastRetentionDays = epg.pastRetentionDays,
         refreshOnAppStartEnabled = epg.refreshOnAppStartEnabled,
         refreshOnPlaylistChangeEnabled = epg.refreshOnPlaylistChangeEnabled,

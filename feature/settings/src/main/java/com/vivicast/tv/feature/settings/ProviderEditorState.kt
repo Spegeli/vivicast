@@ -3,12 +3,12 @@ package com.vivicast.tv.feature.settings
 import androidx.annotation.StringRes
 import androidx.compose.ui.focus.FocusRequester
 import com.vivicast.tv.core.designsystem.R
+import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
-import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.data.provider.normalizeLogoPriority
 import com.vivicast.tv.domain.model.Provider
@@ -178,7 +178,7 @@ internal data class ProviderEditorState(
                 includeLiveTv = true,
                 includeMovies = false,
                 includeSeries = false,
-                refreshIntervalHours = REFRESH_INTERVAL_OFF,
+                refreshIntervalHours = DEFAULT_REFRESH_INTERVAL_HOURS,
             )
 
         fun from(provider: Provider, credentials: ProviderCredentials? = null): ProviderEditorState {

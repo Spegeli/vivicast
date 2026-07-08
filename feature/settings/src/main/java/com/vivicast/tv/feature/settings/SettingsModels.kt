@@ -69,8 +69,9 @@ enum class BackupTargetMode {
 }
 
 data class EpgSettingsState(
+    val refreshIntervalHours: Int = 24,
     val pastRetentionDays: Int = 1,
-    val refreshOnAppStartEnabled: Boolean = true,
+    val refreshOnAppStartEnabled: Boolean = false,
     val refreshOnPlaylistChangeEnabled: Boolean = true,
 )
 

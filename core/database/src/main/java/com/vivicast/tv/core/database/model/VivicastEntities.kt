@@ -224,7 +224,6 @@ data class EpgSourceEntity(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
-    @ColumnInfo(defaultValue = "0") val refreshIntervalHours: Int = 0,
     val lastRefreshAt: Long? = null,
     @ColumnInfo(defaultValue = "0") val lastProgramCount: Int = 0,
     @ColumnInfo(defaultValue = "0") val lastChannelCount: Int = 0,

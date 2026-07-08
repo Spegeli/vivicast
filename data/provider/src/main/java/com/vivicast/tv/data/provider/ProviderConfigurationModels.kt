@@ -16,7 +16,7 @@ data class ProviderCreateRequest(
     val includeLiveTv: Boolean = true,
     val includeMovies: Boolean = true,
     val includeSeries: Boolean = true,
-    val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
+    val refreshIntervalHours: Int = DEFAULT_REFRESH_INTERVAL_HOURS,
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
     val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
@@ -34,7 +34,7 @@ data class ProviderUpdateRequest(
     val includeLiveTv: Boolean = true,
     val includeMovies: Boolean = true,
     val includeSeries: Boolean = true,
-    val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
+    val refreshIntervalHours: Int = DEFAULT_REFRESH_INTERVAL_HOURS,
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
     val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
@@ -78,7 +78,7 @@ val M3uSourceMode.isAutomaticallyRefreshable: Boolean
 // ~32 MB (aligned with the URL M3U byte cap). Content is held in RAM as a String during add/import,
 // so ~2x this in heap; raise only alongside a streaming import path. 1 char ≈ 1 byte for ASCII M3U.
 const val MAX_M3U_INLINE_SOURCE_CHARS = 32 * 1024 * 1024
-const val DEFAULT_REFRESH_INTERVAL_HOURS = 12
+const val DEFAULT_REFRESH_INTERVAL_HOURS = 24
 
 // 0 = automatic hourly refresh disabled for this playlist (the new default).
 const val REFRESH_INTERVAL_OFF = 0

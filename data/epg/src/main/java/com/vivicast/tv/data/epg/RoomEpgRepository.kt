@@ -145,7 +145,6 @@ class RoomEpgRepository(
             sourceConfigKey = sourceConfigKey,
             timeShiftMinutes = request.timeShiftMinutes,
             isActive = request.isActive,
-            refreshIntervalHours = request.refreshIntervalHours,
             // Preserve refresh metadata across edits — otherwise editing (e.g. disabling) a source would
             // wipe its last-refresh timestamp and channel/programme counts back to defaults.
             lastRefreshAt = existing?.lastRefreshAt,
@@ -431,7 +430,6 @@ private fun EpgSourceEntity.toDomain(): EpgSource =
         sourceConfigKey = sourceConfigKey,
         timeShiftMinutes = timeShiftMinutes,
         isActive = isActive,
-        refreshIntervalHours = refreshIntervalHours,
         lastRefreshAt = lastRefreshAt,
         lastProgramCount = lastProgramCount,
         lastChannelCount = lastChannelCount,

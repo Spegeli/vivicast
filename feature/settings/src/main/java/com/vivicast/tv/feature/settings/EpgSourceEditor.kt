@@ -72,7 +72,6 @@ import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
-import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -127,8 +126,6 @@ internal fun EpgSourceEditor(
     val urlBlank = editor.urlRequiredMissing
     // On a blocked save, jump focus to the first bad field (name → URL), like the playlist editor.
     var pendingErrorFocus by remember { mutableStateOf<EpgEditorErrorFocus?>(null) }
-    // Update-interval picker popup (reuses the playlist editor's dialog).
-    var showInterval by remember { mutableStateOf(false) }
     // Name editor popup (edit mode only — add keeps the inline field).
     var showNameDialog by remember { mutableStateOf(false) }
     LaunchedEffect(pendingErrorFocus) {
@@ -250,17 +247,6 @@ internal fun EpgSourceEditor(
             }
         }
 
-        // Per-source auto-refresh interval (button → popup), mirrors the per-playlist "Update Intervall".
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_provider_update_interval),
-                help = "",
-                value = intervalLabel(editor.refreshIntervalHours),
-                forceTextValue = true,
-                onClick = { showInterval = true },
-            )
-        }
-
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3, Alignment.CenterHorizontally),
@@ -309,16 +295,6 @@ internal fun EpgSourceEditor(
         }
     }
 
-    if (showInterval) {
-        ProviderIntervalDialog(
-            current = editor.refreshIntervalHours,
-            onSelect = {
-                onEditorChange(editor.copy(refreshIntervalHours = it))
-                showInterval = false
-            },
-            onDismiss = { showInterval = false },
-        )
-    }
 
     if (showNameDialog) {
         NameEditDialog(
@@ -378,7 +354,6 @@ internal data class EpgSourceEditorState(
     val url: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
-    val refreshIntervalHours: Int,
     // True when editing a source that has a stored URL, until the user edits the field. A blank field
     // then means "keep the stored URL" (so a failed async URL pre-fill doesn't block save), while
     // actively clearing it (which flips this false) is a required-field error.
@@ -405,7 +380,6 @@ internal data class EpgSourceEditorState(
             url = url.ifBlank { null },
             timeShiftMinutes = timeShiftMinutes,
             isActive = isActive,
-            refreshIntervalHours = refreshIntervalHours,
         )
 
     companion object {
@@ -416,7 +390,6 @@ internal data class EpgSourceEditorState(
                 url = "",
                 timeShiftMinutes = 0,
                 isActive = true,
-                refreshIntervalHours = REFRESH_INTERVAL_OFF,
             )
 
         fun from(source: EpgSource, url: String = ""): EpgSourceEditorState =
@@ -426,7 +399,6 @@ internal data class EpgSourceEditorState(
                 url = url,
                 timeShiftMinutes = source.timeShiftMinutes,
                 isActive = source.isActive,
-                refreshIntervalHours = source.refreshIntervalHours,
                 // Editing: there is a stored URL (even if the async pre-fill returned blank on failure).
                 hasExistingUrl = true,
             )

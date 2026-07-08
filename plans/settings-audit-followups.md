@@ -1,19 +1,22 @@
 # Plan: Audit-Follow-ups — Allgemein / Playlist / EPG
 
 ## Umsetzungsstatus (autonomer Lauf)
+
+**✅ PLAN ABGESCHLOSSEN** — alle Phasen umgesetzt und verifiziert (detekt + assembleDebug + Unit/Instrumented-Tests grün, auf `main` gepusht). Der **unused-import-Sweep wird bewusst NICHT** im Rahmen dieses Plans gemacht: detekt `UnusedImports` ist AUS (kein Gate-Effekt), Nutzen gering. Falls überhaupt, dann irgendwann als eigener, separater Plan.
+
 - **Phase 1 — ✅ erledigt** (commit `fix: settings audit phase 1`): R4, R6, E2, S1, S2, E3-Cleanup. Tests grün.
 - **Phase 2 — ✅ erledigt** (`phase 2 — unify the refresh interval clock`): `Provider.lastRefreshAt` (Migration v13), R1/R2 (persistierte Uhr + Lazy read), R3 (Periodic-Phase via initialDelay), R5 (Doppel-EPG-Kaltstart). Migration real + androidTest verifiziert.
 - **Phase 3 — ✅ erledigt** (`phase 3 — editor save/test policy`): E1 (nur testen wenn Source geändert), E4 (Prefill-Fail blockiert nicht). U1 war bereits ok (Save triggert Refresh). Tests grün.
 - **Phase 4 — ✅ Kern erledigt** (`phase 4a` D1, `phase 4b` Dedup+Rename, + M2/PROVIDER_REFRESH_WORK): D1-Entfernung, `SettingsEditorHelpers` (duplicate-name + U2 URL-Normalisierung), `Maintenance*`-Rename, tote runMaintenanceRefresh-Branches. detekt-Baseline regeneriert.
-- **Phase 4 — Rest ✅ erledigt** (Cleanup-Runde): `ProviderEditor.kt`-Split (1327→943 Z.: neue `ProviderEditorState.kt` mit State+Validation+Fokus-Helpern) + `ConnectionTestButton` → `SettingsInputFields.kt`; toter `connectionTestPassed`/`requireConnectionTest`-Gate raus (+ `validation_connection_test_required`-String); tote Standalone-Worker `enqueueLogoRefresh`/`enqueueCacheCleanup` + `LogoRefreshWorker`/`CacheCleanupWorker` + `runLogoRefresh`/`runCacheCleanup` + `LOGO_REFRESH_WORK`/`CACHE_CLEANUP_WORK` raus (Maintenance-Orchestrator macht Logos+Cache weiter); tote `collectDuePlaylists`/`collectAllActiveSources` + `PlaylistRefreshSource`/`EpgSourceResolver`/`ActiveProviderPlaylistSource` raus; tote D1-EPG-Strings raus (assignment/priority, DE+EN). detekt + assembleDebug + test grün. **Nur unused-import-Sweep noch offen** (detekt-`UnusedImports` AUS → kein Gate-Effekt, IDE-Optimize-Imports statt blindem sed).
+- **Phase 4 — Rest ✅ erledigt** (Cleanup-Runde): `ProviderEditor.kt`-Split (1327→943 Z.: neue `ProviderEditorState.kt` mit State+Validation+Fokus-Helpern) + `ConnectionTestButton` → `SettingsInputFields.kt`; toter `connectionTestPassed`/`requireConnectionTest`-Gate raus (+ `validation_connection_test_required`-String); tote Standalone-Worker `enqueueLogoRefresh`/`enqueueCacheCleanup` + `LogoRefreshWorker`/`CacheCleanupWorker` + `runLogoRefresh`/`runCacheCleanup` + `LOGO_REFRESH_WORK`/`CACHE_CLEANUP_WORK` raus (Maintenance-Orchestrator macht Logos+Cache weiter); tote `collectDuePlaylists`/`collectAllActiveSources` + `PlaylistRefreshSource`/`EpgSourceResolver`/`ActiveProviderPlaylistSource` raus; tote D1-EPG-Strings raus (assignment/priority, DE+EN). detekt + assembleDebug + test grün. (unused-import-Sweep bewusst ausgeklammert — siehe Banner oben.)
 - **Phase 5 / Logo-Priorität — ✅ erledigt** (Feature-Runde, ohne Migration): `logoPriority` ist jetzt echt genutzt (vorher tote Spalte). Pro-Playlist-Editor-Row + Popup mit 2 Optionen (Playlist bevorzugen = Default | EPG bevorzugen), Werte `"playlist"`/`"epg"` (Legacy `"provider"` → playlist normalisiert). Die bisher **verwaiste `epg_channels`-Tabelle** wird jetzt beim EPG-Import mit den Kanal-`<icon>`s befüllt (replace pro Quelle) und über `epg_channel_mappings` gejoint. Effektives Logo wird **read-time** im `CatalogDao`-Query berechnet (CASE nach `logoPriority`, Fallback jeweils andere Quelle) → reaktiv, keine Materialisierung, keine Migration. Verifiziert: assembleDebug + detekt + Unit-Suite + Instrumented-Test (`RoomMediaRepositoryTest#effectiveChannelLogoFollowsProviderLogoPriority`) grün auf Emulator. Umfang bewusst minimal (kein Global-Default, kein lokaler Ordner) — weicht damit vom PRD (4 Optionen) ab, per Nutzerentscheidung.
 - **Verwaiste EPG-Strings — ✅ entfernt** (DE+EN): `settings_epg_panel_title`, `_program_count`, `_retention_day`, `_retention_days`, `_source_edit_title`, `_source_new_title`, `_source_edit_body`, `_source_new_body`.
 
-Verbleibend offen: nur der unused-import-Sweep (gate-ignoriert). `epg_channels` ist damit **kein** Removal-Kandidat mehr (jetzt in Nutzung).
+Nichts mehr offen in diesem Plan. `epg_channels` ist **kein** Removal-Kandidat mehr (jetzt in Nutzung). Einziger nicht gemachter Punkt — der unused-import-Sweep — ist bewusst ausgeklammert (eigener Plan, falls je nötig).
 
 ---
 
-Status: **geplant** (Planungsmodus — noch kein Code geändert)
+Status: **abgeschlossen** (alle Phasen umgesetzt; die folgenden Planungsnotizen sind historisch)
 Bereich: `feature/settings`, `worker`, `app/MainActivity`, `data/provider`, `data/epg`, `data/media`, `core/database`, `core/datastore`, `feature/live-tv`
 Grundlage: 4 Read-only-Audits (Refresh-Orchestrierung, Settings-Verdrahtung, Editor-Flows, Code-Struktur).
 

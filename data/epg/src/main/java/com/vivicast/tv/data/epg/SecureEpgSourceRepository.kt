@@ -31,7 +31,6 @@ data class EpgSourceEditRequest(
     val url: String? = null,
     val timeShiftMinutes: Int = 0,
     val isActive: Boolean = true,
-    val refreshIntervalHours: Int = 0,
 )
 
 class SecureEpgSourceRepository(
@@ -57,7 +56,6 @@ class SecureEpgSourceRepository(
                 sourceConfigKey = sourceConfigKey,
                 timeShiftMinutes = request.timeShiftMinutes,
                 isActive = request.isActive,
-                refreshIntervalHours = request.refreshIntervalHours,
             ),
         )
     }

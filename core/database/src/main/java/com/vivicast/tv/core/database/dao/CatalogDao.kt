@@ -26,7 +26,7 @@ interface CatalogDao {
 
     @Query(
         "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
-            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "FROM channels c LEFT JOIN providers p ON p.id = c.providerId " +
             "WHERE c.providerId = :providerId AND (:categoryId IS NULL OR c.categoryId = :categoryId) " +
             "ORDER BY COALESCE(c.channelNumber, ''), c.name COLLATE NOCASE",
     )
@@ -34,7 +34,7 @@ interface CatalogDao {
 
     @Query(
         "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
-            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "FROM channels c LEFT JOIN providers p ON p.id = c.providerId " +
             "WHERE c.providerId = :providerId AND (:categoryId IS NULL OR c.categoryId = :categoryId) " +
             "ORDER BY COALESCE(c.channelNumber, ''), c.name COLLATE NOCASE " +
             "LIMIT :limit OFFSET :offset",
@@ -74,7 +74,7 @@ interface CatalogDao {
 
     @Query(
         "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
-            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "FROM channels c LEFT JOIN providers p ON p.id = c.providerId " +
             "WHERE (c.logoUrl IS NOT NULL AND TRIM(c.logoUrl) != '') " +
             "OR EXISTS (SELECT 1 FROM epg_channel_mappings m " +
             "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +

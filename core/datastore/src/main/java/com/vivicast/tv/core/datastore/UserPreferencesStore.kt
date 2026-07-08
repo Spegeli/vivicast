@@ -80,8 +80,10 @@ data class ParentalControlPreferences(
 )
 
 data class EpgPreferences(
+    // Global auto-refresh interval for ALL EPG sources; 0 = off. Was per-source, now global again.
+    val refreshIntervalHours: Int = 24,
     val pastRetentionDays: Int = 1,
-    val refreshOnAppStartEnabled: Boolean = true,
+    val refreshOnAppStartEnabled: Boolean = false,
     val refreshOnPlaylistChangeEnabled: Boolean = true,
 )
 

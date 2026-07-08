@@ -32,7 +32,6 @@ data class EpgSourceSaveRequest(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
-    val refreshIntervalHours: Int = 0,
 )
 
 data class EpgImportResult(

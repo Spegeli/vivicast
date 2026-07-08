@@ -138,7 +138,6 @@ class StandardBackupExporter(
             name = name,
             timeShiftMinutes = timeShiftMinutes,
             isActive = isActive,
-            refreshIntervalHours = refreshIntervalHours,
             url = secureValueStore.read(SecureKey(sourceConfigKey)).let(::standardBackupEpgUrlOrNull),
         )
 

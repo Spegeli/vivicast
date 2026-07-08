@@ -102,12 +102,21 @@ internal fun EpgGlobalSettings(
     onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
+    var showInterval by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        // Global auto-refresh interval — applies to every EPG source (button → shared interval popup).
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_provider_update_interval),
+            help = "",
+            value = intervalLabel(preferences.refreshIntervalHours),
+            forceTextValue = true,
+            modifier = firstFocusModifier,
+            onClick = { showInterval = true },
+        )
         AdjustableSettingsRow(
             title = stringResource(R.string.settings_epg_past),
             help = stringResource(R.string.settings_epg_help_past),
             value = if (preferences.pastRetentionDays == 1) stringResource(R.string.common_days_singular, preferences.pastRetentionDays) else stringResource(R.string.common_days_plural, preferences.pastRetentionDays),
-            modifier = firstFocusModifier,
             onDecrease = {
                 onEpgPreferencesChanged(
                     preferences.copy(pastRetentionDays = (preferences.pastRetentionDays - 1).coerceAtLeast(1)),
@@ -140,6 +149,19 @@ internal fun EpgGlobalSettings(
                     preferences.copy(refreshOnPlaylistChangeEnabled = !preferences.refreshOnPlaylistChangeEnabled),
                 )
             },
+        )
+    }
+
+    if (showInterval) {
+        ProviderIntervalDialog(
+            current = preferences.refreshIntervalHours,
+            onSelect = { hours ->
+                if (hours != preferences.refreshIntervalHours) {
+                    onEpgPreferencesChanged(preferences.copy(refreshIntervalHours = hours))
+                }
+                showInterval = false
+            },
+            onDismiss = { showInterval = false },
         )
     }
 }

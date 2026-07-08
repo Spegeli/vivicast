@@ -209,7 +209,6 @@ private fun JSONArray.toEpgSourceEntities(now: Long): List<EpgSourceEntity> =
             sourceConfigKey = epgSourceConfigKeyFor(stableKey),
             timeShiftMinutes = source.optInt("timeShiftMinutes", 0),
             isActive = source.optBoolean("isActive", true),
-            refreshIntervalHours = source.optInt("refreshIntervalHours", 0),
             createdAt = now,
             updatedAt = now,
         )

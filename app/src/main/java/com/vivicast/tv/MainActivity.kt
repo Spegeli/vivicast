@@ -768,10 +768,12 @@ private fun VivicastApp(
                                 scheduler.enqueuePlaylistRefresh(provider.id)
                             }
                         }
+                    // Global EPG interval applies to every source; each source keeps its own lastRefreshAt phase.
+                    val epgIntervalHours = appContainer.userPreferencesStore.values.first().epg.refreshIntervalHours
                     appContainer.epgSourceRepository.observeEpgSources().first()
                         .filter { it.isActive }
                         .forEach { source ->
-                            if (isRefreshDue(now, source.lastRefreshAt ?: 0L, source.refreshIntervalHours)) {
+                            if (isRefreshDue(now, source.lastRefreshAt ?: 0L, epgIntervalHours)) {
                                 scheduler.enqueueEpgRefresh(source.id)
                             }
                         }
@@ -782,7 +784,9 @@ private fun VivicastApp(
                 // (read fresh here so a mid-session toggle is honoured). The first run is phased to the
                 // remaining time since lastRefreshAt, so opening the app doesn't reset the countdown.
                 withContext(NonCancellable) {
-                    val master = appContainer.userPreferencesStore.values.first().general.backgroundRefreshEnabled
+                    val preferences = appContainer.userPreferencesStore.values.first()
+                    val master = preferences.general.backgroundRefreshEnabled
+                    val epgIntervalHours = preferences.epg.refreshIntervalHours
                     val now = System.currentTimeMillis()
                     val providers = appContainer.providerRepository.observeProviders().first()
                     val epgSources = appContainer.epgSourceRepository.observeEpgSources().first()
@@ -795,9 +799,9 @@ private fun VivicastApp(
                         }
                     }
                     epgSources.forEach { source ->
-                        if (master && source.isActive && source.refreshIntervalHours > 0) {
-                            val delayMs = refreshDelayMillis(now, source.lastRefreshAt ?: 0L, source.refreshIntervalHours)
-                            scheduler.enqueueEpgPeriodic(source.id, source.refreshIntervalHours, delayMs)
+                        if (master && source.isActive && epgIntervalHours > 0) {
+                            val delayMs = refreshDelayMillis(now, source.lastRefreshAt ?: 0L, epgIntervalHours)
+                            scheduler.enqueueEpgPeriodic(source.id, epgIntervalHours, delayMs)
                         } else {
                             scheduler.cancelEpgPeriodic(source.id)
                         }
