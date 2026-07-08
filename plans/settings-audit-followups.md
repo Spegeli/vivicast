@@ -1,5 +1,17 @@
 # Plan: Audit-Follow-ups — Allgemein / Playlist / EPG
 
+## Umsetzungsstatus (autonomer Lauf)
+- **Phase 1 — ✅ erledigt** (commit `fix: settings audit phase 1`): R4, R6, E2, S1, S2, E3-Cleanup. Tests grün.
+- **Phase 2 — ✅ erledigt** (`phase 2 — unify the refresh interval clock`): `Provider.lastRefreshAt` (Migration v13), R1/R2 (persistierte Uhr + Lazy read), R3 (Periodic-Phase via initialDelay), R5 (Doppel-EPG-Kaltstart). Migration real + androidTest verifiziert.
+- **Phase 3 — ✅ erledigt** (`phase 3 — editor save/test policy`): E1 (nur testen wenn Source geändert), E4 (Prefill-Fail blockiert nicht). U1 war bereits ok (Save triggert Refresh). Tests grün.
+- **Phase 4 — ✅ Kern erledigt** (`phase 4a` D1, `phase 4b` Dedup+Rename, + M2/PROVIDER_REFRESH_WORK): D1-Entfernung, `SettingsEditorHelpers` (duplicate-name + U2 URL-Normalisierung), `Maintenance*`-Rename, tote runMaintenanceRefresh-Branches. detekt-Baseline regeneriert.
+- **Phase 4 — Rest bewusst zurückgestellt** (niedriger Wert / gate-ignoriert / reine Reorg): unused-import-Sweep (detekt-`UnusedImports` ist AUS → kein Gate-Effekt, blindes sed-Entfernen riskiert genutzte Imports), `ProviderEditor.kt`-Split + `ConnectionTestButton`-Verschiebung (reine Reorg, hohe Baseline-Churn), `connectionTestPassed`/`requireConnectionTest`-Gate + `enqueueLogoRefresh`/`enqueueCacheCleanup` (kaskadiert auf Worker-Klassen).
+- **Phase 5 — zurückgestellt** (laut Plan „später/optional"): `epg_channels`-Tabelle entfernen (braucht v13→v14-Migration), `logoPriority` nutzen/entfernen (Entity-Spalte → Migration).
+
+Empfehlung für die zurückgestellten Punkte: eigene kleine „Settings-Cleanup"-Runde, wenn ohnehin eine Migration ansteht (dann `epg_channels` + `logoPriority` bündeln); Datei-Split nur bei erneutem Anfassen von `ProviderEditor.kt`.
+
+---
+
 Status: **geplant** (Planungsmodus — noch kein Code geändert)
 Bereich: `feature/settings`, `worker`, `app/MainActivity`, `data/provider`, `data/epg`, `data/media`, `core/database`, `core/datastore`, `feature/live-tv`
 Grundlage: 4 Read-only-Audits (Refresh-Orchestrierung, Settings-Verdrahtung, Editor-Flows, Code-Struktur).

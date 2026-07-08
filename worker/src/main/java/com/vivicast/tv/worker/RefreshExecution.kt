@@ -50,17 +50,11 @@ class DefaultRefreshWorkerRunner(
     private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
 ) : RefreshWorkerRunner {
     override suspend fun runMaintenanceRefresh(): RefreshWorkerResult =
+        // The maintenance orchestrator only runs logos + cache now (playlists/EPG are per-item workers),
+        // so there is nothing to inspect on success — just succeed.
         runCancellableCatching { orchestrator.refresh() }
             .fold(
-                onSuccess = { report ->
-                    // Heavy per-series detail fetch runs as a separate background job per provider.
-                    report.seriesDetailsProviderIds.forEach { scheduler.enqueueSeriesDetailsRefresh(it) }
-                    if (report.playlistsSucceeded == 0 && report.playlistsFailed > 0) {
-                        RefreshWorkerResult.Retry
-                    } else {
-                        RefreshWorkerResult.Success
-                    }
-                },
+                onSuccess = { RefreshWorkerResult.Success },
                 onFailure = { RefreshWorkerResult.Retry },
             )
 

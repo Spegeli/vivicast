@@ -3,7 +3,6 @@ package com.vivicast.tv.worker
 object WorkerContracts {
     const val GLOBAL_REFRESH_WORK = "global_refresh"
     const val PERIODIC_GLOBAL_REFRESH_WORK = "periodic_global_refresh"
-    const val PROVIDER_REFRESH_WORK = "provider_refresh"
     const val PLAYLIST_REFRESH_WORK = "playlist_refresh"
     const val EPG_REFRESH_WORK = "epg_refresh"
     const val SERIES_DETAILS_REFRESH_WORK = "series_details_refresh"
