@@ -271,6 +271,15 @@ class RoomCatalogImportRepository(
         if (removedIds.isNotEmpty()) {
             favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_SERIES, removedIds)
             playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_SERIES, removedIds)
+            // Cascade the removed series' seasons/episodes (+ episode progress). The fast Xtream refresh
+            // leaves seasons/episodes untouched otherwise, so without this a removed series would orphan
+            // its seasons/episodes until the separate series-details job reconciles them.
+            val orphanEpisodeIds = catalogDao.getEpisodeIdsForSeries(providerId, removedIds)
+            if (orphanEpisodeIds.isNotEmpty()) {
+                playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, orphanEpisodeIds)
+            }
+            catalogDao.deleteEpisodesForSeries(providerId, removedIds)
+            catalogDao.deleteSeasonsForSeries(providerId, removedIds)
             catalogDao.deleteSeries(providerId, removedIds)
         }
         return count.copy(removed = removedIds.size)

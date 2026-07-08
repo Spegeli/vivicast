@@ -303,6 +303,9 @@ internal fun EpgSettingsPanel(
                 duplicateName = editor.name.isNotBlank() && sources.any {
                     it.id != editor.sourceId && it.name.trim().equals(editor.name.trim(), ignoreCase = true)
                 },
+                isDuplicateName = { candidate ->
+                    sources.any { it.id != editor.sourceId && it.name.trim().equals(candidate.trim(), ignoreCase = true) }
+                },
                 duplicateUrlName = duplicateEpgUrl,
                 connectionTestStatus = connectionTestStatus,
                 connectionSummary = connectionSummary,

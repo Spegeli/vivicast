@@ -354,11 +354,20 @@ interface CatalogDao {
     @Query("DELETE FROM seasons WHERE providerId = :providerId AND id IN (:seasonIds)")
     suspend fun deleteSeasons(providerId: String, seasonIds: List<String>)
 
+    @Query("DELETE FROM seasons WHERE providerId = :providerId AND seriesId IN (:seriesIds)")
+    suspend fun deleteSeasonsForSeries(providerId: String, seriesIds: List<String>)
+
     @Query("DELETE FROM episodes WHERE providerId = :providerId")
     suspend fun deleteEpisodesForProvider(providerId: String)
 
     @Query("DELETE FROM episodes WHERE providerId = :providerId AND id IN (:episodeIds)")
     suspend fun deleteEpisodes(providerId: String, episodeIds: List<String>)
+
+    @Query("DELETE FROM episodes WHERE providerId = :providerId AND seriesId IN (:seriesIds)")
+    suspend fun deleteEpisodesForSeries(providerId: String, seriesIds: List<String>)
+
+    @Query("SELECT id FROM episodes WHERE providerId = :providerId AND seriesId IN (:seriesIds)")
+    suspend fun getEpisodeIdsForSeries(providerId: String, seriesIds: List<String>): List<String>
 
     @Transaction
     suspend fun deleteCatalogForProvider(providerId: String) {

@@ -300,6 +300,9 @@ internal fun ProviderSettingsPanel(
         ProviderEditor(
             editor = editor,
             duplicates = ProviderDuplicateInfo(duplicateName, duplicateUrlName),
+            isDuplicateName = { candidate ->
+                providers.any { it.id != editor.providerId && it.name.trim().equals(candidate.trim(), ignoreCase = true) }
+            },
             message = message,
             connectionTestStatus = connectionTestStatus,
             connectionSummary = connectionSummary,

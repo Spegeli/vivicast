@@ -109,6 +109,7 @@ internal fun EpgSourceEditor(
     onUnlinkProvider: (providerId: String, sourceId: String) -> Unit,
     onMoveProviderLink: (providerId: String, sourceId: String, direction: EpgSourcePriorityDirection) -> Unit,
     duplicateName: Boolean = false,
+    isDuplicateName: (String) -> Boolean = { false },
     duplicateUrlName: String? = null,
     connectionTestStatus: ConnectionTestStatus = ConnectionTestStatus.Idle,
     connectionSummary: EpgContentSummary? = null,
@@ -127,15 +128,17 @@ internal fun EpgSourceEditor(
         awaitFrame()
         runCatching { (if (editor.isEditing) toggleFocus else firstFocus).requestFocus() }
     }
-    // A blank URL is only required for a new source (edit keeps the stored one). Reddens after a save
-    // attempt, mirroring the name field / playlist editor.
+    // URL is required in both add and edit (edit pre-fills the stored URL, so clearing it must block the
+    // save). Reddens only after a save attempt, mirroring the M3U URL field.
     val urlFocus = remember { FocusRequester() }
     var showUrlBlankError by remember { mutableStateOf(false) }
-    val urlBlank = !editor.isEditing && editor.url.isBlank()
+    val urlBlank = editor.url.isBlank()
     // On a blocked save, jump focus to the first bad field (name → URL), like the playlist editor.
     var pendingErrorFocus by remember { mutableStateOf<EpgEditorErrorFocus?>(null) }
     // Update-interval picker popup (reuses the playlist editor's dialog).
     var showInterval by remember { mutableStateOf(false) }
+    // Name editor popup (edit mode only — add keeps the inline field).
+    var showNameDialog by remember { mutableStateOf(false) }
     LaunchedEffect(pendingErrorFocus) {
         val target = pendingErrorFocus ?: return@LaunchedEffect
         awaitFrame()
@@ -159,23 +162,19 @@ internal fun EpgSourceEditor(
                 )
             }
         }
-        // Name field stays the first item with a stable key so inserting the duplicate warning below it
-        // never re-creates the focused field (which would let focus escape to the top nav bar).
+        // Edit mode: name row → popup (validation in the popup). Add mode: inline field. Stable key so
+        // inserting the add-mode duplicate warning never re-creates the focused field.
         item(key = "name") {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                ProviderTextField(
-                    label = stringResource(R.string.settings_provider_name_label),
-                    value = editor.name,
-                    placeholder = stringResource(R.string.settings_epg_name_placeholder),
-                    onValueChange = { onEditorChange(editor.copy(name = it)) },
-                    focusRequester = firstFocus,
-                    isError = duplicateName || (showNameBlankError && nameBlank),
-                    maxLength = 25,
-                )
-                VivicastDialogError(
-                    if (duplicateName) stringResource(R.string.settings_epg_name_exists_body) else null,
-                )
-            }
+            EditorNameField(
+                isEditing = editor.isEditing,
+                name = editor.name,
+                placeholder = stringResource(R.string.settings_epg_name_placeholder),
+                isError = duplicateName || (showNameBlankError && nameBlank),
+                duplicateMessage = if (duplicateName) stringResource(R.string.settings_epg_name_exists_body) else null,
+                focusRequester = firstFocus,
+                onNameChange = { onEditorChange(editor.copy(name = it)) },
+                onOpenNameDialog = { showNameDialog = true },
+            )
         }
 
         item {
@@ -189,7 +188,7 @@ internal fun EpgSourceEditor(
                     ProviderTextField(
                         label = stringResource(R.string.m3u_source_url),
                         value = editor.url,
-                        placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://...",
+                        placeholder = "https://...",
                         onValueChange = { onEditorChange(editor.copy(url = it)) },
                         modifier = Modifier.weight(1f),
                         focusRequester = urlFocus,
@@ -200,7 +199,19 @@ internal fun EpgSourceEditor(
                             (showUrlBlankError && urlBlank),
                         maxLength = 250,
                     )
-                    ConnectionTestButton(status = connectionTestStatus, onClick = onTestConnection)
+                    // A blank URL reddens the field and jumps focus instead of running the test (mirrors
+                    // the M3U editor), so an empty test can't add a second "URL missing" message.
+                    ConnectionTestButton(
+                        status = connectionTestStatus,
+                        onClick = {
+                            if (urlBlank) {
+                                showUrlBlankError = true
+                                pendingErrorFocus = EpgEditorErrorFocus.Url
+                            } else {
+                                onTestConnection()
+                            }
+                        },
+                    )
                 }
                 // Missing / duplicate URL — red inline hint (no note); .gz/.xz ignored for duplicates.
                 when {
@@ -316,6 +327,19 @@ internal fun EpgSourceEditor(
                 showInterval = false
             },
             onDismiss = { showInterval = false },
+        )
+    }
+
+    if (showNameDialog) {
+        NameEditDialog(
+            initialName = editor.name,
+            isDuplicate = isDuplicateName,
+            duplicateMessage = stringResource(R.string.settings_epg_name_exists_body),
+            onCancel = { showNameDialog = false },
+            onSave = {
+                onEditorChange(editor.copy(name = it))
+                showNameDialog = false
+            },
         )
     }
 }

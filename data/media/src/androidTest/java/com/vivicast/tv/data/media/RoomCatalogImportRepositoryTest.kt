@@ -249,6 +249,24 @@ class RoomCatalogImportRepositoryTest {
     }
 
     @Test
+    fun fastXtreamImportRemovingSeriesAlsoDeletesItsSeasonsAndEpisodes() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        assertTrue(database.catalogDao().getSeasons(PROVIDER_ID).isNotEmpty())
+        assertTrue(database.catalogDao().getEpisodes(PROVIDER_ID).isNotEmpty())
+
+        // Fast main refresh (seriesInfos empty) where the series is gone from the feed: its seasons and
+        // episodes must be cascaded away, not orphaned until the series-details job reconciles them.
+        now = 2_000L
+        repository.importXtreamCatalog(
+            PROVIDER_ID,
+            firstXtreamCatalog().copy(seriesItems = emptyList(), seriesInfos = emptyList()),
+        )
+        assertEquals(0, database.catalogDao().getSeries(PROVIDER_ID).size)
+        assertEquals(0, database.catalogDao().getSeasons(PROVIDER_ID).size)
+        assertEquals(0, database.catalogDao().getEpisodes(PROVIDER_ID).size)
+    }
+
+    @Test
     fun largeFixtureXtreamMetadataCommitStaysWithinPrd13Budget() = kotlinx.coroutines.runBlocking {
         lateinit var result: XtreamCatalogImportResult
         val catalog = largeXtreamCatalog()

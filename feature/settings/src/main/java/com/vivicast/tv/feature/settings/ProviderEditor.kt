@@ -112,6 +112,7 @@ import java.util.Date
 internal fun ProviderEditor(
     editor: ProviderEditorState,
     duplicates: ProviderDuplicateInfo,
+    isDuplicateName: (String) -> Boolean = { false },
     message: String?,
     connectionTestStatus: ConnectionTestStatus,
     connectionSummary: ContentSummary?,
@@ -195,25 +196,19 @@ internal fun ProviderEditor(
         // Enable/disable toggle above the name — flips the playlist immediately (edit only, no save).
         providerActiveToggleItem(editor, toggleFocus, onToggleEnabled)
 
-        // Name field stays the first item with a stable key so inserting the duplicate warnings below
-        // it never re-creates the focused field (which would let focus escape to the top nav bar).
+        // Edit mode: name row → popup (validation in the popup). Add mode: inline field. Stable key so
+        // inserting the add-mode duplicate warning never re-creates the focused field.
         item(key = "name") {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                ProviderTextField(
-                    label = stringResource(R.string.settings_provider_name_label),
-                    value = editor.name,
-                    placeholder = stringResource(R.string.settings_provider_name_placeholder),
-                    onValueChange = { onEditorChange(editor.copy(name = it)) },
-                    focusRequester = firstFocus,
-                    isError = duplicates.name || (showNameBlankError && nameBlank),
-                    maxLength = 25,
-                )
-                // Red inline error (no separate hint panel), rendered in the same item so the focused
-                // field stays mounted and keeps focus while the duplicate check flips.
-                VivicastDialogError(
-                    if (duplicates.name) stringResource(R.string.settings_provider_name_exists_body) else null,
-                )
-            }
+            EditorNameField(
+                isEditing = editor.isEditing,
+                name = editor.name,
+                placeholder = stringResource(R.string.settings_provider_name_placeholder),
+                isError = duplicates.name || (showNameBlankError && nameBlank),
+                duplicateMessage = if (duplicates.name) stringResource(R.string.settings_provider_name_exists_body) else null,
+                focusRequester = firstFocus,
+                onNameChange = { onEditorChange(editor.copy(name = it)) },
+                onOpenNameDialog = { dialogs.showName = true },
+            )
         }
 
         providerSourceChoiceItem(editor, onEditorChange)
@@ -295,11 +290,12 @@ internal fun ProviderEditor(
         }
     }
 
-    ProviderEditorDialogs(dialogs, editor, epgLinks, onEditorChange, actions.onToggleEpgLink)
+    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink)
 }
 
-/** Open/closed flags for the editor's three popups (interval / User-Agent / EPG sources). */
+/** Open/closed flags for the editor's popups (name / interval / User-Agent / EPG sources). */
 internal class ProviderEditorDialogState {
+    var showName by mutableStateOf(false)
     var showInterval by mutableStateOf(false)
     var showUserAgent by mutableStateOf(false)
     var showEpgSources by mutableStateOf(false)
@@ -310,9 +306,22 @@ private fun ProviderEditorDialogs(
     dialogs: ProviderEditorDialogState,
     editor: ProviderEditorState,
     epgLinks: ProviderEpgLinkInfo,
+    isDuplicateName: (String) -> Boolean,
     onEditorChange: (ProviderEditorState) -> Unit,
     onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit,
 ) {
+    if (dialogs.showName) {
+        NameEditDialog(
+            initialName = editor.name,
+            isDuplicate = isDuplicateName,
+            duplicateMessage = stringResource(R.string.settings_provider_name_exists_body),
+            onCancel = { dialogs.showName = false },
+            onSave = { value ->
+                onEditorChange(editor.copy(name = value))
+                dialogs.showName = false
+            },
+        )
+    }
     if (dialogs.showInterval) {
         ProviderIntervalDialog(
             current = editor.refreshIntervalHours,
