@@ -9,6 +9,8 @@ import com.vivicast.tv.core.database.VivicastDatabaseCallbacks
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
+import com.vivicast.tv.core.database.model.EpgChannelEntity
+import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
 import com.vivicast.tv.core.database.model.EpisodeEntity
 import com.vivicast.tv.core.database.model.MovieEntity
@@ -309,6 +311,55 @@ class RoomMediaRepositoryTest {
 
         assertEquals("episode-s1e2", nextEpisode?.id)
         assertEquals("episode-s2e1", nextSeasonEpisode?.id)
+    }
+
+    @Test
+    fun effectiveChannelLogoFollowsProviderLogoPriority() = runBlocking {
+        seedCatalog()
+        // channel-ard has a playlist logo; channel-dune has none. Both get a mapped EPG <icon>.
+        database.epgDao().upsertEpgChannels(
+            listOf(
+                EpgChannelEntity(
+                    id = "epgchan-ard", epgSourceId = "epg-1", stableKey = "sk-ard",
+                    remoteId = "ard.de", displayName = "ARD", iconUrl = "https://epg.example/ard.png",
+                    createdAt = NOW, updatedAt = NOW,
+                ),
+                EpgChannelEntity(
+                    id = "epgchan-dune", epgSourceId = "epg-1", stableKey = "sk-dune",
+                    remoteId = "dune.tv", displayName = "Dune", iconUrl = "https://epg.example/dune.png",
+                    createdAt = NOW, updatedAt = NOW,
+                ),
+            ),
+        )
+        database.epgDao().upsertMappings(
+            listOf(
+                EpgChannelMappingEntity(
+                    id = "map-ard", providerId = PROVIDER_ID, channelId = "channel-ard",
+                    epgSourceId = "epg-1", epgChannelId = "ard.de", isManual = false, createdAt = NOW,
+                ),
+                EpgChannelMappingEntity(
+                    id = "map-dune", providerId = PROVIDER_ID, channelId = "channel-dune",
+                    epgSourceId = "epg-1", epgChannelId = "dune.tv", isManual = false, createdAt = NOW,
+                ),
+            ),
+        )
+
+        // Playlist-first (default): a channel with a playlist logo keeps it; a logo-less channel falls back to EPG.
+        setProviderLogoPriority("playlist")
+        val playlistFirst = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
+        assertEquals("https://logos.example/ard.png", playlistFirst.getValue("ARD HD").logoUrl)
+        assertEquals("https://epg.example/dune.png", playlistFirst.getValue("Dune TV").logoUrl)
+
+        // EPG-first: both channels prefer the mapped EPG icon over the playlist logo.
+        setProviderLogoPriority("epg")
+        val epgFirst = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
+        assertEquals("https://epg.example/ard.png", epgFirst.getValue("ARD HD").logoUrl)
+        assertEquals("https://epg.example/dune.png", epgFirst.getValue("Dune TV").logoUrl)
+    }
+
+    private suspend fun setProviderLogoPriority(priority: String) {
+        val existing = requireNotNull(database.providerDao().getProvider(PROVIDER_ID))
+        database.providerDao().upsertProvider(existing.copy(logoPriority = priority))
     }
 
     private suspend fun seedCatalog() {

@@ -3,6 +3,7 @@ package com.vivicast.tv.data.epg
 import androidx.room.withTransaction
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.ChannelEntity
+import com.vivicast.tv.core.database.model.EpgChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
@@ -35,7 +36,8 @@ class RoomEpgRepository(
         epgDao.observeProviderEpgSources(providerId).map { sources -> sources.map { it.toDomain() } }
 
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> =
-        catalogDao.observeChannels(providerId, categoryId = null).map { channels -> channels.map { it.toDomain() } }
+        catalogDao.observeChannels(providerId, categoryId = null)
+            .map { channels -> channels.map { it.channel.toDomain().copy(logoUrl = it.effectiveLogoUrl) } }
 
     override fun observeProgramsForChannel(
         providerId: String,
@@ -204,6 +206,29 @@ class RoomEpgRepository(
                 epgDao.upsertMappings(autoMappings)
             }
 
+            // Persist the feed's channel <icon>s (replace per source) so the effective-logo join can serve
+            // them when a provider prefers EPG logos. Only channels that actually carry an icon are stored.
+            val epgChannelRows = document.channels
+                .associateBy { it.id }
+                .values
+                .mapNotNull { xmlChannel ->
+                    val icon = xmlChannel.iconUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    EpgChannelEntity(
+                        id = epgChannelRowId(epgSourceId, xmlChannel.id),
+                        epgSourceId = epgSourceId,
+                        stableKey = epgChannelStableKey(xmlChannel.id),
+                        remoteId = xmlChannel.id,
+                        displayName = xmlChannel.displayNames.firstOrNull() ?: xmlChannel.id,
+                        iconUrl = icon,
+                        createdAt = now,
+                        updatedAt = now,
+                    )
+                }
+            epgDao.deleteEpgChannelsForSource(epgSourceId)
+            if (epgChannelRows.isNotEmpty()) {
+                epgDao.upsertEpgChannels(epgChannelRows)
+            }
+
             val channelById = channels.associateBy { it.id }
             val sourceStableKey = source.stableKey
             val externalChannelToLocal = (manualMappings + autoMappings)
@@ -260,11 +285,11 @@ class RoomEpgRepository(
     override suspend fun cleanupProgramsOutsideRetention(
         nowMillis: Long,
         pastDays: Int,
-        futureDays: Int,
     ): Int {
+        // Past-only: drop programmes that ended before the retention window. Future is unbounded — every
+        // upcoming programme the feed provides is kept.
         val fromMillis = nowMillis - pastDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
-        val toMillis = nowMillis + futureDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
-        return epgDao.deleteProgramsOutsideWindow(fromMillis, toMillis)
+        return epgDao.deleteProgramsBefore(fromMillis)
     }
 
     override suspend fun markEpgSourceRefreshed(
@@ -383,6 +408,9 @@ class RoomEpgRepository(
 
         fun epgChannelStableKey(epgChannelId: String): String =
             stableHash(epgChannelId)
+
+        fun epgChannelRowId(epgSourceId: String, remoteId: String): String =
+            "$epgSourceId:epg-channel:${stableHash(remoteId)}"
 
         fun String.normalize(): String =
             trim().lowercase(Locale.ROOT)

@@ -63,7 +63,6 @@
 
     <!-- EPG settings -->
     <string name="settings_epg_past">Keep EPG history</string>
-    <string name="settings_epg_future">Load/keep EPG future</string>
     <string name="settings_epg_on_start">Refresh EPG on app start</string>
     <string name="settings_epg_on_change">Refresh EPG on playlist change</string>
     <string name="settings_epg_now">Refresh EPG now</string>

@@ -30,20 +30,8 @@ class MaintenanceRefreshOrchestrator(
     }
 }
 
-interface PlaylistRefreshSource {
-    suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget>
-}
-
 interface PlaylistRefresher {
     suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome
-}
-
-interface EpgSourceResolver {
-    /**
-     * Every active EPG source. EPG feeds carry their own value (and refresh independently of playlists),
-     * so a refresh covers all of them rather than only those whose linked playlist just refreshed.
-     */
-    suspend fun collectAllActiveSources(): List<EpgRefreshTarget>
 }
 
 interface EpgRefresher {

@@ -17,7 +17,6 @@ interface EpgImportRepository {
     suspend fun cleanupProgramsOutsideRetention(
         nowMillis: Long,
         pastDays: Int,
-        futureDays: Int,
     ): Int
 
     /** Feed-level refresh metadata (last-refresh timestamp + feed channel/programme counts). */

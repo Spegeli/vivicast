@@ -74,7 +74,6 @@ class DataStoreUserPreferencesStore(
                 ),
                 epg = EpgPreferences(
                     pastRetentionDays = (preferences[Keys.EpgPastRetentionDays] ?: 1).coerceIn(1, 14),
-                    futureRetentionDays = (preferences[Keys.EpgFutureRetentionDays] ?: 7).coerceIn(1, 14),
                     refreshOnAppStartEnabled = preferences[Keys.EpgRefreshOnAppStartEnabled] ?: true,
                     refreshOnPlaylistChangeEnabled = preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] ?: true,
                 ),
@@ -172,7 +171,6 @@ class DataStoreUserPreferencesStore(
     override suspend fun updateEpg(epg: EpgPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.EpgPastRetentionDays] = epg.pastRetentionDays.coerceIn(1, 14)
-            preferences[Keys.EpgFutureRetentionDays] = epg.futureRetentionDays.coerceIn(1, 14)
             preferences[Keys.EpgRefreshOnAppStartEnabled] = epg.refreshOnAppStartEnabled
             preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] = epg.refreshOnPlaylistChangeEnabled
         }
@@ -251,7 +249,6 @@ class DataStoreUserPreferencesStore(
         val ProtectAdultContent = booleanPreferencesKey("protect_adult_content")
 
         val EpgPastRetentionDays = intPreferencesKey("epg_past_retention_days")
-        val EpgFutureRetentionDays = intPreferencesKey("epg_future_retention_days")
         val EpgRefreshOnAppStartEnabled = booleanPreferencesKey("epg_refresh_on_app_start_enabled")
         val EpgRefreshOnPlaylistChangeEnabled = booleanPreferencesKey("epg_refresh_on_playlist_change_enabled")
         val BackupTarget = stringPreferencesKey("backup_target")

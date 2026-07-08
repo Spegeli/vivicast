@@ -81,7 +81,6 @@ data class ParentalControlPreferences(
 
 data class EpgPreferences(
     val pastRetentionDays: Int = 1,
-    val futureRetentionDays: Int = 7,
     val refreshOnAppStartEnabled: Boolean = true,
     val refreshOnPlaylistChangeEnabled: Boolean = true,
 )

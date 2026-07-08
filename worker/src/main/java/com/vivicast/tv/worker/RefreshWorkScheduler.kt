@@ -41,10 +41,6 @@ interface RefreshWorkScheduler {
     fun cancelEpgPeriodic(epgSourceId: String)
 
     fun enqueueSeriesDetailsRefresh(providerId: String)
-
-    fun enqueueLogoRefresh()
-
-    fun enqueueCacheCleanup()
 }
 
 class WorkManagerRefreshWorkScheduler(
@@ -112,22 +108,6 @@ class WorkManagerRefreshWorkScheduler(
             RefreshWorkRequests.seriesDetailsRefresh(providerId),
         )
     }
-
-    override fun enqueueLogoRefresh() {
-        workManager.enqueueUniqueWork(
-            WorkerContracts.LOGO_REFRESH_WORK,
-            ExistingWorkPolicy.KEEP,
-            RefreshWorkRequests.logoRefresh(),
-        )
-    }
-
-    override fun enqueueCacheCleanup() {
-        workManager.enqueueUniqueWork(
-            WorkerContracts.CACHE_CLEANUP_WORK,
-            ExistingWorkPolicy.KEEP,
-            RefreshWorkRequests.cacheCleanup(),
-        )
-    }
 }
 
 internal object RefreshWorkRequests {
@@ -181,15 +161,6 @@ internal object RefreshWorkRequests {
                 .putString(WorkerContracts.INPUT_PROVIDER_ID, providerId)
                 .build(),
         )
-
-    fun logoRefresh(): OneTimeWorkRequest =
-        networkOneTimeRequest<LogoRefreshWorker>()
-
-    fun cacheCleanup(): OneTimeWorkRequest =
-        OneTimeWorkRequestBuilder<CacheCleanupWorker>()
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
-            .addTag(WorkerContracts.CACHE_CLEANUP_WORK)
-            .build()
 
     private inline fun <reified T : DelegatingRefreshWorker> networkOneTimeRequest(
         inputData: Data = Data.EMPTY,

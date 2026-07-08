@@ -13,10 +13,6 @@ interface RefreshWorkerRunner {
     suspend fun runEpgRefresh(epgSourceId: String?): RefreshWorkerResult
 
     suspend fun runSeriesDetailsRefresh(providerId: String?): RefreshWorkerResult
-
-    suspend fun runLogoRefresh(): RefreshWorkerResult
-
-    suspend fun runCacheCleanup(): RefreshWorkerResult
 }
 
 enum class RefreshWorkerResult {
@@ -84,22 +80,6 @@ class SeriesDetailsRefreshWorker(
 ) : DelegatingRefreshWorker(appContext, params) {
     override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
         runSeriesDetailsRefresh(inputData.getString(WorkerContracts.INPUT_PROVIDER_ID))
-}
-
-class LogoRefreshWorker(
-    appContext: Context,
-    params: WorkerParameters,
-) : DelegatingRefreshWorker(appContext, params) {
-    override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
-        runLogoRefresh()
-}
-
-class CacheCleanupWorker(
-    appContext: Context,
-    params: WorkerParameters,
-) : DelegatingRefreshWorker(appContext, params) {
-    override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
-        runCacheCleanup()
 }
 
 /**

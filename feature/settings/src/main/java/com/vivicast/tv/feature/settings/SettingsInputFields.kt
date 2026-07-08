@@ -69,6 +69,7 @@ import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastSpinner
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -131,5 +132,63 @@ internal fun ProviderTextField(
         trailingActionLabel = trailingActionLabel,
         onTrailingAction = onTrailingAction,
     )
+}
+
+@Composable
+internal fun ConnectionTestButton(
+    status: ConnectionTestStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val statusColor: Color? = when (status) {
+        ConnectionTestStatus.Passed -> VivicastColors.Success
+        ConnectionTestStatus.Failed -> VivicastColors.Error
+        else -> null
+    }
+    val glyph: String? = when (status) {
+        ConnectionTestStatus.Passed -> "✓"
+        ConnectionTestStatus.Failed -> "✗"
+        else -> null
+    }
+    val labelRes = when (status) {
+        ConnectionTestStatus.Testing -> R.string.settings_provider_msg_checking
+        ConnectionTestStatus.Passed -> R.string.settings_provider_test_ok
+        ConnectionTestStatus.Failed -> R.string.settings_provider_test_fail
+        else -> R.string.settings_provider_test_connection
+    }
+    FocusPanel(
+        onClick = onClick,
+        modifier = modifier
+            .width(175.dp)
+            .then(
+                if (statusColor != null) {
+                    Modifier.border(VivicastBorders.FocusWidth, statusColor, VivicastShapes.CardRadius)
+                } else {
+                    Modifier
+                },
+            ),
+    ) { _ ->
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (status == ConnectionTestStatus.Testing) {
+                VivicastSpinner(size = 16.dp, color = VivicastColors.TextPrimary)
+            }
+            if (glyph != null) {
+                BasicText(
+                    text = glyph,
+                    style = VivicastTypography.LabelLarge.copy(color = statusColor ?: VivicastColors.TextPrimary),
+                )
+            }
+            BasicText(
+                text = stringResource(labelRes),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = VivicastTypography.LabelMedium.copy(color = statusColor ?: VivicastColors.TextPrimary),
+            )
+        }
+    }
 }
 

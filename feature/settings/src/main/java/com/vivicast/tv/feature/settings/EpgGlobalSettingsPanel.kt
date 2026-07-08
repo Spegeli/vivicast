@@ -119,21 +119,6 @@ internal fun EpgGlobalSettings(
                 )
             },
         )
-        AdjustableSettingsRow(
-            title = stringResource(R.string.settings_epg_future),
-            help = stringResource(R.string.settings_epg_help_cleanup_note),
-            value = if (preferences.futureRetentionDays == 1) stringResource(R.string.common_days_singular, preferences.futureRetentionDays) else stringResource(R.string.common_days_plural, preferences.futureRetentionDays),
-            onDecrease = {
-                onEpgPreferencesChanged(
-                    preferences.copy(futureRetentionDays = (preferences.futureRetentionDays - 1).coerceAtLeast(1)),
-                )
-            },
-            onIncrease = {
-                onEpgPreferencesChanged(
-                    preferences.copy(futureRetentionDays = (preferences.futureRetentionDays + 1).coerceAtMost(14)),
-                )
-            },
-        )
         VivicastSettingsRow(
             title = stringResource(R.string.settings_epg_on_start),
             help = stringResource(R.string.settings_epg_help_background),

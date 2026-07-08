@@ -19,13 +19,11 @@ import org.junit.Test
 class ProviderEditorStateTest {
 
     private fun ProviderEditorState.validate() = validationMessage(
-        requireConnectionTest = false,
         msgNameMissing = "name",
         msgContentType = "content",
         msgXtreamServer = "server",
         msgXtreamUser = "user",
         msgXtreamPass = "pass",
-        msgConnTest = "conntest",
         msgM3uUrl = "m3uurl",
         msgM3uFile = "m3ufile",
     )

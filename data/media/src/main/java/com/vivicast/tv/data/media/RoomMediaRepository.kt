@@ -1,6 +1,7 @@
 package com.vivicast.tv.data.media
 
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.dao.ChannelWithLogo
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
@@ -242,6 +243,9 @@ private fun CategoryEntity.toDomain(): Category =
         sortOrder = sortOrder,
         isHidden = isHidden,
     )
+
+private fun ChannelWithLogo.toDomain(): Channel =
+    channel.toDomain().copy(logoUrl = effectiveLogoUrl)
 
 private fun ChannelEntity.toDomain(): Channel =
     Channel(

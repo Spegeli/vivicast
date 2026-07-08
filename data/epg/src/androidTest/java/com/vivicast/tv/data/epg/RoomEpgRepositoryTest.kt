@@ -208,11 +208,11 @@ class RoomEpgRepositoryTest {
         val deleted = repository.cleanupProgramsOutsideRetention(
             nowMillis = now,
             pastDays = 1,
-            futureDays = 7,
         )
 
-        assertEquals(2, deleted)
-        assertEquals(1, countTable("epg_programs"))
+        // Future is unbounded now: only the past programme ("old") is removed; "current" + "future" stay.
+        assertEquals(1, deleted)
+        assertEquals(2, countTable("epg_programs"))
         assertEquals(1, countTable("epg_sources"))
         assertEquals(1, countTable("provider_epg_sources"))
         assertEquals(1, countTable("epg_channel_mappings"))
@@ -281,7 +281,6 @@ class RoomEpgRepositoryTest {
             programsDeletedByCleanup = repository.cleanupProgramsOutsideRetention(
                 nowMillis = now,
                 pastDays = 1,
-                futureDays = 7,
             )
         }
         val totalMs = importMs + cleanupMs

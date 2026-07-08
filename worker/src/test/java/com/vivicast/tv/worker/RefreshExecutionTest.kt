@@ -158,35 +158,6 @@ class RefreshExecutionTest {
     }
 
     @Test
-    fun activeProviderPlaylistSourceSkipsManualM3uSources() = runBlocking {
-        val urlProvider = provider(id = "m3u-url", type = ProviderType.M3u)
-        val fileProvider = provider(id = "m3u-file", type = ProviderType.M3u)
-        val xtreamProvider = provider(id = "xtream", type = ProviderType.Xtream)
-        val source = ActiveProviderPlaylistSource(
-            FakeProviderRepository(
-                providers = listOf(urlProvider, fileProvider, xtreamProvider),
-                credentials = mapOf(
-                    urlProvider.id to ProviderCredentials.M3u(url = "https://playlist.example/list.m3u"),
-                    fileProvider.id to ProviderCredentials.M3u(
-                        sourceMode = M3uSourceMode.File,
-                        inlineContent = "#EXTM3U",
-                    ),
-                    xtreamProvider.id to ProviderCredentials.Xtream(
-                        serverUrl = "https://xtream.example",
-                        username = "user",
-                        password = "pass",
-                    ),
-                ),
-            ),
-        )
-
-        assertEquals(
-            listOf(PlaylistRefreshTarget(urlProvider.id), PlaylistRefreshTarget(xtreamProvider.id)),
-            source.collectDuePlaylists(),
-        )
-    }
-
-    @Test
     fun m3uPlaylistRefreshImportsManualInlineContentWithoutFetchingUrl() = runBlocking {
         val provider = provider(type = ProviderType.M3u)
         val providerRepository = FakeProviderRepository(
@@ -326,7 +297,6 @@ class RefreshExecutionTest {
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = importRepository,
             epgPastRetentionDaysProvider = { 2 },
-            epgFutureRetentionDaysProvider = { 9 },
         )
 
         val outcome = refresher.refresh(EpgRefreshTarget("epg-1"))
@@ -334,7 +304,7 @@ class RefreshExecutionTest {
         assertEquals(EpgRefreshOutcome("epg-1", success = true), outcome)
         assertEquals(listOf(activeProvider.id), importRepository.providerIds)
         assertEquals("Morning News", importRepository.documents.single().programs.single().title)
-        assertEquals(listOf(2 to 9), importRepository.retentionRequests)
+        assertEquals(listOf(2), importRepository.retentionRequests)
         // Feed-level metadata is recorded once for the source (channel + programme counts from the feed).
         val metadata = importRepository.refreshedMetadata.single()
         assertEquals("epg-1", metadata.sourceId)
@@ -371,7 +341,7 @@ class RefreshExecutionTest {
         runCatching { refresher.refresh(EpgRefreshTarget("epg-1")) }
 
         assertEquals(emptyList<String>(), importRepository.providerIds)
-        assertEquals(emptyList<Pair<Int, Int>>(), importRepository.retentionRequests)
+        assertEquals(emptyList<Int>(), importRepository.retentionRequests)
         // No valid feed → no metadata write, but the refreshing flag is still cleared in the finally block.
         assertEquals(emptyList<RefreshedMetadata>(), importRepository.refreshedMetadata)
         assertEquals(listOf("epg-1" to true, "epg-1" to false), importRepository.refreshingFlags)
@@ -574,7 +544,7 @@ private class StubXtreamParser(private val seriesCount: Int) : com.vivicast.tv.i
 private class FakeEpgImportRepository : EpgImportRepository {
     val providerIds = mutableListOf<String>()
     val documents = mutableListOf<XmltvDocument>()
-    val retentionRequests = mutableListOf<Pair<Int, Int>>()
+    val retentionRequests = mutableListOf<Int>()
     val refreshedMetadata = mutableListOf<RefreshedMetadata>()
     val refreshingFlags = mutableListOf<Pair<String, Boolean>>()
 
@@ -594,8 +564,8 @@ private class FakeEpgImportRepository : EpgImportRepository {
         )
     }
 
-    override suspend fun cleanupProgramsOutsideRetention(nowMillis: Long, pastDays: Int, futureDays: Int): Int {
-        retentionRequests += pastDays to futureDays
+    override suspend fun cleanupProgramsOutsideRetention(nowMillis: Long, pastDays: Int): Int {
+        retentionRequests += pastDays
         return 0
     }
 

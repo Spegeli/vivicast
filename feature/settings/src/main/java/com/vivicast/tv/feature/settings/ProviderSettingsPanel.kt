@@ -145,13 +145,12 @@ internal fun ProviderSettingsPanel(
     val strValidationXtreamServer = stringResource(R.string.validation_xtream_server_missing)
     val strValidationXtreamUser = stringResource(R.string.validation_xtream_username_missing)
     val strValidationXtreamPass = stringResource(R.string.validation_xtream_password_missing)
-    val strValidationConnTest = stringResource(R.string.validation_connection_test_required)
     val strValidationM3uUrl = stringResource(R.string.validation_m3u_url_missing)
     val strValidationM3uFile = stringResource(R.string.validation_m3u_file_missing)
-    fun ProviderEditorState.validationMessageResolved(requireConnectionTest: Boolean) = validationMessage(
-        requireConnectionTest, strValidationNameMissing, strValidationContentType,
+    fun ProviderEditorState.validationMessageResolved() = validationMessage(
+        strValidationNameMissing, strValidationContentType,
         strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
-        strValidationConnTest, strValidationM3uUrl, strValidationM3uFile,
+        strValidationM3uUrl, strValidationM3uFile,
     )
     fun ProviderEditorState.connectionTestRequestMessageResolved() = connectionTestRequestMessage(
         strValidationXtreamServer, strValidationXtreamUser, strValidationXtreamPass,
@@ -327,13 +326,11 @@ internal fun ProviderSettingsPanel(
                         scope.launch {
                             val result = onTestProviderConnection(editor.toConnectionTestRequest())
                             if (result.errorMessage == null) {
-                                editor = editor.copy(connectionTestPassed = true)
                                 connectionTestStatus = ConnectionTestStatus.Passed
                                 connectionSummary = result.summary
                                 connectionError = null
                                 message = null
                             } else {
-                                editor = editor.copy(connectionTestPassed = false)
                                 connectionTestStatus = ConnectionTestStatus.Failed
                                 connectionSummary = null
                                 connectionError = result.errorMessage
@@ -353,7 +350,7 @@ internal fun ProviderSettingsPanel(
                 when {
                     saving || connectionTestStatus == ConnectionTestStatus.Testing -> Unit
                     else -> {
-                        val validationMessage = editor.validationMessageResolved(requireConnectionTest = false)
+                        val validationMessage = editor.validationMessageResolved()
                         if (validationMessage != null) {
                             message = validationMessage
                         } else if (editor.isSourceUnchanged) {
@@ -369,12 +366,10 @@ internal fun ProviderSettingsPanel(
                                 saving = true
                                 val result = onTestProviderConnection(editor.toConnectionTestRequest())
                                 if (result.errorMessage == null) {
-                                    editor = editor.copy(connectionTestPassed = true)
                                     connectionSummary = result.summary
                                     connectionError = null
                                     persistEditor()
                                 } else {
-                                    editor = editor.copy(connectionTestPassed = false)
                                     connectionTestStatus = ConnectionTestStatus.Failed
                                     connectionSummary = null
                                     connectionError = result.errorMessage

@@ -25,15 +25,6 @@ class RefreshWorkRequestsTest {
     }
 
     @Test
-    fun cacheCleanupDoesNotRequireNetwork() {
-        val request = RefreshWorkRequests.cacheCleanup()
-
-        assertEquals(CacheCleanupWorker::class.java.name, request.workSpec.workerClassName)
-        assertEquals(NetworkType.NOT_REQUIRED, request.workSpec.constraints.requiredNetworkType)
-        assertTrue(request.tags.contains(WorkerContracts.CACHE_CLEANUP_WORK))
-    }
-
-    @Test
     fun periodicMaintenanceRefreshClampsTooSmallIntervals() {
         val request = RefreshWorkRequests.periodicMaintenanceRefresh(0)
 

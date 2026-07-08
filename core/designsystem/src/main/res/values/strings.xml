@@ -63,7 +63,6 @@
 
     <!-- EPG settings -->
     <string name="settings_epg_past">EPG-Vergangenheit behalten</string>
-    <string name="settings_epg_future">EPG-Zukunft laden/behalten</string>
     <string name="settings_epg_on_start">EPG beim App-Start aktualisieren</string>
     <string name="settings_epg_on_change">EPG bei Playlist-Änderung aktualisieren</string>
     <string name="settings_epg_now">EPG jetzt aktualisieren</string>
@@ -364,7 +363,6 @@
     <string name="settings_epg_add_source">EPG Quelle hinzufügen</string>
     <string name="settings_epg_help_add_source">Neue EPG-Quelle aus einer XMLTV-URL.</string>
     <string name="settings_epg_test_summary">EPG für %1$d Kanäle gefunden</string>
-    <string name="settings_epg_program_count">%1$d Sendungen</string>
     <string name="settings_epg_channel_count">%1$d Kanäle</string>
     <string name="settings_epg_name_placeholder">Name der EPG-Quelle</string>
     <string name="settings_epg_name_exists_body">Der Name muss eindeutig sein. Eine EPG-Quelle mit diesem Namen existiert bereits.</string>
@@ -473,15 +471,8 @@
     <!-- Settings - EPG messages and labels -->
     <string name="settings_epg_msg_scheduled">EPG Aktualisierung wurde eingeplant.</string>
     <string name="settings_epg_msg_source_saved">EPG Quelle gespeichert. URL bleibt verborgen.</string>
-    <string name="settings_epg_msg_source_assigned">EPG Quelle wurde dem Provider zugeordnet.</string>
-    <string name="settings_epg_msg_source_unlinked">EPG Quelle wurde vom Provider entfernt.</string>
-    <string name="settings_epg_msg_priority_updated">EPG Priorität wurde aktualisiert.</string>
-    <string name="settings_epg_msg_source_select">Wähle eine EPG Quelle oder lege eine neue Quelle an.</string>
     <string name="settings_epg_msg_source_deleted">EPG Quelle gelöscht. Programme und Zuordnungen dieser Quelle wurden entfernt.</string>
-    <string name="settings_epg_help_past">Cleanup entfernt nur EPG-Programmdaten außerhalb dieses Fensters.</string>
-    <string name="settings_epg_retention_day">Tag</string>
-    <string name="settings_epg_retention_days">Tage</string>
-    <string name="settings_epg_help_cleanup_note">Quellen, Provider-Zuordnungen und manuelle Mappings bleiben erhalten.</string>
+    <string name="settings_epg_help_past">Entfernt EPG-Programme, die älter als dieser Zeitraum sind. Zukünftige Sendungen werden vollständig behalten.</string>
     <string name="settings_epg_help_background">Aktualisiert alle EPG-Quellen einmal beim App-Start.</string>
     <string name="settings_epg_help_on_playlist_change">Separater Auslöser neben dem Intervall.</string>
     <string name="settings_epg_help_run_now">Plant eine Aktualisierung nach dem bestehenden Refresh-Plan ein.</string>
@@ -503,24 +494,9 @@
     <string name="settings_epg_delete_body">Diese EPG Quelle, ihre Programme und ihre Zuordnungen werden entfernt. Provider bleiben erhalten.</string>
     <string name="settings_epg_no_sources">Keine EPGs</string>
     <string name="settings_epg_no_sources_body">Lege eine EPG Quelle an, um sie Providern zuzuordnen.</string>
-    <string name="settings_epg_assignment_info">Zuordnung: im Detailbereich</string>
-    <string name="settings_epg_source_edit_title">EPG Quelle bearbeiten</string>
-    <string name="settings_epg_source_new_title">EPG Quelle</string>
-    <string name="settings_epg_source_edit_body">Name, Zeitversatz und Aktiv-Status ändern. URL nur bei Bedarf neu setzen.</string>
-    <string name="settings_epg_source_new_body">URL wird geschützt gespeichert und nicht in Room abgelegt.</string>
     <string name="settings_epg_timeshift_label">Zeitversatz</string>
     <string name="settings_epg_timeshift_help">Korrigiert EPG-Zeiten in Minuten.</string>
     <string name="settings_epg_timeshift_value">%1$d min</string>
-    <string name="settings_epg_priority">Priorität %1$d</string>
-    <string name="settings_epg_not_assigned">Nicht zugeordnet</string>
-    <string name="settings_epg_use_as_priority">Als Priorität %1$d verwenden</string>
-    <string name="settings_epg_higher">Höher</string>
-    <string name="settings_epg_top">Oben</string>
-    <string name="settings_epg_lower">Tiefer</string>
-    <string name="settings_epg_bottom">Unten</string>
-    <string name="settings_epg_provider_assignment_title">Provider-Zuordnung</string>
-    <string name="settings_epg_provider_assignment_body">Priorität ist pro Provider konfigurierbar. Manuelle Kanalzuordnung bleibt ein separater Flow.</string>
-    <string name="settings_epg_no_providers_for_source_body">Lege zuerst eine Wiedergabeliste an, um EPG Quellen zuzuordnen.</string>
 
     <!-- Settings - Provider/Playlist messages and labels -->
     <string name="settings_provider_title_edit">Wiedergabeliste bearbeiten</string>
@@ -693,7 +669,6 @@
     <string name="validation_xtream_server_missing">Xtream Server fehlt.</string>
     <string name="validation_xtream_username_missing">Xtream Benutzername fehlt.</string>
     <string name="validation_xtream_password_missing">Xtream Passwort fehlt.</string>
-    <string name="validation_connection_test_required">Verbindungstest fehlt.</string>
     <string name="validation_m3u_url_missing">M3U URL fehlt.</string>
     <string name="validation_m3u_file_missing">M3U Datei fehlt.</string>    <string name="validation_epg_url_missing">EPG URL fehlt.</string>
 
@@ -757,6 +732,9 @@
     <string name="settings_provider_update_interval">Update Intervall</string>
     <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
     <string name="settings_provider_epg_sources">EPG Quellen</string>
+    <string name="settings_provider_logo_priority">Logo-Priorität</string>
+    <string name="settings_provider_logo_priority_playlist">Logos aus der Playlist bevorzugen</string>
+    <string name="settings_provider_logo_priority_epg">Bevorzuge Logos von EPG</string>
     <string name="settings_provider_ua_hint">Leer lassen für den globalen User-Agent.</string>
     <string name="settings_provider_epg_none">Noch keine EPG-Quellen angelegt.</string>
     <string name="settings_provider_test_connection">Testen</string>
@@ -776,10 +754,8 @@
     <string name="m3u_source_url">URL</string>
     <string name="m3u_source_file">Datei</string>
     <!-- Settings - EPG panel and error messages -->
-    <string name="settings_epg_panel_title">EPG Verwaltung</string>
     <string name="settings_epg_remote_id_body">Remote-ID: %1$s</string>
     <string name="settings_epg_source_save_failed">Speichern fehlgeschlagen: %1$s</string>
-    <string name="settings_epg_msg_priority_failed">Priorität fehlgeschlagen: %1$s</string>
     <string name="settings_epg_msg_source_delete_failed">Löschen fehlgeschlagen: %1$s</string>
 
     <!-- Common -->

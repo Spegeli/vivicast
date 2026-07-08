@@ -63,7 +63,6 @@
 
     <!-- EPG settings -->
     <string name="settings_epg_past">Keep EPG history</string>
-    <string name="settings_epg_future">Load/keep EPG future</string>
     <string name="settings_epg_on_start">Refresh EPG on app start</string>
     <string name="settings_epg_on_change">Refresh EPG on playlist change</string>
     <string name="settings_epg_now">Refresh EPG now</string>
@@ -364,7 +363,6 @@
     <string name="settings_epg_add_source">Add EPG source</string>
     <string name="settings_epg_help_add_source">Add a new EPG source from an XMLTV URL.</string>
     <string name="settings_epg_test_summary">Found EPG for %1$d channels</string>
-    <string name="settings_epg_program_count">%1$d programmes</string>
     <string name="settings_epg_channel_count">%1$d channels</string>
     <string name="settings_epg_name_placeholder">EPG source name</string>
     <string name="settings_epg_name_exists_body">The name must be unique. An EPG source with this name already exists.</string>
@@ -472,15 +470,8 @@
     <!-- Settings - EPG messages and labels -->
     <string name="settings_epg_msg_scheduled">EPG refresh has been scheduled.</string>
     <string name="settings_epg_msg_source_saved">EPG source saved. URL remains hidden.</string>
-    <string name="settings_epg_msg_source_assigned">EPG source assigned to provider.</string>
-    <string name="settings_epg_msg_source_unlinked">EPG source removed from provider.</string>
-    <string name="settings_epg_msg_priority_updated">EPG priority updated.</string>
-    <string name="settings_epg_msg_source_select">Select an EPG source or create a new one.</string>
     <string name="settings_epg_msg_source_deleted">EPG source deleted. Programs and assignments have been removed.</string>
-    <string name="settings_epg_help_past">Cleanup only removes EPG program data outside this window.</string>
-    <string name="settings_epg_retention_day">Day</string>
-    <string name="settings_epg_retention_days">Days</string>
-    <string name="settings_epg_help_cleanup_note">Sources, provider assignments and manual mappings are retained.</string>
+    <string name="settings_epg_help_past">Removes EPG programmes older than this period. All future programmes are kept.</string>
     <string name="settings_epg_help_background">Refreshes all EPG sources once when the app starts.</string>
     <string name="settings_epg_help_on_playlist_change">Separate trigger in addition to the interval.</string>
     <string name="settings_epg_help_run_now">Schedules a refresh according to the existing refresh plan.</string>
@@ -502,24 +493,9 @@
     <string name="settings_epg_delete_body">This EPG source, its programs and assignments will be removed. Providers are retained.</string>
     <string name="settings_epg_no_sources">No EPG sources</string>
     <string name="settings_epg_no_sources_body">Create an EPG source to assign it to providers.</string>
-    <string name="settings_epg_assignment_info">Assignment: in detail panel</string>
-    <string name="settings_epg_source_edit_title">Edit EPG source</string>
-    <string name="settings_epg_source_new_title">EPG source</string>
-    <string name="settings_epg_source_edit_body">Change name, time offset and active status. Reset URL only if needed.</string>
-    <string name="settings_epg_source_new_body">URL is stored securely and not saved in Room.</string>
     <string name="settings_epg_timeshift_label">Time offset</string>
     <string name="settings_epg_timeshift_help">Corrects EPG times in minutes.</string>
     <string name="settings_epg_timeshift_value">%1$d min</string>
-    <string name="settings_epg_priority">Priority %1$d</string>
-    <string name="settings_epg_not_assigned">Not assigned</string>
-    <string name="settings_epg_use_as_priority">Use as priority %1$d</string>
-    <string name="settings_epg_higher">Higher</string>
-    <string name="settings_epg_top">Top</string>
-    <string name="settings_epg_lower">Lower</string>
-    <string name="settings_epg_bottom">Bottom</string>
-    <string name="settings_epg_provider_assignment_title">Provider assignment</string>
-    <string name="settings_epg_provider_assignment_body">Priority is configurable per provider. Manual channel mapping remains a separate flow.</string>
-    <string name="settings_epg_no_providers_for_source_body">Set up a playlist first to assign EPG sources.</string>
 
     <!-- Settings - Provider/Playlist messages and labels -->
     <string name="settings_provider_title_edit">Edit playlist</string>
@@ -692,7 +668,6 @@
     <string name="validation_xtream_server_missing">Xtream server missing.</string>
     <string name="validation_xtream_username_missing">Xtream username missing.</string>
     <string name="validation_xtream_password_missing">Xtream password missing.</string>
-    <string name="validation_connection_test_required">Connection test missing.</string>
     <string name="validation_m3u_url_missing">M3U URL missing.</string>
     <string name="validation_m3u_file_missing">M3U file missing.</string>    <string name="validation_epg_url_missing">EPG URL missing.</string>
 
@@ -756,6 +731,9 @@
     <string name="settings_provider_update_interval">Update interval</string>
     <string name="settings_provider_refresh_on_start">Refresh on app start</string>
     <string name="settings_provider_epg_sources">EPG sources</string>
+    <string name="settings_provider_logo_priority">Logo priority</string>
+    <string name="settings_provider_logo_priority_playlist">Prefer logos from playlist</string>
+    <string name="settings_provider_logo_priority_epg">Prefer logos from EPG</string>
     <string name="settings_provider_ua_hint">Leave empty to use the global User-Agent.</string>
     <string name="settings_provider_epg_none">No EPG sources created yet.</string>
     <string name="settings_provider_test_connection">Test</string>
@@ -775,10 +753,8 @@
     <string name="m3u_source_url">URL</string>
     <string name="m3u_source_file">File</string>
     <!-- Settings - EPG panel and error messages -->
-    <string name="settings_epg_panel_title">EPG Management</string>
     <string name="settings_epg_remote_id_body">Remote ID: %1$s</string>
     <string name="settings_epg_source_save_failed">Save failed: %1$s</string>
-    <string name="settings_epg_msg_priority_failed">Priority update failed: %1$s</string>
     <string name="settings_epg_msg_source_delete_failed">Delete failed: %1$s</string>
 
     <!-- Common -->

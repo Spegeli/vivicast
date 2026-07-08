@@ -85,7 +85,7 @@ class RoomProviderRepository(
             includeMovies = request.includeMovies,
             includeSeries = request.includeSeries,
             refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
-            logoPriority = DEFAULT_LOGO_PRIORITY,
+            logoPriority = normalizeLogoPriority(request.logoPriority),
             createdAt = now,
             updatedAt = now,
             userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
@@ -117,6 +117,7 @@ class RoomProviderRepository(
             includeMovies = request.includeMovies,
             includeSeries = request.includeSeries,
             refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
+            logoPriority = normalizeLogoPriority(request.logoPriority),
             updatedAt = clock(),
             userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
             refreshOnAppStartEnabled = request.refreshOnAppStartEnabled,
@@ -392,6 +393,5 @@ private const val FIELD_M3U_SOURCE_MODE = "m3u_source_mode"
 private const val FIELD_XTREAM_SERVER_URL = "xtream_server_url"
 private const val FIELD_XTREAM_USERNAME = "xtream_username"
 private const val FIELD_XTREAM_PASSWORD = "xtream_password"
-private const val DEFAULT_LOGO_PRIORITY = "provider"
 private const val MIN_REFRESH_INTERVAL_HOURS = 0
 private const val MAX_REFRESH_INTERVAL_HOURS = 168

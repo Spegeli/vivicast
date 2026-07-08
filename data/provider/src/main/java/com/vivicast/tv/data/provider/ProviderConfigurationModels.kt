@@ -19,6 +19,7 @@ data class ProviderCreateRequest(
     val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
+    val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
 )
 
 data class ProviderUpdateRequest(
@@ -36,6 +37,7 @@ data class ProviderUpdateRequest(
     val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
+    val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
 )
 
 data class ProviderSaveResult(
@@ -83,6 +85,16 @@ const val REFRESH_INTERVAL_OFF = 0
 
 // Selectable auto-refresh intervals in the editor popup ("Aus" = REFRESH_INTERVAL_OFF, then hours).
 val REFRESH_INTERVAL_OPTIONS_HOURS = listOf(REFRESH_INTERVAL_OFF, 2, 4, 8, 16, 24, 48, 72, 96, 120, 144, 168)
+
+// Per-provider logo source preference. PLAYLIST (default) prefers the playlist's own channel logo and
+// falls back to a mapped EPG source's <icon>; EPG reverses that order. Resolved at read time in the
+// channel query (see CatalogDao effective-logo projection).
+const val LOGO_PRIORITY_PLAYLIST = "playlist"
+const val LOGO_PRIORITY_EPG = "epg"
+
+/** Normalizes any stored value (including the legacy "provider") to the two supported priorities. */
+fun normalizeLogoPriority(value: String?): String =
+    if (value == LOGO_PRIORITY_EPG) LOGO_PRIORITY_EPG else LOGO_PRIORITY_PLAYLIST
 
 object TransientM3uSourceStore {
     private val sources = ConcurrentHashMap<String, String>()

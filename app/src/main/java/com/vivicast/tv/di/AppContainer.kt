@@ -60,7 +60,6 @@ import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
 import com.vivicast.tv.domain.model.ProviderType
-import com.vivicast.tv.worker.ActiveProviderPlaylistSource
 import com.vivicast.tv.worker.DefaultCacheCleaner
 import com.vivicast.tv.worker.DefaultEpgRefresher
 import com.vivicast.tv.worker.DefaultLogoRefresher
@@ -274,7 +273,6 @@ class AppContainer(
             xmltvParser = DefaultXmltvParser(),
             epgImportRepository = epgImportRepository,
             epgPastRetentionDaysProvider = { userPreferencesStore.values.first().epg.pastRetentionDays },
-            epgFutureRetentionDaysProvider = { userPreferencesStore.values.first().epg.futureRetentionDays },
         )
         val seriesDetailsRefresher = DefaultSeriesDetailsRefresher(
             providerRepository = providerRepository,
@@ -300,8 +298,6 @@ class AppContainer(
             playlistRefresher = playlistRefresher,
             epgRefresher = epgRefresher,
             seriesDetailsRefresher = seriesDetailsRefresher,
-            logoRefresher = logoRefresher,
-            cacheCleaner = cacheCleaner,
             scheduler = refreshWorkScheduler,
             refreshEpgOnPlaylistChangeProvider = {
                 userPreferencesStore.values.first().epg.refreshOnPlaylistChangeEnabled

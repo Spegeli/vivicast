@@ -31,7 +31,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,8 +43,6 @@ class DefaultRefreshWorkerRunner(
     private val playlistRefresher: PlaylistRefresher,
     private val epgRefresher: EpgRefresher,
     private val seriesDetailsRefresher: SeriesDetailsRefresher,
-    private val logoRefresher: LogoRefresher,
-    private val cacheCleaner: CacheCleaner,
     private val scheduler: RefreshWorkScheduler,
     private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
 ) : RefreshWorkerRunner {
@@ -113,32 +110,6 @@ class DefaultRefreshWorkerRunner(
             )
     }
 
-    override suspend fun runLogoRefresh(): RefreshWorkerResult =
-        runCancellableCatching { logoRefresher.refreshLogos() }
-            .fold(onSuccess = { RefreshWorkerResult.Success }, onFailure = { RefreshWorkerResult.Retry })
-
-    override suspend fun runCacheCleanup(): RefreshWorkerResult =
-        runCancellableCatching { cacheCleaner.cleanup() }
-            .fold(onSuccess = { RefreshWorkerResult.Success }, onFailure = { RefreshWorkerResult.Retry })
-}
-
-class ActiveProviderPlaylistSource(
-    private val providerRepository: ProviderRepository,
-) : PlaylistRefreshSource {
-    override suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget> {
-        val providers = providerRepository.observeProviders()
-            .first()
-            .filter { it.isActive && it.status != ProviderStatus.Disabled }
-        return providers.mapNotNull { provider ->
-            val credentials = providerRepository.getCredentials(provider.id)
-            val refreshable = when (credentials) {
-                is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
-                is ProviderCredentials.Xtream -> true
-                null -> false
-            }
-            if (refreshable) PlaylistRefreshTarget(providerId = provider.id) else null
-        }
-    }
 }
 
 class DefaultPlaylistRefresher(
@@ -308,13 +279,8 @@ class DefaultSeriesDetailsRefresher(
 class RoomEpgSourceReader(
     private val database: VivicastDatabase,
     private val secureValueStore: SecureValueStore,
-) : EpgSourceReader, EpgSourceResolver {
+) : EpgSourceReader {
     private val epgDao = database.epgDao()
-
-    override suspend fun collectAllActiveSources(): List<EpgRefreshTarget> =
-        epgDao.getEpgSources()
-            .filter { it.isActive }
-            .map { EpgRefreshTarget(it.id) }
 
     override suspend fun getActiveSourceIdsForProvider(providerId: String): List<String> =
         epgDao.getProviderEpgSources(providerId)
@@ -341,7 +307,6 @@ class DefaultEpgRefresher(
     private val xmltvParser: XmltvParser,
     private val epgImportRepository: EpgImportRepository,
     private val epgPastRetentionDaysProvider: suspend () -> Int = { 1 },
-    private val epgFutureRetentionDaysProvider: suspend () -> Int = { 7 },
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val refreshRunGuard: RefreshRunGuard = RefreshRunGuard(),
 ) : EpgRefresher {
@@ -389,7 +354,6 @@ class DefaultEpgRefresher(
             epgImportRepository.cleanupProgramsOutsideRetention(
                 nowMillis = clock(),
                 pastDays = epgPastRetentionDaysProvider(),
-                futureDays = epgFutureRetentionDaysProvider(),
             )
             return EpgRefreshOutcome(target.epgSourceId, success = true)
         } finally {
@@ -571,8 +535,8 @@ class RoomMediaImageRefreshSource(
     override suspend fun collectImageTargets(): List<MediaImageRefreshTarget> {
         val catalogDao = database.catalogDao()
         return buildList {
-            catalogDao.getChannelsWithLogoUrls().forEach { channel ->
-                addImageTarget(MediaCacheType.ChannelLogo, channel.id, channel.logoUrl)
+            catalogDao.getChannelsWithLogoUrls().forEach { row ->
+                addImageTarget(MediaCacheType.ChannelLogo, row.channel.id, row.effectiveLogoUrl)
             }
             catalogDao.getMoviesWithImageUrls().forEach { movie ->
                 addImageTarget(MediaCacheType.MoviePoster, movie.id, movie.posterUrl)

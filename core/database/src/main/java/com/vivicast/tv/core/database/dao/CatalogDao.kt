@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
@@ -24,28 +25,26 @@ interface CatalogDao {
     fun observeVisibleCategories(providerId: String, type: String): Flow<List<CategoryEntity>>
 
     @Query(
-        """
-        SELECT * FROM channels
-        WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
-        ORDER BY COALESCE(channelNumber, ''), name COLLATE NOCASE
-        """,
+        "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
+            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "WHERE c.providerId = :providerId AND (:categoryId IS NULL OR c.categoryId = :categoryId) " +
+            "ORDER BY COALESCE(c.channelNumber, ''), c.name COLLATE NOCASE",
     )
-    fun observeChannels(providerId: String, categoryId: String?): Flow<List<ChannelEntity>>
+    fun observeChannels(providerId: String, categoryId: String?): Flow<List<ChannelWithLogo>>
 
     @Query(
-        """
-        SELECT * FROM channels
-        WHERE providerId = :providerId AND (:categoryId IS NULL OR categoryId = :categoryId)
-        ORDER BY COALESCE(channelNumber, ''), name COLLATE NOCASE
-        LIMIT :limit OFFSET :offset
-        """,
+        "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
+            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "WHERE c.providerId = :providerId AND (:categoryId IS NULL OR c.categoryId = :categoryId) " +
+            "ORDER BY COALESCE(c.channelNumber, ''), c.name COLLATE NOCASE " +
+            "LIMIT :limit OFFSET :offset",
     )
     fun observeChannelsPage(
         providerId: String,
         categoryId: String?,
         limit: Int,
         offset: Int,
-    ): Flow<List<ChannelEntity>>
+    ): Flow<List<ChannelWithLogo>>
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND type = :type")
     suspend fun getCategories(providerId: String, type: String): List<CategoryEntity>
@@ -74,13 +73,15 @@ interface CatalogDao {
     ): ChannelEntity?
 
     @Query(
-        """
-        SELECT * FROM channels
-        WHERE logoUrl IS NOT NULL AND TRIM(logoUrl) != ''
-        ORDER BY providerId, name COLLATE NOCASE
-        """,
+        "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
+            "FROM channels c JOIN providers p ON p.id = c.providerId " +
+            "WHERE (c.logoUrl IS NOT NULL AND TRIM(c.logoUrl) != '') " +
+            "OR EXISTS (SELECT 1 FROM epg_channel_mappings m " +
+            "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
+            "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '') " +
+            "ORDER BY c.providerId, c.name COLLATE NOCASE",
     )
-    suspend fun getChannelsWithLogoUrls(): List<ChannelEntity>
+    suspend fun getChannelsWithLogoUrls(): List<ChannelWithLogo>
 
     @Query(
         """
@@ -379,3 +380,30 @@ interface CatalogDao {
         deleteCategoriesForProvider(providerId)
     }
 }
+
+/**
+ * A channel plus its resolved [effectiveLogoUrl]: the logo to actually display, chosen at read time from
+ * the channel's own playlist logo and any mapped EPG source <icon> according to the provider's
+ * `logoPriority` (see [EFFECTIVE_LOGO_COLUMN]). The embedded [channel] keeps the raw playlist logoUrl.
+ */
+data class ChannelWithLogo(
+    @Embedded val channel: ChannelEntity,
+    val effectiveLogoUrl: String?,
+)
+
+// Resolves the effective channel logo per the owning provider's `logoPriority`:
+//   'epg'  -> mapped EPG <icon> first, playlist logo as fallback
+//   else   -> playlist logo first (default), mapped EPG <icon> as fallback
+// Assumes the query aliases channels AS c and providers AS p. Correlated subquery picks a manual mapping
+// over an automatic one. Kept as a concatenated constant so the three channel-read queries stay identical.
+private const val EFFECTIVE_LOGO_COLUMN =
+    "CASE WHEN p.logoPriority = 'epg' THEN " +
+        "COALESCE((SELECT ec.iconUrl FROM epg_channel_mappings m " +
+        "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
+        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
+        "ORDER BY m.isManual DESC LIMIT 1), NULLIF(TRIM(c.logoUrl), '')) " +
+        "ELSE COALESCE(NULLIF(TRIM(c.logoUrl), ''), " +
+        "(SELECT ec.iconUrl FROM epg_channel_mappings m " +
+        "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
+        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
+        "ORDER BY m.isManual DESC LIMIT 1)) END"

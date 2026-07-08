@@ -201,7 +201,6 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
         .put("expandedLiveTvProviderIds", JSONArray(expandedLiveTvProviderIds.toList()))
         .put("epg", JSONObject()
             .put("pastRetentionDays", epg.pastRetentionDays)
-            .put("futureRetentionDays", epg.futureRetentionDays)
             .put("refreshOnAppStartEnabled", epg.refreshOnAppStartEnabled)
             .put("refreshOnPlaylistChangeEnabled", epg.refreshOnPlaylistChangeEnabled))
         .put("backup", JSONObject()

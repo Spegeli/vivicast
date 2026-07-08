@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import com.vivicast.tv.core.database.model.EpgChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
@@ -139,6 +140,14 @@ interface EpgDao {
     @Upsert
     suspend fun upsertMappings(mappings: List<EpgChannelMappingEntity>)
 
+    // EPG channel <icon> store (per source). Read only via the effective-logo join in CatalogDao; there
+    // is no direct query. Replaced per source on each import (delete + upsert).
+    @Upsert
+    suspend fun upsertEpgChannels(channels: List<EpgChannelEntity>)
+
+    @Query("DELETE FROM epg_channels WHERE epgSourceId = :epgSourceId")
+    suspend fun deleteEpgChannelsForSource(epgSourceId: String)
+
     @Query("DELETE FROM provider_epg_sources WHERE providerId = :providerId")
     suspend fun deleteProviderEpgSources(providerId: String)
 
@@ -184,13 +193,9 @@ interface EpgDao {
     @Query("DELETE FROM epg_programs WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteProgramsForChannels(providerId: String, channelIds: List<String>)
 
-    @Query(
-        """
-        DELETE FROM epg_programs
-        WHERE endTime < :fromMillis OR startTime > :toMillis
-        """,
-    )
-    suspend fun deleteProgramsOutsideWindow(fromMillis: Long, toMillis: Long): Int
+    // Past-only retention cleanup: future programmes have no upper bound (we keep whatever the feed gives).
+    @Query("DELETE FROM epg_programs WHERE endTime < :beforeMillis")
+    suspend fun deleteProgramsBefore(beforeMillis: Long): Int
 
     @Query(
         """

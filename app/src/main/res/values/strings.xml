@@ -63,7 +63,6 @@
 
     <!-- EPG settings -->
     <string name="settings_epg_past">EPG-Vergangenheit behalten</string>
-    <string name="settings_epg_future">EPG-Zukunft laden/behalten</string>
     <string name="settings_epg_on_start">EPG beim App-Start aktualisieren</string>
     <string name="settings_epg_on_change">EPG bei Playlist-Änderung aktualisieren</string>
     <string name="settings_epg_now">EPG jetzt aktualisieren</string>

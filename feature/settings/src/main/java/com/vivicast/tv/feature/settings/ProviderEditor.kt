@@ -81,6 +81,8 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.LOGO_PRIORITY_EPG
+import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
 import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OPTIONS_HOURS
 import com.vivicast.tv.data.provider.ContentSummary
@@ -248,6 +250,7 @@ internal fun ProviderEditor(
                 onOpenInterval = { dialogs.showInterval = true },
                 onOpenUserAgent = { dialogs.showUserAgent = true },
                 onOpenEpgSources = { dialogs.showEpgSources = true },
+                onOpenLogoPriority = { dialogs.showLogoPriority = true },
             )
         }
 
@@ -298,6 +301,7 @@ internal class ProviderEditorDialogState {
     var showInterval by mutableStateOf(false)
     var showUserAgent by mutableStateOf(false)
     var showEpgSources by mutableStateOf(false)
+    var showLogoPriority by mutableStateOf(false)
 }
 
 @Composable
@@ -347,6 +351,16 @@ private fun ProviderEditorDialogs(
             linkedIds = epgLinks.linkedIds,
             onToggle = onToggleEpgLink,
             onDismiss = { dialogs.showEpgSources = false },
+        )
+    }
+    if (dialogs.showLogoPriority) {
+        ProviderLogoPriorityDialog(
+            current = editor.logoPriority,
+            onSelect = { value ->
+                if (value != editor.logoPriority) onEditorChange(editor.copy(logoPriority = value))
+                dialogs.showLogoPriority = false
+            },
+            onDismiss = { dialogs.showLogoPriority = false },
         )
     }
 }
@@ -413,17 +427,17 @@ private fun LazyListScope.providerSourceChoiceItem(
                 ProviderChoiceButton(
                     label = "M3U " + stringResource(R.string.m3u_source_url),
                     selected = editor.type == ProviderType.M3u && editor.m3uSourceMode == M3uSourceMode.Url,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.Url, connectionTestPassed = false)) },
+                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.Url)) },
                 )
                 ProviderChoiceButton(
                     label = "M3U " + stringResource(R.string.m3u_source_file),
                     selected = editor.type == ProviderType.M3u && editor.m3uSourceMode == M3uSourceMode.File,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.File, connectionTestPassed = false)) },
+                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.File)) },
                 )
                 ProviderChoiceButton(
                     label = "Xtream Codes",
                     selected = editor.type == ProviderType.Xtream,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.Xtream, connectionTestPassed = false)) },
+                    onClick = { onEditorChange(editor.copy(type = ProviderType.Xtream)) },
                 )
             }
         }
@@ -460,7 +474,6 @@ private fun LazyListScope.providerM3uCredentialItems(
                                         m3uUrl = "",
                                         m3uContent = "",
                                         m3uHasExistingSource = false,
-                                        connectionTestPassed = false,
                                     ),
                                 )
                             },
@@ -484,7 +497,7 @@ private fun LazyListScope.providerM3uCredentialItems(
                         value = editor.m3uUrl,
                         placeholder = if (editor.m3uHasExistingSource) stringResource(R.string.settings_provider_placeholder_reset) else "https://...",
                         onValueChange = {
-                            onEditorChange(editor.copy(m3uUrl = it, m3uHasExistingSource = false, connectionTestPassed = false))
+                            onEditorChange(editor.copy(m3uUrl = it, m3uHasExistingSource = false))
                         },
                         modifier = Modifier.weight(1f),
                         focusRequester = sourceFocus.url,
@@ -532,7 +545,7 @@ private fun LazyListScope.providerXtreamCredentialItems(
             label = stringResource(R.string.settings_provider_server_label),
             value = editor.xtreamServerUrl,
             placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else "https://server.example",
-            onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it, connectionTestPassed = false)) },
+            onValueChange = { onEditorChange(editor.copy(xtreamServerUrl = it)) },
             focusRequester = fields.serverFocus,
             secret = false,
             isError = fields.serverError || connectionTestStatus == ConnectionTestStatus.Failed,
@@ -544,7 +557,7 @@ private fun LazyListScope.providerXtreamCredentialItems(
             label = stringResource(R.string.settings_provider_username_label),
             value = editor.xtreamUsername,
             placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_username_label),
-            onValueChange = { onEditorChange(editor.copy(xtreamUsername = it, connectionTestPassed = false)) },
+            onValueChange = { onEditorChange(editor.copy(xtreamUsername = it)) },
             focusRequester = fields.userFocus,
             secret = false,
             isError = fields.userError || connectionTestStatus == ConnectionTestStatus.Failed,
@@ -556,7 +569,7 @@ private fun LazyListScope.providerXtreamCredentialItems(
             label = stringResource(R.string.settings_provider_password_label),
             value = editor.xtreamPassword,
             placeholder = if (editor.isEditing) stringResource(R.string.settings_provider_placeholder_reset) else stringResource(R.string.settings_provider_password_label),
-            onValueChange = { onEditorChange(editor.copy(xtreamPassword = it, connectionTestPassed = false)) },
+            onValueChange = { onEditorChange(editor.copy(xtreamPassword = it)) },
             focusRequester = fields.passFocus,
             secret = true,
             allowReveal = true,
@@ -604,7 +617,6 @@ private fun ProviderM3uFilePicker(
                                 m3uContent = content.take(MAX_M3U_INLINE_SOURCE_CHARS),
                                 m3uFileName = fileName,
                                 m3uHasExistingSource = false,
-                                connectionTestPassed = false,
                             ),
                         )
                     }
@@ -649,19 +661,19 @@ private fun LazyListScope.providerImportItem(
                 ImportCheckboxRow(
                     label = stringResource(R.string.nav_live_tv),
                     checked = editor.includeLiveTv,
-                    onToggle = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv, connectionTestPassed = false)) },
+                    onToggle = { onEditorChange(editor.copy(includeLiveTv = !editor.includeLiveTv)) },
                     modifier = Modifier.weight(1f).focusRequester(importFocusRequester),
                 )
                 ImportCheckboxRow(
                     label = stringResource(R.string.nav_movies_label),
                     checked = editor.includeMovies,
-                    onToggle = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies, connectionTestPassed = false)) },
+                    onToggle = { onEditorChange(editor.copy(includeMovies = !editor.includeMovies)) },
                     modifier = Modifier.weight(1f),
                 )
                 ImportCheckboxRow(
                     label = stringResource(R.string.nav_series_label),
                     checked = editor.includeSeries,
-                    onToggle = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries, connectionTestPassed = false)) },
+                    onToggle = { onEditorChange(editor.copy(includeSeries = !editor.includeSeries)) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -686,6 +698,7 @@ private fun LazyListScope.providerEditControlItems(
     onOpenInterval: () -> Unit,
     onOpenUserAgent: () -> Unit,
     onOpenEpgSources: () -> Unit,
+    onOpenLogoPriority: () -> Unit,
 ) {
     // Auto-refresh (interval + app-start) only applies to source types that can actually be re-fetched.
     if (editor.isAutomaticallyRefreshable) {
@@ -730,6 +743,15 @@ private fun LazyListScope.providerEditControlItems(
             help = "",
             value = if (linkedEpgCount > 0) linkedEpgCount.toString() else stringResource(R.string.about_open_value),
             onClick = onOpenEpgSources,
+        )
+    }
+    item(key = "logo-priority") {
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_provider_logo_priority),
+            help = "",
+            value = logoPriorityLabel(editor.logoPriority),
+            forceTextValue = true,
+            onClick = onOpenLogoPriority,
         )
     }
 }
@@ -789,6 +811,49 @@ internal fun ProviderIntervalDialog(
 }
 
 private val INTERVAL_DIALOG_MAX_HEIGHT = 340.dp
+
+@Composable
+internal fun logoPriorityLabel(priority: String): String =
+    if (priority == LOGO_PRIORITY_EPG) {
+        stringResource(R.string.settings_provider_logo_priority_epg)
+    } else {
+        stringResource(R.string.settings_provider_logo_priority_playlist)
+    }
+
+/** Two-option logo-source picker: prefer the playlist's own logo (default) or a mapped EPG source's icon.
+ * Focus starts on the current value; selecting a different value saves it, the current one just closes. */
+@Composable
+private fun ProviderLogoPriorityDialog(
+    current: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val selectedFocusRequester = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_provider_logo_priority),
+        initialFocus = selectedFocusRequester,
+    ) {
+        // Panels sit directly in the dialog's Column (spaced by the dialog). wrapContentHeight(unbounded)
+        // keeps each row at its text height instead of stretching to fill — mirrors LanguagePickerDialog.
+        listOf(LOGO_PRIORITY_PLAYLIST, LOGO_PRIORITY_EPG).forEach { option ->
+            FocusPanel(
+                selected = option == current,
+                onClick = { onSelect(option) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(unbounded = true)
+                    .then(if (option == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
+            ) {
+                BasicText(
+                    text = logoPriorityLabel(option),
+                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                )
+            }
+        }
+    }
+}
 
 /** Per-playlist User-Agent editor — mirrors the global one; empty saves as "use the global UA". */
 @Composable
@@ -866,395 +931,6 @@ private fun ProviderEpgSourcesDialog(
         Spacer(modifier = Modifier.height(VivicastSpacing.Space2))
         VivicastButtonRow {
             ActionPill(label = stringResource(R.string.common_close), onClick = onDismiss)
-        }
-    }
-}
-
-internal data class ProviderEditorState(
-    val providerId: String?,
-    val type: ProviderType,
-    val name: String,
-    val m3uSourceMode: M3uSourceMode,
-    val m3uUrl: String,
-    val m3uContent: String,
-    val m3uHasExistingSource: Boolean,
-    val xtreamServerUrl: String,
-    val xtreamUsername: String,
-    val xtreamPassword: String,
-    val includeLiveTv: Boolean,
-    val includeMovies: Boolean,
-    val includeSeries: Boolean,
-    val refreshIntervalHours: Int,
-    val connectionTestPassed: Boolean,
-    val m3uFileName: String = "",
-    val isActive: Boolean = true,
-    val userAgent: String = "",
-    val refreshOnAppStartEnabled: Boolean = true,
-    // Signature of the source (URL/file/Xtream creds) as loaded when editing; blank for a new provider.
-    // Lets Save skip the connection test when the source didn't change (see isSourceUnchanged).
-    val pristineSource: String = "",
-) {
-    val isEditing: Boolean get() = providerId != null
-    val isAutomaticallyRefreshable: Boolean
-        get() = type == ProviderType.Xtream || (type == ProviderType.M3u && m3uSourceMode.isAutomaticallyRefreshable)
-
-    /** A stable signature of the current source fields, compared against [pristineSource]. */
-    fun sourceSignature(): String = when (type) {
-        ProviderType.M3u -> "M3U|$m3uSourceMode|${m3uUrl.trim()}|${m3uContent.trim()}"
-        ProviderType.Xtream -> "XT|${xtreamServerUrl.trim()}|${xtreamUsername.trim()}|${xtreamPassword.trim()}"
-    }
-
-    /** Editing an existing provider without having changed its source — Save may skip the connection test. */
-    val isSourceUnchanged: Boolean
-        get() = isEditing && pristineSource.isNotEmpty() && pristineSource == sourceSignature()
-
-    fun validationMessage(
-        requireConnectionTest: Boolean,
-        msgNameMissing: String,
-        msgContentType: String,
-        msgXtreamServer: String,
-        msgXtreamUser: String,
-        msgXtreamPass: String,
-        msgConnTest: String,
-        msgM3uUrl: String,
-        msgM3uFile: String,
-    ): String? {
-        if (name.isBlank()) return msgNameMissing
-        // Every source type imports selectable content now (M3U classifies too), and the repository
-        // requires at least one type for all providers — surface that in the UI up front.
-        if (!includeLiveTv && !includeMovies && !includeSeries) return msgContentType
-        when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = isEditing, msgM3uUrl, msgM3uFile)?.let { return it }
-            ProviderType.Xtream -> if (!isEditing) {
-                if (xtreamServerUrl.isBlank()) return msgXtreamServer
-                if (xtreamUsername.isBlank()) return msgXtreamUser
-                if (xtreamPassword.isBlank()) return msgXtreamPass
-            }
-        }
-        if (requireConnectionTest && !connectionTestPassed) return msgConnTest
-        return null
-    }
-
-    // Connection test is independent of the name (blank or duplicate) — it only needs the
-    // connection-relevant fields (M3U URL/file content, or Xtream server/user/password).
-    fun connectionTestRequestMessage(
-        msgXtreamServer: String,
-        msgXtreamUser: String,
-        msgXtreamPass: String,
-        msgM3uUrl: String,
-        msgM3uFile: String,
-    ): String? =
-        when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = false, msgM3uUrl, msgM3uFile)
-            ProviderType.Xtream -> when {
-                xtreamServerUrl.isBlank() -> msgXtreamServer
-                xtreamUsername.isBlank() -> msgXtreamUser
-                xtreamPassword.isBlank() -> msgXtreamPass
-                else -> null
-            }
-        }
-
-    fun toConnectionTestRequest(): ProviderCreateRequest =
-        ProviderCreateRequest(
-            name = name,
-            type = type,
-            m3uSourceMode = m3uSourceMode,
-            m3uUrl = m3uUrl,
-            m3uContent = m3uContent,
-            xtreamServerUrl = xtreamServerUrl,
-            xtreamUsername = xtreamUsername,
-            xtreamPassword = xtreamPassword,
-            includeLiveTv = includeLiveTv,
-            includeMovies = includeMovies,
-            includeSeries = includeSeries,
-            refreshIntervalHours = refreshIntervalHours,
-            userAgent = userAgent.ifBlank { null },
-        )
-
-    fun toCreateRequest(): ProviderCreateRequest =
-        ProviderCreateRequest(
-            name = name,
-            type = type,
-            m3uSourceMode = m3uSourceMode,
-            m3uUrl = m3uUrl,
-            m3uContent = m3uContent,
-            xtreamServerUrl = xtreamServerUrl,
-            xtreamUsername = xtreamUsername,
-            xtreamPassword = xtreamPassword,
-            includeLiveTv = includeLiveTv,
-            includeMovies = includeMovies,
-            includeSeries = includeSeries,
-            refreshIntervalHours = refreshIntervalHours,
-            userAgent = userAgent.ifBlank { null },
-            refreshOnAppStartEnabled = refreshOnAppStartEnabled,
-        )
-
-    fun toUpdateRequest(): ProviderUpdateRequest =
-        ProviderUpdateRequest(
-            providerId = requireNotNull(providerId),
-            name = name,
-            m3uSourceMode = if (type == ProviderType.M3u && shouldReplaceM3uSource) m3uSourceMode else null,
-            m3uUrl = m3uUrl.ifBlank { null },
-            m3uContent = m3uContent.ifBlank { null },
-            xtreamServerUrl = xtreamServerUrl.ifBlank { null },
-            xtreamUsername = xtreamUsername.ifBlank { null },
-            xtreamPassword = xtreamPassword.ifBlank { null },
-            includeLiveTv = includeLiveTv,
-            includeMovies = includeMovies,
-            includeSeries = includeSeries,
-            refreshIntervalHours = refreshIntervalHours,
-            userAgent = userAgent.ifBlank { null },
-            refreshOnAppStartEnabled = refreshOnAppStartEnabled,
-        )
-
-    private val shouldReplaceM3uSource: Boolean
-        get() = !m3uHasExistingSource || m3uUrl.isNotBlank() || m3uContent.isNotBlank()
-
-    private fun m3uSourceValidationMessage(allowExistingSource: Boolean, msgUrl: String, msgFile: String): String? {
-        if (allowExistingSource && m3uHasExistingSource && m3uUrl.isBlank() && m3uContent.isBlank()) return null
-        return when (m3uSourceMode) {
-            M3uSourceMode.Url -> if (m3uUrl.isBlank()) msgUrl else null
-            M3uSourceMode.File -> if (m3uContent.isBlank()) msgFile else null
-        }
-    }
-
-    companion object {
-        fun newProvider(type: ProviderType): ProviderEditorState =
-            ProviderEditorState(
-                providerId = null,
-                type = type,
-                name = "",
-                m3uSourceMode = M3uSourceMode.Url,
-                m3uUrl = "",
-                m3uContent = "",
-                m3uHasExistingSource = false,
-                xtreamServerUrl = "",
-                xtreamUsername = "",
-                xtreamPassword = "",
-                includeLiveTv = true,
-                includeMovies = false,
-                includeSeries = false,
-                refreshIntervalHours = REFRESH_INTERVAL_OFF,
-                connectionTestPassed = false,
-            )
-
-        fun from(provider: Provider, credentials: ProviderCredentials? = null): ProviderEditorState {
-            // Pre-fill the editor with the stored credentials so editing shows the current values.
-            val m3u = credentials as? ProviderCredentials.M3u
-            val xtream = credentials as? ProviderCredentials.Xtream
-            return ProviderEditorState(
-                providerId = provider.id,
-                type = provider.type,
-                name = provider.name,
-                m3uSourceMode = m3u?.sourceMode ?: M3uSourceMode.Url,
-                m3uUrl = m3u?.url.orEmpty(),
-                m3uContent = m3u?.inlineContent.orEmpty(),
-                // Tied to the provider type, not the loaded credentials: an M3U provider still HAS a stored
-                // source even if the (async, secure) credential load failed — so a blank field means "keep
-                // the stored source", not "source missing", and Save isn't blocked on a transient read error.
-                m3uHasExistingSource = provider.type == ProviderType.M3u,
-                xtreamServerUrl = xtream?.serverUrl.orEmpty(),
-                xtreamUsername = xtream?.username.orEmpty(),
-                xtreamPassword = xtream?.password.orEmpty(),
-                includeLiveTv = provider.includeLiveTv,
-                includeMovies = provider.includeMovies,
-                includeSeries = provider.includeSeries,
-                refreshIntervalHours = provider.refreshIntervalHours,
-                connectionTestPassed = true,
-                isActive = provider.isActive,
-                userAgent = provider.userAgent.orEmpty(),
-                refreshOnAppStartEnabled = provider.refreshOnAppStartEnabled,
-            ).let { it.copy(pristineSource = it.sourceSignature()) }
-        }
-    }
-}
-
-@get:StringRes
-internal val M3uSourceMode.labelRes: Int
-    get() = when (this) {
-        M3uSourceMode.Url -> R.string.m3u_source_url
-        M3uSourceMode.File -> R.string.m3u_source_file
-    }
-
-internal enum class ConnectionTestStatus { Idle, Testing, Passed, Failed }
-
-private enum class ProviderEditorErrorFocus { Name, Url, File, Server, User, Pass, Import }
-
-/** The URL and file field focus requesters, bundled to keep the credential list under the arg limit. */
-private class M3uSourceFocus(val url: FocusRequester, val file: FocusRequester)
-
-/** True when the given M3U source's field is empty and required (not an edit that keeps its source). */
-private fun ProviderEditorState.isSourceBlank(mode: M3uSourceMode): Boolean {
-    if (type != ProviderType.M3u || m3uSourceMode != mode) return false
-    if (isEditing && m3uHasExistingSource) return false
-    return when (mode) {
-        M3uSourceMode.Url -> m3uUrl.isBlank()
-        M3uSourceMode.File -> m3uContent.isBlank()
-    }
-}
-
-/** First blocking field error on save (name → URL/file → import), or null when the form may be saved. */
-private fun firstSaveError(
-    editor: ProviderEditorState,
-    duplicateName: Boolean,
-    duplicateUrlName: String?,
-    nameBlank: Boolean,
-    urlBlank: Boolean,
-    fileBlank: Boolean,
-    serverBlank: Boolean,
-    userBlank: Boolean,
-    passBlank: Boolean,
-): ProviderEditorErrorFocus? {
-    // Xtream credentials are required only when creating; an edit keeps its stored credentials.
-    val xtreamRequired = !editor.isEditing
-    return when {
-        duplicateName || nameBlank -> ProviderEditorErrorFocus.Name
-        duplicateUrlName != null || urlBlank -> ProviderEditorErrorFocus.Url
-        fileBlank -> ProviderEditorErrorFocus.File
-        xtreamRequired && serverBlank -> ProviderEditorErrorFocus.Server
-        xtreamRequired && userBlank -> ProviderEditorErrorFocus.User
-        xtreamRequired && passBlank -> ProviderEditorErrorFocus.Pass
-        !editor.includeLiveTv && !editor.includeMovies && !editor.includeSeries -> ProviderEditorErrorFocus.Import
-        else -> null
-    }
-}
-
-/** Error targets that live at the top of the list, so a jump to them scrolls to item 0 first. */
-private val topFocusTargets = setOf(ProviderEditorErrorFocus.Name, ProviderEditorErrorFocus.Url)
-
-/** The source field to focus when a test fails (M3U URL/file, or the Xtream server). */
-private fun ProviderEditorState.sourceFocusTarget(): ProviderEditorErrorFocus = when {
-    type == ProviderType.Xtream -> ProviderEditorErrorFocus.Server
-    m3uSourceMode == M3uSourceMode.File -> ProviderEditorErrorFocus.File
-    else -> ProviderEditorErrorFocus.Url
-}
-
-/** The blank required source field to jump to when testing, or null when the test may run. */
-private fun testBlankSourceFocus(
-    editor: ProviderEditorState,
-    serverBlank: Boolean,
-    userBlank: Boolean,
-    passBlank: Boolean,
-    urlBlank: Boolean,
-    fileBlank: Boolean,
-): ProviderEditorErrorFocus? =
-    if (editor.type == ProviderType.Xtream) {
-        firstBlankXtreamFocus(serverBlank, userBlank, passBlank)
-    } else {
-        sourceBlankFocus(urlBlank, fileBlank)
-    }
-
-/** Blank source field to jump to when testing (URL or file), or null when the test may run. */
-private fun sourceBlankFocus(urlBlank: Boolean, fileBlank: Boolean): ProviderEditorErrorFocus? = when {
-    urlBlank -> ProviderEditorErrorFocus.Url
-    fileBlank -> ProviderEditorErrorFocus.File
-    else -> null
-}
-
-/** Xtream fields for the credential list, bundled to keep its arg list under the limit. */
-private class XtreamFieldState(
-    val serverError: Boolean,
-    val userError: Boolean,
-    val passError: Boolean,
-    val serverFocus: FocusRequester,
-    val userFocus: FocusRequester,
-    val passFocus: FocusRequester,
-)
-
-private enum class XtreamField { Server, User, Pass }
-
-private fun xtreamFieldState(
-    showSourceBlankError: Boolean,
-    serverBlank: Boolean,
-    userBlank: Boolean,
-    passBlank: Boolean,
-    serverFocus: FocusRequester,
-    userFocus: FocusRequester,
-    passFocus: FocusRequester,
-): XtreamFieldState = XtreamFieldState(
-    serverError = showSourceBlankError && serverBlank,
-    userError = showSourceBlankError && userBlank,
-    passError = showSourceBlankError && passBlank,
-    serverFocus = serverFocus,
-    userFocus = userFocus,
-    passFocus = passFocus,
-)
-
-private fun ProviderEditorState.isXtreamFieldBlank(field: XtreamField): Boolean {
-    if (type != ProviderType.Xtream) return false
-    return when (field) {
-        XtreamField.Server -> xtreamServerUrl.isBlank()
-        XtreamField.User -> xtreamUsername.isBlank()
-        XtreamField.Pass -> xtreamPassword.isBlank()
-    }
-}
-
-/** First blank Xtream credential to jump to on test (server → user → password), or null. */
-private fun firstBlankXtreamFocus(
-    serverBlank: Boolean,
-    userBlank: Boolean,
-    passBlank: Boolean,
-): ProviderEditorErrorFocus? = when {
-    serverBlank -> ProviderEditorErrorFocus.Server
-    userBlank -> ProviderEditorErrorFocus.User
-    passBlank -> ProviderEditorErrorFocus.Pass
-    else -> null
-}
-
-@Composable
-internal fun ConnectionTestButton(
-    status: ConnectionTestStatus,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val statusColor: Color? = when (status) {
-        ConnectionTestStatus.Passed -> VivicastColors.Success
-        ConnectionTestStatus.Failed -> VivicastColors.Error
-        else -> null
-    }
-    val glyph: String? = when (status) {
-        ConnectionTestStatus.Passed -> "✓"
-        ConnectionTestStatus.Failed -> "✗"
-        else -> null
-    }
-    val labelRes = when (status) {
-        ConnectionTestStatus.Testing -> R.string.settings_provider_msg_checking
-        ConnectionTestStatus.Passed -> R.string.settings_provider_test_ok
-        ConnectionTestStatus.Failed -> R.string.settings_provider_test_fail
-        else -> R.string.settings_provider_test_connection
-    }
-    FocusPanel(
-        onClick = onClick,
-        modifier = modifier
-            .width(175.dp)
-            .then(
-                if (statusColor != null) {
-                    Modifier.border(VivicastBorders.FocusWidth, statusColor, VivicastShapes.CardRadius)
-                } else {
-                    Modifier
-                },
-            ),
-    ) { _ ->
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (status == ConnectionTestStatus.Testing) {
-                VivicastSpinner(size = 16.dp, color = VivicastColors.TextPrimary)
-            }
-            if (glyph != null) {
-                BasicText(
-                    text = glyph,
-                    style = VivicastTypography.LabelLarge.copy(color = statusColor ?: VivicastColors.TextPrimary),
-                )
-            }
-            BasicText(
-                text = stringResource(labelRes),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = VivicastTypography.LabelMedium.copy(color = statusColor ?: VivicastColors.TextPrimary),
-            )
         }
     }
 }
