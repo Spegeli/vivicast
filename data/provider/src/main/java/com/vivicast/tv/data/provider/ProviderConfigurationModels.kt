@@ -16,7 +16,9 @@ data class ProviderCreateRequest(
     val includeLiveTv: Boolean = true,
     val includeMovies: Boolean = true,
     val includeSeries: Boolean = true,
-    val refreshIntervalHours: Int = DEFAULT_REFRESH_INTERVAL_HOURS,
+    val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
+    val userAgent: String? = null,
+    val refreshOnAppStartEnabled: Boolean = true,
 )
 
 data class ProviderUpdateRequest(
@@ -31,7 +33,9 @@ data class ProviderUpdateRequest(
     val includeLiveTv: Boolean = true,
     val includeMovies: Boolean = true,
     val includeSeries: Boolean = true,
-    val refreshIntervalHours: Int = DEFAULT_REFRESH_INTERVAL_HOURS,
+    val refreshIntervalHours: Int = REFRESH_INTERVAL_OFF,
+    val userAgent: String? = null,
+    val refreshOnAppStartEnabled: Boolean = true,
 )
 
 data class ProviderSaveResult(
@@ -73,6 +77,12 @@ val M3uSourceMode.isAutomaticallyRefreshable: Boolean
 // so ~2x this in heap; raise only alongside a streaming import path. 1 char ≈ 1 byte for ASCII M3U.
 const val MAX_M3U_INLINE_SOURCE_CHARS = 32 * 1024 * 1024
 const val DEFAULT_REFRESH_INTERVAL_HOURS = 12
+
+// 0 = automatic hourly refresh disabled for this playlist (the new default).
+const val REFRESH_INTERVAL_OFF = 0
+
+// Selectable auto-refresh intervals in the editor popup ("Aus" = REFRESH_INTERVAL_OFF, then hours).
+val REFRESH_INTERVAL_OPTIONS_HOURS = listOf(REFRESH_INTERVAL_OFF, 2, 4, 8, 16, 24, 48, 72, 96, 120, 144, 168)
 
 object TransientM3uSourceStore {
     private val sources = ConcurrentHashMap<String, String>()

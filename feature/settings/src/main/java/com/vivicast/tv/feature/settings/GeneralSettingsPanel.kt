@@ -128,6 +128,17 @@ internal fun GeneralSettingsPanel(
 
         item {
             VivicastSettingsRow(
+                title = stringResource(R.string.settings_background_refresh),
+                help = stringResource(R.string.settings_help_background_refresh),
+                value = if (state.backgroundRefreshEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+                modifier = Modifier,
+                icon = { SettingsRowIcon("refresh") },
+                onClick = toggleBackgroundRefresh,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
                 title = stringResource(R.string.settings_double_back),
                 help = stringResource(R.string.settings_help_double_back),
                 value = if (state.doubleBackToExit) stringResource(R.string.value_on) else stringResource(R.string.value_off),
@@ -145,17 +156,6 @@ internal fun GeneralSettingsPanel(
                 modifier = if (focusLanguageInsteadOfFirst) firstFocusModifier else Modifier,
                 icon = { SettingsRowIcon("language") },
                 onClick = { showLanguagePicker = true },
-            )
-        }
-
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_background_refresh),
-                help = stringResource(R.string.settings_help_background_refresh),
-                value = if (state.backgroundRefreshEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
-                icon = { SettingsRowIcon("refresh") },
-                onClick = toggleBackgroundRefresh,
             )
         }
 

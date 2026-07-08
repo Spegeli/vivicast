@@ -10,6 +10,7 @@ data class Provider(
     val includeLiveTv: Boolean,
     val includeMovies: Boolean,
     val includeSeries: Boolean,
+    // Hours between automatic refreshes; 0 = off (no periodic auto-refresh for this provider).
     val refreshIntervalHours: Int,
     val logoPriority: String,
     val createdAt: Long,
@@ -17,6 +18,10 @@ data class Provider(
     val stableKey: String = id,
     val xtreamExpiresAtMillis: Long? = null,
     val xtreamMaxConnections: Int? = null,
+    // Blank/null = use the global User-Agent; otherwise this provider's refresh + playback use this UA.
+    val userAgent: String? = null,
+    // Whether this playlist is refreshed once when the app starts (independent of the interval).
+    val refreshOnAppStartEnabled: Boolean = true,
 )
 
 enum class ProviderType { M3u, Xtream }
@@ -138,8 +143,12 @@ data class EpgSource(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    // Hours between automatic refreshes; 0 = off (no periodic auto-refresh for this source).
+    val refreshIntervalHours: Int = 0,
     val lastRefreshAt: Long? = null,
     val lastProgramCount: Int = 0,
+    val lastChannelCount: Int = 0,
+    val isRefreshing: Boolean = false,
     val stableKey: String = id,
 )
 

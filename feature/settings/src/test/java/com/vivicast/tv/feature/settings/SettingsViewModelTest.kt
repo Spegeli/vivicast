@@ -184,14 +184,14 @@ class SettingsViewModelTest {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore(
             UserPreferences(
-                epg = EpgPreferences(refreshIntervalHours = 12, refreshOnAppStartEnabled = false),
+                epg = EpgPreferences(pastRetentionDays = 5, refreshOnAppStartEnabled = false),
                 diagnostics = DiagnosticsPreferences(diagnosticsLoggingEnabled = true, retentionDays = 9),
             ),
         )
         val vm = newViewModel(scope, store)
 
         val state = vm.uiState.value
-        assertEquals(12, state.epg.refreshIntervalHours)
+        assertEquals(5, state.epg.pastRetentionDays)
         assertEquals(false, state.epg.refreshOnAppStartEnabled)
         assertEquals(true, state.diagnostics.diagnosticsLoggingEnabled)
         // retentionDays coerced into 1..7
@@ -205,9 +205,9 @@ class SettingsViewModelTest {
         val store = FakeUserPreferencesStore()
         val vm = newViewModel(scope, store)
 
-        vm.onEpgSettingsChanged(EpgSettingsState(refreshIntervalHours = 6, refreshOnPlaylistChangeEnabled = false))
+        vm.onEpgSettingsChanged(EpgSettingsState(pastRetentionDays = 6, refreshOnPlaylistChangeEnabled = false))
 
-        assertEquals(6, store.flow.value.epg.refreshIntervalHours)
+        assertEquals(6, store.flow.value.epg.pastRetentionDays)
         assertEquals(false, store.flow.value.epg.refreshOnPlaylistChangeEnabled)
         scope.cancel()
     }

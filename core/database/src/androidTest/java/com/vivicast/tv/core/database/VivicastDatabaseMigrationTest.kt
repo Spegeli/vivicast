@@ -40,6 +40,10 @@ class VivicastDatabaseMigrationTest {
             VivicastMigrations.Migration5To6,
             VivicastMigrations.Migration6To7,
             VivicastMigrations.Migration7To8,
+            VivicastMigrations.Migration8To9,
+            VivicastMigrations.Migration9To10,
+            VivicastMigrations.Migration10To11,
+            VivicastMigrations.Migration11To12,
         )
 
         migrated.use {
@@ -49,6 +53,7 @@ class VivicastDatabaseMigrationTest {
             assertEquals("movie-1", it.stringValue("SELECT stableKey FROM movies WHERE id = 'movie-1'"))
             assertEquals("series-1", it.stringValue("SELECT stableKey FROM series WHERE id = 'series-1'"))
             assertEquals("epg-url-key-1", it.stringValue("SELECT sourceConfigKey FROM epg_sources WHERE id = 'epg-source-1'"))
+            assertEquals(0, it.longValue("SELECT refreshIntervalHours FROM epg_sources WHERE id = 'epg-source-1'").toInt())
             assertEquals("external-channel-1", it.stringValue("SELECT epgChannelId FROM epg_programs WHERE id = 'program-1'"))
             assertEquals("channel-1", it.stringValue("SELECT channelStableKey FROM channel_history WHERE id = 'history-1'"))
             assertEquals("movie-1", it.stringValue("SELECT mediaStableKey FROM favorites WHERE id = 'favorite-1'"))
@@ -70,6 +75,10 @@ class VivicastDatabaseMigrationTest {
         validateMigrationStep("migration-5-6.db", 5, 6, VivicastMigrations.Migration5To6)
         validateMigrationStep("migration-6-7.db", 6, 7, VivicastMigrations.Migration6To7)
         validateMigrationStep("migration-7-8.db", 7, 8, VivicastMigrations.Migration7To8)
+        validateMigrationStep("migration-8-9.db", 8, 9, VivicastMigrations.Migration8To9)
+        validateMigrationStep("migration-9-10.db", 9, 10, VivicastMigrations.Migration9To10)
+        validateMigrationStep("migration-10-11.db", 10, 11, VivicastMigrations.Migration10To11)
+        validateMigrationStep("migration-11-12.db", 11, 12, VivicastMigrations.Migration11To12)
     }
 
     private fun validateMigrationStep(

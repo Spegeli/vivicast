@@ -60,9 +60,11 @@ class DefaultXtreamClientTest {
 
     private class RecordingTransport : XtreamTransport {
         var lastUrl: String = ""
+        var lastUserAgent: String? = null
 
-        override suspend fun get(url: String): String {
+        override suspend fun get(url: String, userAgent: String?): String {
             lastUrl = url
+            lastUserAgent = userAgent
             return """{"ok":true}"""
         }
     }

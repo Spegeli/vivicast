@@ -92,6 +92,11 @@ class AppContainer(
 ) {
     private val appContext = context.applicationContext
 
+    // Process-scoped so the "refresh on app start" one-shots fire once per real launch (cold start) and
+    // survive Activity recreation (e.g. a language-change recreate()), which a Compose-remembered flag
+    // would not.
+    var appStartRefreshTriggered: Boolean = false
+
     val database: VivicastDatabase by lazy {
         VivicastDatabaseFactory.create(appContext)
     }
@@ -219,6 +224,7 @@ class AppContainer(
         PlaybackRequestFactory(
             playbackStreamResolver = playbackStreamResolver,
             playbackRepository = playbackRepository,
+            providerUserAgent = { providerId -> providerRepository.getProvider(providerId)?.userAgent },
         )
     }
 
@@ -285,10 +291,6 @@ class AppContainer(
             DEFAULT_MEDIA_CACHE_SIZE_BYTES
         }
         val orchestrator = GlobalRefreshOrchestrator(
-            playlistSource = ActiveProviderPlaylistSource(providerRepository),
-            playlistRefresher = playlistRefresher,
-            epgSourceResolver = epgSourceReader,
-            epgRefresher = epgRefresher,
             logoRefresher = logoRefresher,
             cacheCleaner = cacheCleaner,
             diagnostics = refreshDiagnostics,
@@ -301,6 +303,9 @@ class AppContainer(
             logoRefresher = logoRefresher,
             cacheCleaner = cacheCleaner,
             scheduler = refreshWorkScheduler,
+            refreshEpgOnPlaylistChangeProvider = {
+                userPreferencesStore.values.first().epg.refreshOnPlaylistChangeEnabled
+            },
         )
     }
 
@@ -333,7 +338,7 @@ class AppContainer(
             m3uParser = DefaultM3uParser(),
             xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
             xtreamParser = DefaultXtreamParser(),
-            fetchText = { url -> OkHttpTextFetcher(okHttpClient).fetch(url) },
+            fetchText = { url, userAgent -> OkHttpTextFetcher(okHttpClient).fetch(url, userAgent) },
         )
     }
 

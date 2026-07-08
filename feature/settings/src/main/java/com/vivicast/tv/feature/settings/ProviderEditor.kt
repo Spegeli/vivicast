@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -81,6 +82,8 @@ import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
+import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OPTIONS_HOURS
 import com.vivicast.tv.data.provider.ContentSummary
 import com.vivicast.tv.data.provider.M3uContentSummarizer
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
@@ -115,8 +118,10 @@ internal fun ProviderEditor(
     connectionError: String?,
     signals: ProviderEditorSignals,
     actions: ProviderEditorActions,
+    epgLinks: ProviderEpgLinkInfo = ProviderEpgLinkInfo(),
     modifier: Modifier = Modifier,
 ) {
+    val dialogs = remember { ProviderEditorDialogState() }
     val onEditorChange = actions.onEditorChange
     val onTestConnection = actions.onTestConnection
     val onSave = actions.onSave
@@ -173,11 +178,7 @@ internal fun ProviderEditor(
     val sourceBlankError = showSourceBlankError && (urlBlank || fileBlank)
     // Test is name-independent; a blank required source field reddens it and jumps focus (no note).
     val onTestClick: () -> Unit = {
-        val blankFocus = if (editor.type == ProviderType.Xtream) {
-            firstBlankXtreamFocus(serverBlank, userBlank, passBlank)
-        } else {
-            sourceBlankFocus(urlBlank, fileBlank)
-        }
+        val blankFocus = testBlankSourceFocus(editor, serverBlank, userBlank, passBlank, urlBlank, fileBlank)
         if (blankFocus == null) {
             onTestConnection()
         } else {
@@ -245,9 +246,15 @@ internal fun ProviderEditor(
 
         providerImportItem(editor, importFocus, onEditorChange)
 
-        // Refresh interval is an edit-only control; a new playlist uses the default until saved.
+        // Update interval / app-start / User-Agent / EPG assignment are edit-only; a new playlist uses
+        // the defaults until it has been saved (and thus has an id to assign EPG sources to).
         if (editor.isEditing) {
-            providerRefreshItems(editor, onEditorChange)
+            providerEditControlItems(
+                editor, onEditorChange, epgLinks.linkedIds.size,
+                onOpenInterval = { dialogs.showInterval = true },
+                onOpenUserAgent = { dialogs.showUserAgent = true },
+                onOpenEpgSources = { dialogs.showEpgSources = true },
+            )
         }
 
         if (message != null) {
@@ -287,6 +294,53 @@ internal fun ProviderEditor(
             }
         }
     }
+
+    ProviderEditorDialogs(dialogs, editor, epgLinks, onEditorChange, actions.onToggleEpgLink)
+}
+
+/** Open/closed flags for the editor's three popups (interval / User-Agent / EPG sources). */
+internal class ProviderEditorDialogState {
+    var showInterval by mutableStateOf(false)
+    var showUserAgent by mutableStateOf(false)
+    var showEpgSources by mutableStateOf(false)
+}
+
+@Composable
+private fun ProviderEditorDialogs(
+    dialogs: ProviderEditorDialogState,
+    editor: ProviderEditorState,
+    epgLinks: ProviderEpgLinkInfo,
+    onEditorChange: (ProviderEditorState) -> Unit,
+    onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit,
+) {
+    if (dialogs.showInterval) {
+        ProviderIntervalDialog(
+            current = editor.refreshIntervalHours,
+            onSelect = { hours ->
+                if (hours != editor.refreshIntervalHours) onEditorChange(editor.copy(refreshIntervalHours = hours))
+                dialogs.showInterval = false
+            },
+            onDismiss = { dialogs.showInterval = false },
+        )
+    }
+    if (dialogs.showUserAgent) {
+        ProviderUserAgentDialog(
+            initialValue = editor.userAgent,
+            onCancel = { dialogs.showUserAgent = false },
+            onSave = { value ->
+                onEditorChange(editor.copy(userAgent = value))
+                dialogs.showUserAgent = false
+            },
+        )
+    }
+    if (dialogs.showEpgSources) {
+        ProviderEpgSourcesDialog(
+            sources = epgLinks.sources,
+            linkedIds = epgLinks.linkedIds,
+            onToggle = onToggleEpgLink,
+            onDismiss = { dialogs.showEpgSources = false },
+        )
+    }
 }
 
 /** Duplicate-name / duplicate-URL flags, bundled to keep the editor under the arg limit. */
@@ -307,6 +361,14 @@ internal class ProviderEditorActions(
     val onToggleEnabled: () -> Unit,
     val onDelete: () -> Unit,
     val onPickM3uFile: ((String, String) -> Unit) -> Unit,
+    // Links/unlinks an EPG source to the edited playlist immediately (no save button).
+    val onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit = { _, _ -> },
+)
+
+/** All EPG sources plus the ids linked to the edited playlist, for the "EPG Quellen" assignment popup. */
+internal class ProviderEpgLinkInfo(
+    val sources: List<EpgSource> = emptyList(),
+    val linkedIds: Set<String> = emptySet(),
 )
 
 /** Edit mode only: an enable/disable toggle that flips the playlist immediately (no save needed). */
@@ -607,41 +669,34 @@ private fun LazyListScope.providerImportItem(
     }
 }
 
-/** Auto-refresh interval adjuster, or a manual-only note for source types that can't auto-refresh. */
-private fun LazyListScope.providerRefreshItems(
+/** Edit-only rows: update interval (button → popup), refresh-on-app-start toggle, per-playlist
+ * User-Agent (button → dialog), and EPG-source assignment (button → popup). */
+private fun LazyListScope.providerEditControlItems(
     editor: ProviderEditorState,
     onEditorChange: (ProviderEditorState) -> Unit,
+    linkedEpgCount: Int,
+    onOpenInterval: () -> Unit,
+    onOpenUserAgent: () -> Unit,
+    onOpenEpgSources: () -> Unit,
 ) {
+    // Auto-refresh (interval + app-start) only applies to source types that can actually be re-fetched.
     if (editor.isAutomaticallyRefreshable) {
-        item(key = "refresh") {
-            FocusPanel(
-                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.CompactSettingsRowHeight),
-                contentPadding = 0.dp,
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space4),
-                ) {
-                    // help intentionally not rendered — single-line row, same height as the other rows.
-                    BasicText(
-                        stringResource(R.string.settings_provider_interval_label),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = VivicastTypography.LabelLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
-                        ActionPill("-6h", modifier = Modifier.width(80.dp), height = 28.dp, onClick = {
-                            onEditorChange(editor.copy(refreshIntervalHours = (editor.refreshIntervalHours - 6).coerceAtLeast(1)))
-                        })
-                        BasicText("${editor.refreshIntervalHours} h", style = VivicastTypography.LabelLarge)
-                        ActionPill("+6h", modifier = Modifier.width(80.dp), height = 28.dp, onClick = {
-                            onEditorChange(editor.copy(refreshIntervalHours = (editor.refreshIntervalHours + 6).coerceAtMost(168)))
-                        })
-                    }
-                }
-            }
+        item(key = "update-interval") {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_provider_update_interval),
+                help = "",
+                value = intervalLabel(editor.refreshIntervalHours),
+                forceTextValue = true,
+                onClick = onOpenInterval,
+            )
+        }
+        item(key = "refresh-on-start") {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_provider_refresh_on_start),
+                help = "",
+                value = if (editor.refreshOnAppStartEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+                onClick = { onEditorChange(editor.copy(refreshOnAppStartEnabled = !editor.refreshOnAppStartEnabled)) },
+            )
         }
     } else {
         item(key = "refresh-none") {
@@ -651,6 +706,158 @@ private fun LazyListScope.providerRefreshItems(
                 badge = stringResource(R.string.settings_epg_badge_manual),
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+    item(key = "user-agent") {
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_user_agent),
+            help = "",
+            value = editor.userAgent.ifBlank { stringResource(R.string.value_app_default) },
+            onClick = onOpenUserAgent,
+        )
+    }
+    item(key = "epg-sources") {
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_provider_epg_sources),
+            help = "",
+            value = if (linkedEpgCount > 0) linkedEpgCount.toString() else stringResource(R.string.about_open_value),
+            onClick = onOpenEpgSources,
+        )
+    }
+}
+
+@Composable
+internal fun intervalLabel(hours: Int): String =
+    if (hours <= REFRESH_INTERVAL_OFF) {
+        stringResource(R.string.value_off)
+    } else {
+        stringResource(R.string.common_hours, hours)
+    }
+
+/** Interval picker — behaves like the language picker: focus starts on the current value, selecting a
+ * different value saves it, selecting the current one just closes. Scrolls (≈5 rows tall) since the
+ * option list is long. */
+@Composable
+internal fun ProviderIntervalDialog(
+    current: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val currentIndex = REFRESH_INTERVAL_OPTIONS_HOURS.indexOf(current).coerceAtLeast(0)
+    val listState = rememberLazyListState()
+    val selectedFocusRequester = remember { FocusRequester() }
+    // Bring the current value into view (it may be far down the list) before focusing it.
+    LaunchedEffect(Unit) {
+        listState.scrollToItem(currentIndex)
+        awaitFrame()
+        runCatching { selectedFocusRequester.requestFocus() }
+    }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_provider_update_interval),
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.heightIn(max = INTERVAL_DIALOG_MAX_HEIGHT),
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+        ) {
+            items(REFRESH_INTERVAL_OPTIONS_HOURS) { hours ->
+                FocusPanel(
+                    selected = hours == current,
+                    onClick = { onSelect(hours) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (hours == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
+                ) {
+                    BasicText(
+                        text = intervalLabel(hours),
+                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val INTERVAL_DIALOG_MAX_HEIGHT = 340.dp
+
+/** Per-playlist User-Agent editor — mirrors the global one; empty saves as "use the global UA". */
+@Composable
+private fun ProviderUserAgentDialog(
+    initialValue: String,
+    onCancel: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var value by remember(initialValue) { mutableStateOf(initialValue) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val strInvalidChars = stringResource(R.string.settings_ua_invalid_chars)
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_user_agent),
+    ) {
+        VivicastTextField(
+            value = value,
+            onValueChange = {
+                value = it.take(200)
+                error = null
+            },
+            focusRequester = fieldFocus,
+            isError = error != null,
+        )
+        BodyText(stringResource(R.string.settings_provider_ua_hint), maxLines = 2)
+        if (error != null) {
+            BodyText(error!!, color = VivicastColors.Error)
+        }
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.common_save),
+            onPrimary = {
+                val trimmed = value.trim()
+                if (trimmed.any { it.isISOControl() }) {
+                    error = strInvalidChars
+                } else {
+                    onSave(trimmed)
+                }
+            },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+        )
+    }
+}
+
+/** EPG-source assignment popup — every EPG source with a toggle; toggling links/unlinks immediately. */
+@Composable
+private fun ProviderEpgSourcesDialog(
+    sources: List<EpgSource>,
+    linkedIds: Set<String>,
+    onToggle: (sourceId: String, link: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Compact,
+        title = stringResource(R.string.settings_provider_epg_sources),
+    ) {
+        if (sources.isEmpty()) {
+            BodyText(stringResource(R.string.settings_provider_epg_none), maxLines = 2)
+        } else {
+            sources.forEach { source ->
+                val linked = source.id in linkedIds
+                VivicastSettingsRow(
+                    title = source.name,
+                    help = "",
+                    value = if (linked) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+                    onClick = { onToggle(source.id, !linked) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(VivicastSpacing.Space2))
+        VivicastButtonRow {
+            ActionPill(label = stringResource(R.string.common_close), onClick = onDismiss)
         }
     }
 }
@@ -673,6 +880,8 @@ internal data class ProviderEditorState(
     val connectionTestPassed: Boolean,
     val m3uFileName: String = "",
     val isActive: Boolean = true,
+    val userAgent: String = "",
+    val refreshOnAppStartEnabled: Boolean = true,
 ) {
     val isEditing: Boolean get() = providerId != null
     val isAutomaticallyRefreshable: Boolean
@@ -738,6 +947,7 @@ internal data class ProviderEditorState(
             includeMovies = includeMovies,
             includeSeries = includeSeries,
             refreshIntervalHours = refreshIntervalHours,
+            userAgent = userAgent.ifBlank { null },
         )
 
     fun toCreateRequest(): ProviderCreateRequest =
@@ -754,6 +964,8 @@ internal data class ProviderEditorState(
             includeMovies = includeMovies,
             includeSeries = includeSeries,
             refreshIntervalHours = refreshIntervalHours,
+            userAgent = userAgent.ifBlank { null },
+            refreshOnAppStartEnabled = refreshOnAppStartEnabled,
         )
 
     fun toUpdateRequest(): ProviderUpdateRequest =
@@ -770,6 +982,8 @@ internal data class ProviderEditorState(
             includeMovies = includeMovies,
             includeSeries = includeSeries,
             refreshIntervalHours = refreshIntervalHours,
+            userAgent = userAgent.ifBlank { null },
+            refreshOnAppStartEnabled = refreshOnAppStartEnabled,
         )
 
     private val shouldReplaceM3uSource: Boolean
@@ -799,7 +1013,7 @@ internal data class ProviderEditorState(
                 includeLiveTv = true,
                 includeMovies = false,
                 includeSeries = false,
-                refreshIntervalHours = DEFAULT_REFRESH_INTERVAL_HOURS,
+                refreshIntervalHours = REFRESH_INTERVAL_OFF,
                 connectionTestPassed = false,
             )
 
@@ -824,6 +1038,8 @@ internal data class ProviderEditorState(
                 refreshIntervalHours = provider.refreshIntervalHours,
                 connectionTestPassed = true,
                 isActive = provider.isActive,
+                userAgent = provider.userAgent.orEmpty(),
+                refreshOnAppStartEnabled = provider.refreshOnAppStartEnabled,
             )
         }
     }
@@ -888,6 +1104,21 @@ private fun ProviderEditorState.sourceFocusTarget(): ProviderEditorErrorFocus = 
     m3uSourceMode == M3uSourceMode.File -> ProviderEditorErrorFocus.File
     else -> ProviderEditorErrorFocus.Url
 }
+
+/** The blank required source field to jump to when testing, or null when the test may run. */
+private fun testBlankSourceFocus(
+    editor: ProviderEditorState,
+    serverBlank: Boolean,
+    userBlank: Boolean,
+    passBlank: Boolean,
+    urlBlank: Boolean,
+    fileBlank: Boolean,
+): ProviderEditorErrorFocus? =
+    if (editor.type == ProviderType.Xtream) {
+        firstBlankXtreamFocus(serverBlank, userBlank, passBlank)
+    } else {
+        sourceBlankFocus(urlBlank, fileBlank)
+    }
 
 /** Blank source field to jump to when testing (URL or file), or null when the test may run. */
 private fun sourceBlankFocus(urlBlank: Boolean, fileBlank: Boolean): ProviderEditorErrorFocus? = when {

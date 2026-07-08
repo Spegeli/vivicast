@@ -32,6 +32,10 @@ data class ProviderEntity(
     // Xtream account info (from player_api.php user_info), refreshed on each import. Null for M3U.
     @ColumnInfo(defaultValue = "NULL") val xtreamExpiresAtMillis: Long? = null,
     @ColumnInfo(defaultValue = "NULL") val xtreamMaxConnections: Int? = null,
+    // Per-provider User-Agent override; NULL/blank falls back to the global User-Agent.
+    @ColumnInfo(defaultValue = "NULL") val userAgent: String? = null,
+    // Refresh this playlist once on app start (independent of the hourly interval).
+    @ColumnInfo(defaultValue = "1") val refreshOnAppStartEnabled: Boolean = true,
 )
 
 @Entity(
@@ -218,8 +222,11 @@ data class EpgSourceEntity(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    @ColumnInfo(defaultValue = "0") val refreshIntervalHours: Int = 0,
     val lastRefreshAt: Long? = null,
     @ColumnInfo(defaultValue = "0") val lastProgramCount: Int = 0,
+    @ColumnInfo(defaultValue = "0") val lastChannelCount: Int = 0,
+    @ColumnInfo(defaultValue = "0") val isRefreshing: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
 )

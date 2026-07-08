@@ -313,6 +313,9 @@ fun VivicastSettingsRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     icon: (@Composable () -> Unit)? = null,
+    // Rows whose value happens to read "An"/"Aus" but are NOT on/off toggles (e.g. an interval set to
+    // "off") set this to keep the value as plain text + chevron instead of rendering a switch.
+    forceTextValue: Boolean = false,
     onClick: () -> Unit = {},
 ) {
     val disabledColor = VivicastColors.TextSecondary.copy(alpha = 0.55f)
@@ -320,7 +323,7 @@ fun VivicastSettingsRow(
     val secondaryColor = if (enabled) VivicastColors.TextSecondary else disabledColor
     val strOn = stringResource(R.string.value_on)
     val strOff = stringResource(R.string.value_off)
-    val isToggle = value == strOn || value == strOff
+    val isToggle = !forceTextValue && (value == strOn || value == strOff)
     val isOn = value == strOn
 
     @Composable

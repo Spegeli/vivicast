@@ -112,6 +112,10 @@ internal fun ProviderSettingsPanel(
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
+    epgSources: List<EpgSource> = emptyList(),
+    providerEpgLinks: List<ProviderEpgSource> = emptyList(),
+    onSelectEpgProvider: (String) -> Unit = {},
+    onToggleEpgLink: (providerId: String, sourceId: String, link: Boolean) -> Unit = { _, _, _ -> },
     firstFocusModifier: Modifier = Modifier,
     onParkFocusBeforeEditor: () -> Unit = {},
 ) {
@@ -227,6 +231,9 @@ internal fun ProviderSettingsPanel(
                 // the swap; otherwise focus escapes to the top nav bar and navigates to Home.
                 onParkFocusBeforeEditor()
                 selectedProviderId = provider.id
+                // Point the EPG-links observation at this provider so the "EPG Quellen" popup shows
+                // its current assignments.
+                onSelectEpgProvider(provider.id)
                 editor = ProviderEditorState.from(provider)
                 showEditor = true
                 message = null
@@ -377,6 +384,13 @@ internal fun ProviderSettingsPanel(
                 pendingDelete = providers.firstOrNull { it.id == editor.providerId }
             },
             onPickM3uFile = onPickM3uFile,
+            onToggleEpgLink = { sourceId, link ->
+                selectedProviderId?.let { onToggleEpgLink(it, sourceId, link) }
+            },
+            ),
+            epgLinks = ProviderEpgLinkInfo(
+                sources = epgSources,
+                linkedIds = providerEpgLinks.mapTo(mutableSetOf()) { it.epgSourceId },
             ),
             modifier = Modifier.fillMaxSize(),
         )

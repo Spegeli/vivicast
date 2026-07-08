@@ -3,6 +3,7 @@ package com.vivicast.tv.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 
 interface RefreshWorkerRunner {
     suspend fun runGlobalRefresh(): RefreshWorkerResult
@@ -45,7 +46,7 @@ abstract class DelegatingRefreshWorker(
 ) : CoroutineWorker(appContext, params) {
     final override suspend fun doWork(): Result {
         val runner = RefreshWorkerRegistry.requireRunner() ?: return Result.retry()
-        return runCatching { runner.runDelegatedWork() }
+        return runCancellableCatching { runner.runDelegatedWork() }
             .getOrElse { RefreshWorkerResult.Retry }
             .toWorkResult()
     }
@@ -100,6 +101,21 @@ class CacheCleanupWorker(
     override suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult =
         runCacheCleanup()
 }
+
+/**
+ * Like [runCatching] but never swallows [CancellationException]. WorkManager cancels a worker's
+ * coroutine on stop (e.g. the ~10-minute execution limit); if that cancellation is caught and turned
+ * into a "retry", the refresh keeps running every remaining stage instead of stopping — which is how a
+ * global refresh ends up "running" far past its window. Rethrowing lets structured cancellation stop it.
+ */
+internal inline fun <T> runCancellableCatching(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (throwable: Throwable) {
+        Result.failure(throwable)
+    }
 
 private fun RefreshWorkerResult.toWorkResult(): ListenableWorkerResult =
     when (this) {

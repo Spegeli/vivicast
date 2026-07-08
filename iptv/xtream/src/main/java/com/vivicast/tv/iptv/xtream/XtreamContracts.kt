@@ -30,42 +30,44 @@ interface XtreamClient {
 }
 
 interface XtreamTransport {
-    suspend fun get(url: String): String
+    suspend fun get(url: String, userAgent: String? = null): String
 }
 
 data class XtreamCredentials(
     val serverUrl: String,
     val username: String,
     val password: String,
+    // Per-provider User-Agent override; null/blank falls back to the global User-Agent.
+    val userAgent: String? = null,
 )
 
 class DefaultXtreamClient(
     private val transport: XtreamTransport,
 ) : XtreamClient {
     override suspend fun getUserInfo(credentials: XtreamCredentials): String =
-        transport.get(credentials.userInfoUrl())
+        transport.get(credentials.userInfoUrl(), credentials.userAgent)
 
     override suspend fun getLiveCategories(credentials: XtreamCredentials): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_LIVE_CATEGORIES))
+        transport.get(credentials.requestUrl(action = ACTION_GET_LIVE_CATEGORIES), credentials.userAgent)
 
     override suspend fun getLiveStreams(credentials: XtreamCredentials, categoryId: String?): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_LIVE_STREAMS, categoryId = categoryId))
+        transport.get(credentials.requestUrl(action = ACTION_GET_LIVE_STREAMS, categoryId = categoryId), credentials.userAgent)
 
     override suspend fun getVodCategories(credentials: XtreamCredentials): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_VOD_CATEGORIES))
+        transport.get(credentials.requestUrl(action = ACTION_GET_VOD_CATEGORIES), credentials.userAgent)
 
     override suspend fun getVodStreams(credentials: XtreamCredentials, categoryId: String?): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_VOD_STREAMS, categoryId = categoryId))
+        transport.get(credentials.requestUrl(action = ACTION_GET_VOD_STREAMS, categoryId = categoryId), credentials.userAgent)
 
     override suspend fun getSeriesCategories(credentials: XtreamCredentials): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_SERIES_CATEGORIES))
+        transport.get(credentials.requestUrl(action = ACTION_GET_SERIES_CATEGORIES), credentials.userAgent)
 
     override suspend fun getSeries(credentials: XtreamCredentials, categoryId: String?): String =
-        transport.get(credentials.requestUrl(action = ACTION_GET_SERIES, categoryId = categoryId))
+        transport.get(credentials.requestUrl(action = ACTION_GET_SERIES, categoryId = categoryId), credentials.userAgent)
 
     override suspend fun getSeriesInfo(credentials: XtreamCredentials, seriesId: String): String {
         require(seriesId.isNotBlank()) { "Series ID must not be blank." }
-        return transport.get(credentials.requestUrl(action = ACTION_GET_SERIES_INFO, seriesId = seriesId))
+        return transport.get(credentials.requestUrl(action = ACTION_GET_SERIES_INFO, seriesId = seriesId), credentials.userAgent)
     }
 
     private fun XtreamCredentials.requestUrl(
@@ -121,11 +123,12 @@ class OkHttpXtreamTransport(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : XtreamTransport {
-    override suspend fun get(url: String): String =
+    override suspend fun get(url: String, userAgent: String?): String =
         withContext(ioDispatcher) {
             withXtreamRetry {
                 val request = Request.Builder()
                     .url(url)
+                    .apply { userAgent?.trim()?.takeIf { it.isNotEmpty() }?.let { header("User-Agent", it) } }
                     .get()
                     .build()
                 client.newCall(request).execute().use { response ->

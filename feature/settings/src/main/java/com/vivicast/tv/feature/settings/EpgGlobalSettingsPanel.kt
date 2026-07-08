@@ -101,31 +101,14 @@ import java.util.Date
 internal fun EpgGlobalSettings(
     preferences: EpgSettingsState,
     onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
-    onRunGlobalRefresh: () -> Unit,
-    canRefreshNow: Boolean = true,
     firstFocusModifier: Modifier = Modifier,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         AdjustableSettingsRow(
-            title = stringResource(R.string.settings_epg_interval),
-            help = stringResource(R.string.settings_epg_help_interval),
-            value = stringResource(R.string.common_hours, preferences.refreshIntervalHours),
-            onDecrease = {
-                onEpgPreferencesChanged(
-                    preferences.copy(refreshIntervalHours = (preferences.refreshIntervalHours - 1).coerceAtLeast(1)),
-                )
-            },
-            onIncrease = {
-                onEpgPreferencesChanged(
-                    preferences.copy(refreshIntervalHours = (preferences.refreshIntervalHours + 1).coerceAtMost(168)),
-                )
-            },
-            modifier = firstFocusModifier,
-        )
-        AdjustableSettingsRow(
             title = stringResource(R.string.settings_epg_past),
             help = stringResource(R.string.settings_epg_help_past),
             value = if (preferences.pastRetentionDays == 1) stringResource(R.string.common_days_singular, preferences.pastRetentionDays) else stringResource(R.string.common_days_plural, preferences.pastRetentionDays),
+            modifier = firstFocusModifier,
             onDecrease = {
                 onEpgPreferencesChanged(
                     preferences.copy(pastRetentionDays = (preferences.pastRetentionDays - 1).coerceAtLeast(1)),
@@ -174,16 +157,6 @@ internal fun EpgGlobalSettings(
                 )
             },
         )
-        // Nothing to refresh without an EPG source, so hide the action until one exists.
-        if (canRefreshNow) {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_epg_now),
-                help = stringResource(R.string.settings_epg_help_run_now),
-                value = stringResource(R.string.settings_epg_now_value),
-                icon = { SettingsRowIcon("refresh") },
-                onClick = onRunGlobalRefresh,
-            )
-        }
     }
 }
 

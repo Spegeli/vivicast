@@ -172,6 +172,38 @@ object VivicastMigrations {
             db.addNullableIntegerColumn("providers", "xtreamMaxConnections")
         }
     }
+
+    // EPG source now stores the feed's channel count, written on refresh alongside lastRefreshAt.
+    val Migration8To9: Migration = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE epg_sources ADD COLUMN lastChannelCount INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    // In-progress flag on the EPG source so the overview can show a "Refreshing" badge.
+    val Migration9To10: Migration = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE epg_sources ADD COLUMN isRefreshing INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    // Per-provider User-Agent + refresh-on-app-start flag. Auto-refresh becomes per-provider, so the
+    // hourly interval now means "off" when 0 — reset every existing playlist to off (opt-in per playlist).
+    val Migration10To11: Migration = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE providers ADD COLUMN userAgent TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE providers ADD COLUMN refreshOnAppStartEnabled INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("UPDATE providers SET refreshIntervalHours = 0")
+        }
+    }
+
+    // Per-EPG-source refresh interval (replaces the single global EPG interval). Existing sources start
+    // "off" (0) — opt-in per source, mirroring the per-playlist interval reset in Migration10To11.
+    val Migration11To12: Migration = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE epg_sources ADD COLUMN refreshIntervalHours INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

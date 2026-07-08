@@ -62,7 +62,6 @@
     <string name="settings_audio_passthrough">Audio passthrough</string>
 
     <!-- EPG settings -->
-    <string name="settings_epg_interval">Global EPG refresh interval</string>
     <string name="settings_epg_past">Keep EPG history</string>
     <string name="settings_epg_future">Load/keep EPG future</string>
     <string name="settings_epg_on_start">Refresh EPG on app start</string>
@@ -112,7 +111,7 @@
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Add playlist</string>
     <string name="settings_playlist_add_value">Open</string>
-    <string name="settings_playlist_refresh_all">Refresh all playlists</string>
+    <string name="settings_playlist_refresh_all">Refresh Playlists now</string>
     <string name="settings_playlist_refresh_value">Start</string>
     <string name="settings_playlist_empty_title">No playlists configured</string>
     <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>

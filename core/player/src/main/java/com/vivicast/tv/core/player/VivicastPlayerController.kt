@@ -72,6 +72,8 @@ data class PlaybackRequest(
     val startPositionMillis: Long = 0L,
     val epgProgramStableKey: String? = null,
     val timeshift: PlaybackTimeshiftConfig? = null,
+    // Per-provider User-Agent for the stream; null/blank falls back to the global User-Agent.
+    val userAgent: String? = null,
 )
 
 enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
@@ -554,7 +556,7 @@ class Media3PlaybackEngine(
         withContext(dispatcher) {
             activePlaybackId = request.playbackId
             val mediaItem = MediaItem.fromUri(request.streamUrl)
-            val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory())
+            val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
             val mediaSourceFactory = if (request.timeshift?.storage == PlaybackTimeshiftStorage.InternalStorage) {
                 DefaultMediaSourceFactory(
                     CacheDataSource.Factory()
@@ -630,8 +632,10 @@ class Media3PlaybackEngine(
         const val DEFAULT_USER_AGENT = "Vivicast/1.0"
     }
 
-    private fun httpDataSourceFactory(): DefaultHttpDataSource.Factory =
-        DefaultHttpDataSource.Factory().setUserAgent(userAgentProvider().normalizedUserAgent())
+    private fun httpDataSourceFactory(userAgent: String? = null): DefaultHttpDataSource.Factory {
+        val resolved = userAgent?.trim()?.takeIf { it.isNotEmpty() } ?: userAgentProvider()
+        return DefaultHttpDataSource.Factory().setUserAgent(resolved.normalizedUserAgent())
+    }
 }
 
 private fun String.normalizedUserAgent(): String =

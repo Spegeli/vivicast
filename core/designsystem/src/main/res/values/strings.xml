@@ -62,13 +62,14 @@
     <string name="settings_audio_passthrough">Audio-Passthrough</string>
 
     <!-- EPG settings -->
-    <string name="settings_epg_interval">Globales EPG-Aktualisierungsintervall</string>
     <string name="settings_epg_past">EPG-Vergangenheit behalten</string>
     <string name="settings_epg_future">EPG-Zukunft laden/behalten</string>
     <string name="settings_epg_on_start">EPG beim App-Start aktualisieren</string>
     <string name="settings_epg_on_change">EPG bei Playlist-Änderung aktualisieren</string>
     <string name="settings_epg_now">EPG jetzt aktualisieren</string>
     <string name="settings_epg_now_value">Starten</string>
+    <string name="settings_epg_global_settings">Globale EPG-Einstellungen</string>
+    <string name="settings_epg_help_global_settings">Intervall, Aufbewahrung und automatische Aktualisierung.</string>
 
     <!-- Appearance settings -->
     <string name="settings_theme">Hintergrundthema</string>
@@ -112,7 +113,7 @@
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Wiedergabeliste hinzufügen</string>
     <string name="settings_playlist_add_value">Öffnen</string>
-    <string name="settings_playlist_refresh_all">Alle Wiedergabelisten aktualisieren</string>
+    <string name="settings_playlist_refresh_all">Wiedergabelisten jetzt aktualisieren</string>
     <string name="settings_playlist_refresh_value">Starten</string>
     <string name="settings_playlist_empty_title">Keine Wiedergabelisten vorhanden</string>
     <string name="settings_playlist_empty_body">Füge eine Wiedergabeliste hinzu, um Inhalte zu importieren.</string>
@@ -364,6 +365,7 @@
     <string name="settings_epg_help_add_source">Neue EPG-Quelle aus einer XMLTV-URL.</string>
     <string name="settings_epg_test_summary">EPG für %1$d Kanäle gefunden</string>
     <string name="settings_epg_program_count">%1$d Sendungen</string>
+    <string name="settings_epg_channel_count">%1$d Kanäle</string>
     <string name="settings_epg_name_placeholder">Name der EPG-Quelle</string>
     <string name="settings_epg_name_exists_body">Der Name muss eindeutig sein. Eine EPG-Quelle mit diesem Namen existiert bereits.</string>
     <string name="settings_epg_url_exists">Diese URL wird bereits von der EPG-Quelle „%1$s“ verwendet.</string>
@@ -450,7 +452,7 @@
     <string name="settings_help_launch_on_boot">Versucht Vivicast beim Android-TV-Start zu öffnen, sofern das System es erlaubt.</string>
     <string name="settings_help_double_back">Erfordert aus der Top Navigation eine zweite Zurück-Bestätigung.</string>
     <string name="settings_help_language">Systemstandard oder feste App-Sprache.</string>
-    <string name="settings_help_background_refresh">Playlists und EPG im Hintergrund aktualisieren.</string>
+    <string name="settings_help_background_refresh">Playlisten und EPG aktualisieren, während die App im Hintergrund läuft.</string>
     <string name="settings_help_user_agent">Gilt appweit für HTTP-Anfragen. Leer nutzt den App-Standard.</string>
 
     <!-- Settings - Playback help texts -->
@@ -476,12 +478,11 @@
     <string name="settings_epg_msg_priority_updated">EPG Priorität wurde aktualisiert.</string>
     <string name="settings_epg_msg_source_select">Wähle eine EPG Quelle oder lege eine neue Quelle an.</string>
     <string name="settings_epg_msg_source_deleted">EPG Quelle gelöscht. Programme und Zuordnungen dieser Quelle wurden entfernt.</string>
-    <string name="settings_epg_help_interval">Gilt nur für den automatischen Intervall-Refresh.</string>
     <string name="settings_epg_help_past">Cleanup entfernt nur EPG-Programmdaten außerhalb dieses Fensters.</string>
     <string name="settings_epg_retention_day">Tag</string>
     <string name="settings_epg_retention_days">Tage</string>
     <string name="settings_epg_help_cleanup_note">Quellen, Provider-Zuordnungen und manuelle Mappings bleiben erhalten.</string>
-    <string name="settings_epg_help_background">Startet nur, wenn Hintergrundaktualisierung erlaubt ist.</string>
+    <string name="settings_epg_help_background">Aktualisiert alle EPG-Quellen einmal beim App-Start.</string>
     <string name="settings_epg_help_on_playlist_change">Separater Auslöser neben dem Intervall.</string>
     <string name="settings_epg_help_run_now">Plant eine Aktualisierung nach dem bestehenden Refresh-Plan ein.</string>
     <string name="settings_epg_no_providers_body">Lege zuerst eine Wiedergabeliste an, um manuelle EPG-Zuordnungen zu bearbeiten.</string>
@@ -753,6 +754,11 @@
     <string name="settings_provider_content_section">Inhalte</string>
     <string name="settings_provider_interval_label">Intervall</string>
     <string name="settings_provider_update_title">Aktualisierung</string>
+    <string name="settings_provider_update_interval">Update Intervall</string>
+    <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
+    <string name="settings_provider_epg_sources">EPG Quellen</string>
+    <string name="settings_provider_ua_hint">Leer lassen für den globalen User-Agent.</string>
+    <string name="settings_provider_epg_none">Noch keine EPG-Quellen angelegt.</string>
     <string name="settings_provider_test_connection">Testen</string>
     <string name="settings_provider_test_ok">Erfolgreich</string>
     <string name="settings_provider_test_fail">Nicht erfolgreich</string>

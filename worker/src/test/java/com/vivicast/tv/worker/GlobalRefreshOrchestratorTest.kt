@@ -1,124 +1,57 @@
 package com.vivicast.tv.worker
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class GlobalRefreshOrchestratorTest {
+    // The global periodic refresh covers logos + cache only; playlists and EPG sources refresh via their
+    // own per-item workers, so the orchestrator has no playlist or EPG stage.
+
     @Test
-    fun refreshRunsAdr003OrderAndDeduplicatesEpgSources() = runBlocking {
+    fun refreshPropagatesCancellationAndStopsRemainingStages() = runBlocking {
         val calls = mutableListOf<String>()
-        val diagnostics = InMemoryRefreshDiagnostics()
         val orchestrator = GlobalRefreshOrchestrator(
-            playlistSource = object : PlaylistRefreshSource {
-                override suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget> {
-                    calls += "collect-playlists"
-                    return listOf(PlaylistRefreshTarget("provider-a"), PlaylistRefreshTarget("provider-b"))
-                }
-            },
-            playlistRefresher = object : PlaylistRefresher {
-                override suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome {
-                    calls += "refresh-playlist:${target.providerId}"
-                    return PlaylistRefreshOutcome(target.providerId, success = true, epgSourceIds = listOf("epg-shared"))
-                }
-            },
-            epgSourceResolver = object : EpgSourceResolver {
-                override suspend fun collectRequiredSources(playlistOutcomes: List<PlaylistRefreshOutcome>): List<EpgRefreshTarget> {
-                    calls += "collect-epg"
-                    return playlistOutcomes.flatMap { it.epgSourceIds }.map(::EpgRefreshTarget)
-                }
-            },
-            epgRefresher = object : EpgRefresher {
-                override suspend fun refresh(target: EpgRefreshTarget): EpgRefreshOutcome {
-                    calls += "refresh-epg:${target.epgSourceId}"
-                    return EpgRefreshOutcome(target.epgSourceId, success = true)
-                }
-            },
             logoRefresher = object : LogoRefresher {
-                override suspend fun refreshLogos() {
-                    calls += "refresh-logos"
-                }
+                // Simulates WorkManager stopping the worker mid-refresh.
+                override suspend fun refreshLogos() { throw CancellationException("stopped") }
             },
             cacheCleaner = object : CacheCleaner {
-                override suspend fun cleanup() {
-                    calls += "cache-cleanup"
-                }
+                override suspend fun cleanup() { calls += "cache" }
             },
-            diagnostics = diagnostics,
+            diagnostics = InMemoryRefreshDiagnostics(),
         )
 
-        val report = orchestrator.refresh()
-
-        assertEquals(
-            listOf(
-                "collect-playlists",
-                "refresh-playlist:provider-a",
-                "refresh-playlist:provider-b",
-                "collect-epg",
-                "refresh-epg:epg-shared",
-                "refresh-logos",
-                "cache-cleanup",
-            ),
-            calls,
-        )
-        assertEquals(2, report.playlistsCollected)
-        assertEquals(1, report.epgSourcesCollected)
-        assertEquals(RefreshDiagnosticType.RefreshCompleted, diagnostics.events.last().type)
+        try {
+            orchestrator.refresh()
+            fail("Cancellation should propagate out of refresh()")
+        } catch (expected: CancellationException) {
+            // Cancellation must stop the pipeline: no cache work after the cancelled logo stage.
+            assertEquals(emptyList<String>(), calls)
+        }
     }
 
     @Test
-    fun refreshKeepsGoingWhenPlaylistAndEpgRefreshFail() = runBlocking {
+    fun refreshRunsLogosThenCache() = runBlocking {
         val calls = mutableListOf<String>()
         val diagnostics = InMemoryRefreshDiagnostics()
         val orchestrator = GlobalRefreshOrchestrator(
-            playlistSource = object : PlaylistRefreshSource {
-                override suspend fun collectDuePlaylists(): List<PlaylistRefreshTarget> =
-                    listOf(PlaylistRefreshTarget("provider-a"), PlaylistRefreshTarget("provider-b"))
-            },
-            playlistRefresher = object : PlaylistRefresher {
-                override suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome {
-                    if (target.providerId == "provider-a") {
-                        error("https://server.example/player_api.php?username=user&password=secret")
-                    }
-                    return PlaylistRefreshOutcome(target.providerId, success = true, epgSourceIds = listOf("epg-1"))
-                }
-            },
-            epgSourceResolver = object : EpgSourceResolver {
-                override suspend fun collectRequiredSources(playlistOutcomes: List<PlaylistRefreshOutcome>): List<EpgRefreshTarget> =
-                    playlistOutcomes.flatMap { it.epgSourceIds }.map(::EpgRefreshTarget)
-            },
-            epgRefresher = object : EpgRefresher {
-                override suspend fun refresh(target: EpgRefreshTarget): EpgRefreshOutcome {
-                    error("EPG failed: epg_url=https://epg.example/file.xml?token=abc")
-                }
-            },
             logoRefresher = object : LogoRefresher {
-                override suspend fun refreshLogos() {
-                    calls += "logos"
-                }
+                override suspend fun refreshLogos() { calls += "refresh-logos" }
             },
             cacheCleaner = object : CacheCleaner {
-                override suspend fun cleanup() {
-                    calls += "cache"
-                }
+                override suspend fun cleanup() { calls += "cache-cleanup" }
             },
             diagnostics = diagnostics,
         )
 
         val report = orchestrator.refresh()
 
-        assertEquals(1, report.playlistsSucceeded)
-        assertEquals(1, report.playlistsFailed)
-        assertEquals(0, report.epgSourcesSucceeded)
-        assertEquals(1, report.epgSourcesFailed)
-        assertEquals(listOf("logos", "cache"), calls)
-        assertTrue(diagnostics.events.any { it.type == RefreshDiagnosticType.PlaylistRefreshFailed })
-        assertTrue(diagnostics.events.any { it.type == RefreshDiagnosticType.EpgRefreshFailed })
-        val diagnosticText = diagnostics.events.joinToString("\n") { it.message }
-        assertFalse(diagnosticText.contains("secret"))
-        assertFalse(diagnosticText.contains("token=abc"))
-        assertTrue(diagnosticText.contains("password=[REDACTED]"))
+        assertEquals(listOf("refresh-logos", "cache-cleanup"), calls)
+        assertEquals(0, report.playlistsCollected)
+        assertEquals(0, report.epgSourcesCollected)
+        assertEquals(RefreshDiagnosticType.RefreshCompleted, diagnostics.events.last().type)
     }
 }

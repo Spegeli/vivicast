@@ -62,7 +62,6 @@
     <string name="settings_audio_passthrough">Audio-Passthrough</string>
 
     <!-- EPG settings -->
-    <string name="settings_epg_interval">Globales EPG-Aktualisierungsintervall</string>
     <string name="settings_epg_past">EPG-Vergangenheit behalten</string>
     <string name="settings_epg_future">EPG-Zukunft laden/behalten</string>
     <string name="settings_epg_on_start">EPG beim App-Start aktualisieren</string>
@@ -112,7 +111,7 @@
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Wiedergabeliste hinzufügen</string>
     <string name="settings_playlist_add_value">Öffnen</string>
-    <string name="settings_playlist_refresh_all">Alle Wiedergabelisten aktualisieren</string>
+    <string name="settings_playlist_refresh_all">Wiedergabelisten jetzt aktualisieren</string>
     <string name="settings_playlist_refresh_value">Starten</string>
     <string name="settings_playlist_empty_title">Keine Wiedergabelisten vorhanden</string>
     <string name="settings_playlist_empty_body">Füge eine Wiedergabeliste hinzu, um Inhalte zu importieren.</string>

@@ -147,13 +147,14 @@ fun SettingsRoute(
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
     onExportDiagnostics: () -> Unit = {},
     onCopySupportInformation: () -> Unit = {},
-    onRunGlobalRefresh: () -> Unit,
+    onRefreshEpgSource: (sourceId: String) -> Unit,
     onClearHistory: (HistoryClearTarget) -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore, epgSourceRepository, providerRepository),
     )
     val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val routeScope = rememberCoroutineScope()
     val settingsSections = settingsSectionsList()
     val mainSections = remember(settingsSections) { settingsSections.dropLast(1) }
     val sectionGeneral = stringResource(R.string.settings_section_general)
@@ -319,6 +320,19 @@ fun SettingsRoute(
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
+                            epgSources = settingsUiState.epgSources,
+                            providerEpgLinks = settingsUiState.providerEpgLinks,
+                            onSelectEpgProvider = viewModel::onEpgProviderSelected,
+                            onToggleEpgLink = { providerId, sourceId, link ->
+                                routeScope.launch {
+                                    if (link) {
+                                        val priority = (settingsUiState.providerEpgLinks.maxOfOrNull { it.priority } ?: 0) + 1
+                                        viewModel.linkEpgSourceToProvider(providerId, sourceId, priority)
+                                    } else {
+                                        viewModel.unlinkEpgSourceFromProvider(providerId, sourceId)
+                                    }
+                                }
+                            },
                             firstFocusModifier = detailFirstFocusModifier,
                             // Park focus on the (always-present) section button before the overview
                             // swaps to the inline editor, so focus can't escape to the top nav bar.
@@ -336,7 +350,7 @@ fun SettingsRoute(
                             manualMappings = settingsUiState.manualMappingsForSelectedChannel,
                             selectedManualMappingChannelId = settingsUiState.selectedManualMappingChannelId,
                             onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
-                            onRunGlobalRefresh = onRunGlobalRefresh,
+                            onRefreshEpgSource = onRefreshEpgSource,
                             onSelectProvider = viewModel::onEpgProviderSelected,
                             onSaveEpgSource = viewModel::saveEpgSource,
                             onDeleteEpgSource = viewModel::deleteEpgSource,

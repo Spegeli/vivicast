@@ -207,7 +207,7 @@ class RefreshExecutionTest {
             catalogImportRepository = catalogRepository,
             m3uParser = DefaultM3uParser(),
             textFetcher = object : TextFetcher {
-                override suspend fun fetch(url: String): String = throw RefreshHttpException(401)
+                override suspend fun fetch(url: String, userAgent: String?): String = throw RefreshHttpException(401)
             },
             xtreamClient = EmptyXtreamClient,
             xtreamParser = EmptyXtreamParser,
@@ -308,6 +308,13 @@ class RefreshExecutionTest {
         assertEquals(listOf(activeProvider.id), importRepository.providerIds)
         assertEquals("Morning News", importRepository.documents.single().programs.single().title)
         assertEquals(listOf(2 to 9), importRepository.retentionRequests)
+        // Feed-level metadata is recorded once for the source (channel + programme counts from the feed).
+        val metadata = importRepository.refreshedMetadata.single()
+        assertEquals("epg-1", metadata.sourceId)
+        assertEquals(1, metadata.channelCount)
+        assertEquals(1, metadata.programCount)
+        // Refreshing flag is raised at the start and cleared afterwards.
+        assertEquals(listOf("epg-1" to true, "epg-1" to false), importRepository.refreshingFlags)
     }
 
     @Test
@@ -338,6 +345,9 @@ class RefreshExecutionTest {
 
         assertEquals(emptyList<String>(), importRepository.providerIds)
         assertEquals(emptyList<Pair<Int, Int>>(), importRepository.retentionRequests)
+        // No valid feed → no metadata write, but the refreshing flag is still cleared in the finally block.
+        assertEquals(emptyList<RefreshedMetadata>(), importRepository.refreshedMetadata)
+        assertEquals(listOf("epg-1" to true, "epg-1" to false), importRepository.refreshingFlags)
     }
 
     @Test
@@ -538,6 +548,8 @@ private class FakeEpgImportRepository : EpgImportRepository {
     val providerIds = mutableListOf<String>()
     val documents = mutableListOf<XmltvDocument>()
     val retentionRequests = mutableListOf<Pair<Int, Int>>()
+    val refreshedMetadata = mutableListOf<RefreshedMetadata>()
+    val refreshingFlags = mutableListOf<Pair<String, Boolean>>()
 
     override suspend fun saveEpgSource(request: EpgSourceSaveRequest): EpgSource =
         error("Not used.")
@@ -559,7 +571,27 @@ private class FakeEpgImportRepository : EpgImportRepository {
         retentionRequests += pastDays to futureDays
         return 0
     }
+
+    override suspend fun markEpgSourceRefreshed(
+        sourceId: String,
+        refreshedAt: Long,
+        channelCount: Int,
+        programCount: Int,
+    ) {
+        refreshedMetadata += RefreshedMetadata(sourceId, refreshedAt, channelCount, programCount)
+    }
+
+    override suspend fun setEpgSourceRefreshing(sourceId: String, refreshing: Boolean) {
+        refreshingFlags += sourceId to refreshing
+    }
 }
+
+private data class RefreshedMetadata(
+    val sourceId: String,
+    val refreshedAt: Long,
+    val channelCount: Int,
+    val programCount: Int,
+)
 
 private class FakeTextFetcher(
     private vararg val responses: Pair<String, String>,
@@ -567,7 +599,7 @@ private class FakeTextFetcher(
     private val responseMap = responses.toMap()
     val urls = mutableListOf<String>()
 
-    override suspend fun fetch(url: String): String {
+    override suspend fun fetch(url: String, userAgent: String?): String {
         urls += url
         return responseMap.getValue(url)
     }

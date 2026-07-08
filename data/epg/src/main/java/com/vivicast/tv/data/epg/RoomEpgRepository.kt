@@ -138,6 +138,13 @@ class RoomEpgRepository(
             sourceConfigKey = sourceConfigKey,
             timeShiftMinutes = request.timeShiftMinutes,
             isActive = request.isActive,
+            refreshIntervalHours = request.refreshIntervalHours,
+            // Preserve refresh metadata across edits — otherwise editing (e.g. disabling) a source would
+            // wipe its last-refresh timestamp and channel/programme counts back to defaults.
+            lastRefreshAt = existing?.lastRefreshAt,
+            lastProgramCount = existing?.lastProgramCount ?: 0,
+            lastChannelCount = existing?.lastChannelCount ?: 0,
+            isRefreshing = existing?.isRefreshing ?: false,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -253,6 +260,19 @@ class RoomEpgRepository(
         val fromMillis = nowMillis - pastDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
         val toMillis = nowMillis + futureDays.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS).toLong() * MILLIS_PER_DAY
         return epgDao.deleteProgramsOutsideWindow(fromMillis, toMillis)
+    }
+
+    override suspend fun markEpgSourceRefreshed(
+        sourceId: String,
+        refreshedAt: Long,
+        channelCount: Int,
+        programCount: Int,
+    ) {
+        epgDao.markEpgSourceRefreshed(sourceId, refreshedAt, channelCount, programCount)
+    }
+
+    override suspend fun setEpgSourceRefreshing(sourceId: String, refreshing: Boolean) {
+        epgDao.setEpgSourceRefreshing(sourceId, refreshing)
     }
 
     private fun buildAutomaticMappings(
@@ -378,8 +398,11 @@ private fun EpgSourceEntity.toDomain(): EpgSource =
         sourceConfigKey = sourceConfigKey,
         timeShiftMinutes = timeShiftMinutes,
         isActive = isActive,
+        refreshIntervalHours = refreshIntervalHours,
         lastRefreshAt = lastRefreshAt,
         lastProgramCount = lastProgramCount,
+        lastChannelCount = lastChannelCount,
+        isRefreshing = isRefreshing,
     )
 
 private fun ProviderEpgSourceEntity.toDomain(): ProviderEpgSource =

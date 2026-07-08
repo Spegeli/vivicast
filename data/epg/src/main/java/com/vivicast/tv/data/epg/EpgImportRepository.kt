@@ -19,6 +19,12 @@ interface EpgImportRepository {
         pastDays: Int,
         futureDays: Int,
     ): Int
+
+    /** Feed-level refresh metadata (last-refresh timestamp + feed channel/programme counts). */
+    suspend fun markEpgSourceRefreshed(sourceId: String, refreshedAt: Long, channelCount: Int, programCount: Int)
+
+    /** Toggles the in-progress flag so the source overview can show a "Refreshing" badge. */
+    suspend fun setEpgSourceRefreshing(sourceId: String, refreshing: Boolean)
 }
 
 data class EpgSourceSaveRequest(
@@ -27,6 +33,7 @@ data class EpgSourceSaveRequest(
     val sourceConfigKey: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    val refreshIntervalHours: Int = 0,
 )
 
 data class EpgImportResult(

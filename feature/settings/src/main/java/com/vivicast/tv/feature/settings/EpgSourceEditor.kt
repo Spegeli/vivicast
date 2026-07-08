@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,7 +45,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
@@ -55,11 +53,9 @@ import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
-import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
-import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogError
@@ -77,7 +73,7 @@ import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
-import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
+import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -93,7 +89,6 @@ import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -124,12 +119,13 @@ internal fun EpgSourceEditor(
     // Blank name reddens only after a save attempt (mirrors the playlist editor).
     var showNameBlankError by remember { mutableStateOf(false) }
     val nameBlank = editor.name.isBlank()
-    // Start focus on the name field (like the playlist editor). Wait one frame, else focus escapes to
-    // the top nav bar during the overview→editor swap.
+    // Add starts on the name field; edit starts on the enable toggle (the first item) — mirrors the
+    // playlist editor. Wait one frame, else focus escapes to the top nav bar during the overview→editor swap.
     val firstFocus = remember { FocusRequester() }
+    val toggleFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         awaitFrame()
-        runCatching { firstFocus.requestFocus() }
+        runCatching { (if (editor.isEditing) toggleFocus else firstFocus).requestFocus() }
     }
     // A blank URL is only required for a new source (edit keeps the stored one). Reddens after a save
     // attempt, mirroring the name field / playlist editor.
@@ -138,6 +134,8 @@ internal fun EpgSourceEditor(
     val urlBlank = !editor.isEditing && editor.url.isBlank()
     // On a blocked save, jump focus to the first bad field (name → URL), like the playlist editor.
     var pendingErrorFocus by remember { mutableStateOf<EpgEditorErrorFocus?>(null) }
+    // Update-interval picker popup (reuses the playlist editor's dialog).
+    var showInterval by remember { mutableStateOf(false) }
     LaunchedEffect(pendingErrorFocus) {
         val target = pendingErrorFocus ?: return@LaunchedEffect
         awaitFrame()
@@ -157,7 +155,7 @@ internal fun EpgSourceEditor(
                     help = "",
                     value = if (editor.isActive) stringResource(R.string.value_on) else stringResource(R.string.value_off),
                     onClick = { onEditorChange(editor.copy(isActive = !editor.isActive)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(toggleFocus),
                 )
             }
         }
@@ -195,7 +193,8 @@ internal fun EpgSourceEditor(
                         onValueChange = { onEditorChange(editor.copy(url = it)) },
                         modifier = Modifier.weight(1f),
                         focusRequester = urlFocus,
-                        secret = editor.isEditing,
+                        // Show the pre-filled URL in plaintext when editing (mirrors the playlist M3U field).
+                        secret = false,
                         isError = connectionTestStatus == ConnectionTestStatus.Failed ||
                             duplicateUrlName != null ||
                             (showUrlBlankError && urlBlank),
@@ -245,6 +244,17 @@ internal fun EpgSourceEditor(
             }
         }
 
+        // Per-source auto-refresh interval (button → popup), mirrors the per-playlist "Update Intervall".
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_provider_update_interval),
+                help = "",
+                value = intervalLabel(editor.refreshIntervalHours),
+                forceTextValue = true,
+                onClick = { showInterval = true },
+            )
+        }
+
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3, Alignment.CenterHorizontally),
@@ -282,114 +292,10 @@ internal fun EpgSourceEditor(
             }
         }
 
-        if (editor.isEditing) {
-            item {
-                InfoPanel(
-                    title = stringResource(R.string.settings_epg_provider_assignment_title),
-                    body = stringResource(R.string.settings_epg_provider_assignment_body),
-                    badge = "EPG",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            if (providers.isEmpty()) {
-                item {
-                    InfoPanel(
-                        title = stringResource(R.string.common_no_provider),
-                        body = stringResource(R.string.settings_epg_no_providers_for_source_body),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            } else {
-                items(providers, key = { it.id }) { provider ->
-                    FocusPanel(
-                        selected = provider.id == selectedProviderId,
-                        onClick = { onSelectProvider(provider.id) },
-                        onFocused = { onSelectProvider(provider.id) },
-                        modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
-                        contentPadding = VivicastSpacing.Space4,
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
-                                BasicText(provider.name, style = VivicastTypography.LabelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                BodyText(provider.status.localizedLabel(), maxLines = 1)
-                            }
-                            val link = if (provider.id == selectedProviderId) {
-                                providerLinks.firstOrNull { it.epgSourceId == editor.sourceId }
-                            } else {
-                                null
-                            }
-                            StatusBadge(
-                                label = link?.let { stringResource(R.string.settings_epg_priority, it.priority) } ?: stringResource(R.string.settings_epg_not_assigned),
-                                tone = if (link != null) VivicastColors.Success else VivicastColors.SurfaceHigh,
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    val providerId = selectedProviderId
-                    val sourceId = editor.sourceId
-                    val existingLink = providerLinks.firstOrNull { it.epgSourceId == sourceId }
-                    val nextPriority = existingLink?.priority ?: (providerLinks.maxOfOrNull { it.priority } ?: 0) + 1
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                            ActionPill(
-                                label = existingLink?.let { stringResource(R.string.settings_epg_priority, it.priority) } ?: stringResource(R.string.settings_epg_use_as_priority, nextPriority),
-                                modifier = Modifier.width(270.dp),
-                                selected = existingLink != null,
-                                onClick = {
-                                    if (providerId != null && sourceId != null && existingLink == null) {
-                                        onLinkProvider(providerId, sourceId, nextPriority)
-                                    }
-                                },
-                            )
-                            if (existingLink != null) {
-                                ActionPill(
-                                    label = stringResource(R.string.common_remove),
-                                    modifier = Modifier.width(140.dp),
-                                    onClick = {
-                                        if (providerId != null && sourceId != null) {
-                                            onUnlinkProvider(providerId, sourceId)
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                        if (existingLink != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxWidth()) {
-                                val canMoveUp = existingLink.priority > 1
-                                val canMoveDown = existingLink.priority < providerLinks.size
-                                ActionPill(
-                                    label = if (canMoveUp) stringResource(R.string.settings_epg_higher) else stringResource(R.string.settings_epg_top),
-                                    modifier = Modifier.width(128.dp),
-                                    selected = !canMoveUp,
-                                    onClick = {
-                                        if (providerId != null && sourceId != null && canMoveUp) {
-                                            onMoveProviderLink(providerId, sourceId, EpgSourcePriorityDirection.Up)
-                                        }
-                                    },
-                                )
-                                ActionPill(
-                                    label = if (canMoveDown) stringResource(R.string.settings_epg_lower) else stringResource(R.string.settings_epg_bottom),
-                                    modifier = Modifier.width(128.dp),
-                                    selected = !canMoveDown,
-                                    onClick = {
-                                        if (providerId != null && sourceId != null && canMoveDown) {
-                                            onMoveProviderLink(providerId, sourceId, EpgSourcePriorityDirection.Down)
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Provider-assignment UI intentionally removed from the EPG source editor (not used here). The
+        // callbacks (onSelectProvider / onLinkProvider / onUnlinkProvider / onMoveProviderLink) and the
+        // providers/providerLinks/selectedProviderId params are kept wired so the block can be re-added
+        // elsewhere without re-plumbing the repository + ViewModel flow.
 
         if (message != null) {
             item {
@@ -400,6 +306,17 @@ internal fun EpgSourceEditor(
                 )
             }
         }
+    }
+
+    if (showInterval) {
+        ProviderIntervalDialog(
+            current = editor.refreshIntervalHours,
+            onSelect = {
+                onEditorChange(editor.copy(refreshIntervalHours = it))
+                showInterval = false
+            },
+            onDismiss = { showInterval = false },
+        )
     }
 }
 
@@ -447,6 +364,7 @@ internal data class EpgSourceEditorState(
     val url: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    val refreshIntervalHours: Int,
 ) {
     val isEditing: Boolean get() = sourceId != null
 
@@ -463,6 +381,7 @@ internal data class EpgSourceEditorState(
             url = url.ifBlank { null },
             timeShiftMinutes = timeShiftMinutes,
             isActive = isActive,
+            refreshIntervalHours = refreshIntervalHours,
         )
 
     companion object {
@@ -473,15 +392,17 @@ internal data class EpgSourceEditorState(
                 url = "",
                 timeShiftMinutes = 0,
                 isActive = true,
+                refreshIntervalHours = REFRESH_INTERVAL_OFF,
             )
 
-        fun from(source: EpgSource): EpgSourceEditorState =
+        fun from(source: EpgSource, url: String = ""): EpgSourceEditorState =
             EpgSourceEditorState(
                 sourceId = source.id,
                 name = source.name,
-                url = "",
+                url = url,
                 timeShiftMinutes = source.timeShiftMinutes,
                 isActive = source.isActive,
+                refreshIntervalHours = source.refreshIntervalHours,
             )
     }
 }

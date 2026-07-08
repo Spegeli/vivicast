@@ -112,6 +112,15 @@ interface EpgDao {
     @Upsert
     suspend fun upsertEpgSources(sources: List<EpgSourceEntity>)
 
+    @Query(
+        "UPDATE epg_sources SET lastRefreshAt = :refreshedAt, lastChannelCount = :channelCount, " +
+            "lastProgramCount = :programCount WHERE id = :sourceId",
+    )
+    suspend fun markEpgSourceRefreshed(sourceId: String, refreshedAt: Long, channelCount: Int, programCount: Int)
+
+    @Query("UPDATE epg_sources SET isRefreshing = :refreshing WHERE id = :sourceId")
+    suspend fun setEpgSourceRefreshing(sourceId: String, refreshing: Boolean)
+
     @Upsert
     suspend fun upsertProviderEpgSources(sources: List<ProviderEpgSourceEntity>)
 

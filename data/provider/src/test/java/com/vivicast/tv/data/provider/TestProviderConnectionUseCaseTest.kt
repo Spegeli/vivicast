@@ -164,8 +164,12 @@ private class FakeFetcher(private val result: String = "", private val error: Th
     var lastUrl: String? = null
         private set
 
-    suspend fun fetch(url: String): String {
+    var lastUserAgent: String? = null
+        private set
+
+    suspend fun fetch(url: String, userAgent: String? = null): String {
         lastUrl = url
+        lastUserAgent = userAgent
         error?.let { throw it }
         return result
     }

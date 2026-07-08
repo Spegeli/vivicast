@@ -30,10 +30,16 @@ class NetworkClientFactory {
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .addInterceptor { chain ->
-                val request = chain.request()
-                    .newBuilder()
-                    .header(USER_AGENT_HEADER, userAgentProvider().normalizedUserAgent())
-                    .build()
+                val original = chain.request()
+                // A caller may set a per-request User-Agent (e.g. a per-provider override); only fall
+                // back to the global User-Agent when the request doesn't already carry one.
+                val request = if (original.header(USER_AGENT_HEADER) == null) {
+                    original.newBuilder()
+                        .header(USER_AGENT_HEADER, userAgentProvider().normalizedUserAgent())
+                        .build()
+                } else {
+                    original
+                }
                 chain.proceed(request)
             }
         if (trustAllCertificates) {

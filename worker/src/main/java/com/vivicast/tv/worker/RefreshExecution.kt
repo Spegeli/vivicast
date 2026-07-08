@@ -27,6 +27,7 @@ import com.vivicast.tv.iptv.xtream.XtreamClient
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.XtreamParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -46,9 +47,10 @@ class DefaultRefreshWorkerRunner(
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
     private val scheduler: RefreshWorkScheduler,
+    private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
 ) : RefreshWorkerRunner {
     override suspend fun runGlobalRefresh(): RefreshWorkerResult =
-        runCatching { orchestrator.refresh() }
+        runCancellableCatching { orchestrator.refresh() }
             .fold(
                 onSuccess = { report ->
                     // Heavy per-series detail fetch runs as a separate background job per provider.
@@ -65,11 +67,20 @@ class DefaultRefreshWorkerRunner(
     override suspend fun runPlaylistRefresh(providerId: String?): RefreshWorkerResult {
         val target = providerId?.takeIf { it.isNotBlank() }?.let(::PlaylistRefreshTarget)
             ?: return RefreshWorkerResult.Failure
-        return runCatching { playlistRefresher.refresh(target) }
+        return runCancellableCatching { playlistRefresher.refresh(target) }
             .fold(
                 onSuccess = { outcome ->
-                    if (outcome.success && outcome.needsSeriesDetailsRefresh) {
-                        scheduler.enqueueSeriesDetailsRefresh(target.providerId)
+                    if (outcome.success) {
+                        if (outcome.needsSeriesDetailsRefresh) {
+                            scheduler.enqueueSeriesDetailsRefresh(target.providerId)
+                        }
+                        // "Refresh EPG on playlist change": the catalog just changed, so re-refresh the
+                        // EPG sources assigned to this provider (mapping re-runs against the fresh
+                        // channels). epgSourceIds is empty when the provider has no assigned source, so
+                        // an unassigned source is never refreshed by this trigger.
+                        if (refreshEpgOnPlaylistChangeProvider()) {
+                            outcome.epgSourceIds.forEach { scheduler.enqueueEpgRefresh(it) }
+                        }
                     }
                     if (outcome.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry
                 },
@@ -79,7 +90,7 @@ class DefaultRefreshWorkerRunner(
 
     override suspend fun runSeriesDetailsRefresh(providerId: String?): RefreshWorkerResult {
         val id = providerId?.takeIf { it.isNotBlank() } ?: return RefreshWorkerResult.Failure
-        return runCatching { seriesDetailsRefresher.refresh(id) }
+        return runCancellableCatching { seriesDetailsRefresher.refresh(id) }
             .fold(
                 onSuccess = { if (it.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry },
                 onFailure = { RefreshWorkerResult.Retry },
@@ -89,7 +100,7 @@ class DefaultRefreshWorkerRunner(
     override suspend fun runEpgRefresh(epgSourceId: String?): RefreshWorkerResult {
         val target = epgSourceId?.takeIf { it.isNotBlank() }?.let(::EpgRefreshTarget)
             ?: return RefreshWorkerResult.Failure
-        return runCatching { epgRefresher.refresh(target) }
+        return runCancellableCatching { epgRefresher.refresh(target) }
             .fold(
                 onSuccess = { if (it.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry },
                 onFailure = { RefreshWorkerResult.Retry },
@@ -97,11 +108,11 @@ class DefaultRefreshWorkerRunner(
     }
 
     override suspend fun runLogoRefresh(): RefreshWorkerResult =
-        runCatching { logoRefresher.refreshLogos() }
+        runCancellableCatching { logoRefresher.refreshLogos() }
             .fold(onSuccess = { RefreshWorkerResult.Success }, onFailure = { RefreshWorkerResult.Retry })
 
     override suspend fun runCacheCleanup(): RefreshWorkerResult =
-        runCatching { cacheCleaner.cleanup() }
+        runCancellableCatching { cacheCleaner.cleanup() }
             .fold(onSuccess = { RefreshWorkerResult.Success }, onFailure = { RefreshWorkerResult.Retry })
 }
 
@@ -160,6 +171,9 @@ class DefaultPlaylistRefresher(
                     needsSeriesDetailsRefresh = provider.type == ProviderType.Xtream && provider.includeSeries,
                 )
             }.getOrElse { error ->
+                // A cancelled refresh (worker stopped) is not a provider error — propagate without
+                // overwriting the status, so the provider isn't left marked as failed on shutdown.
+                if (error is CancellationException) throw error
                 providerRepository.setProviderStatus(provider.id, error.toProviderStatus())
                 throw error
             }
@@ -171,7 +185,10 @@ class DefaultPlaylistRefresher(
     private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u): ProviderStatus {
         require(provider.type == ProviderType.M3u) { "Provider type mismatch." }
         val source = if (credentials.sourceMode.isAutomaticallyRefreshable) {
-            textFetcher.fetch(credentials.url ?: throw RefreshAuthenticationException("M3U URL is missing."))
+            textFetcher.fetch(
+                credentials.url ?: throw RefreshAuthenticationException("M3U URL is missing."),
+                userAgent = provider.userAgent,
+            )
         } else {
             credentials.inlineContent ?: throw RefreshAuthenticationException("M3U content is missing.")
         }
@@ -192,6 +209,7 @@ class DefaultPlaylistRefresher(
             serverUrl = credentials.serverUrl,
             username = credentials.username,
             password = credentials.password,
+            userAgent = provider.userAgent,
         )
         val seriesItems = if (provider.includeSeries) {
             xtreamParser.parseSeries(xtreamClient.getSeries(xtreamCredentials))
@@ -233,8 +251,8 @@ class DefaultPlaylistRefresher(
         )
         catalogImportRepository.importXtreamCatalog(provider.id, catalog)
         // Best-effort account snapshot (expiry + max connections). A user_info failure must NOT
-        // fail the catalog refresh that already succeeded, so it is isolated in runCatching.
-        runCatching {
+        // fail the catalog refresh that already succeeded, so it is isolated in runCancellableCatching.
+        runCancellableCatching {
             val userInfo = xtreamParser.parseUserInfo(xtreamClient.getUserInfo(xtreamCredentials))
             providerRepository.updateXtreamAccountInfo(
                 providerId = provider.id,
@@ -268,6 +286,7 @@ class DefaultSeriesDetailsRefresher(
             serverUrl = credentials.serverUrl,
             username = credentials.username,
             password = credentials.password,
+            userAgent = provider.userAgent,
         )
         val seriesItems = xtreamParser.parseSeries(xtreamClient.getSeries(xtreamCredentials))
         // Full per cycle: fetch getSeriesInfo for every series (sequential — 1-connection-safe), then
@@ -286,12 +305,10 @@ class RoomEpgSourceReader(
 ) : EpgSourceReader, EpgSourceResolver {
     private val epgDao = database.epgDao()
 
-    override suspend fun collectRequiredSources(playlistOutcomes: List<PlaylistRefreshOutcome>): List<EpgRefreshTarget> =
-        playlistOutcomes
-            .filter { it.success }
-            .flatMap { it.epgSourceIds }
-            .distinct()
-            .map(::EpgRefreshTarget)
+    override suspend fun collectAllActiveSources(): List<EpgRefreshTarget> =
+        epgDao.getEpgSources()
+            .filter { it.isActive }
+            .map { EpgRefreshTarget(it.id) }
 
     override suspend fun getActiveSourceIdsForProvider(providerId: String): List<String> =
         epgDao.getProviderEpgSources(providerId)
@@ -330,6 +347,7 @@ class DefaultEpgRefresher(
         }
 
         try {
+            epgImportRepository.setEpgSourceRefreshing(source.id, refreshing = true)
             // Stream the feed (SAX, constant memory) and collect channels + programmes instead of
             // building a DOM tree of the whole document. gzip bodies are decompressed by the parser.
             val channels = ArrayList<XmltvChannel>()
@@ -348,6 +366,14 @@ class DefaultEpgRefresher(
                 throw RefreshImportException("XMLTV document contains no importable programs.")
             }
             val document = XmltvDocument(channels = channels, programs = programs, skippedPrograms = skippedPrograms)
+            // Channel count + last-refresh timestamp are feed properties, so record them for every source
+            // with a valid feed — even one linked to no active provider (its programmes just stay unmapped).
+            epgImportRepository.markEpgSourceRefreshed(
+                sourceId = source.id,
+                refreshedAt = clock(),
+                channelCount = document.channels.size,
+                programCount = document.programs.size,
+            )
             val activeProviderIds = source.providerIds.filter { providerId ->
                 providerRepository.getProvider(providerId)?.isActive == true
             }
@@ -361,6 +387,7 @@ class DefaultEpgRefresher(
             )
             return EpgRefreshOutcome(target.epgSourceId, success = true)
         } finally {
+            epgImportRepository.setEpgSourceRefreshing(source.id, refreshing = false)
             refreshRunGuard.exit(source.id)
         }
     }
@@ -390,18 +417,19 @@ data class ResolvedEpgSource(
 )
 
 interface TextFetcher {
-    suspend fun fetch(url: String): String
+    suspend fun fetch(url: String, userAgent: String? = null): String
 }
 
 class OkHttpTextFetcher(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : TextFetcher {
-    override suspend fun fetch(url: String): String =
+    override suspend fun fetch(url: String, userAgent: String?): String =
         withContext(ioDispatcher) {
             withFetchRetry {
                 val request = Request.Builder()
                     .url(url)
+                    .applyUserAgent(userAgent)
                     .get()
                     .build()
                 client.newCall(request).execute().use { response ->
@@ -472,6 +500,11 @@ class EpgSourceTooLargeException(
     val byteCount: Long,
 ) : RuntimeException("EPG document exceeds the $MAX_EPG_URL_BYTES byte limit (got $byteCount).")
 
+/** Sets a per-request User-Agent header when [userAgent] is non-blank; the OkHttp interceptor supplies
+ * the global User-Agent for requests without one. */
+private fun Request.Builder.applyUserAgent(userAgent: String?): Request.Builder =
+    userAgent?.trim()?.takeIf { it.isNotEmpty() }?.let { header("User-Agent", it) } ?: this
+
 interface BinaryFetcher {
     suspend fun fetch(url: String): ByteArray
 }
@@ -508,7 +541,7 @@ class DefaultLogoRefresher(
                 sourceUrl = target.sourceUrl,
             )
             if (!mediaCacheStore.hasEntry(key)) {
-                runCatching {
+                runCancellableCatching {
                     mediaCacheStore.put(key, binaryFetcher.fetch(target.sourceUrl))
                 }
             }

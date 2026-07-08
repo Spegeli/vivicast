@@ -18,7 +18,7 @@ class TestProviderConnectionUseCase(
     private val m3uParser: M3uParser,
     private val xtreamClient: XtreamClient,
     private val xtreamParser: XtreamParser,
-    private val fetchText: suspend (url: String) -> String,
+    private val fetchText: suspend (url: String, userAgent: String?) -> String,
     private val m3uContentSummarizer: M3uContentSummarizer = M3uContentSummarizer(),
 ) {
     /**
@@ -35,7 +35,7 @@ class TestProviderConnectionUseCase(
         val source = if (request.m3uSourceMode.isAutomaticallyRefreshable) {
             val url = request.m3uUrl?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException()
-            fetchText(url)
+            fetchText(url, request.userAgent)
         } else {
             request.m3uContent?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException()
@@ -55,6 +55,7 @@ class TestProviderConnectionUseCase(
                 ?: throw IllegalArgumentException(),
             password = request.xtreamPassword?.trim()?.takeIf { it.isNotBlank() }
                 ?: throw IllegalArgumentException(),
+            userAgent = request.userAgent,
         )
         // Canonical Xtream login check: player_api.php (no action) returns user_info.auth.
         val userInfo = xtreamParser.parseUserInfo(xtreamClient.getUserInfo(credentials))

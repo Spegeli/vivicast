@@ -19,8 +19,14 @@ object WorkerContracts {
     fun uniquePlaylistRefreshWork(providerId: String): String =
         "$PLAYLIST_REFRESH_WORK:$providerId"
 
+    fun uniquePlaylistPeriodicWork(providerId: String): String =
+        "periodic_$PLAYLIST_REFRESH_WORK:$providerId"
+
     fun uniqueEpgRefreshWork(epgSourceId: String): String =
         "$EPG_REFRESH_WORK:$epgSourceId"
+
+    fun uniqueEpgPeriodicWork(epgSourceId: String): String =
+        "periodic_$EPG_REFRESH_WORK:$epgSourceId"
 
     fun uniqueSeriesDetailsRefreshWork(providerId: String): String =
         "$SERIES_DETAILS_REFRESH_WORK:$providerId"

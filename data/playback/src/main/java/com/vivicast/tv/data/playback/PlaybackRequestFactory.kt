@@ -25,6 +25,8 @@ class PlaybackRequestFactory(
     private val playbackStreamResolver: PlaybackStreamResolver,
     private val playbackRepository: PlaybackRepository,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    // Per-provider User-Agent for playback; null/blank → the player uses the global User-Agent.
+    private val providerUserAgent: suspend (providerId: String) -> String? = { null },
 ) {
     suspend fun movieRequest(
         movie: Movie,
@@ -50,6 +52,7 @@ class PlaybackRequestFactory(
         return PlaybackRequest(
             playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
             providerId = stream.providerId,
+            userAgent = providerUserAgent(stream.providerId),
             mediaId = stream.mediaId,
             mediaType = PlaybackMediaType.Movie,
             providerStableKey = stream.providerStableKey,
@@ -82,6 +85,7 @@ class PlaybackRequestFactory(
         return PlaybackRequest(
             playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
             providerId = stream.providerId,
+            userAgent = providerUserAgent(stream.providerId),
             mediaId = stream.mediaId,
             mediaType = PlaybackMediaType.Episode,
             providerStableKey = stream.providerStableKey,
@@ -112,6 +116,7 @@ class PlaybackRequestFactory(
         return PlaybackRequest(
             playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
             providerId = stream.providerId,
+            userAgent = providerUserAgent(stream.providerId),
             mediaId = stream.mediaId,
             mediaType = PlaybackMediaType.Channel,
             providerStableKey = stream.providerStableKey,
@@ -145,6 +150,7 @@ class PlaybackRequestFactory(
         return PlaybackRequest(
             playbackId = playbackId(stream.providerId, stream.mediaType, stream.mediaId),
             providerId = stream.providerId,
+            userAgent = providerUserAgent(stream.providerId),
             mediaId = stream.mediaId,
             mediaType = PlaybackMediaType.CatchUp,
             providerStableKey = stream.providerStableKey,

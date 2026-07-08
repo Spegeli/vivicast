@@ -276,7 +276,6 @@ internal class SettingsViewModel(
         it.copy(
             pastRetentionDays = epg.pastRetentionDays,
             futureRetentionDays = epg.futureRetentionDays,
-            refreshIntervalHours = epg.refreshIntervalHours,
             refreshOnAppStartEnabled = epg.refreshOnAppStartEnabled,
             refreshOnPlaylistChangeEnabled = epg.refreshOnPlaylistChangeEnabled,
         )
@@ -362,7 +361,6 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
     epg = EpgSettingsState(
         pastRetentionDays = epg.pastRetentionDays,
         futureRetentionDays = epg.futureRetentionDays,
-        refreshIntervalHours = epg.refreshIntervalHours,
         refreshOnAppStartEnabled = epg.refreshOnAppStartEnabled,
         refreshOnPlaylistChangeEnabled = epg.refreshOnPlaylistChangeEnabled,
     ),

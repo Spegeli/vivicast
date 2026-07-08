@@ -62,13 +62,14 @@
     <string name="settings_audio_passthrough">Audio passthrough</string>
 
     <!-- EPG settings -->
-    <string name="settings_epg_interval">Global EPG refresh interval</string>
     <string name="settings_epg_past">Keep EPG history</string>
     <string name="settings_epg_future">Load/keep EPG future</string>
     <string name="settings_epg_on_start">Refresh EPG on app start</string>
     <string name="settings_epg_on_change">Refresh EPG on playlist change</string>
     <string name="settings_epg_now">Refresh EPG now</string>
     <string name="settings_epg_now_value">Start</string>
+    <string name="settings_epg_global_settings">Global EPG settings</string>
+    <string name="settings_epg_help_global_settings">Interval, retention and automatic refresh.</string>
 
     <!-- Appearance settings -->
     <string name="settings_theme">Background theme</string>
@@ -112,7 +113,7 @@
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Add playlist</string>
     <string name="settings_playlist_add_value">Open</string>
-    <string name="settings_playlist_refresh_all">Refresh all playlists</string>
+    <string name="settings_playlist_refresh_all">Refresh Playlists now</string>
     <string name="settings_playlist_refresh_value">Start</string>
     <string name="settings_playlist_empty_title">No playlists configured</string>
     <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>
@@ -364,6 +365,7 @@
     <string name="settings_epg_help_add_source">Add a new EPG source from an XMLTV URL.</string>
     <string name="settings_epg_test_summary">Found EPG for %1$d channels</string>
     <string name="settings_epg_program_count">%1$d programmes</string>
+    <string name="settings_epg_channel_count">%1$d channels</string>
     <string name="settings_epg_name_placeholder">EPG source name</string>
     <string name="settings_epg_name_exists_body">The name must be unique. An EPG source with this name already exists.</string>
     <string name="settings_epg_url_exists">This URL is already used by the EPG source \"%1$s\".</string>
@@ -449,7 +451,7 @@
     <string name="settings_help_launch_on_boot">Attempts to open Vivicast on Android TV startup if the system allows it.</string>
     <string name="settings_help_double_back">Requires a second back confirmation from the top navigation.</string>
     <string name="settings_help_language">System default or fixed app language.</string>
-    <string name="settings_help_background_refresh">Refresh playlists and EPG in the background.</string>
+    <string name="settings_help_background_refresh">Update playlists and EPG while the app runs in the background.</string>
     <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty uses the app default.</string>
 
     <!-- Settings - Playback help texts -->
@@ -475,12 +477,11 @@
     <string name="settings_epg_msg_priority_updated">EPG priority updated.</string>
     <string name="settings_epg_msg_source_select">Select an EPG source or create a new one.</string>
     <string name="settings_epg_msg_source_deleted">EPG source deleted. Programs and assignments have been removed.</string>
-    <string name="settings_epg_help_interval">Applies only to the automatic interval refresh.</string>
     <string name="settings_epg_help_past">Cleanup only removes EPG program data outside this window.</string>
     <string name="settings_epg_retention_day">Day</string>
     <string name="settings_epg_retention_days">Days</string>
     <string name="settings_epg_help_cleanup_note">Sources, provider assignments and manual mappings are retained.</string>
-    <string name="settings_epg_help_background">Starts only when background refresh is enabled.</string>
+    <string name="settings_epg_help_background">Refreshes all EPG sources once when the app starts.</string>
     <string name="settings_epg_help_on_playlist_change">Separate trigger in addition to the interval.</string>
     <string name="settings_epg_help_run_now">Schedules a refresh according to the existing refresh plan.</string>
     <string name="settings_epg_no_providers_body">Set up a playlist first to edit manual EPG assignments.</string>
@@ -752,6 +753,11 @@
     <string name="settings_provider_content_section">Content</string>
     <string name="settings_provider_interval_label">Interval</string>
     <string name="settings_provider_update_title">Update</string>
+    <string name="settings_provider_update_interval">Update interval</string>
+    <string name="settings_provider_refresh_on_start">Refresh on app start</string>
+    <string name="settings_provider_epg_sources">EPG sources</string>
+    <string name="settings_provider_ua_hint">Leave empty to use the global User-Agent.</string>
+    <string name="settings_provider_epg_none">No EPG sources created yet.</string>
     <string name="settings_provider_test_connection">Test</string>
     <string name="settings_provider_test_ok">Successful</string>
     <string name="settings_provider_test_fail">Not successful</string>

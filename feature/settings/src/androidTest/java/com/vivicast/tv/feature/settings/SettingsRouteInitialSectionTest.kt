@@ -99,7 +99,7 @@ class SettingsRouteInitialSectionTest {
                 onTestProviderConnection = { ProviderConnectionTestResult(errorMessage = null, summary = null) },
                 onProviderSaved = {},
                 onBackgroundRefreshChanged = {},
-                onRunGlobalRefresh = {},
+                onRefreshEpgSource = {},
                 onClearHistory = {},
             )
         }

@@ -20,11 +20,21 @@ interface RefreshWorkScheduler {
         repeatIntervalHours: Long = WorkerContracts.DEFAULT_GLOBAL_REFRESH_INTERVAL_HOURS,
     )
 
-    fun enqueueGlobalRefresh()
-
     fun enqueuePlaylistRefresh(providerId: String)
 
+    /** Schedules this playlist's own periodic auto-refresh at [intervalHours]. */
+    fun enqueuePlaylistPeriodic(providerId: String, intervalHours: Int)
+
+    /** Cancels this playlist's periodic auto-refresh (used when its interval is set to "off"). */
+    fun cancelPlaylistPeriodic(providerId: String)
+
     fun enqueueEpgRefresh(epgSourceId: String)
+
+    /** Schedules this EPG source's own periodic auto-refresh at [intervalHours]. */
+    fun enqueueEpgPeriodic(epgSourceId: String, intervalHours: Int)
+
+    /** Cancels this EPG source's periodic auto-refresh (used when its interval is set to "off"). */
+    fun cancelEpgPeriodic(epgSourceId: String)
 
     fun enqueueSeriesDetailsRefresh(providerId: String)
 
@@ -49,14 +59,6 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
-    override fun enqueueGlobalRefresh() {
-        workManager.enqueueUniqueWork(
-            WorkerContracts.GLOBAL_REFRESH_WORK,
-            ExistingWorkPolicy.KEEP,
-            RefreshWorkRequests.globalRefresh(),
-        )
-    }
-
     override fun enqueuePlaylistRefresh(providerId: String) {
         workManager.enqueueUniqueWork(
             WorkerContracts.uniquePlaylistRefreshWork(providerId),
@@ -65,12 +67,36 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
+    override fun enqueuePlaylistPeriodic(providerId: String, intervalHours: Int) {
+        workManager.enqueueUniquePeriodicWork(
+            WorkerContracts.uniquePlaylistPeriodicWork(providerId),
+            ExistingPeriodicWorkPolicy.UPDATE,
+            RefreshWorkRequests.periodicPlaylistRefresh(providerId, intervalHours),
+        )
+    }
+
+    override fun cancelPlaylistPeriodic(providerId: String) {
+        workManager.cancelUniqueWork(WorkerContracts.uniquePlaylistPeriodicWork(providerId))
+    }
+
     override fun enqueueEpgRefresh(epgSourceId: String) {
         workManager.enqueueUniqueWork(
             WorkerContracts.uniqueEpgRefreshWork(epgSourceId),
             ExistingWorkPolicy.KEEP,
             RefreshWorkRequests.epgRefresh(epgSourceId),
         )
+    }
+
+    override fun enqueueEpgPeriodic(epgSourceId: String, intervalHours: Int) {
+        workManager.enqueueUniquePeriodicWork(
+            WorkerContracts.uniqueEpgPeriodicWork(epgSourceId),
+            ExistingPeriodicWorkPolicy.UPDATE,
+            RefreshWorkRequests.periodicEpgRefresh(epgSourceId, intervalHours),
+        )
+    }
+
+    override fun cancelEpgPeriodic(epgSourceId: String) {
+        workManager.cancelUniqueWork(WorkerContracts.uniqueEpgPeriodicWork(epgSourceId))
     }
 
     override fun enqueueSeriesDetailsRefresh(providerId: String) {
@@ -101,9 +127,6 @@ class WorkManagerRefreshWorkScheduler(
 }
 
 internal object RefreshWorkRequests {
-    fun globalRefresh(): OneTimeWorkRequest =
-        networkOneTimeRequest<GlobalRefreshWorker>()
-
     fun periodicGlobalRefresh(repeatIntervalHours: Long): PeriodicWorkRequest {
         val safeInterval = repeatIntervalHours
             .coerceAtLeast(WorkerContracts.MIN_GLOBAL_REFRESH_INTERVAL_HOURS)
@@ -121,12 +144,30 @@ internal object RefreshWorkRequests {
                 .build(),
         )
 
+    fun periodicPlaylistRefresh(providerId: String, intervalHours: Int): PeriodicWorkRequest {
+        val safeInterval = intervalHours.toLong().coerceAtLeast(WorkerContracts.MIN_GLOBAL_REFRESH_INTERVAL_HOURS)
+        return PeriodicWorkRequestBuilder<PlaylistRefreshWorker>(safeInterval, TimeUnit.HOURS)
+            .setInputData(Data.Builder().putString(WorkerContracts.INPUT_PROVIDER_ID, providerId).build())
+            .setConstraints(networkConstraints())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
+            .build()
+    }
+
     fun epgRefresh(epgSourceId: String): OneTimeWorkRequest =
         networkOneTimeRequest<EpgRefreshWorker>(
             Data.Builder()
                 .putString(WorkerContracts.INPUT_EPG_SOURCE_ID, epgSourceId)
                 .build(),
         )
+
+    fun periodicEpgRefresh(epgSourceId: String, intervalHours: Int): PeriodicWorkRequest {
+        val safeInterval = intervalHours.toLong().coerceAtLeast(WorkerContracts.MIN_GLOBAL_REFRESH_INTERVAL_HOURS)
+        return PeriodicWorkRequestBuilder<EpgRefreshWorker>(safeInterval, TimeUnit.HOURS)
+            .setInputData(Data.Builder().putString(WorkerContracts.INPUT_EPG_SOURCE_ID, epgSourceId).build())
+            .setConstraints(networkConstraints())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
+            .build()
+    }
 
     fun seriesDetailsRefresh(providerId: String): OneTimeWorkRequest =
         networkOneTimeRequest<SeriesDetailsRefreshWorker>(

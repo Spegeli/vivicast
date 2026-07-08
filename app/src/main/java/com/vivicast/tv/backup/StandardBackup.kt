@@ -49,6 +49,7 @@ data class StandardBackupEpgSource(
     val name: String,
     val timeShiftMinutes: Int,
     val isActive: Boolean,
+    val refreshIntervalHours: Int = 0,
     val url: String? = null,
 )
 
@@ -201,7 +202,6 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
         .put("epg", JSONObject()
             .put("pastRetentionDays", epg.pastRetentionDays)
             .put("futureRetentionDays", epg.futureRetentionDays)
-            .put("refreshIntervalHours", epg.refreshIntervalHours)
             .put("refreshOnAppStartEnabled", epg.refreshOnAppStartEnabled)
             .put("refreshOnPlaylistChangeEnabled", epg.refreshOnPlaylistChangeEnabled))
         .put("backup", JSONObject()
@@ -232,6 +232,7 @@ private fun StandardBackupEpgSource.toJson(): JSONObject =
         .put("name", name)
         .put("timeShiftMinutes", timeShiftMinutes)
         .put("isActive", isActive)
+        .put("refreshIntervalHours", refreshIntervalHours)
         .put("url", url)
 
 private fun StandardBackupProviderEpgSource.toJson(): JSONObject =

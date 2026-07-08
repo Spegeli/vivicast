@@ -1,71 +1,14 @@
 package com.vivicast.tv.worker
 
 class GlobalRefreshOrchestrator(
-    private val playlistSource: PlaylistRefreshSource,
-    private val playlistRefresher: PlaylistRefresher,
-    private val epgSourceResolver: EpgSourceResolver,
-    private val epgRefresher: EpgRefresher,
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
     private val diagnostics: RefreshDiagnostics,
 ) {
+    // Playlists and EPG sources are refreshed by their own per-item periodic/one-time workers now, so the
+    // global periodic covers only logos + cache maintenance.
     suspend fun refresh(): RefreshReport {
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.RefreshStarted, "Global refresh started."))
-
-        val playlists = playlistSource.collectDuePlaylists()
-        val playlistOutcomes = playlists.map { target ->
-            runCatching { playlistRefresher.refresh(target) }
-                .fold(
-                    onSuccess = { outcome ->
-                        diagnostics.record(
-                            RefreshDiagnosticEvent(
-                                type = RefreshDiagnosticType.PlaylistRefreshSucceeded,
-                                message = "Playlist refreshed for provider ${target.providerId}.",
-                                metadata = mapOf("providerId" to target.providerId),
-                            ),
-                        )
-                        outcome
-                    },
-                    onFailure = { error ->
-                        diagnostics.record(
-                            RefreshDiagnosticEvent(
-                                type = RefreshDiagnosticType.PlaylistRefreshFailed,
-                                message = "Playlist refresh failed for provider ${target.providerId}: ${error.message.orEmpty()}",
-                                metadata = mapOf("providerId" to target.providerId),
-                            ),
-                        )
-                        PlaylistRefreshOutcome(providerId = target.providerId, success = false, epgSourceIds = emptyList())
-                    },
-                )
-        }
-
-        val epgSources = epgSourceResolver.collectRequiredSources(playlistOutcomes)
-            .distinctBy { it.epgSourceId }
-        val epgOutcomes = epgSources.map { source ->
-            runCatching { epgRefresher.refresh(source) }
-                .fold(
-                    onSuccess = { outcome ->
-                        diagnostics.record(
-                            RefreshDiagnosticEvent(
-                                type = RefreshDiagnosticType.EpgRefreshSucceeded,
-                                message = "EPG source refreshed: ${source.epgSourceId}.",
-                                metadata = mapOf("epgSourceId" to source.epgSourceId),
-                            ),
-                        )
-                        outcome
-                    },
-                    onFailure = { error ->
-                        diagnostics.record(
-                            RefreshDiagnosticEvent(
-                                type = RefreshDiagnosticType.EpgRefreshFailed,
-                                message = "EPG refresh failed for ${source.epgSourceId}: ${error.message.orEmpty()}",
-                                metadata = mapOf("epgSourceId" to source.epgSourceId),
-                            ),
-                        )
-                        EpgRefreshOutcome(epgSourceId = source.epgSourceId, success = false)
-                    },
-                )
-        }
 
         logoRefresher.refreshLogos()
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.LogoRefreshCompleted, "Logo refresh completed."))
@@ -74,15 +17,13 @@ class GlobalRefreshOrchestrator(
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.CacheCleanupCompleted, "Cache cleanup completed."))
 
         val report = RefreshReport(
-            playlistsCollected = playlists.size,
-            playlistsSucceeded = playlistOutcomes.count { it.success },
-            playlistsFailed = playlistOutcomes.count { !it.success },
-            epgSourcesCollected = epgSources.size,
-            epgSourcesSucceeded = epgOutcomes.count { it.success },
-            epgSourcesFailed = epgOutcomes.count { !it.success },
-            seriesDetailsProviderIds = playlistOutcomes
-                .filter { it.success && it.needsSeriesDetailsRefresh }
-                .map { it.providerId },
+            playlistsCollected = 0,
+            playlistsSucceeded = 0,
+            playlistsFailed = 0,
+            epgSourcesCollected = 0,
+            epgSourcesSucceeded = 0,
+            epgSourcesFailed = 0,
+            seriesDetailsProviderIds = emptyList(),
         )
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.RefreshCompleted, "Global refresh completed."))
         return report
@@ -98,7 +39,11 @@ interface PlaylistRefresher {
 }
 
 interface EpgSourceResolver {
-    suspend fun collectRequiredSources(playlistOutcomes: List<PlaylistRefreshOutcome>): List<EpgRefreshTarget>
+    /**
+     * Every active EPG source. EPG feeds carry their own value (and refresh independently of playlists),
+     * so a refresh covers all of them rather than only those whose linked playlist just refreshed.
+     */
+    suspend fun collectAllActiveSources(): List<EpgRefreshTarget>
 }
 
 interface EpgRefresher {

@@ -88,6 +88,8 @@ class RoomProviderRepository(
             logoPriority = DEFAULT_LOGO_PRIORITY,
             createdAt = now,
             updatedAt = now,
+            userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
+            refreshOnAppStartEnabled = request.refreshOnAppStartEnabled,
         )
         database.withTransaction {
             providerDao.upsertProvider(provider.toEntity())
@@ -116,6 +118,8 @@ class RoomProviderRepository(
             includeSeries = request.includeSeries,
             refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
             updatedAt = clock(),
+            userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
+            refreshOnAppStartEnabled = request.refreshOnAppStartEnabled,
         )
         database.withTransaction {
             providerDao.upsertProvider(updated.toEntity())
@@ -298,6 +302,8 @@ private fun ProviderEntity.toDomain(): Provider =
         updatedAt = updatedAt,
         xtreamExpiresAtMillis = xtreamExpiresAtMillis,
         xtreamMaxConnections = xtreamMaxConnections,
+        userAgent = userAgent,
+        refreshOnAppStartEnabled = refreshOnAppStartEnabled,
     )
 
 private fun Provider.toEntity(): ProviderEntity =
@@ -318,6 +324,8 @@ private fun Provider.toEntity(): ProviderEntity =
         updatedAt = updatedAt,
         xtreamExpiresAtMillis = xtreamExpiresAtMillis,
         xtreamMaxConnections = xtreamMaxConnections,
+        userAgent = userAgent,
+        refreshOnAppStartEnabled = refreshOnAppStartEnabled,
     )
 
 private val ProviderType.storageValue: String
@@ -381,5 +389,5 @@ private const val FIELD_XTREAM_SERVER_URL = "xtream_server_url"
 private const val FIELD_XTREAM_USERNAME = "xtream_username"
 private const val FIELD_XTREAM_PASSWORD = "xtream_password"
 private const val DEFAULT_LOGO_PRIORITY = "provider"
-private const val MIN_REFRESH_INTERVAL_HOURS = 1
+private const val MIN_REFRESH_INTERVAL_HOURS = 0
 private const val MAX_REFRESH_INTERVAL_HOURS = 168
