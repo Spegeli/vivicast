@@ -83,6 +83,33 @@ class RefreshExecutionTest {
     }
 
     @Test
+    fun playlistRefreshSkipsWhenAlreadyRunningInProcess() = runBlocking {
+        val provider = provider(type = ProviderType.M3u)
+        val guard = RefreshRunGuard()
+        // Simulate an in-flight refresh already holding the per-provider lock.
+        guard.tryEnter(provider.id)
+        val refresher = DefaultPlaylistRefresher(
+            providerRepository = FakeProviderRepository(
+                providers = listOf(provider),
+                credentials = mapOf(provider.id to ProviderCredentials.M3u(url = "https://x")),
+            ),
+            catalogImportRepository = FakeCatalogImportRepository(),
+            m3uParser = DefaultM3uParser(),
+            textFetcher = FakeTextFetcher(),
+            xtreamClient = EmptyXtreamClient,
+            xtreamParser = EmptyXtreamParser,
+            epgSourceReader = FakeEpgSourceReader(),
+            refreshRunGuard = guard,
+        )
+
+        val outcome = refresher.refresh(PlaylistRefreshTarget(provider.id))
+
+        // Skipped (not failed): the runner must map this to Success, not Retry.
+        assertEquals(false, outcome.success)
+        assertEquals(true, outcome.skipped)
+    }
+
+    @Test
     fun seriesDetailsRefresherImportsForActiveXtreamProvider() = runBlocking {
         val xtreamProvider = provider(id = "xtream", type = ProviderType.Xtream)
         val catalog = FakeCatalogImportRepository()

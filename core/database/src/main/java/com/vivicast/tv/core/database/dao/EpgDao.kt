@@ -51,12 +51,14 @@ interface EpgDao {
 
     @Query(
         """
-        SELECT * FROM epg_programs
-        WHERE providerId = :providerId
-            AND channelId = :channelId
-            AND endTime >= :fromMillis
-            AND startTime <= :toMillis
-        ORDER BY startTime
+        SELECT p.* FROM epg_programs p
+        INNER JOIN epg_sources s ON p.epgSourceId = s.id
+        WHERE p.providerId = :providerId
+            AND p.channelId = :channelId
+            AND p.endTime >= :fromMillis
+            AND p.startTime <= :toMillis
+            AND s.isActive = 1
+        ORDER BY p.startTime
         """,
     )
     fun observeProgramsForChannel(
@@ -120,6 +122,10 @@ interface EpgDao {
 
     @Query("UPDATE epg_sources SET isRefreshing = :refreshing WHERE id = :sourceId")
     suspend fun setEpgSourceRefreshing(sourceId: String, refreshing: Boolean)
+
+    // Recovery for a refresh cancelled/killed mid-run that left isRefreshing stuck at 1. Run once at startup.
+    @Query("UPDATE epg_sources SET isRefreshing = 0 WHERE isRefreshing = 1")
+    suspend fun clearStuckRefreshingState()
 
     @Upsert
     suspend fun upsertProviderEpgSources(sources: List<ProviderEpgSourceEntity>)

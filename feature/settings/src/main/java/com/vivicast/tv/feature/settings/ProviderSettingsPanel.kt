@@ -214,7 +214,9 @@ internal fun ProviderSettingsPanel(
             },
             onRefreshAll = {
                 scope.launch {
-                    if (providers.any { it.status == ProviderStatus.Refreshing }) return@launch
+                    // No "any refreshing → skip" guard: enqueuePlaylistRefresh uses KEEP, so a genuinely
+                    // in-flight provider coalesces (no-op) while a stuck/idle one still starts. A single
+                    // stuck-"Refreshing" provider must not block refreshing everything else.
                     val refreshableProviders = providers.filter { provider ->
                         provider.isActive &&
                             when (val credentials = onGetProviderCredentials(provider.id)) {

@@ -313,6 +313,16 @@ class AppContainer(
         RefreshWorkerRegistry.install(refreshWorkerRunner)
     }
 
+    /**
+     * Clears transient "refreshing" state that a cancelled/killed refresh left stuck (provider status
+     * REFRESHING, EPG source isRefreshing=1). Run once at app start so a stuck badge / status doesn't
+     * linger and block nothing.
+     */
+    suspend fun recoverStuckRefreshState() {
+        database.providerDao().clearStuckRefreshingStatus()
+        database.epgDao().clearStuckRefreshingState()
+    }
+
     fun updateGlobalUserAgent(userAgent: String) {
         userAgentPolicy.update(userAgent)
     }

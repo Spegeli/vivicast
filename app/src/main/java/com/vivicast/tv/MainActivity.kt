@@ -718,6 +718,8 @@ private fun VivicastApp(
         // Activity recreate (e.g. language change) does not re-trigger it — only a real relaunch does.
         if (!appContainer.appStartRefreshTriggered) {
             appContainer.appStartRefreshTriggered = true
+            // Clear any "refreshing" state a cancelled/killed refresh left stuck (else the badge lingers).
+            appContainer.recoverStuckRefreshState()
             val now = System.currentTimeMillis()
             val providers = appContainer.providerRepository.observeProviders().first()
             val epgSources = appContainer.epgSourceRepository.observeEpgSources().first()

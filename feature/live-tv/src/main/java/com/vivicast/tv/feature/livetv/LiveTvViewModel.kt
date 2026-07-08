@@ -72,8 +72,9 @@ internal class LiveTvViewModel(
             providerRepository.observeProviders().collect { all ->
                 providersRaw = all
                 val current = selectedProviderIdFlow.value
-                if (current == null || all.none { it.id == current }) {
-                    selectedProviderIdFlow.value = all.firstOrNull { it.isActive }?.id ?: all.firstOrNull()?.id
+                // Only active providers are browsable; re-pick if the selected one is gone or deactivated.
+                if (current == null || all.none { it.id == current && it.isActive }) {
+                    selectedProviderIdFlow.value = all.firstOrNull { it.isActive }?.id
                 }
                 rebuild()
             }
@@ -265,7 +266,8 @@ internal class LiveTvViewModel(
         val nextProgram = selectedPrograms.firstOrNull { it.startTime > now }
 
         _uiState.value = LiveTvUiState(
-            providers = providersRaw,
+            // Deactivated playlists are not browsable (refresh/WatchNext/resume already honor isActive).
+            providers = providersRaw.filter { it.isActive },
             selectedProviderId = providerId,
             categories = categories,
             selectedCategoryId = categoryId,

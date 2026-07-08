@@ -110,6 +110,27 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun deactivatingSourceHidesItsProgramsFromDisplayQuery() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = true)
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "epg-source-1", name = "Public EPG", sourceConfigKey = "secure:epg-source-1", timeShiftMinutes = 60, isActive = true),
+        )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
+        repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+        assertTrue(
+            repository.observeProgramsForChannel(PROVIDER_ID, "channel-ard", 0L, Long.MAX_VALUE).first().isNotEmpty(),
+        )
+
+        // Deactivate the source -> its already-imported programs must disappear from the display query.
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "epg-source-1", name = "Public EPG", sourceConfigKey = "secure:epg-source-1", timeShiftMinutes = 60, isActive = false),
+        )
+        assertTrue(
+            repository.observeProgramsForChannel(PROVIDER_ID, "channel-ard", 0L, Long.MAX_VALUE).first().isEmpty(),
+        )
+    }
+
+    @Test
     fun importXmltvKeepsProgramsForOtherProvidersUsingSameSource() = runBlocking {
         seedLiveChannel(providerId = PROVIDER_ID, channelId = "provider-1-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
         seedLiveChannel(providerId = OTHER_PROVIDER_ID, channelId = "provider-2-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
@@ -129,6 +150,25 @@ class RoomEpgRepositoryTest {
         assertEquals(1, countPrograms(PROVIDER_ID, "shared-source"))
         assertEquals(1, countPrograms(OTHER_PROVIDER_ID, "shared-source"))
         assertEquals(1, result.programsImported)
+    }
+
+    @Test
+    fun saveEpgSourceRejectsDuplicateNameButAllowsEditingSelf() = runBlocking {
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "s1", name = "News EPG", sourceConfigKey = "secure:s1", timeShiftMinutes = 0, isActive = true),
+        )
+        // Different source, same name (case-insensitive) -> rejected.
+        val duplicate = runCatching {
+            repository.saveEpgSource(
+                EpgSourceSaveRequest(sourceId = "s2", name = "news epg", sourceConfigKey = "secure:s2", timeShiftMinutes = 0, isActive = true),
+            )
+        }
+        assertTrue(duplicate.exceptionOrNull() is IllegalArgumentException)
+        // Re-saving the same source with its own name still works (edit path).
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "s1", name = "News EPG", sourceConfigKey = "secure:s1", timeShiftMinutes = 0, isActive = true),
+        )
+        assertEquals(1, countTable("epg_sources"))
     }
 
     @Test

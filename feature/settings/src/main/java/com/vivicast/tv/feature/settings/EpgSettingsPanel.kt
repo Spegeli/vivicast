@@ -431,16 +431,12 @@ internal fun EpgSettingsPanel(
                             help = stringResource(R.string.settings_epg_help_run_now),
                             value = stringResource(R.string.settings_epg_now_value),
                             onClick = {
-                                // Mirror "Refresh all playlists": enqueue a scoped per-source EPG refresh
-                                // for each active source (fast, shows the source's Refreshing badge) rather
-                                // than the monolithic global refresh, which — being one long-running unique
-                                // work — silently swallows repeat clicks under WorkManager's KEEP policy.
-                                // No-op while any is already refreshing so the button can't re-trigger.
-                                val activeSources = sources.filter { it.isActive }
-                                if (activeSources.none { it.isRefreshing }) {
-                                    activeSources.forEach { onRefreshEpgSource(it.id) }
-                                    message = strEpgScheduled
-                                }
+                                // Enqueue a scoped per-source EPG refresh for each active source. No
+                                // "any refreshing → skip" guard: enqueueEpgRefresh uses KEEP, so an
+                                // in-flight source coalesces while a stuck/idle one still starts — one
+                                // stuck-"Refreshing" source must not block refreshing everything else.
+                                sources.filter { it.isActive }.forEach { onRefreshEpgSource(it.id) }
+                                message = strEpgScheduled
                             },
                         )
                     }

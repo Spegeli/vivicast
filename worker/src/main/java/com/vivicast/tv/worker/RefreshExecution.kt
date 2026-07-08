@@ -82,7 +82,13 @@ class DefaultRefreshWorkerRunner(
                             outcome.epgSourceIds.forEach { scheduler.enqueueEpgRefresh(it) }
                         }
                     }
-                    if (outcome.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry
+                    when {
+                        outcome.success -> RefreshWorkerResult.Success
+                        // Skipped (already refreshing in-process): the in-flight run covers it — a Retry
+                        // would just re-fetch the whole playlist a few seconds later.
+                        outcome.skipped -> RefreshWorkerResult.Success
+                        else -> RefreshWorkerResult.Retry
+                    }
                 },
                 onFailure = { RefreshWorkerResult.Retry },
             )
@@ -102,7 +108,13 @@ class DefaultRefreshWorkerRunner(
             ?: return RefreshWorkerResult.Failure
         return runCancellableCatching { epgRefresher.refresh(target) }
             .fold(
-                onSuccess = { if (it.success) RefreshWorkerResult.Success else RefreshWorkerResult.Retry },
+                onSuccess = {
+                    when {
+                        it.success -> RefreshWorkerResult.Success
+                        it.skipped -> RefreshWorkerResult.Success
+                        else -> RefreshWorkerResult.Retry
+                    }
+                },
                 onFailure = { RefreshWorkerResult.Retry },
             )
     }
@@ -152,7 +164,7 @@ class DefaultPlaylistRefresher(
             return PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList())
         }
         if (!refreshRunGuard.tryEnter(provider.id)) {
-            return PlaylistRefreshOutcome(provider.id, success = false, epgSourceIds = emptyList())
+            return PlaylistRefreshOutcome(provider.id, success = false, epgSourceIds = emptyList(), skipped = true)
         }
 
         try {
@@ -343,7 +355,7 @@ class DefaultEpgRefresher(
         val source = epgSourceReader.getActiveSource(target.epgSourceId)
             ?: return EpgRefreshOutcome(target.epgSourceId, success = false)
         if (!refreshRunGuard.tryEnter(source.id)) {
-            return EpgRefreshOutcome(target.epgSourceId, success = false)
+            return EpgRefreshOutcome(target.epgSourceId, success = false, skipped = true)
         }
 
         try {

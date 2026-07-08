@@ -196,11 +196,25 @@ class LiveTvViewModelTest {
         assertEquals(PROVIDER, vm.uiState.value.selectedProviderId)
         scope.cancel()
     }
+
+    @Test
+    fun inactiveProviders_areExcludedFromList() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val active = provider(id = "active", isActive = true)
+        val inactive = provider(id = "inactive", isActive = false)
+        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(inactive, active)), media = mediaWithChannels())
+
+        val ids = vm.uiState.value.providers.map { it.id }
+        assertEquals(listOf("active"), ids)
+        assertEquals("active", vm.uiState.value.selectedProviderId)
+        scope.cancel()
+    }
 }
 
-private fun provider(id: String = PROVIDER) = Provider(
+private fun provider(id: String = PROVIDER, isActive: Boolean = true) = Provider(
     id = id, name = "Provider", type = ProviderType.Xtream, sourceConfigKey = "key",
-    isActive = true, status = ProviderStatus.Active, includeLiveTv = true, includeMovies = false,
+    isActive = isActive, status = if (isActive) ProviderStatus.Active else ProviderStatus.Disabled,
+    includeLiveTv = true, includeMovies = false,
     includeSeries = false, refreshIntervalHours = 12, logoPriority = "provider", createdAt = 1L, updatedAt = 1L,
 )
 

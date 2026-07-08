@@ -76,6 +76,10 @@ data class PlaylistRefreshOutcome(
     val success: Boolean,
     val epgSourceIds: List<String>,
     val needsSeriesDetailsRefresh: Boolean = false,
+    // True when this run was skipped because the same provider is already refreshing in-process. Distinct
+    // from a failure: the caller must NOT retry (the in-flight run covers it), else the whole playlist is
+    // re-fetched/re-imported a few seconds later.
+    val skipped: Boolean = false,
 )
 
 data class EpgRefreshTarget(
@@ -85,6 +89,8 @@ data class EpgRefreshTarget(
 data class EpgRefreshOutcome(
     val epgSourceId: String,
     val success: Boolean,
+    // See PlaylistRefreshOutcome.skipped — already refreshing in-process, do not retry.
+    val skipped: Boolean = false,
 )
 
 data class RefreshReport(

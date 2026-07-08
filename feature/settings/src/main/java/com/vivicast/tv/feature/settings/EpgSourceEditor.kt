@@ -394,7 +394,9 @@ internal data class EpgSourceEditorState(
 
     fun validationMessage(msgNameMissing: String, msgUrlMissing: String): String? {
         if (name.isBlank()) return msgNameMissing
-        if (!isEditing && url.isBlank()) return msgUrlMissing
+        // URL is required in both add and edit (edit pre-fills the stored URL; clearing it blocks save),
+        // consistent with the Save-button pre-check. Intentionally stricter than the M3U editor (D2).
+        if (url.isBlank()) return msgUrlMissing
         return null
     }
 

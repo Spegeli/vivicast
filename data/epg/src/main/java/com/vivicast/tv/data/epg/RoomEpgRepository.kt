@@ -131,6 +131,11 @@ class RoomEpgRepository(
         val now = clock()
         val existing = request.sourceId?.let { epgDao.getEpgSource(it) }
         val sourceId = existing?.id ?: request.sourceId ?: UUID.randomUUID().toString()
+        // Repo-level uniqueness backstop (the editor already checks, but a race / non-editor caller must
+        // not persist duplicate names — mirrors RoomProviderRepository).
+        require(epgDao.getEpgSources().none { it.id != sourceId && it.name.trim().equals(name, ignoreCase = true) }) {
+            "EPG source name must be unique."
+        }
         val source = EpgSourceEntity(
             id = sourceId,
             stableKey = existing?.stableKey ?: sourceId,
