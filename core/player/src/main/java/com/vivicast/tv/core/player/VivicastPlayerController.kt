@@ -120,6 +120,7 @@ data class VivicastPlayerState(
     val subtitleOption: PlaybackSubtitleOption = PlaybackSubtitleOption.Off,
     val aspectRatioMode: PlaybackAspectRatioMode = PlaybackAspectRatioMode.Fit,
     val isReconnecting: Boolean = false,
+    val videoFrameRate: Float = 0f,
     val error: PlaybackError? = null,
 ) {
     val isTimeshiftEnabled: Boolean
@@ -411,7 +412,7 @@ class DefaultVivicastPlayerController(
                 if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) {
                     return@launch
                 }
-                mutableState.value = if (current.isTimeshiftEnabled) {
+                val progressed = if (current.isTimeshiftEnabled) {
                     timeshiftProgressState(current, elapsedMillis)
                 } else {
                     current.copy(
@@ -419,6 +420,8 @@ class DefaultVivicastPlayerController(
                         durationMillis = engine.durationMillis,
                     )
                 }
+                // Frame rate becomes known shortly after tracks load; picked up on the next poll for AFR.
+                mutableState.value = progressed.copy(videoFrameRate = engine.videoFrameRate)
             }
         }
     }
@@ -536,6 +539,10 @@ interface PlaybackEngine {
 
     val durationMillis: Long
 
+    /** Source content frame rate (fps), 0 if unknown — used for auto frame-rate matching. */
+    val videoFrameRate: Float
+        get() = 0f
+
     suspend fun start(request: PlaybackRequest)
 
     fun pause()
@@ -630,6 +637,9 @@ class Media3PlaybackEngine(
 
     override val durationMillis: Long
         get() = player.duration.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
+
+    override val videoFrameRate: Float
+        get() = player.videoFormat?.frameRate?.takeIf { it > 0f } ?: 0f
 
     override suspend fun start(request: PlaybackRequest) {
         val gate = startGate.arm()

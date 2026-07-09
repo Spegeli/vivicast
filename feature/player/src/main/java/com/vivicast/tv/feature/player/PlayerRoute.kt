@@ -1,5 +1,7 @@
 package com.vivicast.tv.feature.player
 
+import android.os.Build
+import android.view.Surface
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -65,6 +67,7 @@ fun PlayerRoute(
     onBeforeStop: (VivicastPlayerState?) -> Unit = {},
     autoNextEnabled: Boolean = false,
     autoNextCountdownSeconds: Int = 10,
+    afrEnabled: Boolean = false,
     nextEpisodeTitle: String? = null,
     onPlayNextEpisode: () -> Unit = {},
     onAutoNextBack: () -> Unit = {},
@@ -253,6 +256,23 @@ fun PlayerRoute(
         DisposableEffect(playerController, videoSurfaceView) {
             playerController?.attachVideoSurface(videoSurfaceView)
             onDispose { playerController?.detachVideoSurface() }
+        }
+
+        // Auto frame-rate: match the display refresh to the content fps. Seamless-only + API 31+ so a
+        // non-seamless HDMI re-handshake never blacks out the persistent SurfaceView. Off → left untouched.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val frameRate = controllerState?.videoFrameRate ?: 0f
+            LaunchedEffect(afrEnabled, frameRate, videoSurfaceView) {
+                if (afrEnabled && frameRate > 0f) {
+                    runCatching {
+                        videoSurfaceView.holder.surface.setFrameRate(
+                            frameRate,
+                            Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                            Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS,
+                        )
+                    }
+                }
+            }
         }
 
         if (overlayVisible) {

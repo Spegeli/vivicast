@@ -1295,6 +1295,7 @@ private fun VivicastApp(
             },
             autoNextEnabled = preferences.playback.autoNextEnabled,
             autoNextCountdownSeconds = preferences.playback.autoNextCountdownSeconds,
+            afrEnabled = preferences.playback.afrEnabled,
             nextEpisodeTitle = nextAutoNextEpisode?.name,
             onPlayNextEpisode = ::playNextAutoNextEpisode,
             onAutoNextBack = {
