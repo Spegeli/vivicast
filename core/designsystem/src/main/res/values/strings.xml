@@ -458,6 +458,7 @@
     <!-- Settings - Playback help texts -->
     <string name="settings_help_next_stream">Wird beim nächsten Stream-Start angewendet.</string>
     <string name="settings_help_afr">Passt die Ausgabe an die Wiedergabe an, wenn das Gerät es unterstützt.</string>
+    <string name="settings_help_afr_unsupported">Wird von diesem Gerät oder dieser Android-Version nicht unterstützt.</string>
     <string name="settings_help_external_player">Gilt nur für Filme und einzelne Episoden. Live-TV und Catch-Up bleiben intern.</string>
     <string name="settings_help_timeshift">Erlaubt zeitversetztes Live-TV, sofern Sender und Stream es unterstützen.</string>
     <string name="settings_help_timeshift_buffer">Begrenzt den aktiven Timeshift-Puffer.</string>

@@ -1,5 +1,6 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -96,65 +97,22 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+private enum class PlaybackPicker {
+    Buffer, AudioDecoder, VideoDecoder, ExternalPlayer, TimeshiftMinutes, TimeshiftStorage,
+    AudioLanguage, SubtitleLanguage, Countdown,
+}
+
 @Composable
 fun PlaybackSettingsPanel(
     state: PlaybackSettingsState = PlaybackSettingsState(),
     onPlaybackPreferencesChanged: (PlaybackSettingsState) -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val cycleBufferSize = {
-        onPlaybackPreferencesChanged(state.copy(bufferSize = state.bufferSize.nextBufferSize()))
-    }
-    val cycleAudioDecoder = {
-        onPlaybackPreferencesChanged(state.copy(audioDecoder = state.audioDecoder.nextDecoderMode()))
-    }
-    val cycleVideoDecoder = {
-        onPlaybackPreferencesChanged(state.copy(videoDecoder = state.videoDecoder.nextDecoderMode()))
-    }
-    val toggleAfr = {
-        onPlaybackPreferencesChanged(state.copy(afrEnabled = !state.afrEnabled))
-    }
-    val cycleAudioLanguage = {
-        onPlaybackPreferencesChanged(state.copy(preferredAudioLanguage = state.preferredAudioLanguage.nextAudioLanguage()))
-    }
-    val cycleSubtitleLanguage = {
-        onPlaybackPreferencesChanged(
-            state.copy(preferredSubtitleLanguage = state.preferredSubtitleLanguage.nextSubtitleLanguage()),
-        )
-    }
-    val toggleAudioPassthrough = {
-        onPlaybackPreferencesChanged(state.copy(audioPassthroughEnabled = !state.audioPassthroughEnabled))
-    }
-    val cycleExternalPlayer = {
-        onPlaybackPreferencesChanged(state.copy(externalPlayer = state.externalPlayer.nextExternalPlayerPreference()))
-    }
-    val toggleTimeshift = {
-        onPlaybackPreferencesChanged(state.copy(timeshiftEnabled = !state.timeshiftEnabled))
-    }
-    val cycleTimeshiftMinutes = {
-        if (state.timeshiftEnabled) {
-            onPlaybackPreferencesChanged(state.copy(timeshiftMinutes = state.timeshiftMinutes.nextTimeshiftMinutes()))
-        }
-    }
-    val cycleTimeshiftStorage = {
-        if (state.timeshiftEnabled) {
-            onPlaybackPreferencesChanged(state.copy(timeshiftStorage = state.timeshiftStorage.nextTimeshiftStorage()))
-        }
-    }
-    val toggleAutoNext = {
-        onPlaybackPreferencesChanged(state.copy(autoNextEnabled = !state.autoNextEnabled))
-    }
-    val cycleCountdown = {
-        if (state.autoNextEnabled) {
-            onPlaybackPreferencesChanged(
-                state.copy(autoNextCountdownSeconds = state.autoNextCountdownSeconds.nextAutoNextCountdown()),
-            )
-        }
-    }
+    var openPicker by remember { mutableStateOf<PlaybackPicker?>(null) }
+    // AFR needs the seamless setFrameRate overload (API 31+); older systems can't switch → row disabled.
+    val afrSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_buffer_size),
@@ -162,144 +120,207 @@ fun PlaybackSettingsPanel(
                 value = state.bufferSize.label(),
                 modifier = firstFocusModifier,
                 icon = { SettingsRowIcon("buffer") },
-                onClick = cycleBufferSize,
+                onClick = { openPicker = PlaybackPicker.Buffer },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_audio_decoder),
                 help = stringResource(R.string.settings_help_next_stream),
                 value = state.audioDecoder.label(),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("speaker") },
-                onClick = cycleAudioDecoder,
+                onClick = { openPicker = PlaybackPicker.AudioDecoder },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_video_decoder),
                 help = stringResource(R.string.settings_help_next_stream),
                 value = state.videoDecoder.label(),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("film") },
-                onClick = cycleVideoDecoder,
+                onClick = { openPicker = PlaybackPicker.VideoDecoder },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_afr),
-                help = stringResource(R.string.settings_help_afr),
+                help = if (afrSupported) stringResource(R.string.settings_help_afr) else stringResource(R.string.settings_help_afr_unsupported),
                 value = if (state.afrEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
+                enabled = afrSupported,
                 icon = { SettingsRowIcon("display") },
-                onClick = toggleAfr,
+                onClick = { onPlaybackPreferencesChanged(state.copy(afrEnabled = !state.afrEnabled)) },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_external_player),
                 help = stringResource(R.string.settings_help_external_player),
                 value = state.externalPlayer.label(),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("external") },
-                onClick = cycleExternalPlayer,
+                onClick = { openPicker = PlaybackPicker.ExternalPlayer },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_timeshift),
                 help = stringResource(R.string.settings_help_timeshift),
                 value = if (state.timeshiftEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("timeshift") },
-                onClick = toggleTimeshift,
+                onClick = { onPlaybackPreferencesChanged(state.copy(timeshiftEnabled = !state.timeshiftEnabled)) },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_timeshift_max_duration),
                 help = if (state.timeshiftEnabled) stringResource(R.string.settings_help_timeshift_buffer) else stringResource(R.string.settings_help_disabled_note),
                 value = stringResource(R.string.common_minutes, state.timeshiftMinutes.validTimeshiftMinutes()),
-                modifier = if (state.timeshiftEnabled) Modifier else Modifier,
                 enabled = state.timeshiftEnabled,
                 icon = { SettingsRowIcon("clock") },
-                onClick = cycleTimeshiftMinutes,
+                onClick = { openPicker = PlaybackPicker.TimeshiftMinutes },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_timeshift_storage),
                 help = if (state.timeshiftEnabled) stringResource(R.string.settings_help_timeshift_storage) else stringResource(R.string.settings_help_disabled_note),
                 value = state.timeshiftStorage.label(),
-                modifier = if (state.timeshiftEnabled) Modifier else Modifier,
                 enabled = state.timeshiftEnabled,
                 icon = { SettingsRowIcon("storage") },
-                onClick = cycleTimeshiftStorage,
+                onClick = { openPicker = PlaybackPicker.TimeshiftStorage },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_audio_language),
                 help = stringResource(R.string.settings_help_audio_lang),
                 value = state.preferredAudioLanguage.label(),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("microphone") },
-                onClick = cycleAudioLanguage,
+                onClick = { openPicker = PlaybackPicker.AudioLanguage },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_subtitle_language),
                 help = stringResource(R.string.settings_help_subtitle_lang),
                 value = state.preferredSubtitleLanguage.label(),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("subtitles") },
-                onClick = cycleSubtitleLanguage,
+                onClick = { openPicker = PlaybackPicker.SubtitleLanguage },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_auto_next),
                 help = stringResource(R.string.settings_help_auto_next),
                 value = if (state.autoNextEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("skip_forward") },
-                onClick = toggleAutoNext,
+                onClick = { onPlaybackPreferencesChanged(state.copy(autoNextEnabled = !state.autoNextEnabled)) },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_auto_next_countdown),
                 help = if (state.autoNextEnabled) stringResource(R.string.settings_help_auto_next_countdown) else stringResource(R.string.settings_help_autonext_note),
                 value = stringResource(R.string.common_seconds, state.autoNextCountdownSeconds.validAutoNextCountdown()),
-                modifier = if (state.autoNextEnabled) Modifier else Modifier,
                 enabled = state.autoNextEnabled,
                 icon = { SettingsRowIcon("timer") },
-                onClick = cycleCountdown,
+                onClick = { openPicker = PlaybackPicker.Countdown },
             )
         }
-
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_audio_passthrough),
                 help = stringResource(R.string.settings_help_passthrough),
                 value = if (state.audioPassthroughEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
                 icon = { SettingsRowIcon("passthrough") },
-                onClick = toggleAudioPassthrough,
+                onClick = { onPlaybackPreferencesChanged(state.copy(audioPassthroughEnabled = !state.audioPassthroughEnabled)) },
             )
         }
+    }
+
+    PlaybackSettingsDialogs(openPicker, state, onPlaybackPreferencesChanged) { openPicker = null }
+}
+
+@Composable
+private fun PlaybackSettingsDialogs(
+    openPicker: PlaybackPicker?,
+    state: PlaybackSettingsState,
+    onChange: (PlaybackSettingsState) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    when (openPicker) {
+        PlaybackPicker.Buffer -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_buffer_size),
+            options = PlaybackBufferSizeMode.entries,
+            selected = state.bufferSize,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(bufferSize = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.AudioDecoder -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_audio_decoder),
+            options = PlaybackDecoderMode.entries,
+            selected = state.audioDecoder,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(audioDecoder = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.VideoDecoder -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_video_decoder),
+            options = PlaybackDecoderMode.entries,
+            selected = state.videoDecoder,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(videoDecoder = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.ExternalPlayer -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_external_player),
+            options = PlaybackExternalPlayerMode.entries,
+            selected = state.externalPlayer,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(externalPlayer = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.TimeshiftMinutes -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_timeshift_max_duration),
+            options = listOf(15, 30, 60, 120),
+            selected = state.timeshiftMinutes.validTimeshiftMinutes(),
+            label = { stringResource(R.string.common_minutes, it) },
+            onSelect = { onChange(state.copy(timeshiftMinutes = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.TimeshiftStorage -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_timeshift_storage),
+            options = PlaybackTimeshiftStorageMode.entries,
+            selected = state.timeshiftStorage,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(timeshiftStorage = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.AudioLanguage -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_audio_language),
+            options = PlaybackAudioLanguage.entries,
+            selected = state.preferredAudioLanguage,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(preferredAudioLanguage = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.SubtitleLanguage -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_subtitle_language),
+            options = PlaybackSubtitleLanguage.entries,
+            selected = state.preferredSubtitleLanguage,
+            label = { it.label() },
+            onSelect = { onChange(state.copy(preferredSubtitleLanguage = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        PlaybackPicker.Countdown -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_auto_next_countdown),
+            options = listOf(5, 10, 15, 30),
+            selected = state.autoNextCountdownSeconds.validAutoNextCountdown(),
+            label = { stringResource(R.string.common_seconds, it) },
+            onSelect = { onChange(state.copy(autoNextCountdownSeconds = it)); onDismiss() },
+            onDismiss = onDismiss,
+        )
+        null -> Unit
     }
 }
 
@@ -309,26 +330,10 @@ private fun Int.validAutoNextCountdown(): Int =
         else -> 10
     }
 
-private fun Int.nextAutoNextCountdown(): Int =
-    when (validAutoNextCountdown()) {
-        5 -> 10
-        10 -> 15
-        15 -> 30
-        else -> 5
-    }
-
 private fun Int.validTimeshiftMinutes(): Int =
     when (this) {
         15, 30, 60, 120 -> this
         else -> 30
-    }
-
-private fun Int.nextTimeshiftMinutes(): Int =
-    when (validTimeshiftMinutes()) {
-        15 -> 30
-        30 -> 60
-        60 -> 120
-        else -> 15
     }
 
 @Composable
@@ -340,26 +345,11 @@ private fun PlaybackBufferSizeMode.label(): String = when (this) {
     PlaybackBufferSizeMode.ExtraLarge -> stringResource(R.string.size_very_large)
 }
 
-private fun PlaybackBufferSizeMode.nextBufferSize(): PlaybackBufferSizeMode =
-    when (this) {
-        PlaybackBufferSizeMode.Off -> PlaybackBufferSizeMode.Small
-        PlaybackBufferSizeMode.Small -> PlaybackBufferSizeMode.Medium
-        PlaybackBufferSizeMode.Medium -> PlaybackBufferSizeMode.Large
-        PlaybackBufferSizeMode.Large -> PlaybackBufferSizeMode.ExtraLarge
-        PlaybackBufferSizeMode.ExtraLarge -> PlaybackBufferSizeMode.Off
-    }
-
 @Composable
 private fun PlaybackDecoderMode.label(): String = when (this) {
     PlaybackDecoderMode.Hardware -> stringResource(R.string.decoder_hardware)
     PlaybackDecoderMode.Software -> stringResource(R.string.decoder_software)
 }
-
-private fun PlaybackDecoderMode.nextDecoderMode(): PlaybackDecoderMode =
-    when (this) {
-        PlaybackDecoderMode.Hardware -> PlaybackDecoderMode.Software
-        PlaybackDecoderMode.Software -> PlaybackDecoderMode.Hardware
-    }
 
 @Composable
 private fun PlaybackAudioLanguage.label(): String = when (this) {
@@ -369,14 +359,6 @@ private fun PlaybackAudioLanguage.label(): String = when (this) {
     PlaybackAudioLanguage.Original -> stringResource(R.string.audio_original)
 }
 
-private fun PlaybackAudioLanguage.nextAudioLanguage(): PlaybackAudioLanguage =
-    when (this) {
-        PlaybackAudioLanguage.SystemDefault -> PlaybackAudioLanguage.German
-        PlaybackAudioLanguage.German -> PlaybackAudioLanguage.English
-        PlaybackAudioLanguage.English -> PlaybackAudioLanguage.Original
-        PlaybackAudioLanguage.Original -> PlaybackAudioLanguage.SystemDefault
-    }
-
 @Composable
 private fun PlaybackSubtitleLanguage.label(): String = when (this) {
     PlaybackSubtitleLanguage.Off -> stringResource(R.string.value_off)
@@ -385,14 +367,6 @@ private fun PlaybackSubtitleLanguage.label(): String = when (this) {
     PlaybackSubtitleLanguage.English -> stringResource(R.string.language_english)
 }
 
-private fun PlaybackSubtitleLanguage.nextSubtitleLanguage(): PlaybackSubtitleLanguage =
-    when (this) {
-        PlaybackSubtitleLanguage.Off -> PlaybackSubtitleLanguage.SystemDefault
-        PlaybackSubtitleLanguage.SystemDefault -> PlaybackSubtitleLanguage.German
-        PlaybackSubtitleLanguage.German -> PlaybackSubtitleLanguage.English
-        PlaybackSubtitleLanguage.English -> PlaybackSubtitleLanguage.Off
-    }
-
 @Composable
 private fun PlaybackExternalPlayerMode.label(): String = when (this) {
     PlaybackExternalPlayerMode.Internal -> stringResource(R.string.player_internal)
@@ -400,24 +374,10 @@ private fun PlaybackExternalPlayerMode.label(): String = when (this) {
     PlaybackExternalPlayerMode.AskEveryTime -> stringResource(R.string.player_ask)
 }
 
-private fun PlaybackExternalPlayerMode.nextExternalPlayerPreference(): PlaybackExternalPlayerMode =
-    when (this) {
-        PlaybackExternalPlayerMode.Internal -> PlaybackExternalPlayerMode.External
-        PlaybackExternalPlayerMode.External -> PlaybackExternalPlayerMode.AskEveryTime
-        PlaybackExternalPlayerMode.AskEveryTime -> PlaybackExternalPlayerMode.Internal
-    }
-
 @Composable
 private fun PlaybackTimeshiftStorageMode.label(): String = when (this) {
     PlaybackTimeshiftStorageMode.Automatic -> stringResource(R.string.storage_auto)
     PlaybackTimeshiftStorageMode.Ram -> "RAM"
     PlaybackTimeshiftStorageMode.InternalStorage -> stringResource(R.string.storage_internal)
 }
-
-private fun PlaybackTimeshiftStorageMode.nextTimeshiftStorage(): PlaybackTimeshiftStorageMode =
-    when (this) {
-        PlaybackTimeshiftStorageMode.Automatic -> PlaybackTimeshiftStorageMode.Ram
-        PlaybackTimeshiftStorageMode.Ram -> PlaybackTimeshiftStorageMode.InternalStorage
-        PlaybackTimeshiftStorageMode.InternalStorage -> PlaybackTimeshiftStorageMode.Automatic
-    }
 

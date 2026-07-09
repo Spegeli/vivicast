@@ -104,13 +104,19 @@ class SettingsGeneralPanelTest {
         compose.onNodeWithText("Audio-Decoder").assertIsDisplayed()
         compose.onNodeWithText("Video-Decoder").assertIsDisplayed()
         compose.onNodeWithText("Automatische Bildwiederholrate").assertIsDisplayed()
-        compose.onNodeWithText("Puffergröße").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals(PlaybackBufferSizeMode.Large, submitted.bufferSize)
 
-        compose.onNodeWithText("Audio-Decoder").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals(PlaybackDecoderMode.Software, submitted.audioDecoder)
-
+        // AFR stays a toggle (API 31+ emulator supports it).
         compose.onNodeWithText("Automatische Bildwiederholrate").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(true, submitted.afrEnabled)
+
+        // Enum rows now open a single-choice popup instead of cycling: pick "Groß" -> Large.
+        compose.onNodeWithText("Puffergröße").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Groß").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(PlaybackBufferSizeMode.Large, submitted.bufferSize)
+
+        // Audio decoder popup: pick "Software".
+        compose.onNodeWithText("Audio-Decoder").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Software").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(PlaybackDecoderMode.Software, submitted.audioDecoder)
     }
 }
