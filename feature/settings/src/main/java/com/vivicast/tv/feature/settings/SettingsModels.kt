@@ -4,6 +4,7 @@ data class GeneralSettingsState(
     val launchOnBoot: Boolean = false,
     val doubleBackToExit: Boolean = true,
     val backgroundRefreshEnabled: Boolean = true,
+    val resumeLastChannelOnStart: Boolean = false,
     val appLanguage: SettingsLanguage = SettingsLanguage.System,
     val globalUserAgent: String = "Vivicast/1.0",
 )

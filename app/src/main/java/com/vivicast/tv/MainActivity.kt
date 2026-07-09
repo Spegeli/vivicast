@@ -699,7 +699,23 @@ private fun VivicastApp(
             selectRoute(ROUTE_SETTINGS)
         } else {
             selectRoute(ROUTE_HOME)
-            topNavigationFocusRequester.requestFocus()
+            // "Resume last watched channel on startup": open the last channel over Home when the option
+            // is on, history is on, and it still resolves + its endpoint probes reachable (dead/removed
+            // → null → stay on Home, no error flash). The reachability probe runs off the main thread;
+            // Home is already visible meanwhile. Refresh keeps running in parallel — playback needs no
+            // fresh catalog.
+            val resumeChannel = if (
+                currentPreferences.general.resumeLastChannelOnStart && currentPreferences.history.enabled
+            ) {
+                appContainer.resolveResumableLastChannel()
+            } else {
+                null
+            }
+            if (resumeChannel != null) {
+                openChannel(resumeChannel)
+            } else {
+                topNavigationFocusRequester.requestFocus()
+            }
         }
     }
 

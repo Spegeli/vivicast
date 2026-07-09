@@ -28,6 +28,7 @@ class DataStoreUserPreferencesStore(
                     launchOnBoot = preferences[Keys.LaunchOnBoot] ?: false,
                     doubleBackToExit = preferences[Keys.DoubleBackToExit] ?: true,
                     backgroundRefreshEnabled = preferences[Keys.BackgroundRefreshEnabled] ?: true,
+                    resumeLastChannelOnStart = preferences[Keys.ResumeLastChannelOnStart] ?: false,
                     globalUserAgent = preferences[Keys.GlobalUserAgent]?.takeIf { it.isNotBlank() }
                         ?: DEFAULT_GLOBAL_USER_AGENT,
                     lastSettingsSection = preferences[Keys.LastSettingsSection],
@@ -107,6 +108,7 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.LaunchOnBoot] = general.launchOnBoot
             preferences[Keys.DoubleBackToExit] = general.doubleBackToExit
             preferences[Keys.BackgroundRefreshEnabled] = general.backgroundRefreshEnabled
+            preferences[Keys.ResumeLastChannelOnStart] = general.resumeLastChannelOnStart
             preferences[Keys.GlobalUserAgent] = general.globalUserAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
             preferences.setNullable(Keys.LastSettingsSection, general.lastSettingsSection)
         }
@@ -216,6 +218,7 @@ class DataStoreUserPreferencesStore(
         val LaunchOnBoot = booleanPreferencesKey("launch_on_boot")
         val DoubleBackToExit = booleanPreferencesKey("double_back_to_exit")
         val BackgroundRefreshEnabled = booleanPreferencesKey("background_refresh_enabled")
+        val ResumeLastChannelOnStart = booleanPreferencesKey("resume_last_channel_on_start")
         val GlobalUserAgent = stringPreferencesKey("global_user_agent")
         val LastSettingsSection = stringPreferencesKey("last_settings_section")
 

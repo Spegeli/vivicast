@@ -14,6 +14,7 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.Locale
 
@@ -475,6 +477,38 @@ class DefaultVivicastPlayerController(
 internal fun List<Long>.retryDelayAfterFailedAttempt(failedAttempt: Int): Long =
     getOrNull(failedAttempt - 1)?.coerceAtLeast(0L) ?: 0L
 
+/**
+ * Bridges ExoPlayer's asynchronous `prepare()` onto the suspend [PlaybackEngine.start] contract:
+ * start() must not report success until playback actually began, and must throw when it fails.
+ * Without this, an HTTP 404/500 lets start() return "success" (prepare() never throws) while the real
+ * error only arrives later via `onPlayerError` — which made the reconnect logic loop forever on
+ * "Reconnecting…" instead of settling into the error dialog.
+ */
+internal class PlaybackStartGate {
+    @Volatile
+    private var pending: CompletableDeferred<Unit>? = null
+
+    /** Arms a fresh gate for the start about to be issued. Call BEFORE prepare() so no signal is missed. */
+    fun arm(): CompletableDeferred<Unit> = CompletableDeferred<Unit>().also { pending = it }
+
+    fun onReady() {
+        pending?.complete(Unit)
+    }
+
+    fun onError(error: Throwable) {
+        pending?.completeExceptionally(error)
+    }
+}
+
+internal class PlaybackStartTimeoutException(timeoutMillis: Long) :
+    Exception("Playback did not reach a ready state within ${timeoutMillis}ms.")
+
+/** Suspends until the gate reports ready, rethrows its error, or throws on timeout. */
+internal suspend fun CompletableDeferred<Unit>.awaitStartedOrThrow(timeoutMillis: Long) {
+    withTimeoutOrNull(timeoutMillis) { await() }
+        ?: throw PlaybackStartTimeoutException(timeoutMillis)
+}
+
 interface PlaybackEngine {
     val playbackErrors: Flow<Throwable>
         get() = emptyFlow()
@@ -525,18 +559,24 @@ class Media3PlaybackEngine(
         .build()
     private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val playbackEndedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val startGate = PlaybackStartGate()
     private var activePlaybackId: String? = null
 
     init {
         player.addListener(
             object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
+                    // Fail the in-flight start (so start() throws for the retry logic) AND keep emitting
+                    // to the flow so a mid-watch death — after start already succeeded — still triggers
+                    // the controller's reconnect.
+                    startGate.onError(error)
                     playbackErrorEvents.tryEmit(error)
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
+                    when (playbackState) {
+                        Player.STATE_READY -> startGate.onReady()
+                        Player.STATE_ENDED -> activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
                     }
                 }
             },
@@ -553,6 +593,7 @@ class Media3PlaybackEngine(
         get() = player.duration.takeUnless { it == C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
 
     override suspend fun start(request: PlaybackRequest) {
+        val gate = startGate.arm()
         withContext(dispatcher) {
             activePlaybackId = request.playbackId
             val mediaItem = MediaItem.fromUri(request.streamUrl)
@@ -574,6 +615,12 @@ class Media3PlaybackEngine(
             player.prepare()
             player.playWhenReady = true
         }
+        // Honour the PlaybackEngine.start contract: don't report success until ExoPlayer actually
+        // reached READY. A 404/500/dead-host surfaces via onPlayerError and makes this throw so the
+        // controller's retry/reconnect budget applies. The timeout is only a backstop for a
+        // connected-but-silent endpoint — a real HTTP error fires onPlayerError in well under a second.
+        // ponytail: fixed 10s ceiling; make it injectable only if a slow-but-alive stream trips it.
+        gate.awaitStartedOrThrow(START_READY_TIMEOUT_MILLIS)
     }
 
     override fun pause() {
@@ -630,6 +677,7 @@ class Media3PlaybackEngine(
         const val TIMESHIFT_BACK_BUFFER_MILLIS = 120 * 60 * 1_000
         const val TIMESHIFT_CACHE_MAX_BYTES = 512L * 1024L * 1024L
         const val DEFAULT_USER_AGENT = "Vivicast/1.0"
+        const val START_READY_TIMEOUT_MILLIS = 10_000L
     }
 
     private fun httpDataSourceFactory(userAgent: String? = null): DefaultHttpDataSource.Factory {

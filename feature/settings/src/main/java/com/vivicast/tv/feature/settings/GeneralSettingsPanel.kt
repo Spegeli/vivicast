@@ -102,6 +102,7 @@ internal fun GeneralSettingsPanel(
     onLaunchOnBootChanged: (Boolean) -> Unit,
     onDoubleBackToExitChanged: (Boolean) -> Unit,
     onBackgroundRefreshChanged: (Boolean) -> Unit,
+    onResumeLastChannelChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit,
     onGlobalUserAgentChanged: (String) -> Unit,
     firstFocusModifier: Modifier = Modifier,
@@ -110,6 +111,7 @@ internal fun GeneralSettingsPanel(
     var showUserAgentDialog by remember { mutableStateOf(false) }
     val toggleLaunchOnBoot = { onLaunchOnBootChanged(!state.launchOnBoot) }
     val toggleBackgroundRefresh = { onBackgroundRefreshChanged(!state.backgroundRefreshEnabled) }
+    val toggleResumeLastChannel = { onResumeLastChannelChanged(!state.resumeLastChannelOnStart) }
     val toggleDoubleBack = { onDoubleBackToExitChanged(!state.doubleBackToExit) }
     var showLanguagePicker by remember { mutableStateOf(false) }
 
@@ -133,6 +135,17 @@ internal fun GeneralSettingsPanel(
                 modifier = Modifier,
                 icon = { SettingsRowIcon("refresh") },
                 onClick = toggleBackgroundRefresh,
+            )
+        }
+
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_resume_last_channel),
+                help = stringResource(R.string.settings_help_resume_last_channel),
+                value = if (state.resumeLastChannelOnStart) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+                modifier = Modifier,
+                icon = { SettingsRowIcon("timeshift") },
+                onClick = toggleResumeLastChannel,
             )
         }
 

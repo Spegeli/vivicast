@@ -195,6 +195,26 @@ internal suspend fun AppContainer.openChannelPlayback(
     onStarted()
 }
 
+/**
+ * Resolves the last watched channel for the "resume on startup" option: the most recent history row
+ * → its still-persisted [Channel] → a preflight liveness check on the resolved stream. Returns the
+ * channel only when it still exists and its endpoint is reachable; otherwise null so the caller lands
+ * on Home instead of opening the player on a dead stream. Refresh is not awaited — the stream URL
+ * resolves straight from Room.
+ */
+internal suspend fun AppContainer.resolveResumableLastChannel(): Channel? {
+    val lastWatched = playbackRepository.observeAllRecentChannels(limit = 1).first().firstOrNull() ?: return null
+    val channel = mediaRepository.getChannel(lastWatched.providerId, lastWatched.channelId) ?: return null
+    // timeshift = null: for a live channel the stream URL is identical with/without timeshift, and the
+    // probe only needs the URL + User-Agent.
+    val request = playbackRequestFactory.channelRequest(
+        channel = channel,
+        timeshift = null,
+        origin = PlaybackOrigin.LiveTv,
+    ) ?: return null
+    return channel.takeIf { streamReachabilityProbe.isReachable(request.streamUrl, request.userAgent) }
+}
+
 internal suspend fun AppContainer.openMoviePlayback(
     movie: Movie,
     resumeProgress: Boolean,

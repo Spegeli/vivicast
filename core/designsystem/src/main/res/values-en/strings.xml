@@ -28,6 +28,7 @@
     <string name="settings_double_back">Double back to exit</string>
     <string name="settings_language">Language</string>
     <string name="settings_background_refresh">Allow background refresh</string>
+    <string name="settings_resume_last_channel">Resume last watched channel on startup</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->
@@ -450,6 +451,7 @@
     <string name="settings_help_double_back">Requires a second back confirmation from the top navigation.</string>
     <string name="settings_help_language">System default or fixed app language.</string>
     <string name="settings_help_background_refresh">Update playlists and EPG while the app runs in the background.</string>
+    <string name="settings_help_resume_last_channel">On app startup, automatically opens the last watched channel if it is still reachable.</string>
     <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty uses the app default.</string>
 
     <!-- Settings - Playback help texts -->

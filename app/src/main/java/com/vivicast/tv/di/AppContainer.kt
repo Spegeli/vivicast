@@ -41,6 +41,7 @@ import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.playback.PlaybackRequestFactory
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
+import com.vivicast.tv.data.playback.StreamReachabilityProbe
 import com.vivicast.tv.data.provider.ProviderConnectionResponseException
 import com.vivicast.tv.data.provider.ProviderInvalidCredentialsException
 import com.vivicast.tv.data.provider.ProviderRepository
@@ -82,9 +83,13 @@ import com.vivicast.tv.worker.RoomEpgSourceReader
 import com.vivicast.tv.worker.RoomMediaImageRefreshSource
 import com.vivicast.tv.worker.WorkManagerRefreshWorkScheduler
 import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.Request
+
+private const val STREAM_PROBE_TIMEOUT_SECONDS = 6L
 
 class AppContainer(
     context: Context,
@@ -225,6 +230,25 @@ class AppContainer(
             playbackRepository = playbackRepository,
             providerUserAgent = { providerId -> providerRepository.getProvider(providerId)?.userAgent },
         )
+    }
+
+    val streamReachabilityProbe: StreamReachabilityProbe by lazy {
+        // Short-timeout liveness check reusing the shared client's connection pool. execute() returns
+        // once response headers arrive; `.use` closes the body immediately so we never pull the live
+        // stream. Range asks servers that honour it not to start a full transfer. Debug TLS-bypass and
+        // the global User-Agent fallback come from the shared okHttpClient.
+        val probeClient = okHttpClient.newBuilder()
+            .callTimeout(STREAM_PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+        StreamReachabilityProbe { url, userAgent ->
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val builder = Request.Builder().url(url).header("Range", "bytes=0-1")
+                    userAgent?.trim()?.takeIf { it.isNotEmpty() }?.let { builder.header("User-Agent", it) }
+                    probeClient.newCall(builder.build()).execute().use { it.code }
+                }.getOrNull()
+            }
+        }
     }
 
     val playbackProgressRecorder: PlaybackProgressRecorder by lazy {

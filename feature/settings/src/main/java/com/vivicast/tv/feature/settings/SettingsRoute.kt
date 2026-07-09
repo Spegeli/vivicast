@@ -301,6 +301,7 @@ fun SettingsRoute(
                                 viewModel.onBackgroundRefreshChanged(enabled)
                                 onBackgroundRefreshChanged(enabled)
                             },
+                            onResumeLastChannelChanged = viewModel::onResumeLastChannelChanged,
                             onLanguageChanged = { language ->
                                 viewModel.onLanguageChanged(language)
                                 onLanguageChanged(language)

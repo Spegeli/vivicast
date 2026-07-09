@@ -28,6 +28,7 @@
     <string name="settings_double_back">Doppelte Zurück-Taste zum Beenden</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_background_refresh">Hintergrundaktualisierung erlauben</string>
+    <string name="settings_resume_last_channel">Zuletzt gesehenen Sender beim Start fortsetzen</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->
@@ -451,6 +452,7 @@
     <string name="settings_help_double_back">Erfordert aus der Top Navigation eine zweite Zurück-Bestätigung.</string>
     <string name="settings_help_language">Systemstandard oder feste App-Sprache.</string>
     <string name="settings_help_background_refresh">Playlisten und EPG aktualisieren, während die App im Hintergrund läuft.</string>
+    <string name="settings_help_resume_last_channel">Öffnet beim App-Start automatisch den zuletzt gesehenen Sender, sofern er noch erreichbar ist.</string>
     <string name="settings_help_user_agent">Gilt appweit für HTTP-Anfragen. Leer nutzt den App-Standard.</string>
 
     <!-- Settings - Playback help texts -->

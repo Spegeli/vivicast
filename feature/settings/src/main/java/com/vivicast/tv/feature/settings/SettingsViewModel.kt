@@ -248,6 +248,8 @@ internal class SettingsViewModel(
     /** Persists the preference only; the scheduler side effect stays in the app layer. */
     fun onBackgroundRefreshChanged(enabled: Boolean) = updateGeneral { it.copy(backgroundRefreshEnabled = enabled) }
 
+    fun onResumeLastChannelChanged(enabled: Boolean) = updateGeneral { it.copy(resumeLastChannelOnStart = enabled) }
+
     fun onSelectedSectionChanged(section: String) = updateGeneral { it.copy(lastSettingsSection = section) }
 
     /** Persists the preference only; LocaleHelper/recreate stay in the app layer. */
@@ -325,6 +327,7 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
         launchOnBoot = general.launchOnBoot,
         doubleBackToExit = general.doubleBackToExit,
         backgroundRefreshEnabled = general.backgroundRefreshEnabled,
+        resumeLastChannelOnStart = general.resumeLastChannelOnStart,
         appLanguage = appearance.language.toSettingsLanguage(),
         globalUserAgent = general.globalUserAgent,
     ),
