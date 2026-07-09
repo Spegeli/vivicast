@@ -512,7 +512,17 @@ private fun VivicastApp(
     fun launchExternalPlayback(request: PlaybackRequest): Boolean {
         return try {
             appContainer.playerController.stop()
-            externalPlayerLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(request.streamUrl)))
+            // Set an explicit media MIME so players that filter by type (not just ACTION_VIEW) match too.
+            val mimeType = when {
+                request.streamUrl.contains(".m3u8", ignoreCase = true) -> "application/vnd.apple.mpegurl"
+                request.streamUrl.contains(".mpd", ignoreCase = true) -> "application/dash+xml"
+                request.streamUrl.contains(".ts", ignoreCase = true) -> "video/mp2t"
+                request.streamUrl.contains(".mkv", ignoreCase = true) -> "video/x-matroska"
+                else -> "video/*"
+            }
+            externalPlayerLauncher.launch(
+                Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(request.streamUrl), mimeType),
+            )
             true
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, context.getString(R.string.main_no_external_player), Toast.LENGTH_SHORT).show()

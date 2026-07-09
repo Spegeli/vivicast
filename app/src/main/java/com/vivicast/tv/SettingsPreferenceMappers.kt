@@ -74,6 +74,8 @@ import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.player.BufferTier
 import com.vivicast.tv.core.player.DecoderMode
+import com.vivicast.tv.core.player.PlaybackAudioOption
+import com.vivicast.tv.core.player.PlaybackSubtitleOption
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
@@ -285,7 +287,26 @@ internal fun PlaybackPreferences.toPlaybackTuning(): PlaybackTuning =
         videoDecoder = videoDecoder.toDecoderMode(),
         passthroughEnabled = audioPassthroughEnabled,
         backBufferMinutes = timeshiftMinutes.takeIf { it in listOf(15, 30, 60, 120) } ?: 30,
+        preferredAudio = preferredAudioLanguage.toPlaybackAudioOption(),
+        preferredSubtitle = preferredSubtitleLanguage.toPlaybackSubtitleOption(),
     )
+
+// String keys mirror the feature-settings persistence (null = system/off).
+private fun String?.toPlaybackAudioOption(): PlaybackAudioOption =
+    when (this) {
+        "de" -> PlaybackAudioOption.German
+        "en" -> PlaybackAudioOption.English
+        "original" -> PlaybackAudioOption.Original
+        else -> PlaybackAudioOption.SystemDefault
+    }
+
+private fun String?.toPlaybackSubtitleOption(): PlaybackSubtitleOption =
+    when (this) {
+        "system" -> PlaybackSubtitleOption.SystemDefault
+        "de" -> PlaybackSubtitleOption.German
+        "en" -> PlaybackSubtitleOption.English
+        else -> PlaybackSubtitleOption.Off
+    }
 
 private fun BufferSizePreference.toBufferTier(): BufferTier =
     when (this) {

@@ -604,8 +604,7 @@ class Media3PlaybackEngine(
     }
 
     /** Rebuilds the player only when a build-time setting changed, re-attaching the video surface. */
-    private fun rebuildPlayerIfTuningChanged() {
-        val tuning = tuningProvider()
+    private fun rebuildPlayerIfTuningChanged(tuning: PlaybackTuning) {
         if (tuning.builderSubset == builtTuning.builderSubset) return
         player.release()
         player = buildExoPlayer(appContext, tuning).also { it.addListener(newPlayerListener()) }
@@ -634,12 +633,14 @@ class Media3PlaybackEngine(
 
     override suspend fun start(request: PlaybackRequest) {
         val gate = startGate.arm()
+        val tuning = tuningProvider()
         withContext(dispatcher) {
-            rebuildPlayerIfTuningChanged()
+            rebuildPlayerIfTuningChanged(tuning)
             activePlaybackId = request.playbackId
             val mediaItem = MediaItem.fromUri(request.streamUrl)
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
-            val mediaSourceFactory = if (request.timeshift?.storage == PlaybackTimeshiftStorage.InternalStorage) {
+            val useDisk = request.timeshift?.let { usesDiskCache(it.storage, it.windowMillis) } == true
+            val mediaSourceFactory = if (useDisk) {
                 DefaultMediaSourceFactory(
                     CacheDataSource.Factory()
                         .setCache(timeshiftCache)
@@ -655,6 +656,10 @@ class Media3PlaybackEngine(
             )
             player.prepare()
             player.playWhenReady = true
+            // Seed the initial track selection from the settings snapshot (spec: applied at stream start).
+            // A later in-player overlay pick overrides this for the current playback only.
+            selectAudio(tuning.preferredAudio)
+            selectSubtitle(tuning.preferredSubtitle)
         }
         // Honour the PlaybackEngine.start contract: don't report success until ExoPlayer actually
         // reached READY. A 404/500/dead-host surfaces via onPlayerError and makes this throw so the

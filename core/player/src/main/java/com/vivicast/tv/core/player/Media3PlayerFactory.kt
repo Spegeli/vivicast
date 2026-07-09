@@ -5,6 +5,9 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioCapabilities
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
@@ -97,7 +100,7 @@ fun buildExoPlayer(context: Context, tuning: PlaybackTuning): ExoPlayer {
     } else {
         DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
     }
-    val renderersFactory = NextRenderersFactory(context)
+    val renderersFactory = VivicastRenderersFactory(context, tuning.passthroughEnabled)
         .setEnableDecoderFallback(true)
         .setExtensionRendererMode(extensionMode)
         .setMediaCodecSelector(VivicastMediaCodecSelector(tuning))
@@ -106,4 +109,41 @@ fun buildExoPlayer(context: Context, tuning: PlaybackTuning): ExoPlayer {
         .build()
 }
 
+/**
+ * Renderers factory that decides the audio sink from the passthrough setting. NextRenderersFactory adds the
+ * FFmpeg audio decoder; this subclass additionally controls passthrough vs forced-PCM.
+ */
+private class VivicastRenderersFactory(
+    context: Context,
+    private val passthroughEnabled: Boolean,
+) : NextRenderersFactory(context) {
+    // OFF (default): force stereo PCM. The no-Context DefaultAudioSink.Builder honours setAudioCapabilities
+    // (the Context overload IGNORES it) — this is how PCM decode is forced instead of bitstreaming AC3/DTS to
+    // a receiver, avoiding lip-sync/stall on boxes that misreport passthrough. ON: default context sink (HDMI).
+    @Suppress("DEPRECATION")
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean,
+    ): AudioSink? =
+        if (passthroughEnabled) {
+            super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+        } else {
+            DefaultAudioSink.Builder()
+                .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                .build()
+        }
+}
+
+/**
+ * Timeshift storage decision. RAM = memory-only (no disk cache), InternalStorage = disk CacheDataSource,
+ * Automatic = disk only for long windows (short ones stay in RAM) — so all three options differ at runtime.
+ */
+fun usesDiskCache(storage: PlaybackTimeshiftStorage, windowMillis: Long): Boolean = when (storage) {
+    PlaybackTimeshiftStorage.Ram -> false
+    PlaybackTimeshiftStorage.InternalStorage -> true
+    PlaybackTimeshiftStorage.Automatic -> windowMillis > AUTO_DISK_THRESHOLD_MILLIS
+}
+
 private const val MILLIS_PER_MINUTE = 60_000
+private const val AUTO_DISK_THRESHOLD_MILLIS = 30L * 60_000L
