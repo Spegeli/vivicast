@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +33,7 @@ import androidx.tv.material3.Text
 
 fun playerTimelineTag(): String = "player-timeline"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VivicastPlayerOverlay(
     title: String,
@@ -81,7 +84,14 @@ fun VivicastPlayerOverlay(
             onSeekRight = onSeekRight,
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), content = actions)
+        // FlowRow so the action pills wrap to a second line instead of overflowing off-screen when there are
+        // more (or longer) actions than fit one row.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            content = actions,
+        )
         footer()
     }
 }
