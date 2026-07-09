@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug-only timeshift spike (Phase 0). Exported so it can be launched via adb am start.
+             Inherits the application theme. Not present in release builds. -->
+        <activity
+            android:name=".TimeshiftSpikeActivity"
+            android:exported="true" />
+    </application>
+</manifest>

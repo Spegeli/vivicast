@@ -1,111 +1,80 @@
-# Plan: Timeshift-Redesign — Immer-an, rollendes 60-min-Fenster (Segment-Engine)
+# Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
 
-Status: geplant (2026-07-09), noch nicht umgesetzt. Orientiert an StreamVaults Timeshift-Engine
-(einzige echte Live-Rewind-App der vier), mit zwei bewussten Verbesserungen (siehe unten).
+Status: geplant (2026-07-09). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
-## Context
+## Spike-Erkenntnis (entscheidend)
 
-Aktueller Timeshift (`setBackBuffer(minutes)` RAM + fixer 512-MB-`SimpleCache`) hat echte Konflikte:
-60-min-RAM-Back-Buffer → OOM-Risiko (ExoPlayer bietet keinen Byte-Cap dafür); 512 MB halten bei HD nur
-~8–15 min → eingestellte Dauer nicht honoriert; Cache wird bei Sender-Wechsel nicht geleert. Nutzer-Switch
-RAM/Disk + frei wählbare Dauer sind Sonderwege (keine Referenz-App hat sie).
+Debug-Spike (`app/src/debug/.../TimeshiftSpikeActivity.kt`) auf ARD-HLS (`daserste …/master.m3u8`) gezeigt:
+- Bild rendert, `status=Playing`.
+- ExoPlayer meldet ein **natives server-seitiges DVR-Fenster von 7200s = 2 Stunden**; Seek-zurück (−5 min)
+  springt sofort auf andere Szene, läuft flüssig weiter. **Kein eigener Capture nötig.**
 
-## Entschieden (fix, mit Nutzer)
+→ Für **HLS-Streams mit DVR-Fenster** ist Timeshift praktisch geschenkt. Der bisherige
+`setBackBuffer`+`SimpleCache`+virtuelles-Fenster-Ansatz ist dafür unnötig und begrenzt das native Fenster
+künstlich.
 
-- **Immer-an, rollendes 60-min-Fenster.** Ab Sender-Start läuft die Aufnahme durchgehend; gehalten werden
-  stets die **letzten 60 min** (Ältestes vorne wird getrimmt). Man kann **jederzeit** bis 60 min zurück —
-  auch ohne vorher Pause (z.B. „Szene vor 5 min nochmal"). Pause läuft im Hintergrund weiter; Resume spielt
-  verzögert weiter und man kann innerhalb des rollenden Fensters bleiben.
-- **Disk-first automatisch** (cacheDir), **RAM nur Fallback** (~5 min) wenn Disk nicht schreibbar. Kein Switch.
-- **60 min hart.** Keine Dauer-Auswahl. **Global ~2 GB Byte-Budget + ~200–500 MB Frei-Speicher-Floor + LRU.**
-- **Nur eine Session gleichzeitig** (aktueller Sender). **Sender-Wechsel/Stop → Session löschen.**
-  Waisen-Verzeichnisse beim App-/Session-Start aufräumen (Crash-Recovery).
+## Ziel (öffentliche App → breite Stream-Kompatibilität)
 
-## Architektur (StreamVault-Muster, adaptiert)
+Zwei Wege, **automatisch nach Stream-Typ** gewählt:
 
-**Capture ist von der Wiedergabe entkoppelt** — ein Hintergrund-Downloader schreibt fortlaufend auf Disk,
-der Player spielt daraus. Komponenten (neu, in `core/player` bzw. eigenes `:data:timeshift`):
+- **Fall A — natives DVR-Fenster (primär):** M3U/HLS-Broadcaster + Xtream-HLS-Output. ExoPlayer-Seek im
+  nativen `seekableWindow`. Deckt die breite Masse (Broadcaster oft Stunden).
+- **Fall B — lokale Capture-Engine (Backup, dedizierte spätere Phase):** nur für progressive MPEG-TS ohne
+  natives Fenster (Xtream-`.ts`) bzw. HLS-Live-Edge-only. Immer-an, rollendes Fenster, segment-basiert
+  (StreamVault-Muster: Disk-first, Front-Trim, 2-GB-LRU, Frei-Speicher-Floor). Bis B existiert: sauberer
+  Hinweis „begrenztes/kein Timeshift" für solche Streams.
 
-- **`TimeshiftRecorder` + Session** (per Container): Hintergrund-Coroutine (`SupervisorJob + Dispatchers.IO`,
-  OkHttp), schreibt Segment-/Chunk-Dateien unter `cacheDir/timeshift/<channelKey>-<ts>/`, hält ein rollendes
-  `ArrayDeque` + **Front-Trim** (dauer-basiert, Ältestes löschen solange Fenster > 60 min).
-  - **Progressive TS (Xtream `.ts`, unser Hauptfall):** ein langlebiger GET, alle **~2 s** ein neuer
-    `chunk-N.ts`; Fenster über Wall-Clock-Dauer. Reconnect mit Backoff.
-  - **HLS:** Media-Playlist alle `targetDuration/2` pollen, neue Segmente per `mediaSequence` erkennen +
-    downloaden. (DASH optional später.)
-- **`TimeshiftDiskManager`:** globales 2-GB-Budget, `usableSpace`-Floor (~300–500 MB), LRU-Eviction alter
-  Session-Dirs, Waisen-Cleanup, Per-Write-Throttle (vor jedem Segment/Chunk prüfen).
-- **RAM-Fallback:** in-Memory-Byte-Puffer statt Dateien, Tiefe hart ~5 min; `onTrimMemory(CRITICAL)` → Session
-  killen.
+### Schlüssel-Hebel: Xtream-Ausgabeformat (wie TVMate)
+Der Resolver baut Xtream-Live aktuell **hardcoded `.ts`** (`PlaybackStreamResolver`,
+`…/live/user/pass/id.ts`) → nie nativ seekbar. **Neue Provider-Option „Ausgabeformat" (MPEG-TS / HLS),
+Default HLS** → Resolver baut `…/id.m3u8`, ExoPlayer nutzt das native Fenster wo der Server es liefert.
+Ehrliche Nuance: Xtream-HLS-Fenster ist oft klein (Live-Edge, server-abhängig); tiefes Xtream-Rewind bleibt
+Fall B oder der Server-Timeshift-Endpoint (den wir für Catch-up schon bauen).
 
-### Wiedergabe — lokale **Live-Playlist** statt eingefrorenem Snapshot (Verbesserung ggü. StreamVault)
-
-StreamVault erzeugt bei jedem Seek einen statischen `index.m3u8` (`EXT-X-ENDLIST`) und **kopiert** dafür das
-ganze Fenster (Disk-Churn), und „an Live aufschließen" ist ein **Rejoin** (kein nahtloses Weiterlaufen hinter
-Live). Für unser rollendes Modell besser:
-
-- **Eine** lokale, **rollende Live-HLS-Playlist** `index.m3u8` **ohne** `ENDLIST`, die der Recorder bei jedem
-  neuen Segment fortschreibt (neues `#EXTINF` anhängen, getrimmtes entfernen, `#EXT-X-MEDIA-SEQUENCE` hochzählen)
-  und die die Segment-Dateien **in place referenziert** (nicht kopiert).
-- **Ein** ExoPlayer dauerhaft auf `file://…/index.m3u8`. ExoPlayer behandelt das als **Live-HLS mit
-  DVR-Fenster** → nativer Pause/Seek-zurück im 60-min-Fenster, „Live-Rand" = neuestes Segment, Rollen wird
-  vom periodischen Live-Reload nativ verfolgt. **Kein** Player-Swap, **keine** Snapshot-Kopie.
-- Kosten: wenige Sekunden zusätzliche Latenz ggü. direktem Live (Chunking/Playlist-Reload) — akzeptabel.
-
-**Offene Kern-Unbekannte (Spike klärt):** rohe TS-Chunks in beliebiger 2-s-Schnittweite sind **keine** sauber
-einzeln dekodierbaren HLS-Segmente (TS-Schnitt braucht idealerweise Keyframe/PAT/PMT-Grenzen). Zu klären, ob
-ExoPlayer eine lokale HLS-Playlist aus solchen TS-Chunks lückenlos spielt, oder ob wir (a) an sinnvollen
-Grenzen schneiden, (b) leicht re-muxen, oder (c) auf StreamVaults concat-`buffer.ts`-Snapshot ausweichen
-müssen (dann mit periodischem Re-Snapshot fürs Weiterlaufen). **Das entscheidet der Spike.**
+### Auto-Detect zur Laufzeit
+Nach `play()` das native Fenster lesen (`player.isCurrentMediaItemSeekable` / Timeline-Window-Dauer):
+ausreichend seekbar → Fall A (natives Fenster als Timeline). Sonst → Fall B (falls gebaut) bzw. Hinweis.
 
 ## Phasen
 
-### Phase 0 — Spike (zuerst; klärt die eine echte Unbekannte)
-Auf Emulator mit den Test-Playlisten (Memory `test-playlists`):
-- Progressive Xtream-`.ts`: Downloader schreibt 2-s-`chunk-N.ts` + rollende lokale Live-`index.m3u8` in place;
-  spielt ExoPlayer das lückenlos, mit Seek-zurück und Live-Follow? Falls nicht → concat-`buffer.ts`-Variante
-  bzw. Schnitt-an-Grenzen testen.
-- HLS-Live (`deu.m3u`): Segment-Poll + lokale Playlist — spielt/seekt sauber?
-- Ergebnis fixiert die Playback-Mechanik für Phase 2. **Kein Weiterbau ohne validierten Kern.**
+### Phase 1 — Fall A sauber + Rückbau (jetzt, klein, hoher Nutzen)
+- **Rückbau** des `setBackBuffer` (RAM-OOM-Quelle) + der `SimpleCache`-Timeshift-Disk-Nutzung + der virtuellen
+  `timeshiftWindowMillis`/`liveEdgeOffset`-Maschinerie, soweit sie das native Fenster ersetzt.
+- **Controller/Engine:** Live-Channel mit `seekable=true`; Seek/Live-Edge auf das **native** Timeline-Window
+  abbilden (`seekBy`, `seekToDefaultPosition` für Live). `timeshiftProgressState` an die reale Timeline hängen.
+- **Xtream-Ausgabeformat-Option**: `ProviderConfigurationModels`/Provider-Editor (neues Feld, Default HLS),
+  `PlaybackStreamResolver.resolveXtream` baut `.m3u8`/`.ts` je Option. Catch-up-`.ts`-Pfad bleibt.
+- **Auto-Detect**: nach Start Fenster prüfen; nicht-seekbar → „begrenztes/kein Timeshift"-Hinweis
+  (`player_timeshift_unavailable`).
 
-### Phase 1 — Recorder + DiskManager (Capture + Rolling + Limits)
-Session-Subtypen (Progressive/HLS), Front-Trim, 2-GB-Budget/LRU/Floor/Throttle, RAM-Fallback + Trim-Kill,
-Waisen-Cleanup. Reine Fenster-/Cap-/Floor-/Trim-Logik **unit-testbar**. Injizierbarer Dispatcher.
+### Phase 2 — UI-Vereinfachung
+- `PlaybackSettingsPanel.kt`: **Timeshift-Toggle, Max-Dauer, Timeshift-Speicher entfernen** (das Fenster kommt
+  vom Server/Fall-B, keine dieser Knöpfe mehr sinnvoll). `PlaybackSettingsState`-Felder + Mapper +
+  `PlaybackPreferences`-Felder zurückbauen (tot lassen ok). Strings raus. Timeshift ist dort verfügbar wo der
+  Stream es hergibt.
 
-### Phase 2 — Wiedergabe- + Controller-Integration
-`Media3PlaybackEngine`: bei Live-`start()` Recorder starten und ExoPlayer auf die lokale rollende Playlist
-setzen (per Spike-Ergebnis). `VivicastPlayerController`: Pause/`seekBy`/`seekToLiveEdge` auf das reale
-Session-Fenster (0 … verfügbare Länge) umstellen; die vorhandene virtuelle Timeshift-Maschinerie
-(`liveEdgeOffsetMillis`, `timeshiftProgressState`, `seekTimeshiftBy`, `timeshiftWindowMillis`) an das echte
-Fenster koppeln. `play(neu)`/`stop()`/Sender-Wechsel → Recorder stoppen + Session-Dir löschen.
+### Phase 3 (dediziert, später) — Fall B Capture-Engine
+Nur für MPEG-TS-ohne-Fenster. Immer-an, rollendes 60-min-Fenster, `TimeshiftRecorder` + `TimeshiftDiskManager`
+(2-GB-Budget/LRU/Frei-Floor/Waisen-Cleanup, RAM-Fallback ~5 min + Trim-Kill), lokale rollende Live-HLS-Playlist
+in-place referenziert, ein ExoPlayer drauf. Erst wenn Bedarf real da ist (viele TS-only-Nutzer). Eigener Spike
+für Progressive-TS-Chunk-Playback (die offene Unbekannte) vor dem Bau.
 
-### Phase 3 — Grenzen/Cleanup scharf schalten
-60-min-Cap, Floor, LRU, RAM-Kill, App-Start-Waisen-Sweep, „Sender/Stream unterstützt kein Timeshift"-Fall
-(`player_timeshift_unavailable`) sauber. Catch-up-Kontext von Timeshift ausschließen.
-
-### Phase 4 — UI-Vereinfachung (zuletzt, wenn Engine liefert)
-`PlaybackSettingsPanel.kt`: **Timeshift-Toggle, Max-Dauer, Timeshift-Speicher entfernen** (+ `PlaybackPicker`
--Einträge + Dialoge). Timeshift immer verfügbar. `SettingsModels.PlaybackSettingsState`: die drei Felder
-raus; `SettingsViewModel`/Mapper anpassen. `app/SettingsPreferenceMappers.kt`: `timeshiftConfig()` +
-`toPlaybackTuning(backBufferMinutes)` zurückbauen (Back-Buffer entfällt). `core/datastore PlaybackPreferences`:
-drei Felder tot → als dead lassen (keine Migration) oder mit-entfernen. Strings der drei Zeilen raus.
-
-## Betroffene Dateien (Kern)
-- **neu:** `core/player/.../TimeshiftRecorder.kt` (+ Sessions), `.../TimeshiftDiskManager.kt`, Model/Limit-Helfer
-- `core/player/.../VivicastPlayerController.kt` (Engine-Start/Stop + Controller Pause/Seek/Live-Edge/Lifecycle)
-- `feature/settings/.../PlaybackSettingsPanel.kt`, `.../SettingsModels.kt`, `.../SettingsViewModel.kt`, `.../SettingsPreferenceMappers.kt`
-- `app/.../SettingsPreferenceMappers.kt`, `core/datastore/.../UserPreferencesStore.kt`, `core/designsystem/.../strings.xml`
-- `core/player/build.gradle.kts` falls OkHttp/HLS-Parser dort noch fehlt (HLS-Parsing evtl. via media3-exoplayer-hls).
-
-## Risiken / offen
-- **Progressive-TS-Chunk-Playback** (lückenlos + seekbar + rollend) = Haupt-Unbekannte → Phase-0-Spike zwingend.
-- Referenz-in-place statt Kopie: sicherstellen, dass ein gerade abgespieltes Segment nicht vorzeitig getrimmt/
-  gelöscht wird (Trim nur außerhalb der aktuellen Player-Position).
-- Latenz durch lokales Chunking (paar Sekunden hinter echtem Live) — akzeptiert.
-- Timeshift-Progress-UI vom virtuellen auf reales Fenster umstellen (sonst falsche Timeline).
+## Betroffene Dateien
+- `data/playback/.../PlaybackStreamResolver.kt` (Xtream `.m3u8`/`.ts`)
+- `data/provider/.../ProviderConfigurationModels.kt` + Provider-Editor (Ausgabeformat-Option)
+- `core/player/.../VivicastPlayerController.kt` (Rückbau setBackBuffer/virtuelles Fenster; natives Fenster nutzen;
+  Auto-Detect)
+- `feature/settings/.../PlaybackSettingsPanel.kt`, `.../SettingsModels.kt`, `.../SettingsViewModel.kt`, Mapper;
+  `app/.../SettingsPreferenceMappers.kt`; `core/datastore/.../UserPreferencesStore.kt`; Strings
+- Phase 3: neu `core/player/.../TimeshiftRecorder.kt`, `.../TimeshiftDiskManager.kt`
 
 ## Verifikation
-- Spike zuerst manuell (Test-Playlisten): Live läuft; jederzeit bis 60 min zurück; Pause 5 min → Resume ohne
-  Verlust; Fenster rollt (Ältestes fällt raus); Sender-Wechsel löscht Session-Dir; Frei-Speicher-Floor greift.
-- Unit-Tests: Fenster-/Cap-/Floor-/Trim-/Cleanup-Helfer.
-- Gates je Phase: `.\gradlew.bat detekt test assembleDebug`; Emulator-Smoke.
+- Spike-Activity bleibt (debug-only) für weitere Stream-Tests. Emulator + Test-Playlisten (Memory
+  `test-playlists`): Broadcaster-HLS → tiefes Fenster + Seek; nicht-seekbarer Stream → sauberer Hinweis.
+- Unit-Tests: Auto-Detect-Schwelle, Xtream-URL-Bau (`.m3u8`/`.ts`), Fall-B-Limit-Helfer (Phase 3).
+- Gates je Phase: `.\gradlew.bat detekt test assembleDebug`.
+
+## Offen / Risiken
+- Xtream-HLS-Fenster-Tiefe ist server-abhängig (oft klein) — real getestet werden, sobald ein Xtream-Test
+  verfügbar ist. Bis dahin deckt Fall A garantiert die Broadcaster-HLS ab.
+- Progressive-TS-Chunk-Playback (Fall B) = weiterhin die Kern-Unbekannte → eigener Spike vor Phase 3.
