@@ -18,7 +18,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import com.vivicast.tv.core.player.timeshift.MultiFileTailingDataSource
 import com.vivicast.tv.core.player.timeshift.TailingFileDataSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -673,33 +672,32 @@ class Media3PlaybackEngine(
         withContext(dispatcher) {
             rebuildPlayerIfTuningChanged(tuning)
             activePlaybackId = request.playbackId
-            val mediaItem = MediaItem.fromUri(request.streamUrl)
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
             val useDisk = request.timeshift?.let { usesDiskCache(it.storage, it.windowMillis) } == true
-            val mediaSourceFactory: MediaSource.Factory = when {
-                // Fall B / K2: a live-captured local buffer that keeps growing → tail it, stay seekable.
-                // A directory = multi-file segmented buffer (rolling window); a single file = one growing file.
-                request.tailing -> {
-                    val bufferPath = Uri.parse(request.streamUrl).path
-                    val tailingFactory = if (bufferPath != null && File(bufferPath).isDirectory) {
-                        MultiFileTailingDataSource.Factory(MultiFileTailingDataSource.DEFAULT_SEGMENT_BYTES)
-                    } else {
-                        TailingFileDataSource.Factory()
-                    }
-                    ProgressiveMediaSource.Factory(tailingFactory)
+            val bufferDir = request.streamUrl.takeIf { request.tailing }?.let { Uri.parse(it).path }
+                ?.let(::File)?.takeIf { it.isDirectory }
+            if (bufferDir != null) {
+                // Fall B: play the segment files as a native ExoPlayer playlist (reliable cross-item timeline +
+                // gapless transitions); completed segments are bounded, the newest one tails. Start at the newest
+                // = the live edge (avoids the offset-0 start racing the trim).
+                val sources = buildSegmentPlaylist(bufferDir, request.userAgent)
+                player.setMediaSources(sources, (sources.size - 1).coerceAtLeast(0), 0L)
+            } else {
+                val mediaSourceFactory: MediaSource.Factory = when {
+                    request.tailing -> ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
+                    useDisk -> DefaultMediaSourceFactory(
+                        CacheDataSource.Factory()
+                            .setCache(timeshiftCache)
+                            .setUpstreamDataSourceFactory(defaultDataSourceFactory)
+                            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+                    )
+                    else -> DefaultMediaSourceFactory(defaultDataSourceFactory)
                 }
-                useDisk -> DefaultMediaSourceFactory(
-                    CacheDataSource.Factory()
-                        .setCache(timeshiftCache)
-                        .setUpstreamDataSourceFactory(defaultDataSourceFactory)
-                        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+                player.setMediaSource(
+                    mediaSourceFactory.createMediaSource(MediaItem.fromUri(request.streamUrl)),
+                    request.startPositionMillis,
                 )
-                else -> DefaultMediaSourceFactory(defaultDataSourceFactory)
             }
-            player.setMediaSource(
-                mediaSourceFactory.createMediaSource(mediaItem),
-                request.startPositionMillis,
-            )
             player.prepare()
             player.playWhenReady = true
             // Seed the initial track selection from the settings snapshot (spec: applied at stream start).
@@ -783,6 +781,22 @@ class Media3PlaybackEngine(
     private fun httpDataSourceFactory(userAgent: String? = null): DefaultHttpDataSource.Factory {
         val resolved = userAgent?.trim()?.takeIf { it.isNotEmpty() } ?: userAgentProvider()
         return DefaultHttpDataSource.Factory().setUserAgent(resolved.normalizedUserAgent())
+    }
+
+    /** Segment files (seg-N.ts) as a playlist: completed segments bounded, the newest one tailing. */
+    private fun buildSegmentPlaylist(dir: File, userAgent: String?): List<MediaSource> {
+        val segments = dir.listFiles { file -> file.name.startsWith("seg-") && file.name.endsWith(".ts") }
+            ?.sortedBy { it.name.removePrefix("seg-").removeSuffix(".ts").toLongOrNull() ?: 0L }
+            ?: emptyList()
+        val boundedFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(userAgent))
+        return segments.mapIndexed { index, file ->
+            val factory = if (index == segments.lastIndex) {
+                ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
+            } else {
+                ProgressiveMediaSource.Factory(boundedFactory)
+            }
+            factory.createMediaSource(MediaItem.fromUri(file.toURI().toString()))
+        }
     }
 }
 

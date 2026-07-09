@@ -128,9 +128,20 @@ Konstante).
   Single-File-Spike **saubere Position + Seek** — echte Datei, normale ExoPlayer-Seek-Map). Bounding per Rollover auf
   neue Datei bei Disk-Budget (~25 min HD). **Zuverlässige Seek-/Positions-Controls**, dafür **ein Rollover-Glitch
   (~alle 25 min)** + Rewind nur in der aktuellen Datei. Deutlich weniger + sicherer Code.
-- **Empfehlung:** Weg 2. Ein glitchloses Live mit **kaputten** Seek-Controls (Weg 1 aktuell) ist schlechter als ein
-  fast-immer-flüssiges Live mit **funktionierenden** Controls (Weg 2). Weg 1 nur, wenn glitchloses Live oberste
-  Prio ist und der Aufwand ok — dann eigener fokussierter Anlauf für die capture-getriebene Steuerung.
+- **Weg 3 — native ExoPlayer-Playlist (GEBAUT, Validierung offen — der schlaue Rollover):** die Segment-Dateien
+  als **native ExoPlayer-Playlist** (`player.setMediaSources(list)`) statt Custom-Multi-File-DataSource:
+  abgeschlossene Segmente bounded (`ProgressiveMediaSource`+`FileDataSource`), das neueste tailt
+  (`TailingFileDataSource`); Start am **letzten Item = Live-Rand**. ExoPlayer liefert dann eine **native,
+  zuverlässige Positions-/Seek-Timeline über alle Items** (genau das, was der Custom-DataSource nicht konnte) UND
+  **gapless-Übergänge** (kein Rollover-Glitch). Löst also **Positionsproblem UND Glitch auf einmal** — vereint die
+  Vorteile von Weg 1 + Weg 2. Front-Trim = alte Items via `removeMediaItem(0)` + Datei löschen; neue Segmente via
+  `addMediaSource` (dynamisch — für die Produktion).
+  - **Status 2026-07-09:** in `Media3PlaybackEngine.start()` gebaut (Tailing-Dir → `buildSegmentPlaylist` +
+    `setMediaSources`, Start am neuesten Item). Kompiliert, Unit-Tests grün. **On-Device-Validierung blockiert**:
+    der Xtream-Test-Provider drosselt/rate-limitet meine IP nach den vielen Test-Verbindungen dieser Session
+    (captured 1 MB/50 s → 20 Segmente unerreichbar). Muss getestet werden, sobald der Slot/Rate-Limit frei ist
+    (oder mit einer anderen progressive-TS-Quelle). **Das ist der aktuell empfohlene Weg** (statisch bewiesen wäre
+    er strikt besser als Weg 1/2; erst validieren, dann die dynamische add/remove-Version bauen).
 
 - Vor genug Puffer beim Kanalstart: kurzer „Timeshift baut auf"/Buffering-Zustand; danach normal.
 - Kein sichtbarer „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
