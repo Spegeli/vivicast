@@ -6,9 +6,9 @@ Seek, Phase-1-Integration) läuft, ABER **hand-segmentiertes TS → lokales HLS 
 Hardware-Decoder nicht dekodierbar** (Chroma-/Makroblock-Garbage + Audio-PTS-Discontinuities; naiv UND
 keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen. K2 (Concat, kein Re-Mux)
 auf echter Hardware + echtem Xtream-Ziel VALIDIERT** (Mi TV 4S, Xtream progressive `.ts`, ~11.8 Mbps HD,
-max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber** — der HW-Decoder frisst den
-byte-identischen Stream. Nächster K2-Schritt: Tailing (wachsende Datei fürs No-Gap-Edge-Follow) + rollendes
-Fenster. **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber**, **+ Tailing validiert** (wachsende Datei via
+`TailingFileDataSource` spielt durchgehend + seekbar). **Alle Mechanik-Fragen geklärt** — Rest ist Plumbing
+(Recorder, rollendes Fenster, Engine-Integration, Fenster-Metrik). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -159,9 +159,18 @@ Hand-Re-Segmentieren ist raus. Verbleibende Wege:
   - **Produktions-Hinweis `max_connections: 1`:** nur EINE Verbindung gleichzeitig; Kanalwechsel muss die alte
     Stream-Verbindung **voll schliessen** bevor die neue aufgeht (server-seitige Grace-Period sonst → „max
     connections reached"). Auch Test-Tooling (API-Query + Stream) kollidiert daran.
-  - **Verbleibend für Produktion:** (a) **Tailing** — ExoPlayer eine *wachsende* `buffer.ts` spielen lassen
-    (custom DataSource, blockt am EOF) fürs No-Gap-Edge-Follow, bleibt dabei seekbar; (b) **rollendes Fenster** —
-    Front-Trim ohne die seekbare Datei zu zerstören (chunk-basiert wie StreamVault, Concat je Snapshot). Nächster Schritt.
+  - **✅ Tailing VALIDIERT (2026-07-09, Mi TV 4S, Echtzeit-Xtream):** `TailingFileDataSource`
+    (`core/player/.../timeshift/`, `BaseDataSource`, blockt am EOF, meldet `LENGTH_UNSET`) + Engine-Branch
+    (`request.tailing` → `ProgressiveMediaSource`). Ergebnis: wachsende `buffer.ts` spielt **durchgehend**
+    (`status=Playing`, kein `Ended` — Edge-Follow), pixel-scharf, **Seek-back sauber** (`pos 26s→3s`, anderes
+    früheres Bild). **Keine Mechanik-Unbekannte mehr.**
+  - **Verbleibend = reines Plumbing (kein Spike mehr):** (a) **Fenster-Metrik** — für die Tailing-Quelle hat
+    ExoPlayer keine `duration` (`window=0`); Controller muss das Timeshift-Fenster aus der running-max-Position
+    (bzw. der mitgeschnittenen Dauer) ableiten statt aus `engine.durationMillis`; (b) **`LiveTimeshiftRecorder`**
+    (Produktions-Capture: 1 Verbindung, rollendes 60-min-Fenster, Front-Trim); (c) **`TimeshiftDiskManager`**
+    (2-GB-LRU, 200-MB-Floor, Orphan-Cleanup); (d) **Engine-Integration** — Auto-Detect Fall B (nicht-seekbarer
+    Channel) → Recorder besitzt die Verbindung, Player spielt lokal-tailing (wegen max_cons=1 nie beide); (e)
+    **HLS-vs-TS-Erkennung** (Recorder nur für progressive TS; HLS = Fall A direkt).
 - **FFmpeg-Segmenter:** libavformat HLS-Muxer erzeugt konforme Segmente. Robust, aber grosse Abhängigkeit
   (JNI/Binary) + Build-Aufwand.
 - **Fall B ganz zurückstellen (v1):** Fall A (nativ, fertig) deckt HLS-Broadcaster + Xtream-HLS (Default);

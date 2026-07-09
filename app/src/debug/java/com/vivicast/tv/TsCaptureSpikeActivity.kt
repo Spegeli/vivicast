@@ -101,6 +101,7 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                                 title = "TS Concat Spike",
                                 streamUrl = bufferFile.toURI().toString(),
                                 seekable = true,
+                                tailing = true,
                             ),
                         )
                     }
@@ -118,7 +119,7 @@ class TsCaptureSpikeActivity : ComponentActivity() {
 
     private companion object {
         const val USER_AGENT = "Vivicast/1.0"
-        const val START_BYTES = 20_000_000L // ~15s of HD before playing, so a seek in the concat has room
+        const val START_BYTES = 3_000_000L // small: tailing follows the growing file, so start soon after connect
     }
 }
 

@@ -15,6 +15,9 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.vivicast.tv.core.player.timeshift.TailingFileDataSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -82,6 +85,9 @@ data class PlaybackRequest(
     val timeshift: PlaybackTimeshiftConfig? = null,
     // Per-provider User-Agent for the stream; null/blank falls back to the global User-Agent.
     val userAgent: String? = null,
+    // Fall B / K2: streamUrl points at a local file that a live capture is still appending to; play it via
+    // TailingFileDataSource so ExoPlayer follows the growing edge and can seek back into the captured window.
+    val tailing: Boolean = false,
 )
 
 enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
@@ -631,15 +637,16 @@ class Media3PlaybackEngine(
             val mediaItem = MediaItem.fromUri(request.streamUrl)
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
             val useDisk = request.timeshift?.let { usesDiskCache(it.storage, it.windowMillis) } == true
-            val mediaSourceFactory = if (useDisk) {
-                DefaultMediaSourceFactory(
+            val mediaSourceFactory: MediaSource.Factory = when {
+                // Fall B / K2: a live-captured local file that keeps growing → tail it, stay seekable.
+                request.tailing -> ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
+                useDisk -> DefaultMediaSourceFactory(
                     CacheDataSource.Factory()
                         .setCache(timeshiftCache)
                         .setUpstreamDataSourceFactory(defaultDataSourceFactory)
                         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
                 )
-            } else {
-                DefaultMediaSourceFactory(defaultDataSourceFactory)
+                else -> DefaultMediaSourceFactory(defaultDataSourceFactory)
             }
             player.setMediaSource(
                 mediaSourceFactory.createMediaSource(mediaItem),
