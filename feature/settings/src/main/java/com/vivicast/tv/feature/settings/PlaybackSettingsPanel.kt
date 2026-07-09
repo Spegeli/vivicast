@@ -119,6 +119,8 @@ fun PlaybackSettingsPanel(
                 help = stringResource(R.string.settings_help_next_stream),
                 value = state.bufferSize.label(),
                 modifier = firstFocusModifier,
+                // "Off" is a real buffer value; force a text+chevron row so it isn't mistaken for a toggle.
+                forceTextValue = true,
                 icon = { SettingsRowIcon("buffer") },
                 onClick = { openPicker = PlaybackPicker.Buffer },
             )
@@ -203,6 +205,8 @@ fun PlaybackSettingsPanel(
                 title = stringResource(R.string.settings_subtitle_language),
                 help = stringResource(R.string.settings_help_subtitle_lang),
                 value = state.preferredSubtitleLanguage.label(),
+                // "Off" is a real subtitle value; force text+chevron so it isn't mistaken for a toggle.
+                forceTextValue = true,
                 icon = { SettingsRowIcon("subtitles") },
                 onClick = { openPicker = PlaybackPicker.SubtitleLanguage },
             )
