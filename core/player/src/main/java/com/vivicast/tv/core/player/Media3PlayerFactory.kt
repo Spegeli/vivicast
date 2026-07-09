@@ -47,9 +47,13 @@ enum class BufferTier { Off, Small, Medium, Large, ExtraLarge }
 /** ExoPlayer LoadControl buffer durations in ms. */
 data class BufferDurations(val minMs: Int, val maxMs: Int, val forPlaybackMs: Int, val afterRebufferMs: Int)
 
-/** Normative-ish IPTV tiers (values signed off in the plan). forPlayback/afterRebuffer kept low for snappy zap. */
+/**
+ * Normative-ish IPTV tiers (values signed off in the plan). forPlayback/afterRebuffer kept low for snappy zap.
+ * Invariant (DefaultLoadControl.build() asserts it, else it throws): minMs >= forPlaybackMs AND
+ * minMs >= afterRebufferMs AND maxMs >= minMs — see the unit test that guards every tier.
+ */
 fun BufferTier.toBufferDurations(): BufferDurations = when (this) {
-    BufferTier.Off -> BufferDurations(1000, 5000, 1000, 1500)
+    BufferTier.Off -> BufferDurations(1000, 5000, 1000, 1000)
     BufferTier.Small -> BufferDurations(5000, 15000, 1500, 2500)
     BufferTier.Medium -> BufferDurations(15000, 30000, 2500, 5000)
     BufferTier.Large -> BufferDurations(30000, 60000, 2500, 5000)

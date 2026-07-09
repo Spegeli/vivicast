@@ -576,8 +576,12 @@ class Media3PlaybackEngine(
     /** Rebuilds the player only when a build-time setting changed, re-attaching the video surface. */
     private fun rebuildPlayerIfTuningChanged(tuning: PlaybackTuning) {
         if (tuning.builderSubset == builtTuning.builderSubset) return
+        // Build the new player BEFORE releasing the old one: if buildExoPlayer throws (e.g. an invalid
+        // LoadControl config), the old player + builtTuning stay intact so the retry keeps a live player
+        // instead of wedging on a released instance.
+        val next = buildExoPlayer(appContext, tuning).also { it.addListener(newPlayerListener()) }
         player.release()
-        player = buildExoPlayer(appContext, tuning).also { it.addListener(newPlayerListener()) }
+        player = next
         builtTuning = tuning
         videoSurfaceView?.let { player.setVideoSurfaceView(it) }
     }

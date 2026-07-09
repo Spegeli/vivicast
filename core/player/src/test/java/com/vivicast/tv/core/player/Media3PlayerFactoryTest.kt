@@ -14,6 +14,10 @@ class Media3PlayerFactoryTest {
             assertTrue("min<=max for $tier", d.minMs <= d.maxMs)
             assertTrue("forPlayback>0 for $tier", d.forPlaybackMs > 0)
             assertTrue("afterRebuffer>0 for $tier", d.afterRebufferMs > 0)
+            // DefaultLoadControl.build() asserts these two; a violation throws at buildExoPlayer (crashed
+            // the player when Buffer=Off shipped as min 1000 < afterRebuffer 1500).
+            assertTrue("min>=forPlayback for $tier", d.minMs >= d.forPlaybackMs)
+            assertTrue("min>=afterRebuffer for $tier", d.minMs >= d.afterRebufferMs)
         }
         // Spec-signed-off anchors.
         assertEquals(BufferDurations(15000, 30000, 2500, 5000), BufferTier.Medium.toBufferDurations())
