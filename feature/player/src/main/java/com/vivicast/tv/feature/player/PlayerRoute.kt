@@ -537,20 +537,21 @@ private fun PlayerOptionDialog(
         selectedFocusRequester.requestFocus()
     }
 
-    VivicastContentCard(modifier = modifier.fillMaxWidth(0.36f), contentPadding = 22.dp) {
-        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    VivicastContentCard(modifier = modifier.fillMaxWidth(0.42f), contentPadding = 22.dp) {
+        // Vertical list so each option shows its full label (stream track names vary in length and count);
+        // a single horizontal row squished 3+ pills and ellipsized them.
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             SectionTitle(title)
-            VivicastButtonRow {
-                options.forEachIndexed { index, option ->
-                    ActionPill(
-                        label = option.label,
-                        selected = option.selected,
-                        modifier = Modifier
-                            .then(if (index == selectedIndex) Modifier.focusRequester(selectedFocusRequester) else Modifier)
-                            .testTag(playerOptionTag(option.key)),
-                        onClick = option.onClick,
-                    )
-                }
+            options.forEachIndexed { index, option ->
+                ActionPill(
+                    label = option.label,
+                    selected = option.selected,
+                    fillWidth = true,
+                    modifier = Modifier
+                        .then(if (index == selectedIndex) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                        .testTag(playerOptionTag(option.key)),
+                    onClick = option.onClick,
+                )
             }
         }
     }

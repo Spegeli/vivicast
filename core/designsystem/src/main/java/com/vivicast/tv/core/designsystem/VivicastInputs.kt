@@ -57,11 +57,16 @@ fun ActionPill(
     selected: Boolean = false,
     enabled: Boolean = true,
     loading: Boolean = false,
+    // fillWidth = stretch to the parent width and show the full label (for vertical option lists) instead of
+    // the default content-sized pill capped at 300dp (which ellipsizes long labels in a horizontal row).
+    fillWidth: Boolean = false,
     height: Dp = VivicastCardSizes.ActionPillHeight,
     onClick: () -> Unit = {},
 ) {
     VivicastFocusSurface(
-        modifier = modifier.widthIn(min = 80.dp, max = 300.dp).height(height)
+        modifier = modifier
+            .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier.widthIn(min = 80.dp, max = 300.dp))
+            .height(height)
             .then(if (enabled) Modifier else Modifier.alpha(0.5f)),
         selected = selected,
         onClick = { if (enabled && !loading) onClick() },
