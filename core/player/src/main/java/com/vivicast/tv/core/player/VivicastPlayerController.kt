@@ -220,7 +220,13 @@ class DefaultVivicastPlayerController(
         val current = mutableState.value
         val request = current.request ?: return
         if (!current.isTimeshiftEnabled || current.isAtLiveEdge) return
-        engine.seekToLiveEdge()
+        if (request.tailing) {
+            // Growing local capture: the live edge is the current end of the file. seekToDefaultPosition would
+            // jump to the START of a progressive file, so instead jump far forward — ExoPlayer clamps to the end.
+            engine.seekBy(LIVE_EDGE_SEEK_FORWARD_MILLIS)
+        } else {
+            engine.seekToLiveEdge()
+        }
         mutableState.value = current.withNativeTimeline(request)
     }
 
@@ -438,23 +444,38 @@ class DefaultVivicastPlayerController(
      * so the timeline bar reads 100% at live and shrinks as you rewind. VOD/non-seekable get plain native values.
      */
     private fun VivicastPlayerState.withNativeTimeline(request: PlaybackRequest): VivicastPlayerState {
-        return if (isNativeLiveTimeshift(request)) {
-            val window = engine.durationMillis
-            val position = engine.currentPositionMillis
-            liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
-            // ponytail: no wall-clock advance, so a long PAUSE at live won't grow the offset until playback
-            // resumes and catches up — add clock-based advance only if the paused-behind label matters.
-            val offset = (liveEdgePositionMillis - position).coerceIn(0L, window)
-            copy(
-                positionMillis = (window - offset).coerceAtLeast(0L),
-                durationMillis = window,
-                timeshiftWindowMillis = window,
-                liveEdgeOffsetMillis = offset,
-                timeshiftStorage = request.timeshift?.storage,
-            )
-        } else {
-            copy(
-                positionMillis = engine.currentPositionMillis,
+        val position = engine.currentPositionMillis
+        return when {
+            // Fall B: a growing local capture (tailing). ExoPlayer has no duration, so the seekable window is
+            // what has been captured so far = the running-max position (position is already window-relative:
+            // 0 = buffer start, liveEdge = newest captured). Offset = liveEdge - position.
+            request.tailing -> {
+                liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
+                val window = liveEdgePositionMillis
+                copy(
+                    positionMillis = position,
+                    durationMillis = window,
+                    timeshiftWindowMillis = window,
+                    liveEdgeOffsetMillis = (window - position).coerceAtLeast(0L),
+                    timeshiftStorage = request.timeshift?.storage,
+                )
+            }
+            isNativeLiveTimeshift(request) -> {
+                val window = engine.durationMillis
+                liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
+                // ponytail: no wall-clock advance, so a long PAUSE at live won't grow the offset until playback
+                // resumes and catches up — add clock-based advance only if the paused-behind label matters.
+                val offset = (liveEdgePositionMillis - position).coerceIn(0L, window)
+                copy(
+                    positionMillis = (window - offset).coerceAtLeast(0L),
+                    durationMillis = window,
+                    timeshiftWindowMillis = window,
+                    liveEdgeOffsetMillis = offset,
+                    timeshiftStorage = request.timeshift?.storage,
+                )
+            }
+            else -> copy(
+                positionMillis = position,
                 durationMillis = engine.durationMillis,
                 timeshiftWindowMillis = 0L,
                 liveEdgeOffsetMillis = 0L,
@@ -467,6 +488,8 @@ class DefaultVivicastPlayerController(
         const val DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
         val DEFAULT_RETRY_DELAYS_MILLIS = listOf(500L, 1_000L, 2_000L, 4_000L)
         private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
+        // Far-forward seek for a tailing (growing) source: ExoPlayer clamps it to the current buffer end = live.
+        private const val LIVE_EDGE_SEEK_FORWARD_MILLIS = 24L * 60L * 60L * 1_000L
     }
 }
 
