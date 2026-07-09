@@ -11,6 +11,17 @@ max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber**
 (Recorder, rollendes Fenster, Engine-Integration). **→ Produktions-Bau-Plan: `plans/fall-b-timeshift-capture.md`**
 (diese Datei bleibt der Strategie-/Entscheidungs-Record). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
+## Offene Punkte + Archivierung (Stand 2026-07-09)
+**Noch NICHT fertig** — diese Datei bleibt aktiv, bis Fall B produktiv steht:
+- **Fall-B-Produktion** (Recorder, Multi-File-Tailing, Detection, Engine-Integration, DiskManager) →
+  eigener Bau-Plan `plans/fall-b-timeshift-capture.md`. Inkl. Multi-File-Tailing-Spike (offene Mechanik-Frage).
+- **Toter `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad** in Engine/Factory entfernen — wird in
+  `fall-b-timeshift-capture.md` (Increment 5) miterledigt.
+- Harmlos: tote DataStore/Backup-`timeshift*`-Felder + tote Timeshift-Strings (Cleanup-Task-Chip existiert).
+
+**Archivierung:** wenn `fall-b-timeshift-capture.md` komplett umgesetzt ist → beide Plandateien als erledigt
+markieren und nach `plans/archive/` verschieben. Bis dahin bleibt diese Datei die aktive Timeshift-Referenz.
+
 ## Spike-Erkenntnis (entscheidend)
 
 Debug-Spike (`app/src/debug/.../TimeshiftSpikeActivity.kt`) auf ARD-HLS (`daserste …/master.m3u8`) gezeigt:

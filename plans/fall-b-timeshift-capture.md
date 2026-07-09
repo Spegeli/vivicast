@@ -104,6 +104,9 @@ Vor dem Play entscheiden, ob Recorder+Local (Fall B) oder Direkt (Fall A):
 3. `LiveTimeshiftRecorder` (Capture + Segmentierung + Front-Trim + Reconnect).
 4. Fall-A/B-Erkennung: `captureLocally`-Flag in `PlaybackRequestFactory` (+ Xtream-Format/M3U-Endung).
 5. Engine-/Orchestration-Integration (Recorder-Lifecycle, lokal-tailing-Play, Kanalwechsel-Verbindung).
+   **Dabei aufräumen (offener Rest aus `timeshift-redesign.md`):** den nach Phase 2 toten
+   `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad in `Media3PlaybackEngine.start()` + `Media3PlayerFactory`
+   entfernen (der Tailing-Pfad ersetzt seinen Zweck; `SimpleCache` war ein Read-Through-Cache, kein Recorder).
 6. End-to-End auf der echten TV mit echtem Xtream-`.ts` (max_cons=1): Live flüssig, Rewind bis Fenster,
    zurück-zu-Live, Kanalwechsel ohne „max connections", Fenster rollt bei 60 min.
 - Gates je Increment: `.\gradlew.bat detekt test assembleDebug` + TV-Smoke. Unit-Tests für DiskManager/Trim/
