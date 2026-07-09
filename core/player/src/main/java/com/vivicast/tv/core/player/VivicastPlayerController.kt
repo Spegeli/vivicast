@@ -131,6 +131,10 @@ data class VivicastPlayerState(
     val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val isReconnecting: Boolean = false,
     val videoFrameRate: Float = 0f,
+    // Active stream info for the overlay badges (0 = unknown).
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
+    val audioChannelCount: Int = 0,
     val error: PlaybackError? = null,
 ) {
     val isTimeshiftEnabled: Boolean
@@ -433,6 +437,9 @@ class DefaultVivicastPlayerController(
                 mutableState.value = current.withNativeTimeline(request)
                     .copy(
                         videoFrameRate = engine.videoFrameRate,
+                        videoWidth = engine.videoWidth,
+                        videoHeight = engine.videoHeight,
+                        audioChannelCount = engine.audioChannelCount,
                         audioTracks = engine.audioTracks,
                         subtitleTracks = engine.textTracks,
                     )
@@ -540,6 +547,16 @@ interface PlaybackEngine {
     /** Source content frame rate (fps), 0 if unknown — used for auto frame-rate matching. */
     val videoFrameRate: Float
         get() = 0f
+
+    /** Active video/audio stream info for the overlay badges (0 = unknown). */
+    val videoWidth: Int
+        get() = 0
+
+    val videoHeight: Int
+        get() = 0
+
+    val audioChannelCount: Int
+        get() = 0
 
     /** True when the current media item exposes a native seek window (e.g. HLS live DVR); false for progressive TS. */
     val isCurrentSeekable: Boolean
@@ -665,6 +682,15 @@ class Media3PlaybackEngine(
 
     override val videoFrameRate: Float
         get() = player.videoFormat?.frameRate?.takeIf { it > 0f } ?: 0f
+
+    override val videoWidth: Int
+        get() = player.videoFormat?.width?.takeIf { it > 0 } ?: 0
+
+    override val videoHeight: Int
+        get() = player.videoFormat?.height?.takeIf { it > 0 } ?: 0
+
+    override val audioChannelCount: Int
+        get() = player.audioFormat?.channelCount?.takeIf { it > 0 } ?: 0
 
     override val isCurrentSeekable: Boolean
         get() = player.isCurrentMediaItemSeekable

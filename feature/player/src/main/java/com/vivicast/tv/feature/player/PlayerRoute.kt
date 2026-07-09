@@ -56,6 +56,7 @@ import com.vivicast.tv.core.player.PlaybackTrack
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.player.VivicastPlayerState
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 /**
@@ -640,12 +641,36 @@ private fun VivicastPlayerState.progressPercent(): Int {
     return ((positionMillis.coerceAtLeast(0L) * 100L) / durationMillis).coerceIn(0L, 100L).toInt()
 }
 
-private fun VivicastPlayerState.badges(): List<String> =
+private fun VivicastPlayerState.badges(): List<String> = buildList {
+    resolutionBadge(videoHeight)?.let { add(it) }
+    if (videoFrameRate > 0f) add("${videoFrameRate.roundToInt()} fps")
+    audioChannelBadge(audioChannelCount)?.let { add(it) }
     if (isTimeshiftEnabled) {
-        listOf("Timeshift", "${timeshiftWindowMillis / 60_000L} min")
-    } else {
-        emptyList()
+        add("Timeshift")
+        add("${timeshiftWindowMillis / 60_000L} min")
     }
+}
+
+/** Human resolution class from the active video height (0/unknown → no badge). */
+private fun resolutionBadge(height: Int): String? = when {
+    height <= 0 -> null
+    height <= 576 -> "SD"
+    height <= 720 -> "HD"
+    height <= 1080 -> "Full HD"
+    height <= 1440 -> "QHD"
+    height <= 2160 -> "4K"
+    else -> "8K"
+}
+
+/** Active audio channel layout (0/unknown → no badge). */
+private fun audioChannelBadge(channels: Int): String? = when {
+    channels <= 0 -> null
+    channels == 1 -> "Mono"
+    channels == 2 -> "Stereo"
+    channels == 6 -> "5.1"
+    channels == 8 -> "7.1"
+    else -> "${channels}ch"
+}
 
 private fun VivicastPlayerState.autoNextRemainingSeconds(configuredSeconds: Int): Int? {
     if (status != PlaybackStatus.Playing || request?.mediaType != PlaybackMediaType.Episode || durationMillis <= 0L) {
