@@ -1,7 +1,6 @@
 package com.vivicast.tv.core.player
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,17 +36,5 @@ class Media3PlayerFactoryTest {
             PlaybackTuning(audioDecoder = DecoderMode.Hardware).builderSubset,
             PlaybackTuning(audioDecoder = DecoderMode.Software).builderSubset,
         )
-    }
-
-    @Test
-    fun timeshiftStorageDiskDecision() {
-        val long = 60L * 60_000L
-        val short = 15L * 60_000L
-        assertTrue(usesDiskCache(PlaybackTimeshiftStorage.InternalStorage, short))
-        assertFalse(usesDiskCache(PlaybackTimeshiftStorage.Ram, long))
-        // Automatic: disk only for windows longer than 30 min.
-        assertTrue(usesDiskCache(PlaybackTimeshiftStorage.Automatic, long))
-        assertFalse(usesDiskCache(PlaybackTimeshiftStorage.Automatic, short))
-        assertFalse(usesDiskCache(PlaybackTimeshiftStorage.Automatic, 30L * 60_000L))
     }
 }

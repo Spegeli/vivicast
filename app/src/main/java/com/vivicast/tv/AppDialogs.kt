@@ -57,7 +57,6 @@ import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.LanguagePreference
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
-import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.designsystem.R
@@ -77,8 +76,6 @@ import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackReturnTarget
 import com.vivicast.tv.core.player.PlaybackStatus
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
-import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState

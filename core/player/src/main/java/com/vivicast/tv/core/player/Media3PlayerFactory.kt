@@ -133,15 +133,3 @@ private class VivicastRenderersFactory(
                 .build()
         }
 }
-
-/**
- * Timeshift storage decision. RAM = memory-only (no disk cache), InternalStorage = disk CacheDataSource,
- * Automatic = disk only for long windows (short ones stay in RAM) — so all three options differ at runtime.
- */
-fun usesDiskCache(storage: PlaybackTimeshiftStorage, windowMillis: Long): Boolean = when (storage) {
-    PlaybackTimeshiftStorage.Ram -> false
-    PlaybackTimeshiftStorage.InternalStorage -> true
-    PlaybackTimeshiftStorage.Automatic -> windowMillis > AUTO_DISK_THRESHOLD_MILLIS
-}
-
-private const val AUTO_DISK_THRESHOLD_MILLIS = 30L * 60_000L

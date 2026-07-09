@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Debug-only: allow HTTP so the spikes can capture progressive-TS live URLs (e.g. Tvheadend). -->
-    <application android:usesCleartextTraffic="true">
-        <!-- Debug-only timeshift spike (Phase 0). Exported so it can be launched via adb am start.
-             Inherits the application theme. Not present in release builds. -->
-        <activity
-            android:name=".TimeshiftSpikeActivity"
-            android:exported="true" />
-        <!-- Debug-only Fall-B capture spike (Phase 3 / K1): progressive TS -> local rolling live HLS. -->
-        <activity
-            android:name=".TsCaptureSpikeActivity"
-            android:exported="true" />
-    </application>
+    <!-- Debug-only: allow HTTP so progressive-TS / http:// IPTV streams can be tested on the emulator. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

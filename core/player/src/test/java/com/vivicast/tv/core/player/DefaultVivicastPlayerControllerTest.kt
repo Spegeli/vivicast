@@ -274,39 +274,6 @@ class DefaultVivicastPlayerControllerTest {
         assertTrue(controller.state.value.isAtLiveEdge)
     }
 
-    @Test
-    fun tailingCaptureUsesRunningMaxPositionAsWindowAndSeeksWithinIt() = runBlocking {
-        // Fall B: a growing local capture has no ExoPlayer duration. durationMillis here doubles as the fake's
-        // seek clamp (buffer end); the controller derives the window from the running-max position.
-        val engine = BlockingPlaybackEngine().apply {
-            durationMillis = 30_000L
-            currentPositionMillis = 30_000L
-        }
-        val controller = testController(engine)
-
-        controller.play(TAILING_REQUEST)
-        withTimeout(5_000) { engine.awaitStarted("tailing") }
-        engine.complete("tailing")
-        withTimeout(5_000) {
-            controller.state.first { it.status == PlaybackStatus.Playing }
-        }
-
-        assertEquals(30_000L, controller.state.value.timeshiftWindowMillis)
-        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
-        assertTrue(controller.state.value.isAtLiveEdge)
-
-        controller.seekBy(-10_000L)
-        assertEquals(20_000L, controller.state.value.positionMillis)
-        assertEquals(10_000L, controller.state.value.liveEdgeOffsetMillis)
-        assertFalse(controller.state.value.isAtLiveEdge)
-
-        // "Live" jumps far forward; the fake clamps to the buffer end (30s).
-        controller.seekToLiveEdge()
-        assertEquals(30_000L, controller.state.value.positionMillis)
-        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
-        assertTrue(controller.state.value.isAtLiveEdge)
-    }
-
     private fun testController(engine: PlaybackEngine): DefaultVivicastPlayerController =
         DefaultVivicastPlayerController(
             engine = engine,
@@ -357,11 +324,6 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     override fun seekBy(deltaMillis: Long) {
         seekDeltas += deltaMillis
         currentPositionMillis = (currentPositionMillis + deltaMillis).coerceIn(0L, durationMillis)
-    }
-    // Absolute seek: the reported position stays absolute (unlike relative seekBy). durationMillis is the
-    // fake's buffer end / clamp.
-    override fun seekToMillis(positionMillis: Long) {
-        currentPositionMillis = positionMillis.coerceIn(0L, durationMillis)
     }
     override fun seekToLiveEdge() {
         liveEdgeSeeks += 1
@@ -493,14 +455,4 @@ private val SECOND_REQUEST = TEST_REQUEST.copy(
 private val TIMESHIFT_REQUEST = TEST_REQUEST.copy(
     playbackId = "timeshift",
     seekable = true,
-    timeshift = PlaybackTimeshiftConfig(
-        storage = PlaybackTimeshiftStorage.Automatic,
-        windowMillis = 30 * 60_000L,
-    ),
-)
-
-private val TAILING_REQUEST = TEST_REQUEST.copy(
-    playbackId = "tailing",
-    seekable = true,
-    tailing = true,
 )

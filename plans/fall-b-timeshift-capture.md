@@ -1,10 +1,16 @@
-# Plan: Fall B — lokale TS-Capture-Timeshift (Produktion)
+# Plan: Fall B — lokale TS-Capture-Timeshift — ⛔ ABANDONED (native-only)
 
-Status: in Arbeit (2026-07-09). Umsetzungs-Plan für die **Produktion** von Fall B. Vorgeschichte (K1 verworfen,
-K2 concat + Tailing validiert) in `plans/timeshift-redesign.md`. **Multi-File-Tailing-Spike (Schritt 0) gemacht:
-Play/Trim/Seek-Decode ✓, aber Positions-/Seek-STEUERUNG über ExoPlayers unbounded-Timeline unzuverlässig → muss
-capture-getrieben werden** (der eine echte Rest-Design-Punkt, siehe Schritt-0-Ergebnis unten). Diese Datei ist
-der konkrete Bau-Plan.
+> **VERWORFEN 2026-07-09.** Nutzer-Entscheidung: Timeshift ist **native-only** (nur server-seitiges DVR-Fenster).
+> Kein lokaler Capture, kein Recorder, kein Disk-Puffer. Der gesamte hier geplante/gespikte Code wurde entfernt
+> (`TailingFileDataSource`, `MultiFileTailingDataSource`, `PlaybackRequest.tailing`, Segment-Playlist,
+> `timeshiftCache`/`usesDiskCache`, `PlaybackTimeshiftConfig`/`PlaybackTimeshiftStorage`, Debug-Spikes).
+> Aktive Referenz: `plans/timeshift-redesign.md` (native-only, DONE). Der Rest dieser Datei ist nur noch
+> historischer Kontext, warum Fall B nicht gebaut wurde. → nach `plans/archive/` verschiebbar.
+
+Status: ~~in Arbeit~~ **ABANDONED**. Vorgeschichte (K1 verworfen, K2 concat + Tailing validiert) in
+`plans/timeshift-redesign.md`. Multi-File-Tailing-Spike: Play/Trim/Seek-Decode ✓, aber Positions-/Seek-STEUERUNG
+über ExoPlayers unbounded-Timeline unzuverlässig — einer der Gründe, die den Aufwand gegen den schmalen Nutzen
+kippten und zur native-only-Entscheidung führten.
 
 ## Ziel & Scope
 

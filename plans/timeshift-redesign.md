@@ -1,26 +1,35 @@
-# Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
+# Plan: Timeshift-Redesign — natives DVR-Fenster (native-only, ABGESCHLOSSEN)
 
-Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3: K1-Spike auf echter
-Hardware GESCHEITERT** (2026-07-09, Xiaomi Mi TV 4S): Der No-Gap-*Mechanismus* (1 Verbindung, Edge-Follow,
-Seek, Phase-1-Integration) läuft, ABER **hand-segmentiertes TS → lokales HLS ist auf einem echten
-Hardware-Decoder nicht dekodierbar** (Chroma-/Makroblock-Garbage + Audio-PTS-Discontinuities; naiv UND
-keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen. K2 (Concat, kein Re-Mux)
-auf echter Hardware + echtem Xtream-Ziel VALIDIERT** (Mi TV 4S, Xtream progressive `.ts`, ~11.8 Mbps HD,
-max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber**, **+ Tailing validiert** (wachsende Datei via
-`TailingFileDataSource` spielt durchgehend + seekbar). **Alle Mechanik-Fragen geklärt** — Rest ist Plumbing
-(Recorder, rollendes Fenster, Engine-Integration). **→ Produktions-Bau-Plan: `plans/fall-b-timeshift-capture.md`**
-(diese Datei bleibt der Strategie-/Entscheidungs-Record). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+Status: **DONE / native-only** (Entscheidung 2026-07-09). Timeshift = **ausschliesslich** das native server-seitige
+DVR-Fenster (HLS/DASH-Live). Kein lokaler Capture, keine Aufnahme, kein Disk-Puffer.
+- **Phase 1 + 2 DONE** (Commits 5bd904b/476ccb3/6f4e508): natives Fenster erkennen + anzeigen, Seek nativ,
+  Xtream-Ausgabeformat-Option (Default HLS), Timeshift-Settings-Zeilen raus (immer-an).
+- **Feature A DONE:** `BehindLiveWindowException` → Recovery am **frühesten verfügbaren Punkt** (`seekTo(0)` =
+  Fensteranfang) statt Sprung auf Live. Wer länger pausiert als das Fenster, behält den ältesten noch
+  vorhandenen Inhalt. Im `Media3PlaybackEngine.onPlayerError` gehandhabt (nicht propagiert, kein Reconnect-Flash).
+- **Fall B (lokale `.ts`-Capture) VERWORFEN + ENTFERNT** (2026-07-09): Nutzer-Entscheidung native-only. Der
+  ganze Capture-Apparat (Recorder-Spikes, `TailingFileDataSource`, `MultiFileTailingDataSource`,
+  `PlaybackRequest.tailing`, Segment-Playlist, toter `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad,
+  `PlaybackTimeshiftConfig`/`PlaybackTimeshiftStorage`, Debug-Spike-Activities) ist aus dem Code gelöscht.
+  Historie (K1-Hardware-Fail, K2-Validierung) unten als Kontext archiviert.
 
-## Offene Punkte + Archivierung (Stand 2026-07-09)
-**Noch NICHT fertig** — diese Datei bleibt aktiv, bis Fall B produktiv steht:
-- **Fall-B-Produktion** (Recorder, Multi-File-Tailing, Detection, Engine-Integration, DiskManager) →
-  eigener Bau-Plan `plans/fall-b-timeshift-capture.md`. Inkl. Multi-File-Tailing-Spike (offene Mechanik-Frage).
-- **Toter `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad** in Engine/Factory entfernen — wird in
-  `fall-b-timeshift-capture.md` (Increment 5) miterledigt.
-- Harmlos: tote DataStore/Backup-`timeshift*`-Felder + tote Timeshift-Strings (Cleanup-Task-Chip existiert).
+## Was native-only bedeutet (Ist-Verhalten)
+- **Grosses Server-Fenster** (ARD/ZDF 2–3h): volle manifest-treue Tiefe zurückspulbar; Pause bis Fensterlänge
+  hält den Punkt. Kein 60-min-Deckel (der galt nur für das entfernte Fall B).
+- **Kleines Fenster** (Regional/`.ts`): nur so weit wie der Server hergibt; längere Pause verliert den Punkt →
+  Feature A landet am frühesten Verfügbaren statt bei Live.
+- **Progressive `.ts` ohne Fenster:** kein Timeshift/Rückspulen; `player_timeshift_unavailable`-Hinweis.
 
-**Archivierung:** wenn `fall-b-timeshift-capture.md` komplett umgesetzt ist → beide Plandateien als erledigt
-markieren und nach `plans/archive/` verschieben. Bis dahin bleibt diese Datei die aktive Timeshift-Referenz.
+## Offene Rest-Cleanups (harmlos, tangential)
+- Tote DataStore/Backup-`timeshift*`-Felder (`timeshiftEnabled`/`timeshiftStorage`/`timeshiftMinutes` +
+  `TimeshiftStoragePreference`) + tote Timeshift-Strings — von der Kern-Logik entkoppelt, Schema-berührend,
+  daher separat gelassen (Cleanup-Task-Chip existiert).
+
+**Archivierung:** native-only ist entschieden und umgesetzt → beide Timeshift-Plandateien können nach
+`plans/archive/` (erledigt). `fall-b-timeshift-capture.md` ist mit ABANDONED-Header versehen.
+
+---
+_Ab hier: historischer Kontext (Strategie-Record vor der native-only-Entscheidung)._
 
 ## Spike-Erkenntnis (entscheidend)
 

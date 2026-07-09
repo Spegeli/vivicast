@@ -1,24 +1,15 @@
 package com.vivicast.tv.core.player
 
 import android.content.Context
-import android.net.Uri
 import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
-import androidx.media3.datasource.cache.SimpleCache
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import com.vivicast.tv.core.player.timeshift.TailingFileDataSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -37,7 +28,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
 import java.util.Locale
 
 interface VivicastPlayerController {
@@ -83,12 +73,8 @@ data class PlaybackRequest(
     val seekable: Boolean,
     val startPositionMillis: Long = 0L,
     val epgProgramStableKey: String? = null,
-    val timeshift: PlaybackTimeshiftConfig? = null,
     // Per-provider User-Agent for the stream; null/blank falls back to the global User-Agent.
     val userAgent: String? = null,
-    // Fall B / K2: streamUrl points at a local file that a live capture is still appending to; play it via
-    // TailingFileDataSource so ExoPlayer follows the growing edge and can seek back into the captured window.
-    val tailing: Boolean = false,
 )
 
 enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
@@ -96,16 +82,6 @@ enum class PlaybackMediaType { Channel, Movie, Episode, CatchUp }
 enum class PlaybackOrigin { Home, LiveTv, MovieDetail, SeriesDetail, Search, AndroidTv, Unknown }
 
 enum class PlaybackReturnTarget { Home, LiveTv, MovieDetail, SeriesDetail, Unknown }
-
-data class PlaybackTimeshiftConfig(
-    val storage: PlaybackTimeshiftStorage,
-    val windowMillis: Long,
-) {
-    val enabled: Boolean
-        get() = windowMillis > 0L
-}
-
-enum class PlaybackTimeshiftStorage { Automatic, Ram, InternalStorage }
 
 enum class PlaybackAudioOption { SystemDefault, German, English, Original }
 
@@ -123,7 +99,6 @@ data class VivicastPlayerState(
     val durationMillis: Long = 0L,
     val liveEdgeOffsetMillis: Long = 0L,
     val timeshiftWindowMillis: Long = 0L,
-    val timeshiftStorage: PlaybackTimeshiftStorage? = null,
     val audioOption: PlaybackAudioOption = PlaybackAudioOption.SystemDefault,
     val subtitleOption: PlaybackSubtitleOption = PlaybackSubtitleOption.Off,
     val aspectRatioMode: PlaybackAspectRatioMode = PlaybackAspectRatioMode.Fit,
@@ -211,12 +186,7 @@ class DefaultVivicastPlayerController(
         val current = mutableState.value
         val request = current.request ?: return
         if (!request.seekable) return
-        if (request.tailing) {
-            // Tailing: relative seekBy makes ExoPlayer re-base its reported position; absolute seekTo keeps it.
-            seekTailingTo(engine.currentPositionMillis + deltaMillis)
-        } else {
-            engine.seekBy(deltaMillis)
-        }
+        engine.seekBy(deltaMillis)
         mutableState.value = current.withNativeTimeline(request)
     }
 
@@ -225,20 +195,8 @@ class DefaultVivicastPlayerController(
         val current = mutableState.value
         val request = current.request ?: return
         if (!current.isTimeshiftEnabled || current.isAtLiveEdge) return
-        if (request.tailing) {
-            seekTailingTo(liveEdgePositionMillis) // the current live edge = running-max play position
-        } else {
-            engine.seekToLiveEdge()
-        }
+        engine.seekToLiveEdge()
         mutableState.value = current.withNativeTimeline(request)
-    }
-
-    /** Seeks a tailing source to an absolute ms, clamped to the retained window so we never hit trimmed content. */
-    private fun seekTailingTo(targetMillis: Long) {
-        val liveEdge = maxOf(liveEdgePositionMillis, engine.currentPositionMillis)
-        val window = minOf(liveEdge, MAX_TIMESHIFT_WINDOW_MILLIS)
-        val oldest = (liveEdge - window).coerceAtLeast(0L)
-        engine.seekToMillis(targetMillis.coerceIn(oldest, liveEdge))
     }
 
     override fun selectAudio(option: PlaybackAudioOption) {
@@ -410,7 +368,6 @@ class DefaultVivicastPlayerController(
             durationMillis = mutableState.value.durationMillis,
             liveEdgeOffsetMillis = mutableState.value.liveEdgeOffsetMillis,
             timeshiftWindowMillis = mutableState.value.timeshiftWindowMillis,
-            timeshiftStorage = mutableState.value.timeshiftStorage,
             error = PlaybackError(
                 playbackId = request.playbackId,
                 retryCount = maxReconnectAttempts,
@@ -457,21 +414,6 @@ class DefaultVivicastPlayerController(
     private fun VivicastPlayerState.withNativeTimeline(request: PlaybackRequest): VivicastPlayerState {
         val position = engine.currentPositionMillis
         return when {
-            // Fall B: a growing local capture (tailing). ExoPlayer has no duration, so the live edge = the
-            // running-max absolute position and the seekable window grows toward the rolling-window cap.
-            // Tailing seeks use absolute seekTo, so engine.currentPositionMillis stays absolute (no re-base).
-            request.tailing -> {
-                liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
-                val window = minOf(liveEdgePositionMillis, MAX_TIMESHIFT_WINDOW_MILLIS)
-                val offset = (liveEdgePositionMillis - position).coerceIn(0L, window)
-                copy(
-                    positionMillis = (window - offset).coerceAtLeast(0L),
-                    durationMillis = window,
-                    timeshiftWindowMillis = window,
-                    liveEdgeOffsetMillis = offset,
-                    timeshiftStorage = request.timeshift?.storage,
-                )
-            }
             isNativeLiveTimeshift(request) -> {
                 val window = engine.durationMillis
                 liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
@@ -483,7 +425,6 @@ class DefaultVivicastPlayerController(
                     durationMillis = window,
                     timeshiftWindowMillis = window,
                     liveEdgeOffsetMillis = offset,
-                    timeshiftStorage = request.timeshift?.storage,
                 )
             }
             else -> copy(
@@ -500,8 +441,6 @@ class DefaultVivicastPlayerController(
         const val DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
         val DEFAULT_RETRY_DELAYS_MILLIS = listOf(500L, 1_000L, 2_000L, 4_000L)
         private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
-        // Rolling timeshift window cap for a tailing (Fall B) capture — the deepest rewind the UI offers.
-        private const val MAX_TIMESHIFT_WINDOW_MILLIS = 60L * 60L * 1_000L
     }
 }
 
@@ -567,9 +506,6 @@ interface PlaybackEngine {
 
     fun seekBy(deltaMillis: Long)
 
-    /** Seek to an absolute media position. Used for tailing sources where relative seekBy is unreliable. */
-    fun seekToMillis(positionMillis: Long) = Unit
-
     /** Seek to the native live edge (default position) of the current media item. */
     fun seekToLiveEdge() = Unit
 
@@ -595,11 +531,6 @@ class Media3PlaybackEngine(
     private val tuningProvider: () -> PlaybackTuning = { PlaybackTuning() },
 ) : PlaybackEngine {
     private val appContext = context.applicationContext
-    private val timeshiftCache = SimpleCache(
-        File(appContext.cacheDir, TIMESHIFT_CACHE_DIR_NAME),
-        LeastRecentlyUsedCacheEvictor(TIMESHIFT_CACHE_MAX_BYTES),
-        StandaloneDatabaseProvider(appContext),
-    )
     // Buffer/decoder/passthrough live on ExoPlayer.Builder and can't change on a live player, so the player is
     // (re)built from a tuning snapshot: once here, then again in start() whenever the builder-subset changes —
     // exactly "applies at next stream start". Eagerly non-null so the forwarding methods need no null-guards.
@@ -618,6 +549,16 @@ class Media3PlaybackEngine(
 
     private fun newPlayerListener(): Player.Listener = object : Player.Listener {
         override fun onPlayerError(error: PlaybackException) {
+            if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                // Paused/rewound longer than the DVR window, so the position fell out of it. Recover in place at
+                // the EARLIEST still-available position (seekTo(0) = window start) instead of jumping to the live
+                // edge — the user keeps the oldest retained content rather than losing everything since the pause.
+                // Handled here (not propagated) so no reconnect UI flashes. ponytail: the controller's running-max
+                // offset briefly lags after the re-prepare and self-corrects on the next progress poll.
+                player.seekTo(0L)
+                player.prepare()
+                return
+            }
             // Fail the in-flight start (so start() throws for the retry logic) AND keep emitting to the
             // flow so a mid-watch death — after start already succeeded — still triggers the reconnect.
             startGate.onError(error)
@@ -673,31 +614,11 @@ class Media3PlaybackEngine(
             rebuildPlayerIfTuningChanged(tuning)
             activePlaybackId = request.playbackId
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
-            val useDisk = request.timeshift?.let { usesDiskCache(it.storage, it.windowMillis) } == true
-            val bufferDir = request.streamUrl.takeIf { request.tailing }?.let { Uri.parse(it).path }
-                ?.let(::File)?.takeIf { it.isDirectory }
-            if (bufferDir != null) {
-                // Fall B: play the segment files as a native ExoPlayer playlist (reliable cross-item timeline +
-                // gapless transitions); completed segments are bounded, the newest one tails. Start at the newest
-                // = the live edge (avoids the offset-0 start racing the trim).
-                val sources = buildSegmentPlaylist(bufferDir, request.userAgent)
-                player.setMediaSources(sources, (sources.size - 1).coerceAtLeast(0), 0L)
-            } else {
-                val mediaSourceFactory: MediaSource.Factory = when {
-                    request.tailing -> ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
-                    useDisk -> DefaultMediaSourceFactory(
-                        CacheDataSource.Factory()
-                            .setCache(timeshiftCache)
-                            .setUpstreamDataSourceFactory(defaultDataSourceFactory)
-                            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
-                    )
-                    else -> DefaultMediaSourceFactory(defaultDataSourceFactory)
-                }
-                player.setMediaSource(
-                    mediaSourceFactory.createMediaSource(MediaItem.fromUri(request.streamUrl)),
-                    request.startPositionMillis,
-                )
-            }
+            player.setMediaSource(
+                DefaultMediaSourceFactory(defaultDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(request.streamUrl)),
+                request.startPositionMillis,
+            )
             player.prepare()
             player.playWhenReady = true
             // Seed the initial track selection from the settings snapshot (spec: applied at stream start).
@@ -723,10 +644,6 @@ class Media3PlaybackEngine(
 
     override fun seekBy(deltaMillis: Long) {
         player.seekTo((player.currentPosition + deltaMillis).coerceAtLeast(0L))
-    }
-
-    override fun seekToMillis(positionMillis: Long) {
-        player.seekTo(positionMillis.coerceAtLeast(0L))
     }
 
     override fun seekToLiveEdge() {
@@ -768,12 +685,9 @@ class Media3PlaybackEngine(
     override fun release() {
         activePlaybackId = null
         player.release()
-        timeshiftCache.release()
     }
 
     private companion object {
-        const val TIMESHIFT_CACHE_DIR_NAME = "playback-timeshift"
-        const val TIMESHIFT_CACHE_MAX_BYTES = 512L * 1024L * 1024L
         const val DEFAULT_USER_AGENT = "Vivicast/1.0"
         const val START_READY_TIMEOUT_MILLIS = 10_000L
     }
@@ -781,22 +695,6 @@ class Media3PlaybackEngine(
     private fun httpDataSourceFactory(userAgent: String? = null): DefaultHttpDataSource.Factory {
         val resolved = userAgent?.trim()?.takeIf { it.isNotEmpty() } ?: userAgentProvider()
         return DefaultHttpDataSource.Factory().setUserAgent(resolved.normalizedUserAgent())
-    }
-
-    /** Segment files (seg-N.ts) as a playlist: completed segments bounded, the newest one tailing. */
-    private fun buildSegmentPlaylist(dir: File, userAgent: String?): List<MediaSource> {
-        val segments = dir.listFiles { file -> file.name.startsWith("seg-") && file.name.endsWith(".ts") }
-            ?.sortedBy { it.name.removePrefix("seg-").removeSuffix(".ts").toLongOrNull() ?: 0L }
-            ?: emptyList()
-        val boundedFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(userAgent))
-        return segments.mapIndexed { index, file ->
-            val factory = if (index == segments.lastIndex) {
-                ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
-            } else {
-                ProgressiveMediaSource.Factory(boundedFactory)
-            }
-            factory.createMediaSource(MediaItem.fromUri(file.toURI().toString()))
-        }
     }
 }
 

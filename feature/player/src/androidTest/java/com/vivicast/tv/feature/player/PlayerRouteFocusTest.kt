@@ -19,8 +19,6 @@ import com.vivicast.tv.core.player.PlaybackError
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.PlaybackSubtitleOption
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
-import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.designsystem.playerTimelineTag
@@ -463,16 +461,11 @@ class PlayerRouteFocusTest {
                     title = "Controller Channel",
                     streamUrl = "https://stream.example/channel.m3u8",
                     seekable = true,
-                    timeshift = PlaybackTimeshiftConfig(
-                        storage = PlaybackTimeshiftStorage.Automatic,
-                        windowMillis = 30 * 60_000L,
-                    ),
                 ),
                 positionMillis = 30 * 60_000L - 30_000L,
                 durationMillis = 30 * 60_000L,
                 liveEdgeOffsetMillis = 30_000L,
                 timeshiftWindowMillis = 30 * 60_000L,
-                timeshiftStorage = PlaybackTimeshiftStorage.Automatic,
             ),
         )
         var seekToLiveEdgeCount = 0

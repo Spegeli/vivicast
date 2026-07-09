@@ -6,8 +6,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
-import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.data.playback.PlaybackStreamRequest
 import com.vivicast.tv.data.playback.PlaybackStreamResult
 import com.vivicast.tv.data.provider.ProviderCreateRequest
@@ -36,7 +34,6 @@ class M3uPlaybackSmokeTest {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DATABASE_NAME)
         File(context.filesDir, M3U_STREAM_REFERENCE_DIR).deleteRecursively()
-        File(context.cacheDir, TIMESHIFT_CACHE_DIR).deleteRecursively()
         appContainer = AppContainer(context)
     }
 
@@ -98,10 +95,6 @@ class M3uPlaybackSmokeTest {
                         title = channel.name,
                         streamUrl = resolvedStream.url,
                         seekable = true,
-                        timeshift = PlaybackTimeshiftConfig(
-                            storage = PlaybackTimeshiftStorage.Automatic,
-                            windowMillis = TIMESHIFT_WINDOW_MILLIS,
-                        ),
                     ),
                 )
             }
@@ -115,8 +108,8 @@ class M3uPlaybackSmokeTest {
             }.getOrNull()
 
             if (started != null) {
+                // A seekable public HLS channel exposes a native DVR window; depth is server-defined, not fixed.
                 assertTrue(started.isTimeshiftEnabled)
-                assertEquals(TIMESHIFT_WINDOW_MILLIS, started.timeshiftWindowMillis)
 
                 delay(PLAYBACK_STABILITY_MILLIS)
                 if (appContainer.playerController.state.value.status != PlaybackStatus.Error) {
@@ -134,9 +127,7 @@ class M3uPlaybackSmokeTest {
     private companion object {
         const val DATABASE_NAME = "vivicast.db"
         const val M3U_STREAM_REFERENCE_DIR = "m3u-streams"
-        const val TIMESHIFT_CACHE_DIR = "playback-timeshift"
         const val PUBLIC_M3U_URL = "https://raw.githubusercontent.com/josxha/german-tv-m3u/main/german-tv.m3u"
-        const val TIMESHIFT_WINDOW_MILLIS = 15 * 60 * 1_000L
         const val PLAYBACK_START_TIMEOUT_MILLIS = 20_000L
         const val PLAYBACK_STABILITY_MILLIS = 5_000L
         const val SAMPLE_CHANNEL_COUNT = 5
