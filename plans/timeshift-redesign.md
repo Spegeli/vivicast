@@ -1,9 +1,11 @@
 # Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
 
-Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3 geplant + K1-Spike DONE
-& erfolgreich** (2026-07-09): No-Gap-Capture (1 Verbindung, Edge-Follow, Phase-1-Integration) end-to-end auf
-echtem progressive-TS validiert; **einzige offene Arbeit = Keyframe-ausgerichteter Segmenter** (naiver
-Wall-Clock-Schnitt gibt Mid-GOP-Artefakte nach Seek). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3: K1-Spike auf echter
+Hardware GESCHEITERT** (2026-07-09, Xiaomi Mi TV 4S): Der No-Gap-*Mechanismus* (1 Verbindung, Edge-Follow,
+Seek, Phase-1-Integration) läuft, ABER **hand-segmentiertes TS → lokales HLS ist auf einem echten
+Hardware-Decoder nicht dekodierbar** (Chroma-/Makroblock-Garbage + Audio-PTS-Discontinuities; naiv UND
+keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen; Fall-B-Ansatz
+neu bewerten** (siehe „Hardware-Ergebnis" unten). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -130,16 +132,27 @@ Player-Pfad** (wie Fall A, nur lokale Segmente). **Vom Spike bestätigt** (siehe
 **UI:** Fenster wächst von 0 (gerade eingeschaltet) bis 60 min; Badge zeigt die aktuelle Tiefe. Kein sichtbarer
 „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
 
-**Spike (✅ DONE 2026-07-09, ERFOLGREICH):** `app/src/debug/.../TsCaptureSpikeActivity.kt` + `LiveTsSegmenter.kt`.
-Getestet auf echtem progressive-TS (Tvheadend `?profile=pass`) am Emulator. **K1 gewählt** (lokales Live-HLS).
-Bewiesen: (1) der (naive) Segmenter erzeugt spielbare TS-Segmente, ExoPlayer spielt das lokale `file://index.m3u8`
-als Live-HLS mit DVR-Fenster; (2) Seek −20 s/−2 min funktioniert; (3) **Edge-Follow ohne Lücke** — Fenster wuchs
-während des Zuschauens 16 s → 116 s → 164 s, Zurück-zu-Live landet am Rand (`behindLive=0`, `atLive=true`); (4) **1
-Verbindung reicht** (nur der Capturer); (5) die **Phase-1-Native-Fenster-Logik greift direkt** auf der lokalen
-Quelle (`timeshift=true`, `behindLive`-Tracking). **Einschränkung gefunden:** naiver Wall-Clock-Schnitt →
-**Makroblock-Artefakte nach Seek** (Segment-Start mitten im GOP), heilen mit dem nächsten Keyframe. → Produktion
-braucht **Keyframe-ausgerichteten Schnitt** (an `random_access_indicator` + PAT/PMT je Segment-Start). K2 nicht
-mehr nötig.
+**Spike (DONE 2026-07-09):** `app/src/debug/.../TsCaptureSpikeActivity.kt` + `LiveTsSegmenter.kt`, getestet auf
+echtem progressive-TS (Tvheadend `?profile=pass`), Emulator UND Xiaomi Mi TV 4S.
+- **Mechanismus bestätigt:** 1-Verbindung-Capture, lokales Live-HLS, Seek, **Edge-Follow ohne Lücke** (Fenster
+  wuchs 16 → 116 → 164 s, Zurück-zu-Live am Rand), Phase-1-Fenster-Logik greift direkt (`timeshift=true`).
+- **❌ K1 (hand-segmentiertes TS → lokales HLS) auf echter Hardware NICHT dekodierbar:** Chroma-/Makroblock-
+  Garbage + `AudioSink UnexpectedDiscontinuityException` (PTS-Sprünge). Betrifft **naiven Wall-Clock-Schnitt
+  UND Keyframe-Schnitt (mit/ohne PAT/PMT-Prepend)**. Ursache: ein echter HW-Decoder ist strikt gegenüber
+  PES-Framing/PTS-Kontinuität; ein handgeschriebener Re-Segmenter erzeugt kein konformes TS. Der Emulator-
+  Software-Decoder war tolerant und hat das verdeckt (der eine „saubere" Emulator-Frame war low-motion direkt
+  nach Keyframe).
+
+### Hardware-Ergebnis → Neu-Bewertung Fall B (K1 tot)
+Hand-Re-Segmentieren ist raus. Verbleibende Wege:
+- **K2 — Concat statt Segmentieren (StreamVault-Original, produktionsbewiesen):** rohe Byte-Chunks NICHT
+  re-muxen, sondern zu **einer contiguous `buffer.ts` konkatenieren** = byte-identisch zum Originalstream →
+  **konform → HW-Decoder frisst es** (kein Re-Mux, kein PES-Bruch). Kosten: No-Gap+1-Verbindung braucht
+  tailing-Wiedergabe (nicht-standard) oder periodisches Re-Snapshot (Glitch beim Umschalten).
+- **FFmpeg-Segmenter:** libavformat HLS-Muxer erzeugt konforme Segmente. Robust, aber grosse Abhängigkeit
+  (JNI/Binary) + Build-Aufwand.
+- **Fall B ganz zurückstellen (v1):** Fall A (nativ, fertig) deckt HLS-Broadcaster + Xtream-HLS (Default);
+  TS-only-Xtream zeigt den „kein Timeshift"-Hinweis. Fall B = grosser Aufwand für schmale Zielgruppe.
 
 **Aufräumen (Teil von Phase 3):** den nach Phase 2 toten `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad in
 `Media3PlaybackEngine.start()` + `Media3PlayerFactory.kt` entfernen (falsches Mechanismus für Fall B; `SimpleCache`
