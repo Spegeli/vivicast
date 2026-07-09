@@ -8,7 +8,8 @@ keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. �
 auf echter Hardware + echtem Xtream-Ziel VALIDIERT** (Mi TV 4S, Xtream progressive `.ts`, ~11.8 Mbps HD,
 max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber**, **+ Tailing validiert** (wachsende Datei via
 `TailingFileDataSource` spielt durchgehend + seekbar). **Alle Mechanik-Fragen geklärt** — Rest ist Plumbing
-(Recorder, rollendes Fenster, Engine-Integration, Fenster-Metrik). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+(Recorder, rollendes Fenster, Engine-Integration). **→ Produktions-Bau-Plan: `plans/fall-b-timeshift-capture.md`**
+(diese Datei bleibt der Strategie-/Entscheidungs-Record). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
