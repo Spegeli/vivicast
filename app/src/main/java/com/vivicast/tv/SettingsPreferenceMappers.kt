@@ -141,6 +141,30 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.TimeZone
 
+/**
+ * Font-scale enum → LocalDensity fontScale multiplier (normative values from design-tokens.md:169-174).
+ * Pure App-layer mapping (no Density/Context/Compose) so it stays unit-testable and out of the ViewModel;
+ * the [androidx.compose.ui.unit.Density] itself is built at the composition root in MainActivity.
+ */
+internal fun FontScalePreference.toFontScaleFactor(): Float =
+    when (this) {
+        FontScalePreference.Small -> 0.90f
+        FontScalePreference.Medium -> 1.00f
+        FontScalePreference.Large -> 1.12f
+        FontScalePreference.ExtraLarge -> 1.25f
+    }
+
+/**
+ * Transparency enum → panel/overlay surface-opacity multiplier (normative: 0%→1.0, 25%→0.75, 50%→0.5).
+ * Spec supports only 0/25/50; the stale `Percent75` datastore value is clamped to the 50% opacity.
+ */
+internal fun TransparencyLevel.toSurfaceOpacity(): Float =
+    when (this) {
+        TransparencyLevel.Percent0 -> 1.00f
+        TransparencyLevel.Percent25 -> 0.75f
+        TransparencyLevel.Percent50, TransparencyLevel.Percent75 -> 0.50f
+    }
+
 internal fun SettingsLanguage.toLocaleKey(): String =
     when (this) {
         SettingsLanguage.System -> "System"

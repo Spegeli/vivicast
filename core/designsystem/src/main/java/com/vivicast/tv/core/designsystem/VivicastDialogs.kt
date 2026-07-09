@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -51,25 +52,29 @@ fun VivicastDialog(
         LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
     }
     Dialog(onDismissRequest = onDismiss) {
-        VivicastGlassPanel(
-            modifier = modifier
-                .vivicastDialogWidth(width)
-                .then(if (heightCap != null) Modifier.heightIn(max = heightCap) else Modifier)
-                .onPreviewKeyEvent {
-                    if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
-                        onDismiss()
-                        true
-                    } else {
-                        false
+        // Dialogs must stay opaque regardless of the panel-transparency setting (spec: no strong
+        // transparency on dialogs), so re-provide full opacity around the dialog's glass panel.
+        CompositionLocalProvider(LocalSurfaceOpacity provides 1f) {
+            VivicastGlassPanel(
+                modifier = modifier
+                    .vivicastDialogWidth(width)
+                    .then(if (heightCap != null) Modifier.heightIn(max = heightCap) else Modifier)
+                    .onPreviewKeyEvent {
+                        if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
+                            onDismiss()
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                contentPadding = VivicastSpacing.Space5,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
+                    if (title != null) {
+                        SectionTitle(title)
                     }
-                },
-            contentPadding = VivicastSpacing.Space5,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4)) {
-                if (title != null) {
-                    SectionTitle(title)
+                    content()
                 }
-                content()
             }
         }
     }

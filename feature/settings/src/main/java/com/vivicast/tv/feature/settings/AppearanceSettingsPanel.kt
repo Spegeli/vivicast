@@ -103,22 +103,10 @@ private fun SettingsThemeMode.label(): String = when (this) {
     SettingsThemeMode.AmoledDark -> stringResource(R.string.theme_amoled)
 }
 
-private fun SettingsThemeMode.next(): SettingsThemeMode =
-    when (this) {
-        SettingsThemeMode.StandardDark -> SettingsThemeMode.HighContrastDark
-        SettingsThemeMode.HighContrastDark -> SettingsThemeMode.AmoledDark
-        SettingsThemeMode.AmoledDark -> SettingsThemeMode.StandardDark
-    }
-
 @Composable
 private fun SettingsAccentColor.label(): String = when (this) {
     SettingsAccentColor.Blue -> stringResource(R.string.accent_blue)
 }
-
-private fun SettingsAccentColor.next(): SettingsAccentColor =
-    when (this) {
-        SettingsAccentColor.Blue -> SettingsAccentColor.Blue
-    }
 
 @Composable
 private fun SettingsTransparency.label(): String = when (this) {
@@ -126,13 +114,6 @@ private fun SettingsTransparency.label(): String = when (this) {
     SettingsTransparency.Percent25 -> "25 %"
     SettingsTransparency.Percent50 -> "50 %"
 }
-
-private fun SettingsTransparency.next(): SettingsTransparency =
-    when (this) {
-        SettingsTransparency.Percent0 -> SettingsTransparency.Percent25
-        SettingsTransparency.Percent25 -> SettingsTransparency.Percent50
-        SettingsTransparency.Percent50 -> SettingsTransparency.Percent0
-    }
 
 @Composable
 private fun SettingsFontScale.label(): String = when (this) {
@@ -142,14 +123,6 @@ private fun SettingsFontScale.label(): String = when (this) {
     SettingsFontScale.ExtraLarge -> stringResource(R.string.font_very_large)
 }
 
-private fun SettingsFontScale.next(): SettingsFontScale =
-    when (this) {
-        SettingsFontScale.Small -> SettingsFontScale.Medium
-        SettingsFontScale.Medium -> SettingsFontScale.Large
-        SettingsFontScale.Large -> SettingsFontScale.ExtraLarge
-        SettingsFontScale.ExtraLarge -> SettingsFontScale.Small
-    }
-
 @Composable
 private fun SettingsAnimationSpeed.label(): String = when (this) {
     SettingsAnimationSpeed.Off -> stringResource(R.string.value_off)
@@ -158,15 +131,7 @@ private fun SettingsAnimationSpeed.label(): String = when (this) {
     SettingsAnimationSpeed.Slow -> stringResource(R.string.anim_slow)
 }
 
-private fun SettingsAnimationSpeed.next(): SettingsAnimationSpeed =
-    when (this) {
-        SettingsAnimationSpeed.Off -> SettingsAnimationSpeed.Fast
-        SettingsAnimationSpeed.Fast -> SettingsAnimationSpeed.Normal
-        SettingsAnimationSpeed.Normal -> SettingsAnimationSpeed.Slow
-        SettingsAnimationSpeed.Slow -> SettingsAnimationSpeed.Off
-    }
-
-
+private enum class AppearancePicker { Theme, Accent, Transparency, Font, Animation }
 
 @Composable
 internal fun AppearanceSettingsPanel(
@@ -174,21 +139,7 @@ internal fun AppearanceSettingsPanel(
     onAppearanceSettingsChanged: (AppearanceSettingsState) -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val cycleTheme = {
-        onAppearanceSettingsChanged(state.copy(themeMode = state.themeMode.next()))
-    }
-    val cycleAccent = {
-        onAppearanceSettingsChanged(state.copy(accentColor = state.accentColor.next()))
-    }
-    val cycleTransparency = {
-        onAppearanceSettingsChanged(state.copy(transparency = state.transparency.next()))
-    }
-    val cycleFontScale = {
-        onAppearanceSettingsChanged(state.copy(fontScale = state.fontScale.next()))
-    }
-    val cycleAnimationSpeed = {
-        onAppearanceSettingsChanged(state.copy(animationSpeed = state.animationSpeed.next()))
-    }
+    var openPicker by remember { mutableStateOf<AppearancePicker?>(null) }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
@@ -198,7 +149,7 @@ internal fun AppearanceSettingsPanel(
                 value = state.themeMode.label(),
                 modifier = firstFocusModifier,
                 icon = { SettingsRowIcon("moon") },
-                onClick = cycleTheme,
+                onClick = { openPicker = AppearancePicker.Theme },
             )
         }
         item {
@@ -208,7 +159,7 @@ internal fun AppearanceSettingsPanel(
                 value = state.accentColor.label(),
                 modifier = Modifier,
                 icon = { SettingsRowIcon("palette") },
-                onClick = cycleAccent,
+                onClick = { openPicker = AppearancePicker.Accent },
             )
         }
         item {
@@ -218,7 +169,7 @@ internal fun AppearanceSettingsPanel(
                 value = state.transparency.label(),
                 modifier = Modifier,
                 icon = { SettingsRowIcon("transparency") },
-                onClick = cycleTransparency,
+                onClick = { openPicker = AppearancePicker.Transparency },
             )
         }
         item {
@@ -228,7 +179,7 @@ internal fun AppearanceSettingsPanel(
                 value = state.fontScale.label(),
                 modifier = Modifier,
                 icon = { SettingsRowIcon("font") },
-                onClick = cycleFontScale,
+                onClick = { openPicker = AppearancePicker.Font },
             )
         }
         item {
@@ -238,9 +189,54 @@ internal fun AppearanceSettingsPanel(
                 value = state.animationSpeed.label(),
                 modifier = Modifier,
                 icon = { SettingsRowIcon("animation") },
-                onClick = cycleAnimationSpeed,
+                onClick = { openPicker = AppearancePicker.Animation },
             )
         }
+    }
+
+    val dismiss = { openPicker = null }
+    when (openPicker) {
+        AppearancePicker.Theme -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_theme),
+            options = SettingsThemeMode.entries,
+            selected = state.themeMode,
+            label = { it.label() },
+            onSelect = { onAppearanceSettingsChanged(state.copy(themeMode = it)); dismiss() },
+            onDismiss = dismiss,
+        )
+        AppearancePicker.Accent -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_accent_color),
+            options = SettingsAccentColor.entries,
+            selected = state.accentColor,
+            label = { it.label() },
+            onSelect = { onAppearanceSettingsChanged(state.copy(accentColor = it)); dismiss() },
+            onDismiss = dismiss,
+        )
+        AppearancePicker.Transparency -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_transparency),
+            options = SettingsTransparency.entries,
+            selected = state.transparency,
+            label = { it.label() },
+            onSelect = { onAppearanceSettingsChanged(state.copy(transparency = it)); dismiss() },
+            onDismiss = dismiss,
+        )
+        AppearancePicker.Font -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_font_size),
+            options = SettingsFontScale.entries,
+            selected = state.fontScale,
+            label = { it.label() },
+            onSelect = { onAppearanceSettingsChanged(state.copy(fontScale = it)); dismiss() },
+            onDismiss = dismiss,
+        )
+        AppearancePicker.Animation -> SettingsChoiceDialog(
+            title = stringResource(R.string.settings_animations),
+            options = SettingsAnimationSpeed.entries,
+            selected = state.animationSpeed,
+            label = { it.label() },
+            onSelect = { onAppearanceSettingsChanged(state.copy(animationSpeed = it)); dismiss() },
+            onDismiss = dismiss,
+        )
+        null -> Unit
     }
 }
 

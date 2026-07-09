@@ -354,8 +354,11 @@ private fun ProviderEditorDialogs(
         )
     }
     if (dialogs.showLogoPriority) {
-        ProviderLogoPriorityDialog(
-            current = editor.logoPriority,
+        SettingsChoiceDialog(
+            title = stringResource(R.string.settings_provider_logo_priority),
+            options = listOf(LOGO_PRIORITY_PLAYLIST, LOGO_PRIORITY_EPG),
+            selected = editor.logoPriority,
+            label = { logoPriorityLabel(it) },
             onSelect = { value ->
                 if (value != editor.logoPriority) onEditorChange(editor.copy(logoPriority = value))
                 dialogs.showLogoPriority = false
@@ -819,41 +822,6 @@ internal fun logoPriorityLabel(priority: String): String =
     } else {
         stringResource(R.string.settings_provider_logo_priority_playlist)
     }
-
-/** Two-option logo-source picker: prefer the playlist's own logo (default) or a mapped EPG source's icon.
- * Focus starts on the current value; selecting a different value saves it, the current one just closes. */
-@Composable
-private fun ProviderLogoPriorityDialog(
-    current: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val selectedFocusRequester = remember { FocusRequester() }
-    VivicastDialog(
-        onDismiss = onDismiss,
-        width = VivicastDialogWidth.Compact,
-        title = stringResource(R.string.settings_provider_logo_priority),
-        initialFocus = selectedFocusRequester,
-    ) {
-        // Panels sit directly in the dialog's Column (spaced by the dialog). wrapContentHeight(unbounded)
-        // keeps each row at its text height instead of stretching to fill — mirrors LanguagePickerDialog.
-        listOf(LOGO_PRIORITY_PLAYLIST, LOGO_PRIORITY_EPG).forEach { option ->
-            FocusPanel(
-                selected = option == current,
-                onClick = { onSelect(option) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(unbounded = true)
-                    .then(if (option == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
-            ) {
-                BasicText(
-                    text = logoPriorityLabel(option),
-                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                )
-            }
-        }
-    }
-}
 
 /** Per-playlist User-Agent editor — mirrors the global one; empty saves as "use the global UA". */
 @Composable

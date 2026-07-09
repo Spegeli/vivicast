@@ -196,8 +196,11 @@ internal fun GeneralSettingsPanel(
     }
 
     if (showLanguagePicker) {
-        LanguagePickerDialog(
-            current = state.appLanguage,
+        SettingsChoiceDialog(
+            title = stringResource(R.string.settings_language),
+            options = SettingsLanguage.entries,
+            selected = state.appLanguage,
+            label = { it.label() },
             onSelect = { lang ->
                 if (lang != state.appLanguage) onLanguageChanged(lang)
                 showLanguagePicker = false
@@ -269,34 +272,4 @@ private fun SettingsLanguage.label(): String = when (this) {
     SettingsLanguage.English -> stringResource(R.string.language_english)
 }
 
-@Composable
-private fun LanguagePickerDialog(
-    current: SettingsLanguage,
-    onSelect: (SettingsLanguage) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val selectedFocusRequester = remember { FocusRequester() }
-    VivicastDialog(
-        onDismiss = onDismiss,
-        width = VivicastDialogWidth.Compact,
-        title = stringResource(R.string.settings_language),
-        initialFocus = selectedFocusRequester,
-    ) {
-        SettingsLanguage.entries.forEach { lang ->
-            FocusPanel(
-                selected = lang == current,
-                onClick = { onSelect(lang) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight(unbounded = true)
-                    .then(if (lang == current) Modifier.focusRequester(selectedFocusRequester) else Modifier),
-            ) {
-                BasicText(
-                    text = lang.label(),
-                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                )
-            }
-        }
-    }
-}
 

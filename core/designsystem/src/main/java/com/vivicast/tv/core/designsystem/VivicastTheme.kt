@@ -207,6 +207,16 @@ object VivicastMotion {
 
 val LocalVivicastColors = staticCompositionLocalOf { VivicastColors }
 
+/**
+ * Panel/overlay surface opacity multiplier from the "Transparenz" setting (App provides it at the
+ * composition root: 0%→1.0, 25%→0.75, 50%→0.5). Panel surfaces multiply their baked fill alpha by
+ * this; content stays opaque. Default 1.0 = fully as designed. Dialogs re-provide 1.0 to stay opaque.
+ */
+val LocalSurfaceOpacity = staticCompositionLocalOf { 1f }
+
+/** Scales a color's alpha by [factor] (clamped) — used to fade panel fill by [LocalSurfaceOpacity]. */
+fun Color.scaledAlpha(factor: Float): Color = copy(alpha = alpha * factor.coerceIn(0f, 1f))
+
 @Composable
 fun VivicastPlaceholderScreen(
     title: String,

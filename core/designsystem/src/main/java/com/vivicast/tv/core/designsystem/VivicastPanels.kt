@@ -43,10 +43,15 @@ fun VivicastDetailsPanel(
     modifier: Modifier = Modifier,
     badge: String? = null,
 ) {
+    val opacity = LocalSurfaceOpacity.current
     Column(
         modifier = modifier
             .clip(VivicastShapes.CardRadius)
-            .background(Brush.verticalGradient(listOf(Color(0xE6162335), Color(0xD90B1320))))
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xE6162335).scaledAlpha(opacity), Color(0xD90B1320).scaledAlpha(opacity)),
+                ),
+            )
             .border(VivicastBorders.Hairline, Color(0xFF263C55), VivicastShapes.CardRadius)
             .padding(VivicastSpacing.Space4),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),

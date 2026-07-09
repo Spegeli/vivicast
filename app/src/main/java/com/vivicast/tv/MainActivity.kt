@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,8 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
@@ -63,6 +66,7 @@ import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
+import com.vivicast.tv.core.designsystem.LocalSurfaceOpacity
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
@@ -161,12 +165,26 @@ class MainActivity : ComponentActivity() {
         deepLinkData = intent?.data
         appContainer = (application as VivicastApplication).appContainer
         setContent {
+            // Appearance is applied at the composition root (App layer, never the ViewModel). Font scale
+            // overrides LocalDensity's fontScale — scaling all sp text app-wide (incl. player + dialogs,
+            // which inherit the local) without touching any VivicastTypography call site, and without an
+            // Activity recreate (it recomposes live). dp/layout/focus geometry stay fixed.
+            val preferences by appContainer.userPreferencesStore.values.collectAsState(initial = UserPreferences())
+            val baseDensity = LocalDensity.current
             VivicastTheme {
-                VivicastApp(
-                    appContainer = appContainer,
-                    deepLinkData = deepLinkData,
-                    onDeepLinkConsumed = { deepLinkData = null },
-                )
+                CompositionLocalProvider(
+                    LocalDensity provides Density(
+                        density = baseDensity.density,
+                        fontScale = baseDensity.fontScale * preferences.appearance.fontScale.toFontScaleFactor(),
+                    ),
+                    LocalSurfaceOpacity provides preferences.appearance.transparency.toSurfaceOpacity(),
+                ) {
+                    VivicastApp(
+                        appContainer = appContainer,
+                        deepLinkData = deepLinkData,
+                        onDeepLinkConsumed = { deepLinkData = null },
+                    )
+                }
             }
         }
     }

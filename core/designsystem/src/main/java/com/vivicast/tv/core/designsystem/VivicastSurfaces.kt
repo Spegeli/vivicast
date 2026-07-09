@@ -212,15 +212,17 @@ fun VivicastGlassPanel(
     contentPadding: Dp = VivicastSpacing.PanelPadding,
     content: @Composable () -> Unit,
 ) {
+    // Fade only the fill by the user transparency; border + content stay opaque for readability.
+    val opacity = LocalSurfaceOpacity.current
     Box(
         modifier = modifier
             .clip(VivicastShapes.PanelRadius)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xF0152438),
-                        Color(0xEA0B1626),
-                        Color(0xDC07101C),
+                        Color(0xF0152438).scaledAlpha(opacity),
+                        Color(0xEA0B1626).scaledAlpha(opacity),
+                        Color(0xDC07101C).scaledAlpha(opacity),
                     ),
                 ),
             )
