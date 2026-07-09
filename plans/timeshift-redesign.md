@@ -1,8 +1,9 @@
 # Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
 
-Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3 vollständig geplant**
-(Fall B, 1-Verbindung-Tee) — nächster konkreter Schritt ist der TS-Capture-Spike, dann Bau-Entscheidung.
-**Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3 geplant + K1-Spike DONE
+& erfolgreich** (2026-07-09): No-Gap-Capture (1 Verbindung, Edge-Follow, Phase-1-Integration) end-to-end auf
+echtem progressive-TS validiert; **einzige offene Arbeit = Keyframe-ausgerichteter Segmenter** (naiver
+Wall-Clock-Schnitt gibt Mid-GOP-Artefakte nach Seek). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -96,19 +97,15 @@ ununterbrochen. „Live" = neuester Puffer-Teil, „Rewind" = Seek zurück im lo
 Kein Rewind-Swap, keine Lücke, 1 Verbindung. **Preis:** kleine Zap-Verzögerung beim Kanalstart (erst muss etwas
 Puffer da sein, ~3–5 s) statt der Lücke.
 
-**Der lokale Wiedergabe-Mechanismus = die Kern-Unbekannte, die der Spike klärt:**
+**Der lokale Wiedergabe-Mechanismus (durch Spike ENTSCHIEDEN = K1):**
 ExoPlayer muss einen **kontinuierlich wachsenden** lokalen Puffer spielen: Seek-zurück UND dem wachsenden Rand
-folgen. Zwei Kandidaten:
-- **K1 — lokales Live-HLS** (rollende Segmente + laufend aktualisierte `index.m3u8`, kein `#EXT-X-ENDLIST`):
-  ExoPlayer spielt es als Live-HLS mit DVR-Fenster — nativer Seek + Rand-Folgen + Rebuffering = **bewährter
-  Player-Pfad** (wie Fall A, nur lokale Segmente). Preis: die Live-TS in **eigenständig dekodierbare TS-Segmente**
-  schneiden (PAT/PMT am Segment-Start, an Keyframe/`random_access_indicator`-Grenze) — der klassische
-  Live-TS→HLS-Segmenter. **Hier lebt die ursprüngliche „TS-Schnitt"-Unbekannte** (Concat fällt weg).
-- **K2 — tailing single `buffer.ts`** (custom DataSource, blockt am EOF bis mehr da ist): behält Concat-Einfachheit
-  (kein Segment-Schnitt, TsExtractor seekt), aber „unendlich wachsende progressive Live-Datei" ist ein
-  **nicht-standard** ExoPlayer-Pfad (Dauer/Buffer/Seek-Verhalten unklar).
-- **Spike-Auftrag:** K1 zuerst (robuster Player, Segmenter = der Aufwand); wenn der Segmenter zu fummelig/instabil
-  ist → K2 als Fallback. Der Spike entscheidet den Mechanismus **vor** dem Bau der Produktions-Engine.
+folgen. **K1 — lokales Live-HLS** (rollende Segmente + laufend aktualisierte `index.m3u8`, kein `#EXT-X-ENDLIST`):
+ExoPlayer spielt es als Live-HLS mit DVR-Fenster — nativer Seek + Rand-Folgen + Rebuffering = **bewährter
+Player-Pfad** (wie Fall A, nur lokale Segmente). **Vom Spike bestätigt** (siehe „Spike"-Block unten). K2 (tailing
+`buffer.ts`) verworfen — nicht nötig.
+- **Bekannte Rest-Arbeit (kein Unbekannt mehr):** Segment-Schnitt an **Keyframe-Grenzen** (`random_access_indicator`
+  im Adaptation-Field) mit **PAT/PMT je Segment-Start**, sonst Mid-GOP-Artefakte nach Seek (der Spike zeigte das mit
+  naivem Wall-Clock-Schnitt). Das ist der klassische Live-TS→HLS-Segmenter — Aufwand, aber Standard-Technik.
 
 **Architektur (Vivicast), engine-intern:**
 - Neues Package `core/player/.../timeshift/`: `LiveTimeshiftRecorder` (durchgehender OkHttp-Download der Live-URL,
@@ -133,13 +130,16 @@ folgen. Zwei Kandidaten:
 **UI:** Fenster wächst von 0 (gerade eingeschaltet) bis 60 min; Badge zeigt die aktuelle Tiefe. Kein sichtbarer
 „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
 
-**Spike zuerst (ENTSCHIEDEN — Pflicht, de-risk, eigene Datei):** `app/src/debug/.../TsCaptureSpikeActivity.kt`.
-Progressive-TS-Live-URL per adb-Extra; **eine** OkHttp-Verbindung captured durchgehend; ExoPlayer spielt die
-**lokale** Quelle. **Beweist die vier Kernpunkte:** (1) K1 — Segmenter erzeugt dekodierbare TS-Segmente, ExoPlayer
-spielt das lokale Live-HLS; ODER K2 — tailing-`buffer.ts` spielt; (2) Seek −20 s/−2 min im lokalen Fenster läuft
-flüssig; (3) **dem wachsenden Rand ohne Lücke folgen** — 10 min zurück, dann wieder vor bis Live, Inhalt lückenlos
-(genau der Nutzer-Fall); (4) 1 Verbindung reicht (nur der Capturer, kein 2. Provider-Request). Zap-Delay messen.
-Braucht eine progressive-TS-Live-Test-URL (iptv-org rohe `.ts`; sonst Xtream-`.ts`).
+**Spike (✅ DONE 2026-07-09, ERFOLGREICH):** `app/src/debug/.../TsCaptureSpikeActivity.kt` + `LiveTsSegmenter.kt`.
+Getestet auf echtem progressive-TS (Tvheadend `?profile=pass`) am Emulator. **K1 gewählt** (lokales Live-HLS).
+Bewiesen: (1) der (naive) Segmenter erzeugt spielbare TS-Segmente, ExoPlayer spielt das lokale `file://index.m3u8`
+als Live-HLS mit DVR-Fenster; (2) Seek −20 s/−2 min funktioniert; (3) **Edge-Follow ohne Lücke** — Fenster wuchs
+während des Zuschauens 16 s → 116 s → 164 s, Zurück-zu-Live landet am Rand (`behindLive=0`, `atLive=true`); (4) **1
+Verbindung reicht** (nur der Capturer); (5) die **Phase-1-Native-Fenster-Logik greift direkt** auf der lokalen
+Quelle (`timeshift=true`, `behindLive`-Tracking). **Einschränkung gefunden:** naiver Wall-Clock-Schnitt →
+**Makroblock-Artefakte nach Seek** (Segment-Start mitten im GOP), heilen mit dem nächsten Keyframe. → Produktion
+braucht **Keyframe-ausgerichteten Schnitt** (an `random_access_indicator` + PAT/PMT je Segment-Start). K2 nicht
+mehr nötig.
 
 **Aufräumen (Teil von Phase 3):** den nach Phase 2 toten `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad in
 `Media3PlaybackEngine.start()` + `Media3PlayerFactory.kt` entfernen (falsches Mechanismus für Fall B; `SimpleCache`
@@ -164,19 +164,18 @@ war ein Read-Through-Cache, kein rewindbarer Recorder).
 - Gates je Phase: `.\gradlew.bat detekt test assembleDebug` + Emulator-Smoke.
 
 ## Entscheidungen (gelockt) + Rest-Risiken
-- **E1 — Vorgehen: ENTSCHIEDEN = Spike zuerst.** Erst `TsCaptureSpikeActivity` (beweist TsExtractor-Seek auf
-  live-mitgeschnittener concat-`.ts` + 1-Verbindung-Tee), dann Bau-Entscheidung. Bis dahin: nicht-seekbare Kanäle
-  zeigen den vorhandenen „kein/begrenztes Timeshift"-Hinweis.
+- **E1 — Vorgehen: ✅ Spike DONE & erfolgreich.** No-Gap-Mechanismus (K1) end-to-end auf echtem progressive-TS
+  validiert. Bau kann starten. Bis Fall B fertig: nicht-seekbare Kanäle zeigen den „kein/begrenztes Timeshift"-Hinweis.
 - **E2 — Capture: ENTSCHIEDEN = immer-an, 1 Verbindung, KEINE Lücke.** Der Capturer besitzt die eine Verbindung
   durchgehend; ExoPlayer spielt immer den lokalen rollenden Puffer → kontinuierlicher Mitschnitt auch während man
   zurückgespult schaut → **keine fehlenden Minuten / kein Zeitsprung** beim Zurück-zu-Live. Respektiert Xtream
   `max_connections: 1`. Preis: kleine Zap-Verzögerung beim Kanalstart statt der Lücke.
 - **E3 — Backend/Tiefe: Empfehlung** Disk-first, **60 min** rollend, RAM-Fallback 5 min, 2-GB-LRU, 200-MB-Floor
   (StreamVault-Limits). Final beim Bau bestätigen.
-- **Rest-Risiko (Spike klärt — jetzt GRÖSSER als beim verworfenen Gap-Design):** No-Gap zwingt „ExoPlayer spielt
-  kontinuierlich wachsenden lokalen Puffer" → StreamVaults bewiesener Concat+TsExtractor-Trick reicht nicht mehr.
-  Offen: (K1) taugt ein selbstgebauter TS→HLS-Segmenter (dekodierbare Segmente an PAT/PMT+Keyframe) — oder (K2)
-  spielt ExoPlayer eine tailing-progressive-Live-Datei sauber mit Seek + Rand-Folgen? Deshalb ist der Spike Pflicht
-  und entscheidet den Mechanismus vor dem Bau. (Bewusste Wahl: bessere TV-UX gegen höheres Bau-Risiko.)
+- **Rest-Risiko: durch Spike aufgelöst.** No-Gap-K1-Mechanismus validiert (Play + Seek + Edge-Follow + 1 Verbindung
+  + Phase-1-Integration). Verbleibende Arbeit ist **bekannt, nicht mehr Unbekannt:** Keyframe-ausgerichteter
+  Segmenter (`random_access_indicator` + PAT/PMT je Segment) gegen die Mid-GOP-Seek-Artefakte. Standard-Technik,
+  Aufwand kalkulierbar. Zap-Delay beim Kanalstart im Spike gesehen (Puffer-Aufbau) — beim Bau ggf. mit direktem
+  Live-Start + einmaliger Umstellung optimieren.
 - Xtream-HLS-Fenster-Tiefe server-abhängig (oft klein) — sobald ein Xtream-Test da ist real prüfen; Fall A deckt
   die Broadcaster-HLS garantiert.
