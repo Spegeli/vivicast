@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.player
 
 import android.content.Context
+import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -53,6 +54,11 @@ interface VivicastPlayerController {
     fun selectSubtitle(option: PlaybackSubtitleOption) = Unit
 
     fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
+
+    /** Attaches the video output surface. The realtime player screen owns the [SurfaceView] and hands it in. */
+    fun attachVideoSurface(surfaceView: SurfaceView) = Unit
+
+    fun detachVideoSurface() = Unit
 
     fun stop()
 
@@ -227,6 +233,16 @@ class DefaultVivicastPlayerController(
         if (released) return
         engine.selectAspectRatio(mode)
         mutableState.value = mutableState.value.copy(aspectRatioMode = mode)
+    }
+
+    override fun attachVideoSurface(surfaceView: SurfaceView) {
+        if (released) return
+        engine.attachVideoSurface(surfaceView)
+    }
+
+    override fun detachVideoSurface() {
+        if (released) return
+        engine.detachVideoSurface()
     }
 
     override fun stop() {
@@ -534,6 +550,10 @@ interface PlaybackEngine {
 
     fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
 
+    fun attachVideoSurface(surfaceView: SurfaceView) = Unit
+
+    fun detachVideoSurface() = Unit
+
     fun stop()
 
     fun release()
@@ -561,6 +581,8 @@ class Media3PlaybackEngine(
     private val playbackEndedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     private val startGate = PlaybackStartGate()
     private var activePlaybackId: String? = null
+    // Remembered so it can be re-attached after a player rebuild (Phase 1); today the player is a val.
+    private var videoSurfaceView: SurfaceView? = null
 
     init {
         player.addListener(
@@ -585,6 +607,16 @@ class Media3PlaybackEngine(
 
     override val playbackErrors: Flow<Throwable> = playbackErrorEvents
     override val playbackEnded: Flow<String> = playbackEndedEvents
+
+    override fun attachVideoSurface(surfaceView: SurfaceView) {
+        videoSurfaceView = surfaceView
+        player.setVideoSurfaceView(surfaceView)
+    }
+
+    override fun detachVideoSurface() {
+        player.clearVideoSurface()
+        videoSurfaceView = null
+    }
 
     override val currentPositionMillis: Long
         get() = player.currentPosition.coerceAtLeast(0L)

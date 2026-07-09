@@ -1,5 +1,6 @@
 package com.vivicast.tv.feature.player
 
+import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -32,7 +33,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.R
@@ -242,6 +245,16 @@ fun PlayerRoute(
                 }
             },
     ) {
+        // Video output: a SurfaceView beneath the window punches through the Box background so ExoPlayer
+        // renders here; the overlay/dialog chrome below draws on top (later children = higher z-order).
+        val playerContext = LocalContext.current
+        val videoSurfaceView = remember { SurfaceView(playerContext) }
+        AndroidView(factory = { videoSurfaceView }, modifier = Modifier.fillMaxSize())
+        DisposableEffect(playerController, videoSurfaceView) {
+            playerController?.attachVideoSurface(videoSurfaceView)
+            onDispose { playerController?.detachVideoSurface() }
+        }
+
         if (overlayVisible) {
             VivicastPlayerOverlay(
                 title = title,
