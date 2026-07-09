@@ -1,6 +1,7 @@
 # Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
 
-Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). Phase 3 (Fall B) offen/deferred.
+Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Phase 3 vollständig geplant**
+(Fall B, 1-Verbindung-Tee) — nächster konkreter Schritt ist der TS-Capture-Spike, dann Bau-Entscheidung.
 **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
@@ -62,28 +63,100 @@ ausreichend seekbar → Fall A (natives Fenster als Timeline). Sonst → Fall B 
 - ⏳ Offen (harmlos): `PlaybackPreferences.timeshift*` + Backup-Felder als Alt-Felder gelassen (kein
   Migrations-Risiko); tote Timeshift-Strings (spawn-task für Cleanup).
 
-### Phase 3 (dediziert, später) — Fall B Capture-Engine
-Nur für MPEG-TS-ohne-Fenster. Immer-an, rollendes 60-min-Fenster, `TimeshiftRecorder` + `TimeshiftDiskManager`
-(2-GB-Budget/LRU/Frei-Floor/Waisen-Cleanup, RAM-Fallback ~5 min + Trim-Kill), lokale rollende Live-HLS-Playlist
-in-place referenziert, ein ExoPlayer drauf. Erst wenn Bedarf real da ist (viele TS-only-Nutzer). Eigener Spike
-für Progressive-TS-Chunk-Playback (die offene Unbekannte) vor dem Bau.
+### Phase 3 — Fall B: lokale TS-Capture (progressive MPEG-TS ohne natives Fenster) — GEPLANT
 
-## Betroffene Dateien
-- `data/playback/.../PlaybackStreamResolver.kt` (Xtream `.m3u8`/`.ts`)
-- `data/provider/.../ProviderConfigurationModels.kt` + Provider-Editor (Ausgabeformat-Option)
-- `core/player/.../VivicastPlayerController.kt` (Rückbau setBackBuffer/virtuelles Fenster; natives Fenster nutzen;
-  Auto-Detect)
-- `feature/settings/.../PlaybackSettingsPanel.kt`, `.../SettingsModels.kt`, `.../SettingsViewModel.kt`, Mapper;
-  `app/.../SettingsPreferenceMappers.kt`; `core/datastore/.../UserPreferencesStore.kt`; Strings
-- Phase 3: neu `core/player/.../TimeshiftRecorder.kt`, `.../TimeshiftDiskManager.kt`
+Nur für Kanäle, deren Stream **kein** natives Seek-Fenster hat (progressive MPEG-TS, v.a. Xtream-`.ts`).
+Zielgruppe schmal (Xtream default jetzt HLS, Broadcaster HLS) → **Spike zuerst, dann Bau-Entscheidung.**
+
+**Referenz-Mechanismus (StreamVault, `IPTV-APPS/StreamVault-IPTV-master/player/.../timeshift/`, validiert das Konzept):**
+- StreamVault: **zweite, unabhängige OkHttp-Verbindung** lädt die Live-URL parallel (2× Bandbreite).
+- Byte-Stream (64-KB-Reads) nach **Wall-Clock in ~2s-`chunk-N.ts`** schneiden — **keine TS-Paket-Analyse,
+  kein PAT/PMT-/Keyframe-Schnitt.** Chunks dienen nur dem **rollenden Fenster + Eviction** (älteste löschen).
+- Bei Pause/Rewind: **alle behaltenen Chunks zu einer contiguous `buffer.ts` konkatenieren** (= exakt der
+  mitgeschnittene Byte-Stream) → als `file://`-MediaItem an ExoPlayer. Dessen **`TsExtractor` baut die
+  PTS-Seek-Map** über die progressive Datei und seekt nativ. **Kein Remux, kein FFmpeg, kein m3u8 für TS.**
+- Live↔Timeshift = **MediaItem-Swap** (Live-URL ↔ `buffer.ts`). Zurück-zu-Live = Live-URL neu `prepare`.
+  Jeder Rewind erzeugt einen neuen Snapshot-Dir; alte werden „retired" + off-lock gelöscht.
+- Disk-Backend (default) oder RAM-Backend (≤5 min, `onTrimMemory`-Kill). Rollend 15–60 min (default 30/wir 60).
+- **Keine neuen Abhängigkeiten:** OkHttp + Media3-`TsExtractor` + `java.io`.
+
+→ **Die frühere Kern-Unbekannte („TS in dekodierbare Chunks schneiden") entfällt.** Es wird nicht
+schnitt-dekodiert, sondern reassembliert; Seek macht ExoPlayers TsExtractor auf der concat-Datei. Rest-Risiko
+klein (StreamVault in Produktion) → 1 Spike genügt.
+
+**Vivicast-Abweichung — EINE Verbindung (Pflicht, nicht wie StreamVault):**
+StreamVaults 2. Capture-Verbindung würde bei **Xtream-Accounts mit `max_connections: 1`** (häufig, und das ist
+genau die Fall-B-Zielgruppe) den Anbieter-Reject/Playback-Kill auslösen. Daher: **`TeeDataSource`** —
+ExoPlayer spielt die Live-URL, und der Tee schreibt **jedes gelesene Byte** parallel in die rollenden
+2s-Chunk-Dateien (dieselbe eine Verbindung, die ExoPlayer eh nutzt). Kette:
+`TeeDataSource(upstream = DefaultDataSource(live-URL, userAgent), sink = RollingChunkSink)`.
+- **Kosten von „immer-an" sinken damit auf nur Disk-Schreiben** (keine Extra-Bandbreite) — der 2×-Einwand entfällt.
+- **Trade-off:** während der Nutzer **aktiv zurückgespult** ist, liest ExoPlayer die lokale `buffer.ts` → die eine
+  Verbindung lädt kein Live → der Puffer wächst in dem Moment nicht mit; Zurück-zu-Live macht einen frischen
+  Live-Request am echten Rand. Akzeptabel (man schaut ja gerade die Vergangenheit, nicht den Live-Rand).
+- Rest wie oben: Wall-Clock-2s-Chunks, Concat-zu-`buffer.ts`, TsExtractor-Seek, MediaItem-Swap, DiskManager.
+
+**Architektur (Vivicast), engine-intern (StreamVault-Stil):**
+- Neues Package `core/player/.../timeshift/`: `LiveTimeshiftRecorder` (Capture-Session: OkHttp-Download,
+  2s-Chunk-Slicing, Snapshot-Concat, Backoff-Retry) + `TimeshiftDiskManager` (2-GB-LRU→80 %, 200-MB-Frei-Floor,
+  Orphan-Cleanup, per-Session-Dir) + `TimeshiftModels`. Injizierbar: OkHttp-Client, `clock`, `Dispatchers.IO`,
+  `cacheDir`. Eigene Coroutine je Session, Mutex-guarded, Call-Cancel bei stop/Kanalwechsel/release.
+- **`Media3PlaybackEngine` besitzt den Recorder + macht den Swap.** `seekBy`/`seekToLiveEdge` delegieren schon
+  an die Engine → sie fängt sie für eine aktive Fall-B-Session ab (wie StreamVaults `seekBackward`): erst
+  Snapshot bauen, MediaItem auf `buffer.ts` swappen, Pending-Seek bei `READY` anwenden.
+- **Auto-Detect:** nach `start()`+`READY` `isCurrentSeekable` prüfen. `Channel && !isCurrentSeekable` →
+  Recorder-Session starten. Seekbar (Fall A) → kein Capture.
+
+**Integration mit der Phase-1-Fenster-Logik (die eigentliche Design-Frage):**
+- Der Controller leitet Timeshift-UI aus `isCurrentSeekable` ab. Bei Fall B läuft aber die Live-URL
+  (`isCurrentSeekable=false`), während der Recorder schon ein rewindbares Fenster aufbaut → der Controller muss
+  „Timeshift verfügbar, Fenster = bisher mitgeschnittene Sekunden" zeigen.
+- **Lösung:** Engine meldet Capture-Zustand (`captureActive`, `capturedWindowMillis`) an den Controller;
+  `withNativeTimeline` faltet es ein: Fall-B → `timeshiftWindowMillis = min(capturedMillis, 60 min)`, wächst
+  von 0 hoch. Nach dem Swap auf `buffer.ts` wird der Kanal seekbar → die vorhandene **Phase-1-Running-Max-Offset-
+  Logik läuft direkt auf der buffer.ts-Timeline weiter** (kein Sonderpfad für Offset/Position).
+
+**UI:** Fenster wächst von 0 (gerade eingeschaltet) bis 60 min; Badge zeigt die aktuelle Tiefe. Vor genug
+Mitschnitt ist Seek-back begrenzt. Kein sichtbarer „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
+
+**Spike zuerst (ENTSCHIEDEN — Pflicht, de-risk, eigene Datei):** `app/src/debug/.../TsCaptureSpikeActivity.kt`.
+Progressive-TS-Live-URL per adb-Extra; **`TeeDataSource` auf ExoPlayers Live-Download (1 Verbindung)** → 2s-Byte-
+Chunks nach cacheDir; nach ~30 s alle zu `buffer.ts` konkatenieren; ExoPlayer draufsetzen; −20 s/−2 min seeken.
+**Beweist zwei Dinge:** (1) TsExtractor seekt die live-mitgeschnittene concat-`.ts` sauber (Bild + flüssig,
+korrekte Dauer); (2) der Tee auf der Playback-Verbindung liefert die Bytes vollständig (kein 2. Download nötig).
+Braucht eine progressive-TS-Live-Test-URL (iptv-org hat rohe `.ts`; sonst Xtream-`.ts`).
+
+**Aufräumen (Teil von Phase 3):** den nach Phase 2 toten `timeshiftCache`/`usesDiskCache`/CacheDataSource-Pfad in
+`Media3PlaybackEngine.start()` + `Media3PlayerFactory.kt` entfernen (falsches Mechanismus für Fall B; `SimpleCache`
+war ein Read-Through-Cache, kein rewindbarer Recorder).
+
+## Betroffene Dateien (Phase 3)
+- neu: `core/player/.../timeshift/LiveTimeshiftRecorder.kt`, `.../TimeshiftDiskManager.kt`, `.../TimeshiftModels.kt`
+- `core/player/.../VivicastPlayerController.kt` (Engine besitzt Recorder; Swap in start/seek/seekToLiveEdge;
+  Capture-State in `withNativeTimeline`; toten Cache-Pfad raus)
+- `core/player/.../Media3PlayerFactory.kt` (`usesDiskCache`/`SimpleCache` raus)
+- `core/network/.../NetworkClientFactory` (OkHttp-Client für den Recorder bereitstellen, falls nicht schon)
+- neu Spike: `app/src/debug/.../TsCaptureSpikeActivity.kt`
 
 ## Verifikation
-- Spike-Activity bleibt (debug-only) für weitere Stream-Tests. Emulator + Test-Playlisten (Memory
-  `test-playlists`): Broadcaster-HLS → tiefes Fenster + Seek; nicht-seekbarer Stream → sauberer Hinweis.
-- Unit-Tests: Auto-Detect-Schwelle, Xtream-URL-Bau (`.m3u8`/`.ts`), Fall-B-Limit-Helfer (Phase 3).
-- Gates je Phase: `.\gradlew.bat detekt test assembleDebug`.
+- **Phase 1/2:** erledigt (siehe Commits oben), Emulator-validiert (Broadcaster-CMAF: Fenster 599 s, −5 min-Seek,
+  Zurück-an-Rand).
+- **Phase 3 Spike:** progressive-TS-Live → 30 s Capture → concat → seek −2 min läuft flüssig.
+- Unit-Tests: `TimeshiftDiskManager` (LRU→80 %, 200-MB-Floor, Orphan-Cleanup), `LiveTimeshiftRecorder`
+  (Chunk-Rolling/Front-Trim, Snapshot-Concat-Reihenfolge), Auto-Detect-Schwelle.
+- Gates je Phase: `.\gradlew.bat detekt test assembleDebug` + Emulator-Smoke.
 
-## Offen / Risiken
-- Xtream-HLS-Fenster-Tiefe ist server-abhängig (oft klein) — real getestet werden, sobald ein Xtream-Test
-  verfügbar ist. Bis dahin deckt Fall A garantiert die Broadcaster-HLS ab.
-- Progressive-TS-Chunk-Playback (Fall B) = weiterhin die Kern-Unbekannte → eigener Spike vor Phase 3.
+## Entscheidungen (gelockt) + Rest-Risiken
+- **E1 — Vorgehen: ENTSCHIEDEN = Spike zuerst.** Erst `TsCaptureSpikeActivity` (beweist TsExtractor-Seek auf
+  live-mitgeschnittener concat-`.ts` + 1-Verbindung-Tee), dann Bau-Entscheidung. Bis dahin: nicht-seekbare Kanäle
+  zeigen den vorhandenen „kein/begrenztes Timeshift"-Hinweis.
+- **E2 — Capture: ENTSCHIEDEN = immer-an via 1-Verbindung-`TeeDataSource`.** Nutzers Einwand gelöst: keine 2.
+  Verbindung (respektiert Xtream `max_connections: 1`), daher keine Extra-Bandbreite → immer-an nur Disk-Kosten.
+  Trade-off: kein Live-Mitschnitt während man aktiv zurückgespult ist (frischer Live-Request bei „zu Live").
+- **E3 — Backend/Tiefe: Empfehlung** Disk-first, **60 min** rollend, RAM-Fallback 5 min, 2-GB-LRU, 200-MB-Floor
+  (StreamVault-Limits). Final beim Bau bestätigen.
+- **Rest-Risiko (Spike klärt):** liefert der `TeeDataSource` auf der Playback-Verbindung die Bytes vollständig
+  (ExoPlayer liest bei Live-Progressive kontinuierlich am Rand) und seekt TsExtractor die concat-`.ts` sauber?
+  StreamVault beweist das Konzept mit 2 Verbindungen; die 1-Verbindungs-Tee-Variante ist die offene Unbekannte.
+- Xtream-HLS-Fenster-Tiefe server-abhängig (oft klein) — sobald ein Xtream-Test da ist real prüfen; Fall A deckt
+  die Broadcaster-HLS garantiert.
