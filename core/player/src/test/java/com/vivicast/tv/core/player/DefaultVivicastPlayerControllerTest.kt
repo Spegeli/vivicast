@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -207,8 +208,11 @@ class DefaultVivicastPlayerControllerTest {
     }
 
     @Test
-    fun liveTimeshiftStartsAtLiveEdgeWithConfiguredWindow() = runBlocking {
-        val engine = BlockingPlaybackEngine()
+    fun liveChannelUsesNativeWindowAtLiveEdge() = runBlocking {
+        val engine = BlockingPlaybackEngine().apply {
+            durationMillis = 30 * 60_000L
+            currentPositionMillis = 30 * 60_000L
+        }
         val controller = testController(engine)
 
         controller.play(TIMESHIFT_REQUEST)
@@ -218,31 +222,36 @@ class DefaultVivicastPlayerControllerTest {
             controller.state.first { it.status == PlaybackStatus.Playing }
         }
 
+        // Native DVR window drives the timeshift fields; not a fabricated fixed window.
+        assertEquals(30 * 60_000L, controller.state.value.timeshiftWindowMillis)
         assertEquals(30 * 60_000L, controller.state.value.durationMillis)
-        assertEquals(30 * 60_000L, controller.state.value.positionMillis)
         assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
+        assertTrue(controller.state.value.isTimeshiftEnabled)
         assertTrue(controller.state.value.isAtLiveEdge)
     }
 
     @Test
-    fun liveTimeshiftStartFallsBackToLiveWithoutSeekWhenTimeshiftStartFails() = runBlocking {
-        val engine = TimeshiftFailingPlaybackEngine()
+    fun nonSeekableChannelHasNoTimeshift() = runBlocking {
+        val engine = BlockingPlaybackEngine().apply { isCurrentSeekable = false }
         val controller = testController(engine)
 
         controller.play(TIMESHIFT_REQUEST)
+        withTimeout(5_000) { engine.awaitStarted("timeshift") }
+        engine.complete("timeshift")
         withTimeout(5_000) {
             controller.state.first { it.status == PlaybackStatus.Playing }
         }
 
-        assertEquals(listOf(true, false), engine.startedWithTimeshift)
-        assertEquals(false, controller.state.value.request?.seekable)
-        assertEquals(null, controller.state.value.request?.timeshift)
         assertEquals(0L, controller.state.value.timeshiftWindowMillis)
+        assertFalse(controller.state.value.isTimeshiftEnabled)
     }
 
     @Test
-    fun liveTimeshiftSeekTracksOffsetAndCanReturnToLiveEdge() = runBlocking {
-        val engine = BlockingPlaybackEngine()
+    fun liveChannelSeekTracksNativeOffsetAndReturnsToLiveEdge() = runBlocking {
+        val engine = BlockingPlaybackEngine().apply {
+            durationMillis = 30 * 60_000L
+            currentPositionMillis = 30 * 60_000L
+        }
         val controller = testController(engine)
 
         controller.play(TIMESHIFT_REQUEST)
@@ -253,14 +262,16 @@ class DefaultVivicastPlayerControllerTest {
         }
 
         controller.seekBy(-30_000L)
-        assertEquals(30_000L, controller.state.value.liveEdgeOffsetMillis)
-        assertEquals(30 * 60_000L - 30_000L, controller.state.value.positionMillis)
         assertEquals(listOf(-30_000L), engine.seekDeltas)
+        assertEquals(30 * 60_000L - 30_000L, controller.state.value.positionMillis)
+        assertEquals(30_000L, controller.state.value.liveEdgeOffsetMillis)
+        assertFalse(controller.state.value.isAtLiveEdge)
 
         controller.seekToLiveEdge()
-        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
+        assertEquals(1, engine.liveEdgeSeeks)
         assertEquals(30 * 60_000L, controller.state.value.positionMillis)
-        assertEquals(listOf(-30_000L, 30_000L), engine.seekDeltas)
+        assertEquals(0L, controller.state.value.liveEdgeOffsetMillis)
+        assertTrue(controller.state.value.isAtLiveEdge)
     }
 
     private fun testController(engine: PlaybackEngine): DefaultVivicastPlayerController =
@@ -280,7 +291,9 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     var released = false
     override var currentPositionMillis = 0L
     override var durationMillis = 0L
+    override var isCurrentSeekable = true
     val seekDeltas = mutableListOf<Long>()
+    var liveEdgeSeeks = 0
 
     override suspend fun start(request: PlaybackRequest) {
         startedIds += request.playbackId
@@ -310,6 +323,11 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     override fun resume() = Unit
     override fun seekBy(deltaMillis: Long) {
         seekDeltas += deltaMillis
+        currentPositionMillis = (currentPositionMillis + deltaMillis).coerceIn(0L, durationMillis)
+    }
+    override fun seekToLiveEdge() {
+        liveEdgeSeeks += 1
+        currentPositionMillis = durationMillis
     }
     override fun stop() = Unit
     override fun release() {
@@ -352,26 +370,6 @@ private class ReconnectPlaybackEngine(
 
     fun emitPlaybackError() {
         mutablePlaybackErrors.tryEmit(IllegalStateException("stream aborted"))
-    }
-
-    override fun pause() = Unit
-    override fun resume() = Unit
-    override fun seekBy(deltaMillis: Long) = Unit
-    override fun stop() = Unit
-    override fun release() = Unit
-}
-
-private class TimeshiftFailingPlaybackEngine : PlaybackEngine {
-    val startedWithTimeshift = mutableListOf<Boolean>()
-    override val currentPositionMillis = 0L
-    override val durationMillis = 0L
-
-    override suspend fun start(request: PlaybackRequest) {
-        val hasTimeshift = request.timeshift != null
-        startedWithTimeshift += hasTimeshift
-        if (hasTimeshift) {
-            error("timeshift unavailable")
-        }
     }
 
     override fun pause() = Unit

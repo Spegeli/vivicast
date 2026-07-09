@@ -23,20 +23,18 @@ data class PlaybackTuning(
     val audioDecoder: DecoderMode = DecoderMode.Hardware,
     val videoDecoder: DecoderMode = DecoderMode.Hardware,
     val passthroughEnabled: Boolean = false,
-    val backBufferMinutes: Int = 30,
     val preferredAudio: PlaybackAudioOption = PlaybackAudioOption.SystemDefault,
     val preferredSubtitle: PlaybackSubtitleOption = PlaybackSubtitleOption.Off,
 ) {
     /** The build-time subset; a change here forces a player rebuild. Audio/subtitle prefs are excluded. */
     val builderSubset: BuilderSubset
-        get() = BuilderSubset(bufferSize, audioDecoder, videoDecoder, passthroughEnabled, backBufferMinutes)
+        get() = BuilderSubset(bufferSize, audioDecoder, videoDecoder, passthroughEnabled)
 
     data class BuilderSubset(
         val bufferSize: BufferTier,
         val audioDecoder: DecoderMode,
         val videoDecoder: DecoderMode,
         val passthroughEnabled: Boolean,
-        val backBufferMinutes: Int,
     )
 }
 
@@ -90,10 +88,11 @@ class VivicastMediaCodecSelector(private val tuning: PlaybackTuning) : MediaCode
  */
 fun buildExoPlayer(context: Context, tuning: PlaybackTuning): ExoPlayer {
     val buffer = tuning.bufferSize.toBufferDurations()
+    // No back-buffer: live seek-back rides ExoPlayer's native DVR window (re-fetches segments), so retaining
+    // played media in RAM only risked OOM on long-latency live streams. VOD doesn't need it either.
     val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(buffer.minMs, buffer.maxMs, buffer.forPlaybackMs, buffer.afterRebufferMs)
         .setPrioritizeTimeOverSizeThresholds(true)
-        .setBackBuffer(tuning.backBufferMinutes * MILLIS_PER_MINUTE, true)
         .build()
     val extensionMode = if (tuning.audioDecoder == DecoderMode.Software) {
         DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
@@ -145,5 +144,4 @@ fun usesDiskCache(storage: PlaybackTimeshiftStorage, windowMillis: Long): Boolea
     PlaybackTimeshiftStorage.Automatic -> windowMillis > AUTO_DISK_THRESHOLD_MILLIS
 }
 
-private const val MILLIS_PER_MINUTE = 60_000
 private const val AUTO_DISK_THRESHOLD_MILLIS = 30L * 60_000L

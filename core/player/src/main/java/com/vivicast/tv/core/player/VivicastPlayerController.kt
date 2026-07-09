@@ -106,7 +106,8 @@ enum class PlaybackSubtitleOption { Off, SystemDefault, German, English }
 
 enum class PlaybackAspectRatioMode { Fit, Fill, Zoom }
 
-private const val LIVE_EDGE_TOLERANCE_MILLIS = 2_000L
+// Generous vs the old exact-virtual 2s: native live offset jitters as ExoPlayer speed-adjusts toward the edge.
+private const val LIVE_EDGE_TOLERANCE_MILLIS = 5_000L
 
 data class VivicastPlayerState(
     val status: PlaybackStatus = PlaybackStatus.Idle,
@@ -152,7 +153,10 @@ class DefaultVivicastPlayerController(
     private var reconnectJob: Job? = null
     private var engineErrorJob: Job? = null
     private var engineEndedJob: Job? = null
-    private var liveEdgeOffsetMillis = 0L
+    // Running maximum of the native playback position for the current live channel = the live edge in the
+    // position timeline (currentLiveOffset is unreliable — some manifests don't declare live timing). Behind-live
+    // offset derives as liveEdge - position, so any native seek is reflected without extra bookkeeping.
+    private var liveEdgePositionMillis = 0L
     private var released = false
 
     override val state: StateFlow<VivicastPlayerState> = mutableState.asStateFlow()
@@ -176,7 +180,7 @@ class DefaultVivicastPlayerController(
         reconnectJob?.cancel()
         stopProgressPolling()
         engine.stop()
-        liveEdgeOffsetMillis = 0L
+        liveEdgePositionMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Starting, request = request)
         startJob = scope.launch(dispatcher) {
             startWithRetries(request)
@@ -196,26 +200,22 @@ class DefaultVivicastPlayerController(
     }
 
     override fun seekBy(deltaMillis: Long) {
-        if (released || mutableState.value.request?.seekable != true) return
+        if (released) return
         val current = mutableState.value
-        if (current.isTimeshiftEnabled) {
-            seekTimeshiftBy(deltaMillis, current)
-            return
-        }
+        val request = current.request ?: return
+        if (!request.seekable) return
+        // Native seek: ExoPlayer clamps into the seekable/DVR window. State reflects the new native position.
         engine.seekBy(deltaMillis)
+        mutableState.value = current.withNativeTimeline(request)
     }
 
     override fun seekToLiveEdge() {
         if (released) return
         val current = mutableState.value
+        val request = current.request ?: return
         if (!current.isTimeshiftEnabled || current.isAtLiveEdge) return
-        val offset = liveEdgeOffsetMillis
-        liveEdgeOffsetMillis = 0L
-        engine.seekBy(offset)
-        mutableState.value = current.copy(
-            positionMillis = current.timeshiftWindowMillis,
-            liveEdgeOffsetMillis = 0L,
-        )
+        engine.seekToLiveEdge()
+        mutableState.value = current.withNativeTimeline(request)
     }
 
     override fun selectAudio(option: PlaybackAudioOption) {
@@ -254,7 +254,7 @@ class DefaultVivicastPlayerController(
         reconnectJob = null
         stopProgressPolling()
         engine.stop()
-        liveEdgeOffsetMillis = 0L
+        liveEdgePositionMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Idle)
     }
 
@@ -271,13 +271,13 @@ class DefaultVivicastPlayerController(
         engineEndedJob = null
         stopProgressPolling()
         engine.release()
-        liveEdgeOffsetMillis = 0L
+        liveEdgePositionMillis = 0L
         mutableState.value = VivicastPlayerState(status = PlaybackStatus.Released)
     }
 
     private suspend fun startWithRetries(request: PlaybackRequest) {
         var attempt = 1
-        var activeRequest = request
+        val activeRequest = request
         while (attempt <= maxStartAttempts) {
             try {
                 engine.start(activeRequest)
@@ -287,10 +287,6 @@ class DefaultVivicastPlayerController(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                activeRequest.timeshiftFallbackRequest()?.let { fallbackRequest ->
-                    activeRequest = fallbackRequest
-                    continue
-                }
                 if (attempt >= maxStartAttempts) {
                     stopProgressPolling()
                     mutableState.value = VivicastPlayerState(
@@ -366,7 +362,8 @@ class DefaultVivicastPlayerController(
                 engine.stop()
                 val reconnectRequest = request.copy(
                     startPositionMillis = when {
-                        request.isLiveTimeshift() -> 0L
+                        // Live channels resume at the live edge; VOD resumes where it dropped.
+                        request.mediaType == PlaybackMediaType.Channel -> 0L
                         request.seekable -> lastPositionMillis.coerceAtLeast(0L)
                         else -> 0L
                     },
@@ -402,26 +399,16 @@ class DefaultVivicastPlayerController(
     private fun startProgressPolling() {
         stopProgressPolling()
         progressJob = scope.launch(dispatcher) {
-            var lastPollMillis = System.currentTimeMillis()
             while (true) {
                 delay(PROGRESS_POLL_INTERVAL_MILLIS)
-                val nowMillis = System.currentTimeMillis()
-                val elapsedMillis = (nowMillis - lastPollMillis).coerceAtLeast(0L)
-                lastPollMillis = nowMillis
                 val current = mutableState.value
                 if (current.status != PlaybackStatus.Playing && current.status != PlaybackStatus.Paused) {
                     return@launch
                 }
-                val progressed = if (current.isTimeshiftEnabled) {
-                    timeshiftProgressState(current, elapsedMillis)
-                } else {
-                    current.copy(
-                        positionMillis = engine.currentPositionMillis,
-                        durationMillis = engine.durationMillis,
-                    )
-                }
+                val request = current.request ?: return@launch
                 // Frame rate becomes known shortly after tracks load; picked up on the next poll for AFR.
-                mutableState.value = progressed.copy(videoFrameRate = engine.videoFrameRate)
+                mutableState.value = current.withNativeTimeline(request)
+                    .copy(videoFrameRate = engine.videoFrameRate)
             }
         }
     }
@@ -431,58 +418,42 @@ class DefaultVivicastPlayerController(
         progressJob = null
     }
 
-    private fun playingState(request: PlaybackRequest): VivicastPlayerState {
-        val timeshift = request.timeshift?.takeIf { it.enabled }
-        return if (request.isLiveTimeshift() && timeshift != null) {
-            liveEdgeOffsetMillis = 0L
-            VivicastPlayerState(
-                status = PlaybackStatus.Playing,
-                request = request,
-                positionMillis = timeshift.windowMillis,
-                durationMillis = timeshift.windowMillis,
-                liveEdgeOffsetMillis = 0L,
-                timeshiftWindowMillis = timeshift.windowMillis,
-                timeshiftStorage = timeshift.storage,
+    private fun playingState(request: PlaybackRequest): VivicastPlayerState =
+        VivicastPlayerState(status = PlaybackStatus.Playing, request = request).withNativeTimeline(request)
+
+    /** True for a live channel whose stream exposes a native seek window (HLS DVR) — the timeshift case. */
+    private fun isNativeLiveTimeshift(request: PlaybackRequest): Boolean =
+        request.mediaType == PlaybackMediaType.Channel && request.seekable && engine.isCurrentSeekable
+
+    /**
+     * Populates position/duration/timeshift fields from ExoPlayer's native timeline. For a live channel with a
+     * DVR window, timeshiftWindowMillis = the native DVR depth, and behind-live offset = liveEdge - nativePosition
+     * where liveEdge is the running max of the native position. Position/duration are remapped onto the DVR window
+     * so the timeline bar reads 100% at live and shrinks as you rewind. VOD/non-seekable get plain native values.
+     */
+    private fun VivicastPlayerState.withNativeTimeline(request: PlaybackRequest): VivicastPlayerState {
+        return if (isNativeLiveTimeshift(request)) {
+            val window = engine.durationMillis
+            val position = engine.currentPositionMillis
+            liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
+            // ponytail: no wall-clock advance, so a long PAUSE at live won't grow the offset until playback
+            // resumes and catches up — add clock-based advance only if the paused-behind label matters.
+            val offset = (liveEdgePositionMillis - position).coerceIn(0L, window)
+            copy(
+                positionMillis = (window - offset).coerceAtLeast(0L),
+                durationMillis = window,
+                timeshiftWindowMillis = window,
+                liveEdgeOffsetMillis = offset,
+                timeshiftStorage = request.timeshift?.storage,
             )
         } else {
-            VivicastPlayerState(
-                status = PlaybackStatus.Playing,
-                request = request,
+            copy(
                 positionMillis = engine.currentPositionMillis,
                 durationMillis = engine.durationMillis,
+                timeshiftWindowMillis = 0L,
+                liveEdgeOffsetMillis = 0L,
             )
         }
-    }
-
-    private fun PlaybackRequest.isLiveTimeshift(): Boolean =
-        mediaType == PlaybackMediaType.Channel && timeshift?.enabled == true
-
-    private fun PlaybackRequest.timeshiftFallbackRequest(): PlaybackRequest? =
-        takeIf { it.isLiveTimeshift() }?.copy(seekable = false, timeshift = null)
-
-    private fun seekTimeshiftBy(deltaMillis: Long, current: VivicastPlayerState) {
-        val windowMillis = current.timeshiftWindowMillis
-        val targetOffset = (liveEdgeOffsetMillis - deltaMillis).coerceIn(0L, windowMillis)
-        val actualDeltaMillis = liveEdgeOffsetMillis - targetOffset
-        liveEdgeOffsetMillis = targetOffset
-        if (actualDeltaMillis != 0L) {
-            engine.seekBy(actualDeltaMillis)
-        }
-        mutableState.value = current.copy(
-            positionMillis = windowMillis - targetOffset,
-            liveEdgeOffsetMillis = targetOffset,
-        )
-    }
-
-    private fun timeshiftProgressState(current: VivicastPlayerState, elapsedMillis: Long): VivicastPlayerState {
-        if (current.status == PlaybackStatus.Paused) {
-            liveEdgeOffsetMillis = (liveEdgeOffsetMillis + elapsedMillis).coerceAtMost(current.timeshiftWindowMillis)
-        }
-        return current.copy(
-            positionMillis = current.timeshiftWindowMillis - liveEdgeOffsetMillis,
-            durationMillis = current.timeshiftWindowMillis,
-            liveEdgeOffsetMillis = liveEdgeOffsetMillis,
-        )
     }
 
     companion object {
@@ -543,6 +514,10 @@ interface PlaybackEngine {
     val videoFrameRate: Float
         get() = 0f
 
+    /** True when the current media item exposes a native seek window (e.g. HLS live DVR); false for progressive TS. */
+    val isCurrentSeekable: Boolean
+        get() = false
+
     suspend fun start(request: PlaybackRequest)
 
     fun pause()
@@ -550,6 +525,9 @@ interface PlaybackEngine {
     fun resume()
 
     fun seekBy(deltaMillis: Long)
+
+    /** Seek to the native live edge (default position) of the current media item. */
+    fun seekToLiveEdge() = Unit
 
     fun selectAudio(option: PlaybackAudioOption) = Unit
 
@@ -641,6 +619,9 @@ class Media3PlaybackEngine(
     override val videoFrameRate: Float
         get() = player.videoFormat?.frameRate?.takeIf { it > 0f } ?: 0f
 
+    override val isCurrentSeekable: Boolean
+        get() = player.isCurrentMediaItemSeekable
+
     override suspend fun start(request: PlaybackRequest) {
         val gate = startGate.arm()
         val tuning = tuningProvider()
@@ -689,6 +670,11 @@ class Media3PlaybackEngine(
 
     override fun seekBy(deltaMillis: Long) {
         player.seekTo((player.currentPosition + deltaMillis).coerceAtLeast(0L))
+    }
+
+    override fun seekToLiveEdge() {
+        // Default position of a live window is the live edge; ExoPlayer clamps into the DVR window.
+        player.seekToDefaultPosition()
     }
 
     override fun selectAudio(option: PlaybackAudioOption) {

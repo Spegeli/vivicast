@@ -286,7 +286,6 @@ internal fun PlaybackPreferences.toPlaybackTuning(): PlaybackTuning =
         audioDecoder = audioDecoder.toDecoderMode(),
         videoDecoder = videoDecoder.toDecoderMode(),
         passthroughEnabled = audioPassthroughEnabled,
-        backBufferMinutes = timeshiftMinutes.takeIf { it in listOf(15, 30, 60, 120) } ?: 30,
         preferredAudio = preferredAudioLanguage.toPlaybackAudioOption(),
         preferredSubtitle = preferredSubtitleLanguage.toPlaybackSubtitleOption(),
     )
