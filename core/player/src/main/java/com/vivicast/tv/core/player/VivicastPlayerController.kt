@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.player
 
 import android.content.Context
+import android.net.Uri
 import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -17,6 +18,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.vivicast.tv.core.player.timeshift.MultiFileTailingDataSource
 import com.vivicast.tv.core.player.timeshift.TailingFileDataSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -661,8 +663,17 @@ class Media3PlaybackEngine(
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
             val useDisk = request.timeshift?.let { usesDiskCache(it.storage, it.windowMillis) } == true
             val mediaSourceFactory: MediaSource.Factory = when {
-                // Fall B / K2: a live-captured local file that keeps growing → tail it, stay seekable.
-                request.tailing -> ProgressiveMediaSource.Factory(TailingFileDataSource.Factory())
+                // Fall B / K2: a live-captured local buffer that keeps growing → tail it, stay seekable.
+                // A directory = multi-file segmented buffer (rolling window); a single file = one growing file.
+                request.tailing -> {
+                    val bufferPath = Uri.parse(request.streamUrl).path
+                    val tailingFactory = if (bufferPath != null && File(bufferPath).isDirectory) {
+                        MultiFileTailingDataSource.Factory(MultiFileTailingDataSource.DEFAULT_SEGMENT_BYTES)
+                    } else {
+                        TailingFileDataSource.Factory()
+                    }
+                    ProgressiveMediaSource.Factory(tailingFactory)
+                }
                 useDisk -> DefaultMediaSourceFactory(
                     CacheDataSource.Factory()
                         .setCache(timeshiftCache)

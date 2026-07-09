@@ -28,15 +28,16 @@ import com.vivicast.tv.core.player.Media3PlaybackEngine
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.VivicastPlayerController
+import com.vivicast.tv.core.player.timeshift.MultiFileTailingDataSource
 import kotlinx.coroutines.delay
 import java.io.File
 
 /**
- * Debug-only spike (Phase 3 / Fall B, mechanism **K2** — concat, no re-mux). [RawTsRecorder] appends a live
- * progressive-TS byte stream verbatim to one `buffer.ts`; the real [VivicastPlayerController] +
- * [Media3PlaybackEngine] then play that file. Because it is byte-identical to the original stream it should
- * decode cleanly on a real hardware decoder and be seekable via TsExtractor — the exact thing K1 (hand
- * re-segmenting to local HLS) failed on the TV. Buttons rewind so we can see if the concat file is clean + seekable.
+ * Debug-only spike (Phase 3 / Fall B, mechanism **K2** — multi-file variant). [SegmentedTsRecorder] captures a
+ * live progressive-TS stream verbatim into fixed-size `seg-N.ts` files (rolling window, front-trimmed); the real
+ * [VivicastPlayerController] + [Media3PlaybackEngine] play that directory via [MultiFileTailingDataSource].
+ * Validates: seamless live across segment rollovers (no glitch), clean seek-back within the retained window,
+ * front-trim of old segments — all on one connection, byte-identical to the source (no re-mux).
  *
  * Launch (no URL in the repo — pass a progressive-TS live URL, e.g. a Tvheadend `?profile=pass`, at runtime):
  *   adb shell am start -n com.vivicast.tv/.TsCaptureSpikeActivity --es url "<progressive-ts-url>"
@@ -44,8 +45,8 @@ import java.io.File
 class TsCaptureSpikeActivity : ComponentActivity() {
 
     private lateinit var controller: VivicastPlayerController
-    private lateinit var recorder: RawTsRecorder
-    private lateinit var bufferFile: File
+    private lateinit var recorder: SegmentedTsRecorder
+    private lateinit var bufferDir: File
     private var playRequested = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,9 +56,13 @@ class TsCaptureSpikeActivity : ComponentActivity() {
             userAgentProvider = { USER_AGENT },
             trustAllCertificates = BuildConfig.DEBUG,
         )
-        bufferFile = File(cacheDir, "ts-spike/buffer.ts")
+        bufferDir = File(cacheDir, "ts-spike")
         controller = DefaultVivicastPlayerController(Media3PlaybackEngine(applicationContext))
-        recorder = RawTsRecorder(url, USER_AGENT, bufferFile, client)
+        recorder = SegmentedTsRecorder(
+            url, USER_AGENT, bufferDir, client,
+            segmentBytes = MultiFileTailingDataSource.DEFAULT_SEGMENT_BYTES,
+            maxSegments = MAX_SEGMENTS,
+        )
         if (url.isNotBlank()) recorder.start()
 
         setContent {
@@ -70,7 +75,7 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                 )
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(
-                        "url set: ${url.isNotBlank()}  capture=${recorder.status}  captured=${recorder.capturedBytes / 1_000_000}MB  started=$playRequested",
+                        "url set: ${url.isNotBlank()}  capture=${recorder.status}  seg=${recorder.segmentCount}  captured=${recorder.capturedBytes / 1_000_000}MB  started=$playRequested",
                         style = label,
                     )
                     BasicText(
@@ -87,10 +92,10 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                 }
             }
 
-            // Wait until enough bytes are captured, then play the concat buffer.ts as a channel.
+            // Wait for a few segments, then play the segmented buffer dir as a channel (multi-file tailing).
             LaunchedEffect(Unit) {
                 while (!playRequested) {
-                    if (recorder.capturedBytes >= START_BYTES) {
+                    if (recorder.segmentCount >= START_SEGMENTS) {
                         playRequested = true
                         controller.play(
                             PlaybackRequest(
@@ -98,8 +103,8 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                                 providerId = "spike",
                                 mediaId = "spike",
                                 mediaType = PlaybackMediaType.Channel,
-                                title = "TS Concat Spike",
-                                streamUrl = bufferFile.toURI().toString(),
+                                title = "TS Multi-File Spike",
+                                streamUrl = bufferDir.toURI().toString(),
                                 seekable = true,
                                 tailing = true,
                             ),
@@ -119,7 +124,8 @@ class TsCaptureSpikeActivity : ComponentActivity() {
 
     private companion object {
         const val USER_AGENT = "Vivicast/1.0"
-        const val START_BYTES = 3_000_000L // small: tailing follows the growing file, so start soon after connect
+        const val START_SEGMENTS = 3 // play once a few segments exist; tailing follows the growing edge
+        const val MAX_SEGMENTS = 25 // small rolling window so front-trim triggers quickly in the test (~40-60s HD)
     }
 }
 

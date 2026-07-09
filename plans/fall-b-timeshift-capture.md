@@ -1,8 +1,10 @@
 # Plan: Fall B — lokale TS-Capture-Timeshift (Produktion)
 
-Status: geplant (2026-07-09). Umsetzungs-Plan für die **Produktion** von Fall B. Die Vorgeschichte (K1
-verworfen, K2 concat + Single-File-Tailing auf echter Hardware + echtem Xtream validiert) steht in
-`plans/timeshift-redesign.md` — diese Datei ist der konkrete Bau-Plan.
+Status: in Arbeit (2026-07-09). Umsetzungs-Plan für die **Produktion** von Fall B. Vorgeschichte (K1 verworfen,
+K2 concat + Tailing validiert) in `plans/timeshift-redesign.md`. **Multi-File-Tailing-Spike (Schritt 0) gemacht:
+Play/Trim/Seek-Decode ✓, aber Positions-/Seek-STEUERUNG über ExoPlayers unbounded-Timeline unzuverlässig → muss
+capture-getrieben werden** (der eine echte Rest-Design-Punkt, siehe Schritt-0-Ergebnis unten). Diese Datei ist
+der konkrete Bau-Plan.
 
 ## Ziel & Scope
 
@@ -43,10 +45,30 @@ Produktions-Recorder auf der TV verifizieren:
   Offsets sauber „nicht verfügbar".
 - **Spike beweist:** (1) nahtloses Live über einen Segment-Rollover (kein Glitch); (2) Seek-back innerhalb des
   Fensters sauber, auch über gelöschte-Front hinweg begrenzt; (3) 1 Verbindung.
-- Debug-Spike wie bisher (`RawTsRecorder` → segmentiert schreiben; `TsCaptureSpikeActivity` → tailing über die
-  Multi-File-DS). Test auf Mi TV 4S mit progressive-TS.
-- **Wenn's nicht sauber läuft:** Rückfall „A einfach" (Single-File + Rollover-Re-Prepare, seltener Glitch)
-  oder Fenster einfach per Disk-Budget kappen. Aber erst der Spike entscheidet.
+- Debug-Spike (`SegmentedTsRecorder` → fixe SEG_BYTES-Segmente + Front-Trim; `TsCaptureSpikeActivity` → tailing
+  über die Multi-File-DS; Engine dispatcht Dir→Multi-File / Datei→Single-File). Test auf Mi TV 4S mit echtem
+  Xtream-`.ts`.
+
+### ✅/⚠️ Spike-Ergebnis (2026-07-09, Mi TV 4S, echtes Xtream-`.ts`)
+- ✅ **Nahtloses Live über viele Rollover** (seg 11 → 25, `status=Playing` durchgehend, pixel-scharf, **kein
+  Glitch** an Segmentgrenzen).
+- ✅ **Front-Trim funktioniert** (seg bei `maxSegments`=25 gecappt, alte gelöscht, Wiedergabe läuft weiter).
+- ✅ **Seek serviert sauberes Bild** (−30s → anderer, scharfer, früherer Frame — kein Garbage).
+- ❌ **Position/Seek-STEUERUNG über ExoPlayers unbounded-Timeline unzuverlässig** (der „nicht-standard"-Punkt,
+  jetzt real): nach Seek **re-based ExoPlayer die Position auf 0** (`pos=0`), das Fenster aus running-max ignoriert
+  den Trim (`window=185s` bei nur ~50s retained), und `seekToLiveEdge` (mein `seekBy(+24h)`-Clamp-Trick) **schießt
+  über** auf 24h statt Puffer-Ende → Bild eingefroren.
+
+**Fazit:** Der **Decode-/Play-/Trim-Mechanismus ist bewiesen**; **die Timeshift-Positions-/Seek-Steuerung darf
+NICHT aus ExoPlayers unbounded-Position kommen.** Sie muss **capture-getrieben** sein:
+- Recorder mappt **Bytes ↔ Zeit** (v1: Wall-Clock beim Schreiben je Segment; genauer: PCR/PTS parsen) und meldet
+  die **Fenster-Grenzen** (ältestes retained ↔ Live-Rand, in ms).
+- Controller zeigt Position/Fenster/behind-live **aus diesem Mapping** (nicht `player.currentPosition`).
+- Seek: Ziel-ms → Byte-Offset (via Mapping) → `player.seekTo` auf die zugehörige Media-Zeit; `seekToLiveEdge` →
+  Live-Rand-ms (nicht +24h-Overshoot). UI begrenzt Seeks auf `[ältestes-retained, Live-Rand]`.
+- Das ist der **eine echte Rest-Design-Punkt** (Increment vor der vollen Engine-Integration).
+- **Fallback falls capture-getriebene Steuerung zu fummelig:** „A einfach" (Single-File + Rollover-Re-Prepare;
+  saubere ExoPlayer-Position, dafür seltener Live-Glitch beim Rollover).
 
 ## Produktions-Komponenten (`core/player/.../timeshift/`)
 Nach erfolgreichem Spike:
@@ -79,15 +101,21 @@ Vor dem Play entscheiden, ob Recorder+Local (Fall B) oder Direkt (Fall A):
   2. Warten bis genug gepuffert (~wenige Segmente), dann `playerController.play(request.copy(streamUrl =
      bufferDir-URI, tailing = true))` → Engine spielt lokal-tailing.
   3. Bei Kanalwechsel/Stop: Recorder stoppen (Verbindung zu), dann nächsten starten.
-- **`Media3PlaybackEngine`**: der `request.tailing`-Branch existiert schon; für Multi-File die
-  `MultiFileTailingDataSource.Factory` statt der Single-File-DS nutzen (Bufferpfad = Dir statt Datei).
+- **`Media3PlaybackEngine`**: `request.tailing`-Branch **erledigt** — dispatcht Dir→`MultiFileTailingDataSource`,
+  Datei→`TailingFileDataSource` (beide gebaut).
 - Bleibt **App-hoisted** (Recorder-Lifecycle + Verbindung + Play-Delegation im App-Layer, wie
   `docs/SETTINGS-APP-HOISTED-DECISIONS.md` / die Playback-Orchestrierung). Recorder-Klasse selbst in
   `:core:player` (kein Context nötig außer cacheDir/OkHttp — injizieren).
 
-## Controller/UI
-- Fenster-Metrik für Tailing: **erledigt** (running-max-Position). Badge zeigt die mitgeschnittenen Minuten
-  (wächst 0 → 60 min). „Zur Live-Kante" = weit-vorwärts-Clamp (erledigt).
+## Controller/UI — Positions-/Seek-Steuerung (der Rest-Design-Punkt)
+- ⚠️ Der erste Ansatz (Fenster/Offset aus `player.currentPosition` running-max) reicht für Multi-File **nicht**
+  (Spike-Ergebnis: Position re-based beim Seek, seekToLiveEdge überschießt). **Muss capture-getrieben werden:**
+  - Recorder liefert **Bytes↔ms-Mapping** (v1 Wall-Clock je Segment; genauer PCR/PTS) + Fenster-Grenzen
+    (`oldestRetainedMs`, `liveEdgeMs`).
+  - Controller: `timeshiftWindowMillis = liveEdgeMs - oldestRetainedMs`; `positionMillis`/`behindLive` aus dem
+    Mapping (nicht `player.currentPosition`).
+  - `seekBy`/`seekToLiveEdge`: Ziel-ms → Byte-Offset → passende Media-Zeit an `player.seekTo`; Live-Rand = `liveEdgeMs`
+    (kein +24h-Overshoot). UI klemmt auf `[oldestRetainedMs, liveEdgeMs]`.
 - Vor genug Puffer beim Kanalstart: kurzer „Timeshift baut auf"/Buffering-Zustand; danach normal.
 - Kein sichtbarer „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
 
