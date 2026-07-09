@@ -57,7 +57,6 @@ import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.LanguagePreference
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
-import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.designsystem.R
@@ -81,8 +80,6 @@ import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackReturnTarget
 import com.vivicast.tv.core.player.PlaybackStatus
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
-import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.core.player.PlaybackTuning
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
@@ -112,7 +109,6 @@ import com.vivicast.tv.feature.settings.PlaybackDecoderMode
 import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
-import com.vivicast.tv.feature.settings.PlaybackTimeshiftStorageMode
 import com.vivicast.tv.feature.settings.SettingsAccentColor
 import com.vivicast.tv.feature.settings.SettingsAnimationSpeed
 import com.vivicast.tv.feature.settings.SettingsFontScale
@@ -256,25 +252,6 @@ private fun buildSupportInformation(
         "Sprache: $languageTag",
         "Zeitzone: $timeZoneId",
     ).joinToString(separator = "\n")
-
-internal fun PlaybackPreferences.timeshiftConfig(): PlaybackTimeshiftConfig? {
-    if (!timeshiftEnabled) return null
-    val minutes = when (timeshiftMinutes) {
-        15, 30, 60, 120 -> timeshiftMinutes
-        else -> return null
-    }
-    return PlaybackTimeshiftConfig(
-        storage = timeshiftStorage.toPlayerStorage(),
-        windowMillis = minutes * 60_000L,
-    )
-}
-
-private fun TimeshiftStoragePreference.toPlayerStorage(): PlaybackTimeshiftStorage =
-    when (this) {
-        TimeshiftStoragePreference.Automatic -> PlaybackTimeshiftStorage.Automatic
-        TimeshiftStoragePreference.Ram -> PlaybackTimeshiftStorage.Ram
-        TimeshiftStoragePreference.InternalStorage -> PlaybackTimeshiftStorage.InternalStorage
-    }
 
 /**
  * App-layer mapping of the persisted playback prefs onto the engine's [PlaybackTuning] build-time snapshot.

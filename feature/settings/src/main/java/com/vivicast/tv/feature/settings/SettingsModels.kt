@@ -85,9 +85,6 @@ data class PlaybackSettingsState(
     val preferredSubtitleLanguage: PlaybackSubtitleLanguage = PlaybackSubtitleLanguage.Off,
     val audioPassthroughEnabled: Boolean = false,
     val externalPlayer: PlaybackExternalPlayerMode = PlaybackExternalPlayerMode.Internal,
-    val timeshiftEnabled: Boolean = true,
-    val timeshiftMinutes: Int = 30,
-    val timeshiftStorage: PlaybackTimeshiftStorageMode = PlaybackTimeshiftStorageMode.Automatic,
     val autoNextEnabled: Boolean = false,
     val autoNextCountdownSeconds: Int = 10,
 )
@@ -139,12 +136,6 @@ enum class PlaybackSubtitleLanguage {
     SystemDefault,
     German,
     English,
-}
-
-enum class PlaybackTimeshiftStorageMode {
-    Automatic,
-    Ram,
-    InternalStorage,
 }
 
 data class AboutAppState(

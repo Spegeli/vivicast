@@ -1,12 +1,10 @@
 package com.vivicast.tv.feature.settings
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 
@@ -30,17 +28,4 @@ class SettingsPlaybackPanelTest {
         compose.onAllNodesWithText("95 %").assertCountEquals(0)
     }
 
-    @Test
-    fun dependentPlaybackRowsAreVisibleButDisabled() {
-        compose.setContent {
-            PlaybackSettingsPanel(
-                state = PlaybackSettingsState(
-                    timeshiftEnabled = false,
-                    autoNextEnabled = false,
-                ),
-            )
-        }
-
-        compose.onNodeWithText("Maximale Timeshift-Dauer").performScrollTo().assertHasNoClickAction()
-    }
 }

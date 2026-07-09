@@ -107,7 +107,6 @@ import com.vivicast.tv.feature.settings.PlaybackDecoderMode
 import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
-import com.vivicast.tv.feature.settings.PlaybackTimeshiftStorageMode
 import com.vivicast.tv.feature.settings.SettingsAccentColor
 import com.vivicast.tv.feature.settings.SettingsAnimationSpeed
 import com.vivicast.tv.feature.settings.SettingsFontScale

@@ -69,7 +69,7 @@ class SettingsViewModelTest {
                     language = LanguagePreference.English,
                     fontScale = FontScalePreference.Large,
                 ),
-                playback = PlaybackPreferences(bufferSize = BufferSizePreference.Large, timeshiftMinutes = 60),
+                playback = PlaybackPreferences(bufferSize = BufferSizePreference.Large),
             ),
         )
         val vm = newViewModel(scope, store)
@@ -81,7 +81,6 @@ class SettingsViewModelTest {
         assertEquals(SettingsThemeMode.AmoledDark, state.appearance.themeMode)
         assertEquals(SettingsFontScale.Large, state.appearance.fontScale)
         assertEquals(PlaybackBufferSizeMode.Large, state.playback.bufferSize)
-        assertEquals(60, state.playback.timeshiftMinutes)
         scope.cancel()
     }
 

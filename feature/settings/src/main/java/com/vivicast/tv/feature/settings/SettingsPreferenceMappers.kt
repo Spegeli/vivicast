@@ -9,14 +9,13 @@ import com.vivicast.tv.core.datastore.ExternalPlayerPreference
 import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.LanguagePreference
 import com.vivicast.tv.core.datastore.ThemeColor
-import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.TransparencyLevel
 
 /**
  * Pure DataStore <-> settings-UI mappers for the General, Appearance and Playback sections
  * (migrated from app/SettingsPreferenceMappers.kt in P1-04f1). No Context/Android dependency.
- * Context-based mappers (aboutAppState, diagnostics, support info) and the Locale key, backup
- * and player-timeshift mappers remain in the app module.
+ * Context-based mappers (aboutAppState, diagnostics, support info), the Locale key and backup
+ * mappers remain in the app module.
  */
 
 internal fun DiagnosticsPreferences.toSettingsDiagnosticsState(): DiagnosticsSettingsState =
@@ -185,18 +184,4 @@ internal fun PlaybackExternalPlayerMode.toDataStoreExternalPlayerPreference(): E
         PlaybackExternalPlayerMode.Internal -> ExternalPlayerPreference.Internal
         PlaybackExternalPlayerMode.External -> ExternalPlayerPreference.External
         PlaybackExternalPlayerMode.AskEveryTime -> ExternalPlayerPreference.AskEveryTime
-    }
-
-internal fun TimeshiftStoragePreference.toSettingsTimeshiftStorageMode(): PlaybackTimeshiftStorageMode =
-    when (this) {
-        TimeshiftStoragePreference.Automatic -> PlaybackTimeshiftStorageMode.Automatic
-        TimeshiftStoragePreference.Ram -> PlaybackTimeshiftStorageMode.Ram
-        TimeshiftStoragePreference.InternalStorage -> PlaybackTimeshiftStorageMode.InternalStorage
-    }
-
-internal fun PlaybackTimeshiftStorageMode.toDataStoreTimeshiftStoragePreference(): TimeshiftStoragePreference =
-    when (this) {
-        PlaybackTimeshiftStorageMode.Automatic -> TimeshiftStoragePreference.Automatic
-        PlaybackTimeshiftStorageMode.Ram -> TimeshiftStoragePreference.Ram
-        PlaybackTimeshiftStorageMode.InternalStorage -> TimeshiftStoragePreference.InternalStorage
     }

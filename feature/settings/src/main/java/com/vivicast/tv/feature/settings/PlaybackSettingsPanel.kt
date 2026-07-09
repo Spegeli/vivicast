@@ -98,7 +98,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private enum class PlaybackPicker {
-    Buffer, AudioDecoder, VideoDecoder, ExternalPlayer, TimeshiftMinutes, TimeshiftStorage,
+    Buffer, AudioDecoder, VideoDecoder, ExternalPlayer,
     AudioLanguage, SubtitleLanguage, Countdown,
 }
 
@@ -160,35 +160,6 @@ fun PlaybackSettingsPanel(
                 value = state.externalPlayer.label(),
                 icon = { SettingsRowIcon("external") },
                 onClick = { openPicker = PlaybackPicker.ExternalPlayer },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_timeshift),
-                help = stringResource(R.string.settings_help_timeshift),
-                value = if (state.timeshiftEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                icon = { SettingsRowIcon("timeshift") },
-                onClick = { onPlaybackPreferencesChanged(state.copy(timeshiftEnabled = !state.timeshiftEnabled)) },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_timeshift_max_duration),
-                help = if (state.timeshiftEnabled) stringResource(R.string.settings_help_timeshift_buffer) else stringResource(R.string.settings_help_disabled_note),
-                value = stringResource(R.string.common_minutes, state.timeshiftMinutes.validTimeshiftMinutes()),
-                enabled = state.timeshiftEnabled,
-                icon = { SettingsRowIcon("clock") },
-                onClick = { openPicker = PlaybackPicker.TimeshiftMinutes },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_timeshift_storage),
-                help = if (state.timeshiftEnabled) stringResource(R.string.settings_help_timeshift_storage) else stringResource(R.string.settings_help_disabled_note),
-                value = state.timeshiftStorage.label(),
-                enabled = state.timeshiftEnabled,
-                icon = { SettingsRowIcon("storage") },
-                onClick = { openPicker = PlaybackPicker.TimeshiftStorage },
             )
         }
         item {
@@ -284,22 +255,6 @@ private fun PlaybackSettingsDialogs(
             onSelect = { onChange(state.copy(externalPlayer = it)); onDismiss() },
             onDismiss = onDismiss,
         )
-        PlaybackPicker.TimeshiftMinutes -> SettingsChoiceDialog(
-            title = stringResource(R.string.settings_timeshift_max_duration),
-            options = listOf(15, 30, 60, 120),
-            selected = state.timeshiftMinutes.validTimeshiftMinutes(),
-            label = { stringResource(R.string.common_minutes, it) },
-            onSelect = { onChange(state.copy(timeshiftMinutes = it)); onDismiss() },
-            onDismiss = onDismiss,
-        )
-        PlaybackPicker.TimeshiftStorage -> SettingsChoiceDialog(
-            title = stringResource(R.string.settings_timeshift_storage),
-            options = PlaybackTimeshiftStorageMode.entries,
-            selected = state.timeshiftStorage,
-            label = { it.label() },
-            onSelect = { onChange(state.copy(timeshiftStorage = it)); onDismiss() },
-            onDismiss = onDismiss,
-        )
         PlaybackPicker.AudioLanguage -> SettingsChoiceDialog(
             title = stringResource(R.string.settings_audio_language),
             options = PlaybackAudioLanguage.entries,
@@ -332,12 +287,6 @@ private fun Int.validAutoNextCountdown(): Int =
     when (this) {
         5, 10, 15, 30 -> this
         else -> 10
-    }
-
-private fun Int.validTimeshiftMinutes(): Int =
-    when (this) {
-        15, 30, 60, 120 -> this
-        else -> 30
     }
 
 @Composable
@@ -376,12 +325,5 @@ private fun PlaybackExternalPlayerMode.label(): String = when (this) {
     PlaybackExternalPlayerMode.Internal -> stringResource(R.string.player_internal)
     PlaybackExternalPlayerMode.External -> stringResource(R.string.player_external)
     PlaybackExternalPlayerMode.AskEveryTime -> stringResource(R.string.player_ask)
-}
-
-@Composable
-private fun PlaybackTimeshiftStorageMode.label(): String = when (this) {
-    PlaybackTimeshiftStorageMode.Automatic -> stringResource(R.string.storage_auto)
-    PlaybackTimeshiftStorageMode.Ram -> "RAM"
-    PlaybackTimeshiftStorageMode.InternalStorage -> stringResource(R.string.storage_internal)
 }
 

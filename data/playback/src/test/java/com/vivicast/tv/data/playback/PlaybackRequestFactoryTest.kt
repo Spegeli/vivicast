@@ -3,8 +3,6 @@ package com.vivicast.tv.data.playback
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackReturnTarget
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
-import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.EpgProgram
@@ -126,7 +124,7 @@ class PlaybackRequestFactoryTest {
     @Test
     fun channelRequest_builtWhenStreamResolves() = runBlocking {
         val resolver = FakePlaybackStreamResolver(url = "http://channel/stream")
-        val request = factory(resolver).channelRequest(channel(), timeshift = null, origin = PlaybackOrigin.LiveTv)
+        val request = factory(resolver).channelRequest(channel(), origin = PlaybackOrigin.LiveTv)
 
         requireNotNull(request)
         assertEquals(PlaybackMediaType.Channel, request.mediaType)
@@ -138,27 +136,15 @@ class PlaybackRequestFactoryTest {
         assertEquals("p1", request.providerId)
         assertEquals("c1", request.mediaStableKey)
         assertEquals("p1:channel:c1:$fixedClock", request.playbackId)
-        // No timeshift → not seekable, no config.
-        assertEquals(false, request.seekable)
-        assertNull(request.timeshift)
-        assertEquals(MediaType.Channel, resolver.lastRequest?.mediaType)
-    }
-
-    @Test
-    fun channelRequest_includesTimeshiftWhenProvided() = runBlocking {
-        val resolver = FakePlaybackStreamResolver(url = "http://channel/stream")
-        val timeshift = PlaybackTimeshiftConfig(storage = PlaybackTimeshiftStorage.Ram, windowMillis = 60_000L)
-        val request = factory(resolver).channelRequest(channel(), timeshift = timeshift, origin = PlaybackOrigin.LiveTv)
-
-        requireNotNull(request)
+        // Live channels are always seekable; the controller auto-detects a native DVR window at playback.
         assertEquals(true, request.seekable)
-        assertEquals(timeshift, request.timeshift)
+        assertEquals(MediaType.Channel, resolver.lastRequest?.mediaType)
     }
 
     @Test
     fun channelRequest_nullWhenStreamUnresolved() = runBlocking {
         val resolver = FakePlaybackStreamResolver(url = null)
-        val request = factory(resolver).channelRequest(channel(), timeshift = null, origin = PlaybackOrigin.LiveTv)
+        val request = factory(resolver).channelRequest(channel(), origin = PlaybackOrigin.LiveTv)
 
         assertNull(request)
     }

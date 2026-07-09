@@ -55,7 +55,6 @@ import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
 import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.LanguagePreference
-import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TimeshiftStoragePreference
 import com.vivicast.tv.core.datastore.TransparencyLevel
@@ -102,7 +101,6 @@ import com.vivicast.tv.feature.settings.PlaybackDecoderMode
 import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
-import com.vivicast.tv.feature.settings.PlaybackTimeshiftStorageMode
 import com.vivicast.tv.feature.settings.SettingsAccentColor
 import com.vivicast.tv.feature.settings.SettingsAnimationSpeed
 import com.vivicast.tv.feature.settings.SettingsFontScale
@@ -182,13 +180,11 @@ internal suspend fun AppContainer.resolveEpisodeImageModel(episode: Episode): An
 
 internal suspend fun AppContainer.openChannelPlayback(
     channel: Channel,
-    playbackPreferences: PlaybackPreferences,
     origin: PlaybackOrigin,
     onStarted: () -> Unit,
 ) {
     val request = playbackRequestFactory.channelRequest(
         channel = channel,
-        timeshift = playbackPreferences.timeshiftConfig(),
         origin = origin,
     ) ?: return
     playerController.play(request)
@@ -205,11 +201,8 @@ internal suspend fun AppContainer.openChannelPlayback(
 internal suspend fun AppContainer.resolveResumableLastChannel(): Channel? {
     val lastWatched = playbackRepository.observeAllRecentChannels(limit = 1).first().firstOrNull() ?: return null
     val channel = mediaRepository.getChannel(lastWatched.providerId, lastWatched.channelId) ?: return null
-    // timeshift = null: for a live channel the stream URL is identical with/without timeshift, and the
-    // probe only needs the URL + User-Agent.
     val request = playbackRequestFactory.channelRequest(
         channel = channel,
-        timeshift = null,
         origin = PlaybackOrigin.LiveTv,
     ) ?: return null
     return channel.takeIf { streamReachabilityProbe.isReachable(request.streamUrl, request.userAgent) }

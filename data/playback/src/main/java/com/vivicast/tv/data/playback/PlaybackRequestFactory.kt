@@ -4,7 +4,6 @@ import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackReturnTarget
-import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.Episode
@@ -18,8 +17,8 @@ import com.vivicast.tv.domain.model.Movie
  * `playerController.play(...)` and the `onStarted` side effect.
  *
  * [clock] is injectable so the generated [playbackId] and the catch-up window guard are
- * deterministic in tests. The App still owns the timeshift preference mapping (it passes a ready
- * [PlaybackTimeshiftConfig] in) and progress writing (P1-03d).
+ * deterministic in tests. Live channels are always seekable — the player controller auto-detects a
+ * native DVR window at playback; no timeshift preference is threaded in. Progress writing is P1-03d.
  */
 class PlaybackRequestFactory(
     private val playbackStreamResolver: PlaybackStreamResolver,
@@ -101,7 +100,6 @@ class PlaybackRequestFactory(
 
     suspend fun channelRequest(
         channel: Channel,
-        timeshift: PlaybackTimeshiftConfig?,
         origin: PlaybackOrigin,
     ): PlaybackRequest? {
         val stream = playbackStreamResolver.resolve(
@@ -125,8 +123,8 @@ class PlaybackRequestFactory(
             returnTarget = PlaybackReturnTarget.LiveTv,
             title = channel.name,
             streamUrl = stream.url,
-            seekable = timeshift != null,
-            timeshift = timeshift,
+            // Live channels are always seekable; the controller auto-detects a native DVR window at playback.
+            seekable = true,
         )
     }
 
