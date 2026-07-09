@@ -108,6 +108,8 @@ data class PlaybackTrack(
     val trackIndex: Int,
     val language: String?,
     val label: String?,
+    // Audio channel count (-1 = unknown); distinguishes e.g. a stereo vs 5.1 track of the same language.
+    val channelCount: Int = -1,
     val isSelected: Boolean,
 )
 
@@ -690,11 +692,14 @@ class Media3PlaybackEngine(
                 trackIndex = representative,
                 language = format.language,
                 label = format.label,
+                channelCount = format.channelCount,
                 isSelected = (0 until group.length).any { group.isTrackSelected(it) },
             )
         }
+        // Key on channelCount too, so a genuine stereo vs 5.1 pair (same language+label) is NOT collapsed —
+        // only true redundancy (e.g. a stream's A/B origin copies) is.
         return perGroup
-            .groupBy { it.language to it.label }
+            .groupBy { Triple(it.language, it.label, it.channelCount) }
             .map { (_, duplicates) -> duplicates.firstOrNull { it.isSelected } ?: duplicates.first() }
     }
 

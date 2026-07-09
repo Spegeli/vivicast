@@ -62,10 +62,18 @@ import kotlinx.coroutines.delay
  * Display label for a stream track: the stream-provided label, else the localized language name, else the
  * language code, else a positional fallback. Kept UI-side so localization stays out of the player engine.
  */
-private fun PlaybackTrack.trackDisplayLabel(): String =
-    label?.takeIf { it.isNotBlank() }
+private fun PlaybackTrack.trackDisplayLabel(): String {
+    val base = label?.takeIf { it.isNotBlank() }
         ?: language?.let { code -> Locale(code).displayLanguage.ifBlank { code.uppercase(Locale.getDefault()) } }
         ?: "${trackIndex + 1}"
+    val channels = when (channelCount) {
+        1 -> "Mono"
+        6 -> "5.1"
+        8 -> "7.1"
+        else -> null // stereo (2) or unknown: keep it clean
+    }
+    return if (channels != null) "$base · $channels" else base
+}
 
 @Composable
 fun PlayerRoute(
