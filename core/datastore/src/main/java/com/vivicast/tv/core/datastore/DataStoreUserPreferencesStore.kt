@@ -47,12 +47,6 @@ class DataStoreUserPreferencesStore(
                     videoDecoder = preferences.enumValue(Keys.VideoDecoder, DecoderPreference.Hardware),
                     afrEnabled = preferences[Keys.AfrEnabled] ?: false,
                     audioPassthroughEnabled = preferences[Keys.AudioPassthroughEnabled] ?: false,
-                    timeshiftEnabled = preferences[Keys.TimeshiftEnabled] ?: true,
-                    timeshiftStorage = preferences.enumValue(
-                        Keys.TimeshiftStorage,
-                        TimeshiftStoragePreference.Automatic,
-                    ),
-                    timeshiftMinutes = preferences[Keys.TimeshiftMinutes] ?: 30,
                     preferredAudioLanguage = preferences[Keys.PreferredAudioLanguage],
                     preferredSubtitleLanguage = preferences[Keys.PreferredSubtitleLanguage],
                     externalPlayer = preferences.enumValue(Keys.ExternalPlayer, ExternalPlayerPreference.Internal),
@@ -132,9 +126,6 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.VideoDecoder] = playback.videoDecoder.name
             preferences[Keys.AfrEnabled] = playback.afrEnabled
             preferences[Keys.AudioPassthroughEnabled] = playback.audioPassthroughEnabled
-            preferences[Keys.TimeshiftEnabled] = playback.timeshiftEnabled
-            preferences[Keys.TimeshiftStorage] = playback.timeshiftStorage.name
-            preferences[Keys.TimeshiftMinutes] = playback.timeshiftMinutes
             preferences.setNullable(Keys.PreferredAudioLanguage, playback.preferredAudioLanguage)
             preferences.setNullable(Keys.PreferredSubtitleLanguage, playback.preferredSubtitleLanguage)
             preferences[Keys.ExternalPlayer] = playback.externalPlayer.name
@@ -234,9 +225,6 @@ class DataStoreUserPreferencesStore(
         val VideoDecoder = stringPreferencesKey("video_decoder")
         val AfrEnabled = booleanPreferencesKey("afr_enabled")
         val AudioPassthroughEnabled = booleanPreferencesKey("audio_passthrough_enabled")
-        val TimeshiftEnabled = booleanPreferencesKey("timeshift_enabled")
-        val TimeshiftStorage = stringPreferencesKey("timeshift_storage")
-        val TimeshiftMinutes = intPreferencesKey("timeshift_minutes")
         val PreferredAudioLanguage = stringPreferencesKey("preferred_audio_language")
         val PreferredSubtitleLanguage = stringPreferencesKey("preferred_subtitle_language")
         val ExternalPlayer = stringPreferencesKey("external_player")

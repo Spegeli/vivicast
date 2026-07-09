@@ -56,9 +56,6 @@ data class PlaybackPreferences(
     val videoDecoder: DecoderPreference = DecoderPreference.Hardware,
     val afrEnabled: Boolean = false,
     val audioPassthroughEnabled: Boolean = false,
-    val timeshiftEnabled: Boolean = true,
-    val timeshiftStorage: TimeshiftStoragePreference = TimeshiftStoragePreference.Automatic,
-    val timeshiftMinutes: Int = 30,
     val preferredAudioLanguage: String? = null,
     val preferredSubtitleLanguage: String? = null,
     val externalPlayer: ExternalPlayerPreference = ExternalPlayerPreference.Internal,
@@ -114,8 +111,6 @@ enum class AnimationSpeedPreference { Off, Slow, Normal, Fast }
 enum class BufferSizePreference { Off, Small, Medium, Large, ExtraLarge }
 
 enum class DecoderPreference { Automatic, Hardware, Software }
-
-enum class TimeshiftStoragePreference { Automatic, Ram, InternalStorage }
 
 enum class ExternalPlayerPreference { Internal, External, AskEveryTime }
 

@@ -52,9 +52,6 @@
     <string name="settings_video_decoder">Video-Decoder</string>
     <string name="settings_afr">Automatische Bildwiederholrate</string>
     <string name="settings_external_player">Externer Player</string>
-    <string name="settings_timeshift">Timeshift</string>
-    <string name="settings_timeshift_max_duration">Maximale Timeshift-Dauer</string>
-    <string name="settings_timeshift_storage">Timeshift-Speicher</string>
     <string name="settings_audio_language">Audio-Sprache</string>
     <string name="settings_subtitle_language">Untertitel-Sprache</string>
     <string name="settings_auto_next">Automatisch nächste Folge</string>
@@ -186,7 +183,6 @@
     <string name="player_retry">Wiederholen</string>
     <string name="player_other_channel">Anderen Sender wählen</string>
     <string name="player_close">Schließen</string>
-    <string name="player_no_timeshift">Nicht verfügbar</string>
 
     <!-- Common -->
     <string name="common_open">Öffnen</string>

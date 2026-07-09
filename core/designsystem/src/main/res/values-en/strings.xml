@@ -53,9 +53,6 @@
     <string name="settings_video_decoder">Video decoder</string>
     <string name="settings_afr">Automatic frame rate</string>
     <string name="settings_external_player">External player</string>
-    <string name="settings_timeshift">Timeshift</string>
-    <string name="settings_timeshift_max_duration">Max timeshift duration</string>
-    <string name="settings_timeshift_storage">Timeshift storage</string>
     <string name="settings_audio_language">Audio language</string>
     <string name="settings_subtitle_language">Subtitle language</string>
     <string name="settings_auto_next">Auto-play next episode</string>
@@ -206,7 +203,6 @@
     <string name="player_retry">Retry</string>
     <string name="player_other_channel">Choose another channel</string>
     <string name="player_close">Close</string>
-    <string name="player_no_timeshift">Not available</string>
     <string name="player_timeshift_unavailable">Timeshift not available for this channel.</string>
     <string name="player_aspect_fill">Fill</string>
     <string name="player_aspect_fit">Fit</string>
@@ -459,10 +455,6 @@
     <string name="settings_help_afr">Adjusts output to match playback when the device supports it.</string>
     <string name="settings_help_afr_unsupported">Not supported by this device or Android version.</string>
     <string name="settings_help_external_player">Applies to movies and single episodes only. Live-TV and catch-up remain internal.</string>
-    <string name="settings_help_timeshift">Enables time-shifted live TV if the channel and stream support it.</string>
-    <string name="settings_help_timeshift_buffer">Limits the active timeshift buffer.</string>
-    <string name="settings_help_disabled_note">Saved but not operable when timeshift is disabled.</string>
-    <string name="settings_help_timeshift_storage">Selects storage for the active timeshift buffer.</string>
     <string name="settings_help_audio_lang">Preferred audio track if offered by the stream.</string>
     <string name="settings_help_subtitle_lang">Preferred subtitle track if offered by the stream.</string>
     <string name="settings_help_auto_next">Applies to series episodes in the internal player.</string>

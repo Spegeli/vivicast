@@ -53,9 +53,6 @@
     <string name="settings_video_decoder">Video-Decoder</string>
     <string name="settings_afr">Automatische Bildwiederholrate</string>
     <string name="settings_external_player">Externer Player</string>
-    <string name="settings_timeshift">Timeshift</string>
-    <string name="settings_timeshift_max_duration">Maximale Timeshift-Dauer</string>
-    <string name="settings_timeshift_storage">Timeshift-Speicher</string>
     <string name="settings_audio_language">Audio-Sprache</string>
     <string name="settings_subtitle_language">Untertitel-Sprache</string>
     <string name="settings_auto_next">Automatisch nächste Folge</string>
@@ -206,7 +203,6 @@
     <string name="player_retry">Wiederholen</string>
     <string name="player_other_channel">Anderen Sender wählen</string>
     <string name="player_close">Schließen</string>
-    <string name="player_no_timeshift">Nicht verfügbar</string>
     <string name="player_timeshift_unavailable">Timeshift für diesen Sender nicht verfügbar.</string>
     <string name="player_aspect_fill">Ausfüllen</string>
     <string name="player_aspect_fit">Anpassen</string>
@@ -460,10 +456,6 @@
     <string name="settings_help_afr">Passt die Ausgabe an die Wiedergabe an, wenn das Gerät es unterstützt.</string>
     <string name="settings_help_afr_unsupported">Wird von diesem Gerät oder dieser Android-Version nicht unterstützt.</string>
     <string name="settings_help_external_player">Gilt nur für Filme und einzelne Episoden. Live-TV und Catch-Up bleiben intern.</string>
-    <string name="settings_help_timeshift">Erlaubt zeitversetztes Live-TV, sofern Sender und Stream es unterstützen.</string>
-    <string name="settings_help_timeshift_buffer">Begrenzt den aktiven Timeshift-Puffer.</string>
-    <string name="settings_help_disabled_note">Bleibt gespeichert, ist bei deaktiviertem Timeshift nicht bedienbar.</string>
-    <string name="settings_help_timeshift_storage">Wählt den Speicher für den aktiven Timeshift-Puffer.</string>
     <string name="settings_help_audio_lang">Bevorzugte Audiospur, wenn der Stream sie anbietet.</string>
     <string name="settings_help_subtitle_lang">Bevorzugte Untertitelspur, wenn der Stream sie anbietet.</string>
     <string name="settings_help_auto_next">Gilt für Serienepisoden im internen Player.</string>
