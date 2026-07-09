@@ -32,12 +32,11 @@ import kotlinx.coroutines.delay
 import java.io.File
 
 /**
- * Debug-only spike (Phase 3 / Fall B, mechanism K1). Proves the no-gap local-capture timeshift end-to-end:
- * [LiveTsSegmenter] captures a progressive MPEG-TS live stream over ONE connection into a rolling local live
- * HLS playlist, and the REAL [VivicastPlayerController] + [Media3PlaybackEngine] play that local `index.m3u8`
- * as a channel. So it also exercises the Phase-1 native-window logic (the local live HLS is seekable → the
- * controller shows a timeshift window). Buttons rewind / return-to-live to check: does ExoPlayer play the
- * self-segmented TS, seek back within the window, and follow the growing edge with no gap, all on one connection?
+ * Debug-only spike (Phase 3 / Fall B, mechanism **K2** — concat, no re-mux). [RawTsRecorder] appends a live
+ * progressive-TS byte stream verbatim to one `buffer.ts`; the real [VivicastPlayerController] +
+ * [Media3PlaybackEngine] then play that file. Because it is byte-identical to the original stream it should
+ * decode cleanly on a real hardware decoder and be seekable via TsExtractor — the exact thing K1 (hand
+ * re-segmenting to local HLS) failed on the TV. Buttons rewind so we can see if the concat file is clean + seekable.
  *
  * Launch (no URL in the repo — pass a progressive-TS live URL, e.g. a Tvheadend `?profile=pass`, at runtime):
  *   adb shell am start -n com.vivicast.tv/.TsCaptureSpikeActivity --es url "<progressive-ts-url>"
@@ -45,7 +44,8 @@ import java.io.File
 class TsCaptureSpikeActivity : ComponentActivity() {
 
     private lateinit var controller: VivicastPlayerController
-    private lateinit var segmenter: LiveTsSegmenter
+    private lateinit var recorder: RawTsRecorder
+    private lateinit var bufferFile: File
     private var playRequested = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,9 +55,10 @@ class TsCaptureSpikeActivity : ComponentActivity() {
             userAgentProvider = { USER_AGENT },
             trustAllCertificates = BuildConfig.DEBUG,
         )
+        bufferFile = File(cacheDir, "ts-spike/buffer.ts")
         controller = DefaultVivicastPlayerController(Media3PlaybackEngine(applicationContext))
-        segmenter = LiveTsSegmenter(url, USER_AGENT, File(cacheDir, "ts-spike"), client)
-        if (url.isNotBlank()) segmenter.start()
+        recorder = RawTsRecorder(url, USER_AGENT, bufferFile, client)
+        if (url.isNotBlank()) recorder.start()
 
         setContent {
             val state by controller.state.collectAsState()
@@ -68,29 +69,28 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                 )
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    BasicText("url set: ${url.isNotBlank()}  capture=${segmenter.status}  segments=${segmenter.segmentCount}", style = label)
                     BasicText(
-                        "status=${state.status}  pos=${state.positionMillis / 1000}s  window=${state.timeshiftWindowMillis / 1000}s  " +
-                            "behindLive=${state.liveEdgeOffsetMillis / 1000}s",
+                        "url set: ${url.isNotBlank()}  capture=${recorder.status}  captured=${recorder.capturedBytes / 1_000_000}MB  started=$playRequested",
                         style = label,
                     )
                     BasicText(
-                        "timeshift=${state.isTimeshiftEnabled}  atLive=${state.isAtLiveEdge}  fps=${state.videoFrameRate}",
+                        "status=${state.status}  pos=${state.positionMillis / 1000}s  window=${state.timeshiftWindowMillis / 1000}s  " +
+                            "behindLive=${state.liveEdgeOffsetMillis / 1000}s  seekable=${state.request?.seekable}",
                         style = label,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SpikeButton("-20s") { controller.seekBy(-20_000) }
-                        SpikeButton("-2min") { controller.seekBy(-120_000) }
-                        SpikeButton("+30s") { controller.seekBy(30_000) }
+                        SpikeButton("-10s") { controller.seekBy(-10_000) }
+                        SpikeButton("-30s") { controller.seekBy(-30_000) }
+                        SpikeButton("+10s") { controller.seekBy(10_000) }
                         SpikeButton("Live") { controller.seekToLiveEdge() }
                     }
                 }
             }
 
-            // Wait until the segmenter has a few segments, then play the LOCAL rolling live HLS as a channel.
+            // Wait until enough bytes are captured, then play the concat buffer.ts as a channel.
             LaunchedEffect(Unit) {
                 while (!playRequested) {
-                    if (segmenter.segmentCount >= START_AFTER_SEGMENTS) {
+                    if (recorder.capturedBytes >= START_BYTES) {
                         playRequested = true
                         controller.play(
                             PlaybackRequest(
@@ -98,8 +98,8 @@ class TsCaptureSpikeActivity : ComponentActivity() {
                                 providerId = "spike",
                                 mediaId = "spike",
                                 mediaType = PlaybackMediaType.Channel,
-                                title = "TS Capture Spike",
-                                streamUrl = segmenter.playlistFile.toURI().toString(),
+                                title = "TS Concat Spike",
+                                streamUrl = bufferFile.toURI().toString(),
                                 seekable = true,
                             ),
                         )
@@ -111,14 +111,14 @@ class TsCaptureSpikeActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        segmenter.stop()
+        recorder.stop()
         controller.release()
         super.onDestroy()
     }
 
     private companion object {
         const val USER_AGENT = "Vivicast/1.0"
-        const val START_AFTER_SEGMENTS = 3
+        const val START_BYTES = 2_000_000L // low, so it still starts when the test server throttles the capture
     }
 }
 

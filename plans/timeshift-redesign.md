@@ -4,8 +4,10 @@ Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Ph
 Hardware GESCHEITERT** (2026-07-09, Xiaomi Mi TV 4S): Der No-Gap-*Mechanismus* (1 Verbindung, Edge-Follow,
 Seek, Phase-1-Integration) läuft, ABER **hand-segmentiertes TS → lokales HLS ist auf einem echten
 Hardware-Decoder nicht dekodierbar** (Chroma-/Makroblock-Garbage + Audio-PTS-Discontinuities; naiv UND
-keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen; Fall-B-Ansatz
-neu bewerten** (siehe „Hardware-Ergebnis" unten). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen. K2 (Concat, kein Re-Mux) auf
+echter Hardware VALIDIERT: `buffer.ts` spielt gestochen sauber + `seekable=true`** — der HW-Decoder frisst den
+byte-identischen Stream problemlos. Nächster K2-Schritt: Tailing (wachsende Datei fürs No-Gap-Edge-Follow) +
+rollendes Fenster. **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -145,10 +147,14 @@ echtem progressive-TS (Tvheadend `?profile=pass`), Emulator UND Xiaomi Mi TV 4S.
 
 ### Hardware-Ergebnis → Neu-Bewertung Fall B (K1 tot)
 Hand-Re-Segmentieren ist raus. Verbleibende Wege:
-- **K2 — Concat statt Segmentieren (StreamVault-Original, produktionsbewiesen):** rohe Byte-Chunks NICHT
-  re-muxen, sondern zu **einer contiguous `buffer.ts` konkatenieren** = byte-identisch zum Originalstream →
-  **konform → HW-Decoder frisst es** (kein Re-Mux, kein PES-Bruch). Kosten: No-Gap+1-Verbindung braucht
-  tailing-Wiedergabe (nicht-standard) oder periodisches Re-Snapshot (Glitch beim Umschalten).
+- **K2 — Concat statt Segmentieren (StreamVault-Original) — ✅ AUF ECHTER HARDWARE VALIDIERT (2026-07-09):**
+  rohe Bytes NICHT re-muxen, sondern verbatim in **eine `buffer.ts`** (byte-identisch zum Originalstream). Spike
+  `RawTsRecorder` + Controller: die `buffer.ts` spielt auf der Xiaomi Mi TV 4S **gestochen sauber** (kein
+  Chroma-/Makroblock-Garbage, kein Audio-PTS-Fehler) und ist **`seekable=true`**. Bestätigt: kein Re-Mux → konform
+  → HW-Decoder ok. **Verbleibend für Produktion:** (a) **Tailing** — ExoPlayer eine *wachsende* `buffer.ts`
+  spielen lassen (custom DataSource, blockt am EOF) fürs No-Gap-Edge-Follow, bleibt dabei seekbar; (b) **rollendes
+  Fenster** — Front-Trim ohne die seekbare Datei zu zerstören (chunk-basiert wie StreamVault, Concat je Snapshot,
+  oder Datei periodisch neu aufsetzen). Diese zwei sind der nächste Spike-Schritt.
 - **FFmpeg-Segmenter:** libavformat HLS-Muxer erzeugt konforme Segmente. Robust, aber grosse Abhängigkeit
   (JNI/Binary) + Build-Aufwand.
 - **Fall B ganz zurückstellen (v1):** Fall A (nativ, fertig) deckt HLS-Broadcaster + Xtream-HLS (Default);
