@@ -42,8 +42,11 @@ ausreichend seekbar → Fall A (natives Fenster als Timeline). Sonst → Fall B 
   `timeshiftWindowMillis`/`liveEdgeOffset`-Maschinerie, soweit sie das native Fenster ersetzt.
 - **Controller/Engine:** Live-Channel mit `seekable=true`; Seek/Live-Edge auf das **native** Timeline-Window
   abbilden (`seekBy`, `seekToDefaultPosition` für Live). `timeshiftProgressState` an die reale Timeline hängen.
-- **Xtream-Ausgabeformat-Option**: `ProviderConfigurationModels`/Provider-Editor (neues Feld, Default HLS),
-  `PlaybackStreamResolver.resolveXtream` baut `.m3u8`/`.ts` je Option. Catch-up-`.ts`-Pfad bleibt.
+- **Xtream-Ausgabeformat-Option** (mirror des vorhandenen `logoPriority`-per-Provider-Settings, komplette Kette):
+  Feld `xtreamOutputFormat` (Enum MPEG-TS/HLS, Default HLS) in `ProviderCreateRequest`/`ProviderUpdateRequest`
+  + Provider-Domain; **Room-Spalte + DB-Migration**; **Picker-Zeile im `ProviderEditor` nur bei Xtream sichtbar**
+  (`SettingsChoiceDialog`, wie Logo-Priorität); `PlaybackStreamResolver.resolveXtream` baut `.m3u8`/`.ts` je
+  Option. Catch-up-`.ts`-Pfad bleibt.
 - **Auto-Detect**: nach Start Fenster prüfen; nicht-seekbar → „begrenztes/kein Timeshift"-Hinweis
   (`player_timeshift_unavailable`).
 
