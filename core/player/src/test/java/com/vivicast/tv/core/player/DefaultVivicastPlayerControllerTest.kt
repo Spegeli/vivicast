@@ -358,6 +358,11 @@ private class BlockingPlaybackEngine : PlaybackEngine {
         seekDeltas += deltaMillis
         currentPositionMillis = (currentPositionMillis + deltaMillis).coerceIn(0L, durationMillis)
     }
+    // Absolute seek: the reported position stays absolute (unlike relative seekBy). durationMillis is the
+    // fake's buffer end / clamp.
+    override fun seekToMillis(positionMillis: Long) {
+        currentPositionMillis = positionMillis.coerceIn(0L, durationMillis)
+    }
     override fun seekToLiveEdge() {
         liveEdgeSeeks += 1
         currentPositionMillis = durationMillis

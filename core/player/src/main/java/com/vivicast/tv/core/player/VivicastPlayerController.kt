@@ -212,8 +212,12 @@ class DefaultVivicastPlayerController(
         val current = mutableState.value
         val request = current.request ?: return
         if (!request.seekable) return
-        // Native seek: ExoPlayer clamps into the seekable/DVR window. State reflects the new native position.
-        engine.seekBy(deltaMillis)
+        if (request.tailing) {
+            // Tailing: relative seekBy makes ExoPlayer re-base its reported position; absolute seekTo keeps it.
+            seekTailingTo(engine.currentPositionMillis + deltaMillis)
+        } else {
+            engine.seekBy(deltaMillis)
+        }
         mutableState.value = current.withNativeTimeline(request)
     }
 
@@ -223,13 +227,19 @@ class DefaultVivicastPlayerController(
         val request = current.request ?: return
         if (!current.isTimeshiftEnabled || current.isAtLiveEdge) return
         if (request.tailing) {
-            // Growing local capture: the live edge is the current end of the file. seekToDefaultPosition would
-            // jump to the START of a progressive file, so instead jump far forward — ExoPlayer clamps to the end.
-            engine.seekBy(LIVE_EDGE_SEEK_FORWARD_MILLIS)
+            seekTailingTo(liveEdgePositionMillis) // the current live edge = running-max play position
         } else {
             engine.seekToLiveEdge()
         }
         mutableState.value = current.withNativeTimeline(request)
+    }
+
+    /** Seeks a tailing source to an absolute ms, clamped to the retained window so we never hit trimmed content. */
+    private fun seekTailingTo(targetMillis: Long) {
+        val liveEdge = maxOf(liveEdgePositionMillis, engine.currentPositionMillis)
+        val window = minOf(liveEdge, MAX_TIMESHIFT_WINDOW_MILLIS)
+        val oldest = (liveEdge - window).coerceAtLeast(0L)
+        engine.seekToMillis(targetMillis.coerceIn(oldest, liveEdge))
     }
 
     override fun selectAudio(option: PlaybackAudioOption) {
@@ -448,17 +458,18 @@ class DefaultVivicastPlayerController(
     private fun VivicastPlayerState.withNativeTimeline(request: PlaybackRequest): VivicastPlayerState {
         val position = engine.currentPositionMillis
         return when {
-            // Fall B: a growing local capture (tailing). ExoPlayer has no duration, so the seekable window is
-            // what has been captured so far = the running-max position (position is already window-relative:
-            // 0 = buffer start, liveEdge = newest captured). Offset = liveEdge - position.
+            // Fall B: a growing local capture (tailing). ExoPlayer has no duration, so the live edge = the
+            // running-max absolute position and the seekable window grows toward the rolling-window cap.
+            // Tailing seeks use absolute seekTo, so engine.currentPositionMillis stays absolute (no re-base).
             request.tailing -> {
                 liveEdgePositionMillis = maxOf(liveEdgePositionMillis, position)
-                val window = liveEdgePositionMillis
+                val window = minOf(liveEdgePositionMillis, MAX_TIMESHIFT_WINDOW_MILLIS)
+                val offset = (liveEdgePositionMillis - position).coerceIn(0L, window)
                 copy(
-                    positionMillis = position,
+                    positionMillis = (window - offset).coerceAtLeast(0L),
                     durationMillis = window,
                     timeshiftWindowMillis = window,
-                    liveEdgeOffsetMillis = (window - position).coerceAtLeast(0L),
+                    liveEdgeOffsetMillis = offset,
                     timeshiftStorage = request.timeshift?.storage,
                 )
             }
@@ -490,8 +501,8 @@ class DefaultVivicastPlayerController(
         const val DEFAULT_MAX_RECONNECT_ATTEMPTS = 5
         val DEFAULT_RETRY_DELAYS_MILLIS = listOf(500L, 1_000L, 2_000L, 4_000L)
         private const val PROGRESS_POLL_INTERVAL_MILLIS = 1_000L
-        // Far-forward seek for a tailing (growing) source: ExoPlayer clamps it to the current buffer end = live.
-        private const val LIVE_EDGE_SEEK_FORWARD_MILLIS = 24L * 60L * 60L * 1_000L
+        // Rolling timeshift window cap for a tailing (Fall B) capture — the deepest rewind the UI offers.
+        private const val MAX_TIMESHIFT_WINDOW_MILLIS = 60L * 60L * 1_000L
     }
 }
 
@@ -556,6 +567,9 @@ interface PlaybackEngine {
     fun resume()
 
     fun seekBy(deltaMillis: Long)
+
+    /** Seek to an absolute media position. Used for tailing sources where relative seekBy is unreliable. */
+    fun seekToMillis(positionMillis: Long) = Unit
 
     /** Seek to the native live edge (default position) of the current media item. */
     fun seekToLiveEdge() = Unit
@@ -711,6 +725,10 @@ class Media3PlaybackEngine(
 
     override fun seekBy(deltaMillis: Long) {
         player.seekTo((player.currentPosition + deltaMillis).coerceAtLeast(0L))
+    }
+
+    override fun seekToMillis(positionMillis: Long) {
+        player.seekTo(positionMillis.coerceAtLeast(0L))
     }
 
     override fun seekToLiveEdge() {

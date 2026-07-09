@@ -125,7 +125,9 @@ class TsCaptureSpikeActivity : ComponentActivity() {
     private companion object {
         const val USER_AGENT = "Vivicast/1.0"
         const val START_SEGMENTS = 3 // play once a few segments exist; tailing follows the growing edge
-        const val MAX_SEGMENTS = 25 // small rolling window so front-trim triggers quickly in the test (~40-60s HD)
+        // Large so front-trim does not catch the play head during the test (playback starts near offset 0 and
+        // trim races forward — starting at the live edge is a separate production fix). Lets us validate seeks.
+        const val MAX_SEGMENTS = 999
     }
 }
 

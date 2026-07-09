@@ -107,15 +107,31 @@ Vor dem Play entscheiden, ob Recorder+Local (Fall B) oder Direkt (Fall A):
   `docs/SETTINGS-APP-HOISTED-DECISIONS.md` / die Playback-Orchestrierung). Recorder-Klasse selbst in
   `:core:player` (kein Context nötig außer cacheDir/OkHttp — injizieren).
 
-## Controller/UI — Positions-/Seek-Steuerung (der Rest-Design-Punkt)
-- ⚠️ Der erste Ansatz (Fenster/Offset aus `player.currentPosition` running-max) reicht für Multi-File **nicht**
-  (Spike-Ergebnis: Position re-based beim Seek, seekToLiveEdge überschießt). **Muss capture-getrieben werden:**
-  - Recorder liefert **Bytes↔ms-Mapping** (v1 Wall-Clock je Segment; genauer PCR/PTS) + Fenster-Grenzen
-    (`oldestRetainedMs`, `liveEdgeMs`).
-  - Controller: `timeshiftWindowMillis = liveEdgeMs - oldestRetainedMs`; `positionMillis`/`behindLive` aus dem
-    Mapping (nicht `player.currentPosition`).
-  - `seekBy`/`seekToLiveEdge`: Ziel-ms → Byte-Offset → passende Media-Zeit an `player.seekTo`; Live-Rand = `liveEdgeMs`
-    (kein +24h-Overshoot). UI klemmt auf `[oldestRetainedMs, liveEdgeMs]`.
+## Controller/UI — Positions-/Seek-Steuerung (⚠️ HARTER PUNKT, ENTSCHEIDUNG NÖTIG)
+Am 2026-07-09 **drei Ansätze auf der echten TV probiert** (running-max aus `player.currentPosition`; seekAnchor
++ relative seekBy; absolutes `seekToMillis`). **Keiner gab zuverlässige Metriken für die Multi-File-Quelle:** die
+gemeldete Position re-based mal auf 0, mal absolut (double-count), Werte passen nicht zum Seek-Ziel; +
+zusätzlich crasht die Wiedergabe, wenn sie bei Offset 0 startet und der Trim das Segment unterm Playhead löscht.
+On-Device-Ablesen war zudem verrauscht (Screensaver, adb-Latenz, Capture-Race). **Der Decode/Play/Trim-Mechanismus
+läuft — aber ExoPlayers Positions-Timeline für die unbounded Multi-File-Quelle ist nicht verlässlich steuerbar.**
+
+Zwei weitere Produktions-Baustellen dabei gefunden: (a) Wiedergabe muss am **Live-Rand** starten (nicht Offset 0),
+sonst Trim-Race-Crash; (b) Seek-Clamp braucht die **echte retained-Fenster-Grenze** vom Recorder (nicht die 60-min-
+Konstante).
+
+### → Entscheidung (E-POS): Multi-File-capture-driven vs. Single-File-Rollover
+- **Weg 1 — Multi-File capture-driven durchziehen:** Positions-/Seek-Steuerung KOMPLETT capture-getrieben (Recorder
+  liefert Bytes↔ms + Fenster-Grenzen; Controller ignoriert `player.currentPosition` ganz; Seek per byte-mapped
+  `seekTo`; Start am Live-Rand). **Glitchloses Live + rollendes 60-min-Fenster**, aber **hoher, unsicherer Aufwand**
+  (ExoPlayers Verhalten für die Custom-Multi-File-Quelle ist zäh — hat 3 Anläufe standgehalten).
+- **Weg 2 — Single-File + Rollover („A einfach"):** EINE wachsende `TailingFileDataSource` (die hatte im
+  Single-File-Spike **saubere Position + Seek** — echte Datei, normale ExoPlayer-Seek-Map). Bounding per Rollover auf
+  neue Datei bei Disk-Budget (~25 min HD). **Zuverlässige Seek-/Positions-Controls**, dafür **ein Rollover-Glitch
+  (~alle 25 min)** + Rewind nur in der aktuellen Datei. Deutlich weniger + sicherer Code.
+- **Empfehlung:** Weg 2. Ein glitchloses Live mit **kaputten** Seek-Controls (Weg 1 aktuell) ist schlechter als ein
+  fast-immer-flüssiges Live mit **funktionierenden** Controls (Weg 2). Weg 1 nur, wenn glitchloses Live oberste
+  Prio ist und der Aufwand ok — dann eigener fokussierter Anlauf für die capture-getriebene Steuerung.
+
 - Vor genug Puffer beim Kanalstart: kurzer „Timeshift baut auf"/Buffering-Zustand; danach normal.
 - Kein sichtbarer „Aufnahme läuft"-Indikator (immer-an, unsichtbar).
 
