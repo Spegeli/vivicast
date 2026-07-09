@@ -118,7 +118,7 @@ class TsCaptureSpikeActivity : ComponentActivity() {
 
     private companion object {
         const val USER_AGENT = "Vivicast/1.0"
-        const val START_BYTES = 2_000_000L // low, so it still starts when the test server throttles the capture
+        const val START_BYTES = 20_000_000L // ~15s of HD before playing, so a seek in the concat has room
     }
 }
 

@@ -4,10 +4,11 @@ Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). **Ph
 Hardware GESCHEITERT** (2026-07-09, Xiaomi Mi TV 4S): Der No-Gap-*Mechanismus* (1 Verbindung, Edge-Follow,
 Seek, Phase-1-Integration) läuft, ABER **hand-segmentiertes TS → lokales HLS ist auf einem echten
 Hardware-Decoder nicht dekodierbar** (Chroma-/Makroblock-Garbage + Audio-PTS-Discontinuities; naiv UND
-keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen. K2 (Concat, kein Re-Mux) auf
-echter Hardware VALIDIERT: `buffer.ts` spielt gestochen sauber + `seekable=true`** — der HW-Decoder frisst den
-byte-identischen Stream problemlos. Nächster K2-Schritt: Tailing (wachsende Datei fürs No-Gap-Edge-Follow) +
-rollendes Fenster. **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+keyframe). Der Emulator-Software-Decoder war zu tolerant und hat das verdeckt. → **K1 verworfen. K2 (Concat, kein Re-Mux)
+auf echter Hardware + echtem Xtream-Ziel VALIDIERT** (Mi TV 4S, Xtream progressive `.ts`, ~11.8 Mbps HD,
+max_cons=1): `buffer.ts` **pixel-scharf**, `seekable=true`, **Seek-back sauber** — der HW-Decoder frisst den
+byte-identischen Stream. Nächster K2-Schritt: Tailing (wachsende Datei fürs No-Gap-Edge-Follow) + rollendes
+Fenster. **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -147,14 +148,20 @@ echtem progressive-TS (Tvheadend `?profile=pass`), Emulator UND Xiaomi Mi TV 4S.
 
 ### Hardware-Ergebnis → Neu-Bewertung Fall B (K1 tot)
 Hand-Re-Segmentieren ist raus. Verbleibende Wege:
-- **K2 — Concat statt Segmentieren (StreamVault-Original) — ✅ AUF ECHTER HARDWARE VALIDIERT (2026-07-09):**
-  rohe Bytes NICHT re-muxen, sondern verbatim in **eine `buffer.ts`** (byte-identisch zum Originalstream). Spike
-  `RawTsRecorder` + Controller: die `buffer.ts` spielt auf der Xiaomi Mi TV 4S **gestochen sauber** (kein
-  Chroma-/Makroblock-Garbage, kein Audio-PTS-Fehler) und ist **`seekable=true`**. Bestätigt: kein Re-Mux → konform
-  → HW-Decoder ok. **Verbleibend für Produktion:** (a) **Tailing** — ExoPlayer eine *wachsende* `buffer.ts`
-  spielen lassen (custom DataSource, blockt am EOF) fürs No-Gap-Edge-Follow, bleibt dabei seekbar; (b) **rollendes
-  Fenster** — Front-Trim ohne die seekbare Datei zu zerstören (chunk-basiert wie StreamVault, Concat je Snapshot,
-  oder Datei periodisch neu aufsetzen). Diese zwei sind der nächste Spike-Schritt.
+- **K2 — Concat statt Segmentieren (StreamVault-Original) — ✅ AUF ECHTER HARDWARE + ECHTEM ZIEL VALIDIERT
+  (2026-07-09):** rohe Bytes NICHT re-muxen, sondern verbatim in **eine `buffer.ts`** (byte-identisch). Spike
+  `RawTsRecorder` + Controller, getestet auf der **Xiaomi Mi TV 4S** mit (a) Tvheadend-`.ts` und (b) einem
+  **echten Xtream-Provider** (`get_live_streams` → `.ts` = `video/mp2t`, progressive MPEG-TS, ~11.8 Mbps Echtzeit-
+  HD, **`max_connections: 1`** — das exakte Fall-B-Szenario). Ergebnis: `buffer.ts` spielt **pixel-scharf** (kein
+  Chroma-/Makroblock-Garbage, keine Audio-PTS-Fehler), **`seekable=true`**, und **Seek-back zeigt ein sauberes
+  Bild** (`pos 31s→21s`, `behindLive=9s`) — genau da, wo K1 Farbmüll gab. Bestätigt: kein Re-Mux → konform →
+  HW-Decoder ok, HW **und** SW-Decoder egal.
+  - **Produktions-Hinweis `max_connections: 1`:** nur EINE Verbindung gleichzeitig; Kanalwechsel muss die alte
+    Stream-Verbindung **voll schliessen** bevor die neue aufgeht (server-seitige Grace-Period sonst → „max
+    connections reached"). Auch Test-Tooling (API-Query + Stream) kollidiert daran.
+  - **Verbleibend für Produktion:** (a) **Tailing** — ExoPlayer eine *wachsende* `buffer.ts` spielen lassen
+    (custom DataSource, blockt am EOF) fürs No-Gap-Edge-Follow, bleibt dabei seekbar; (b) **rollendes Fenster** —
+    Front-Trim ohne die seekbare Datei zu zerstören (chunk-basiert wie StreamVault, Concat je Snapshot). Nächster Schritt.
 - **FFmpeg-Segmenter:** libavformat HLS-Muxer erzeugt konforme Segmente. Robust, aber grosse Abhängigkeit
   (JNI/Binary) + Build-Aufwand.
 - **Fall B ganz zurückstellen (v1):** Fall A (nativ, fertig) deckt HLS-Broadcaster + Xtream-HLS (Default);
