@@ -72,6 +72,8 @@ import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
+import com.vivicast.tv.core.player.BufferTier
+import com.vivicast.tv.core.player.DecoderMode
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
@@ -79,6 +81,7 @@ import com.vivicast.tv.core.player.PlaybackReturnTarget
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.PlaybackTimeshiftConfig
 import com.vivicast.tv.core.player.PlaybackTimeshiftStorage
+import com.vivicast.tv.core.player.PlaybackTuning
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState
@@ -269,5 +272,34 @@ private fun TimeshiftStoragePreference.toPlayerStorage(): PlaybackTimeshiftStora
         TimeshiftStoragePreference.Automatic -> PlaybackTimeshiftStorage.Automatic
         TimeshiftStoragePreference.Ram -> PlaybackTimeshiftStorage.Ram
         TimeshiftStoragePreference.InternalStorage -> PlaybackTimeshiftStorage.InternalStorage
+    }
+
+/**
+ * App-layer mapping of the persisted playback prefs onto the engine's [PlaybackTuning] build-time snapshot.
+ * Preferred audio/subtitle language seeding is wired in Phase 2 (defaults here).
+ */
+internal fun PlaybackPreferences.toPlaybackTuning(): PlaybackTuning =
+    PlaybackTuning(
+        bufferSize = bufferSize.toBufferTier(),
+        audioDecoder = audioDecoder.toDecoderMode(),
+        videoDecoder = videoDecoder.toDecoderMode(),
+        passthroughEnabled = audioPassthroughEnabled,
+        backBufferMinutes = timeshiftMinutes.takeIf { it in listOf(15, 30, 60, 120) } ?: 30,
+    )
+
+private fun BufferSizePreference.toBufferTier(): BufferTier =
+    when (this) {
+        BufferSizePreference.Off -> BufferTier.Off
+        BufferSizePreference.Small -> BufferTier.Small
+        BufferSizePreference.Medium -> BufferTier.Medium
+        BufferSizePreference.Large -> BufferTier.Large
+        BufferSizePreference.ExtraLarge -> BufferTier.ExtraLarge
+    }
+
+private fun DecoderPreference.toDecoderMode(): DecoderMode =
+    when (this) {
+        DecoderPreference.Software -> DecoderMode.Software
+        // Automatic is unreachable from the UI (spec only exposes HW/SW); treat it as Hardware.
+        DecoderPreference.Hardware, DecoderPreference.Automatic -> DecoderMode.Hardware
     }
 

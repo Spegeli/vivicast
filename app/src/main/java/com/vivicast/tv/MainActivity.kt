@@ -849,6 +849,12 @@ private fun VivicastApp(
         appContainer.updateGlobalUserAgent(preferences.general.globalUserAgent)
     }
 
+    // Feed the player build-time tuning (buffer/decoder/passthrough/back-buffer). The engine reads this
+    // snapshot at the next start() and rebuilds the ExoPlayer only when it changed — "applies at next stream".
+    LaunchedEffect(preferences.playback) {
+        appContainer.updatePlaybackTuning(preferences.playback.toPlaybackTuning())
+    }
+
     LaunchedEffect(selectedRoute) {
         lastTopNavigationBackAt = 0L
     }

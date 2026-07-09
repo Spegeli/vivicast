@@ -7,6 +7,10 @@ activityCompose = "1.13.0"
 coreKtx = "1.17.0"
 lifecycle = "2.10.0"
 media3 = "1.9.4"
+# NextLib bundles the Media3 FFmpeg audio decoder (AC3/E-AC3/DTS/MP2). No 1.9.4 build exists; the 1.9.3
+# extension links against Media3's decoder ABI which is stable across patch releases (Gradle resolves
+# media3 up to 1.9.4). If a runtime ABI mismatch ever appears, pin media3 to 1.9.3 to match exactly.
+nextlibMedia3ext = "1.9.3-0.12.0"
 room = "2.8.2"
 tvMaterial = "1.0.0"
 coroutines = "1.10.2"
@@ -42,6 +46,7 @@ androidx-media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls
 androidx-media3-datasource = { module = "androidx.media3:media3-datasource", version.ref = "media3" }
 androidx-media3-database = { module = "androidx.media3:media3-database", version.ref = "media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+nextlib-media3ext = { module = "io.github.anilbeesetti:nextlib-media3ext", version.ref = "nextlibMedia3ext" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }

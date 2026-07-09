@@ -23,6 +23,8 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.datasource)
     implementation(libs.androidx.media3.database)
+    // Media3 FFmpeg audio decoder (AC3/E-AC3/DTS/MP2 software fallback), enabled via the renderers factory.
+    implementation(libs.nextlib.media3ext)
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)

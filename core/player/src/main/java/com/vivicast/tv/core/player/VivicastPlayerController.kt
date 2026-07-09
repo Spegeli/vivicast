@@ -563,6 +563,7 @@ class Media3PlaybackEngine(
     context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val userAgentProvider: () -> String = { DEFAULT_USER_AGENT },
+    private val tuningProvider: () -> PlaybackTuning = { PlaybackTuning() },
 ) : PlaybackEngine {
     private val appContext = context.applicationContext
     private val timeshiftCache = SimpleCache(
@@ -570,39 +571,46 @@ class Media3PlaybackEngine(
         LeastRecentlyUsedCacheEvictor(TIMESHIFT_CACHE_MAX_BYTES),
         StandaloneDatabaseProvider(appContext),
     )
-    private val player = ExoPlayer.Builder(appContext)
-        .setLoadControl(
-            DefaultLoadControl.Builder()
-                .setBackBuffer(TIMESHIFT_BACK_BUFFER_MILLIS, true)
-                .build(),
-        )
-        .build()
+    // Buffer/decoder/passthrough live on ExoPlayer.Builder and can't change on a live player, so the player is
+    // (re)built from a tuning snapshot: once here, then again in start() whenever the builder-subset changes —
+    // exactly "applies at next stream start". Eagerly non-null so the forwarding methods need no null-guards.
+    private var builtTuning = PlaybackTuning()
+    private var player: ExoPlayer = buildExoPlayer(appContext, builtTuning)
     private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val playbackEndedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
     private val startGate = PlaybackStartGate()
     private var activePlaybackId: String? = null
-    // Remembered so it can be re-attached after a player rebuild (Phase 1); today the player is a val.
+    // Remembered so it can be re-attached to a freshly rebuilt player.
     private var videoSurfaceView: SurfaceView? = null
 
     init {
-        player.addListener(
-            object : Player.Listener {
-                override fun onPlayerError(error: PlaybackException) {
-                    // Fail the in-flight start (so start() throws for the retry logic) AND keep emitting
-                    // to the flow so a mid-watch death — after start already succeeded — still triggers
-                    // the controller's reconnect.
-                    startGate.onError(error)
-                    playbackErrorEvents.tryEmit(error)
-                }
+        player.addListener(newPlayerListener())
+    }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    when (playbackState) {
-                        Player.STATE_READY -> startGate.onReady()
-                        Player.STATE_ENDED -> activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
-                    }
-                }
-            },
-        )
+    private fun newPlayerListener(): Player.Listener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            // Fail the in-flight start (so start() throws for the retry logic) AND keep emitting to the
+            // flow so a mid-watch death — after start already succeeded — still triggers the reconnect.
+            startGate.onError(error)
+            playbackErrorEvents.tryEmit(error)
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_READY -> startGate.onReady()
+                Player.STATE_ENDED -> activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
+            }
+        }
+    }
+
+    /** Rebuilds the player only when a build-time setting changed, re-attaching the video surface. */
+    private fun rebuildPlayerIfTuningChanged() {
+        val tuning = tuningProvider()
+        if (tuning.builderSubset == builtTuning.builderSubset) return
+        player.release()
+        player = buildExoPlayer(appContext, tuning).also { it.addListener(newPlayerListener()) }
+        builtTuning = tuning
+        videoSurfaceView?.let { player.setVideoSurfaceView(it) }
     }
 
     override val playbackErrors: Flow<Throwable> = playbackErrorEvents
@@ -627,6 +635,7 @@ class Media3PlaybackEngine(
     override suspend fun start(request: PlaybackRequest) {
         val gate = startGate.arm()
         withContext(dispatcher) {
+            rebuildPlayerIfTuningChanged()
             activePlaybackId = request.playbackId
             val mediaItem = MediaItem.fromUri(request.streamUrl)
             val defaultDataSourceFactory = DefaultDataSource.Factory(appContext, httpDataSourceFactory(request.userAgent))
@@ -706,7 +715,6 @@ class Media3PlaybackEngine(
 
     private companion object {
         const val TIMESHIFT_CACHE_DIR_NAME = "playback-timeshift"
-        const val TIMESHIFT_BACK_BUFFER_MILLIS = 120 * 60 * 1_000
         const val TIMESHIFT_CACHE_MAX_BYTES = 512L * 1024L * 1024L
         const val DEFAULT_USER_AGENT = "Vivicast/1.0"
         const val START_READY_TIMEOUT_MILLIS = 10_000L

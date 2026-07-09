@@ -17,6 +17,7 @@ import com.vivicast.tv.BuildConfig
 import com.vivicast.tv.core.network.NetworkClientFactory
 import com.vivicast.tv.core.player.DefaultVivicastPlayerController
 import com.vivicast.tv.core.player.Media3PlaybackEngine
+import com.vivicast.tv.core.player.PlaybackTuning
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
@@ -114,6 +115,7 @@ class AppContainer(
     }
 
     private val userAgentPolicy = RuntimeUserAgentPolicy()
+    private val playbackTuningPolicy = RuntimePlaybackTuningPolicy()
 
     val secureValueStore: SecureValueStore by lazy {
         AndroidKeystoreSecureValueStore(appContext)
@@ -270,6 +272,7 @@ class AppContainer(
             engine = Media3PlaybackEngine(
                 context = appContext,
                 userAgentProvider = userAgentPolicy::current,
+                tuningProvider = playbackTuningPolicy::current,
             ),
         )
     }
@@ -347,6 +350,10 @@ class AppContainer(
         userAgentPolicy.update(userAgent)
     }
 
+    fun updatePlaybackTuning(tuning: PlaybackTuning) {
+        playbackTuningPolicy.update(tuning)
+    }
+
     suspend fun syncWatchNext() {
         watchNextSynchronizer.sync()
     }
@@ -405,6 +412,18 @@ private class RuntimeUserAgentPolicy {
 
     fun update(userAgent: String) {
         value = userAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
+    }
+}
+
+/** Live snapshot of the player build-time tuning; the engine reads it at each start (mirrors the UA policy). */
+private class RuntimePlaybackTuningPolicy {
+    @Volatile
+    private var value: PlaybackTuning = PlaybackTuning()
+
+    fun current(): PlaybackTuning = value
+
+    fun update(tuning: PlaybackTuning) {
+        value = tuning
     }
 }
 
