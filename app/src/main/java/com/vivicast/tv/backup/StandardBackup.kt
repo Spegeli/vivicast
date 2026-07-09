@@ -36,6 +36,7 @@ data class StandardBackupProvider(
     val includeSeries: Boolean,
     val refreshIntervalHours: Int,
     val logoPriority: String,
+    val xtreamOutputFormat: String = "hls",
     val source: StandardBackupProviderSource? = null,
 )
 
@@ -121,6 +122,7 @@ fun Provider.toStandardBackupProvider(credentials: ProviderCredentials?): Standa
         includeSeries = includeSeries,
         refreshIntervalHours = refreshIntervalHours,
         logoPriority = logoPriority,
+        xtreamOutputFormat = xtreamOutputFormat,
         source = when {
             type == ProviderType.M3u && credentials is ProviderCredentials.M3u ->
                 standardBackupM3uUrlOrNull(credentials.url)?.let { StandardBackupProviderSource(m3uUrl = it) }
@@ -218,6 +220,7 @@ private fun StandardBackupProvider.toJson(): JSONObject =
         .put("includeSeries", includeSeries)
         .put("refreshIntervalHours", refreshIntervalHours)
         .put("logoPriority", logoPriority)
+        .put("xtreamOutputFormat", xtreamOutputFormat)
         .put("source", source?.toJson())
 
 private fun StandardBackupProviderSource.toJson(): JSONObject =

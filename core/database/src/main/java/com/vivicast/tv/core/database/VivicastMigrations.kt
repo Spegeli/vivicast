@@ -262,6 +262,13 @@ object VivicastMigrations {
             db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_epg_sources_sourceConfigKey` ON `epg_sources` (`sourceConfigKey`)")
         }
     }
+
+    // Per-Xtream-provider live output format (hls/ts). DEFAULT 'hls' matches the entity @ColumnInfo default.
+    val Migration14To15: Migration = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE providers ADD COLUMN xtreamOutputFormat TEXT NOT NULL DEFAULT 'hls'")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

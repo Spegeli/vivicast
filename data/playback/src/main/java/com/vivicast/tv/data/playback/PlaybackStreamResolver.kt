@@ -3,6 +3,7 @@ package com.vivicast.tv.data.playback
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.XTREAM_OUTPUT_TS
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
@@ -74,7 +75,7 @@ class DefaultPlaybackStreamResolver(
                 if (credentials !is ProviderCredentials.Xtream) {
                     PlaybackStreamResult.Failed(PlaybackStreamFailureReason.CredentialTypeMismatch)
                 } else {
-                    resolveXtream(request, credentials, provider.stableKey)
+                    resolveXtream(request, credentials, provider.stableKey, provider.xtreamOutputFormat)
                 }
             }
             ProviderType.M3u -> {
@@ -125,6 +126,7 @@ class DefaultPlaybackStreamResolver(
         request: PlaybackStreamRequest,
         credentials: ProviderCredentials.Xtream,
         providerStableKey: String,
+        outputFormat: String,
     ): PlaybackStreamResult {
         val serverUrl = credentials.serverUrl.trim().trimEnd('/')
         if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
@@ -153,7 +155,10 @@ class DefaultPlaybackStreamResolver(
                     val start = startMillis.toXtreamCatchupStart().pathSegment()
                     "$serverUrl/timeshift/$username/$password/$durationMinutes/$start/$encodedRemoteId.ts"
                 } else {
-                    "$serverUrl/live/$username/$password/$encodedRemoteId.ts"
+                    // HLS output (default) → .m3u8 so ExoPlayer can use the server DVR window for native
+                    // timeshift/seek; MPEG-TS → .ts (progressive, no native seek).
+                    val extension = if (outputFormat == XTREAM_OUTPUT_TS) "ts" else "m3u8"
+                    "$serverUrl/live/$username/$password/$encodedRemoteId.$extension"
                 }
             }
             MediaType.Movie -> {

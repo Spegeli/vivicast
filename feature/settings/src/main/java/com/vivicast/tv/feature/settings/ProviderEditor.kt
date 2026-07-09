@@ -83,6 +83,8 @@ import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_EPG
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
+import com.vivicast.tv.data.provider.XTREAM_OUTPUT_HLS
+import com.vivicast.tv.data.provider.XTREAM_OUTPUT_TS
 import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OPTIONS_HOURS
 import com.vivicast.tv.data.provider.ContentSummary
@@ -251,6 +253,7 @@ internal fun ProviderEditor(
                 onOpenUserAgent = { dialogs.showUserAgent = true },
                 onOpenEpgSources = { dialogs.showEpgSources = true },
                 onOpenLogoPriority = { dialogs.showLogoPriority = true },
+                onOpenXtreamOutputFormat = { dialogs.showXtreamOutputFormat = true },
             )
         }
 
@@ -302,6 +305,7 @@ internal class ProviderEditorDialogState {
     var showUserAgent by mutableStateOf(false)
     var showEpgSources by mutableStateOf(false)
     var showLogoPriority by mutableStateOf(false)
+    var showXtreamOutputFormat by mutableStateOf(false)
 }
 
 @Composable
@@ -364,6 +368,19 @@ private fun ProviderEditorDialogs(
                 dialogs.showLogoPriority = false
             },
             onDismiss = { dialogs.showLogoPriority = false },
+        )
+    }
+    if (dialogs.showXtreamOutputFormat) {
+        SettingsChoiceDialog(
+            title = stringResource(R.string.settings_provider_output_format),
+            options = listOf(XTREAM_OUTPUT_HLS, XTREAM_OUTPUT_TS),
+            selected = editor.xtreamOutputFormat,
+            label = { xtreamOutputFormatLabel(it) },
+            onSelect = { value ->
+                if (value != editor.xtreamOutputFormat) onEditorChange(editor.copy(xtreamOutputFormat = value))
+                dialogs.showXtreamOutputFormat = false
+            },
+            onDismiss = { dialogs.showXtreamOutputFormat = false },
         )
     }
 }
@@ -702,6 +719,7 @@ private fun LazyListScope.providerEditControlItems(
     onOpenUserAgent: () -> Unit,
     onOpenEpgSources: () -> Unit,
     onOpenLogoPriority: () -> Unit,
+    onOpenXtreamOutputFormat: () -> Unit,
 ) {
     // Auto-refresh (interval + app-start) only applies to source types that can actually be re-fetched.
     if (editor.isAutomaticallyRefreshable) {
@@ -757,7 +775,27 @@ private fun LazyListScope.providerEditControlItems(
             onClick = onOpenLogoPriority,
         )
     }
+    // Xtream only: live output format (HLS enables native timeshift where the panel provides a DVR window).
+    if (editor.type == ProviderType.Xtream) {
+        item(key = "xtream-output") {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_provider_output_format),
+                help = "",
+                value = xtreamOutputFormatLabel(editor.xtreamOutputFormat),
+                forceTextValue = true,
+                onClick = onOpenXtreamOutputFormat,
+            )
+        }
+    }
 }
+
+@Composable
+internal fun xtreamOutputFormatLabel(format: String): String =
+    if (format == XTREAM_OUTPUT_TS) {
+        stringResource(R.string.settings_provider_output_ts)
+    } else {
+        stringResource(R.string.settings_provider_output_hls)
+    }
 
 @Composable
 internal fun intervalLabel(hours: Int): String =

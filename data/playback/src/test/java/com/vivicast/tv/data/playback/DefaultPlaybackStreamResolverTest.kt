@@ -22,10 +22,24 @@ import java.time.Instant
 
 class DefaultPlaybackStreamResolverTest {
     @Test
-    fun resolvesXtreamLiveChannelUrlFromCredentialsAndRemoteId() = runBlocking {
+    fun resolvesXtreamLiveChannelUrlAsHlsByDefault() = runBlocking {
+        val stream = resolveXtreamLive(outputFormat = "hls")
+        // HLS is the default output format → .m3u8 (native DVR/seek where the panel provides a window).
+        assertEquals("https://provider.example/live/demo%20user/demo%2Fpass/100.m3u8", stream.url)
+        assertEquals("channel-local-id", stream.mediaId)
+        assertEquals(PROVIDER_STABLE_KEY, stream.providerStableKey)
+    }
+
+    @Test
+    fun resolvesXtreamLiveChannelUrlAsTsWhenSelected() = runBlocking {
+        val stream = resolveXtreamLive(outputFormat = "ts")
+        assertEquals("https://provider.example/live/demo%20user/demo%2Fpass/100.ts", stream.url)
+    }
+
+    private fun resolveXtreamLive(outputFormat: String): PlaybackStream = runBlocking {
         val resolver = DefaultPlaybackStreamResolver(
             providerRepository = FakeProviderRepository(
-                provider = provider(type = ProviderType.Xtream),
+                provider = provider(type = ProviderType.Xtream, xtreamOutputFormat = outputFormat),
                 credentials = ProviderCredentials.Xtream(
                     serverUrl = "https://provider.example/",
                     username = "demo user",
@@ -34,7 +48,6 @@ class DefaultPlaybackStreamResolverTest {
             ),
             m3uStreamReferenceStore = FakeM3uStreamReferenceStore(),
         )
-
         val result = resolver.resolve(
             PlaybackStreamRequest(
                 providerId = PROVIDER_ID,
@@ -43,11 +56,7 @@ class DefaultPlaybackStreamResolverTest {
                 remoteId = "100",
             ),
         )
-
-        val stream = (result as PlaybackStreamResult.Resolved).stream
-        assertEquals("https://provider.example/live/demo%20user/demo%2Fpass/100.ts", stream.url)
-        assertEquals("channel-local-id", stream.mediaId)
-        assertEquals(PROVIDER_STABLE_KEY, stream.providerStableKey)
+        (result as PlaybackStreamResult.Resolved).stream
     }
 
     @Test
@@ -489,6 +498,7 @@ class DefaultPlaybackStreamResolverTest {
             type: ProviderType,
             isActive: Boolean = true,
             status: ProviderStatus = ProviderStatus.Active,
+            xtreamOutputFormat: String = "hls",
         ): Provider =
             Provider(
                 id = PROVIDER_ID,
@@ -505,6 +515,7 @@ class DefaultPlaybackStreamResolverTest {
                 createdAt = 1L,
                 updatedAt = 1L,
                 stableKey = PROVIDER_STABLE_KEY,
+                xtreamOutputFormat = xtreamOutputFormat,
             )
     }
 }

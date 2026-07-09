@@ -736,6 +736,9 @@
     <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
     <string name="settings_provider_epg_sources">EPG Quellen</string>
     <string name="settings_provider_logo_priority">Logo-Priorität</string>
+    <string name="settings_provider_output_format">Ausgabeformat</string>
+    <string name="settings_provider_output_hls">HLS</string>
+    <string name="settings_provider_output_ts">MPEG-TS</string>
     <string name="settings_provider_logo_priority_playlist">Logos aus der Playlist bevorzugen</string>
     <string name="settings_provider_logo_priority_epg">Bevorzuge Logos von EPG</string>
     <string name="settings_provider_ua_hint">Leer lassen für den globalen User-Agent.</string>

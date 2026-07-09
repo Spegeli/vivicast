@@ -38,6 +38,8 @@ data class ProviderEntity(
     @ColumnInfo(defaultValue = "1") val refreshOnAppStartEnabled: Boolean = true,
     // Wall-clock millis of the last successful refresh; NULL = never. Drives interval auto-refresh.
     @ColumnInfo(defaultValue = "NULL") val lastRefreshAt: Long? = null,
+    // Xtream live output format: "hls" (default) or "ts". Ignored for M3U.
+    @ColumnInfo(defaultValue = "'hls'") val xtreamOutputFormat: String = "hls",
 )
 
 @Entity(

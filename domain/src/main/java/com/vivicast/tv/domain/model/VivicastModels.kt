@@ -25,6 +25,8 @@ data class Provider(
     // Wall-clock millis of the last successful refresh; null = never refreshed. Drives interval-based
     // auto-refresh (foreground loop + background periodic phase). Not set by enabling/editing.
     val lastRefreshAt: Long? = null,
+    // Xtream live output format: "hls" (default) or "ts". Ignored for M3U. See XTREAM_OUTPUT_* in data:provider.
+    val xtreamOutputFormat: String = "hls",
 )
 
 enum class ProviderType { M3u, Xtream }

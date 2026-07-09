@@ -20,6 +20,7 @@ data class ProviderCreateRequest(
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
     val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
+    val xtreamOutputFormat: String = XTREAM_OUTPUT_HLS,
 )
 
 data class ProviderUpdateRequest(
@@ -38,6 +39,7 @@ data class ProviderUpdateRequest(
     val userAgent: String? = null,
     val refreshOnAppStartEnabled: Boolean = true,
     val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
+    val xtreamOutputFormat: String = XTREAM_OUTPUT_HLS,
 )
 
 data class ProviderSaveResult(
@@ -95,6 +97,15 @@ const val LOGO_PRIORITY_EPG = "epg"
 /** Normalizes any stored value (including the legacy "provider") to the two supported priorities. */
 fun normalizeLogoPriority(value: String?): String =
     if (value == LOGO_PRIORITY_EPG) LOGO_PRIORITY_EPG else LOGO_PRIORITY_PLAYLIST
+
+// Per-Xtream-provider live output format (mirrors TVMate's per-playlist switch). HLS (default) requests
+// `…/live/…/id.m3u8` → a server DVR window ExoPlayer can seek natively where the panel provides one; MPEG-TS
+// requests `…/id.ts` → progressive, no native seek. Only meaningful for Xtream; catch-up keeps the .ts endpoint.
+const val XTREAM_OUTPUT_HLS = "hls"
+const val XTREAM_OUTPUT_TS = "ts"
+
+fun normalizeXtreamOutputFormat(value: String?): String =
+    if (value == XTREAM_OUTPUT_TS) XTREAM_OUTPUT_TS else XTREAM_OUTPUT_HLS
 
 object TransientM3uSourceStore {
     private val sources = ConcurrentHashMap<String, String>()

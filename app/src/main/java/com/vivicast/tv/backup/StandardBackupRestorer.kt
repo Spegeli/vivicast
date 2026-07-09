@@ -194,6 +194,7 @@ private fun JSONArray.toProviderEntities(now: Long): List<ProviderEntity> =
             includeSeries = provider.optBoolean("includeSeries", true),
             refreshIntervalHours = provider.optInt("refreshIntervalHours", 12).coerceIn(1, 168),
             logoPriority = provider.optString("logoPriority", "provider").ifBlank { "provider" },
+            xtreamOutputFormat = provider.optString("xtreamOutputFormat", "hls").ifBlank { "hls" },
             createdAt = now,
             updatedAt = now,
         )

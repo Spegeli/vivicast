@@ -9,8 +9,10 @@ import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
+import com.vivicast.tv.data.provider.XTREAM_OUTPUT_HLS
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.data.provider.normalizeLogoPriority
+import com.vivicast.tv.data.provider.normalizeXtreamOutputFormat
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderType
 
@@ -34,6 +36,7 @@ internal data class ProviderEditorState(
     val userAgent: String = "",
     val refreshOnAppStartEnabled: Boolean = true,
     val logoPriority: String = LOGO_PRIORITY_PLAYLIST,
+    val xtreamOutputFormat: String = XTREAM_OUTPUT_HLS,
     // Signature of the source (URL/file/Xtream creds) as loaded when editing; blank for a new provider.
     // Lets Save skip the connection test when the source didn't change (see isSourceUnchanged).
     val pristineSource: String = "",
@@ -111,6 +114,7 @@ internal data class ProviderEditorState(
             refreshIntervalHours = refreshIntervalHours,
             userAgent = userAgent.ifBlank { null },
             logoPriority = logoPriority,
+            xtreamOutputFormat = xtreamOutputFormat,
         )
 
     fun toCreateRequest(): ProviderCreateRequest =
@@ -130,6 +134,7 @@ internal data class ProviderEditorState(
             userAgent = userAgent.ifBlank { null },
             refreshOnAppStartEnabled = refreshOnAppStartEnabled,
             logoPriority = logoPriority,
+            xtreamOutputFormat = xtreamOutputFormat,
         )
 
     fun toUpdateRequest(): ProviderUpdateRequest =
@@ -149,6 +154,7 @@ internal data class ProviderEditorState(
             userAgent = userAgent.ifBlank { null },
             refreshOnAppStartEnabled = refreshOnAppStartEnabled,
             logoPriority = logoPriority,
+            xtreamOutputFormat = xtreamOutputFormat,
         )
 
     private val shouldReplaceM3uSource: Boolean
@@ -207,6 +213,7 @@ internal data class ProviderEditorState(
                 userAgent = provider.userAgent.orEmpty(),
                 refreshOnAppStartEnabled = provider.refreshOnAppStartEnabled,
                 logoPriority = normalizeLogoPriority(provider.logoPriority),
+                xtreamOutputFormat = normalizeXtreamOutputFormat(provider.xtreamOutputFormat),
             ).let { it.copy(pristineSource = it.sourceSignature()) }
         }
     }

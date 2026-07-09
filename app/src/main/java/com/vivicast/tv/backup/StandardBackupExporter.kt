@@ -119,6 +119,7 @@ class StandardBackupExporter(
             includeSeries = includeSeries,
             refreshIntervalHours = refreshIntervalHours,
             logoPriority = logoPriority,
+            xtreamOutputFormat = xtreamOutputFormat,
             source = when (type) {
                 PROVIDER_TYPE_M3U -> secureValueStore.read(SecureKey("$sourceConfigKey:$FIELD_M3U_URL"))
                     ?.let(::standardBackupM3uUrlOrNull)

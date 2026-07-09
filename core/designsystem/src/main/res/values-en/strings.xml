@@ -735,6 +735,9 @@
     <string name="settings_provider_refresh_on_start">Refresh on app start</string>
     <string name="settings_provider_epg_sources">EPG sources</string>
     <string name="settings_provider_logo_priority">Logo priority</string>
+    <string name="settings_provider_output_format">Output format</string>
+    <string name="settings_provider_output_hls">HLS</string>
+    <string name="settings_provider_output_ts">MPEG-TS</string>
     <string name="settings_provider_logo_priority_playlist">Prefer logos from playlist</string>
     <string name="settings_provider_logo_priority_epg">Prefer logos from EPG</string>
     <string name="settings_provider_ua_hint">Leave empty to use the global User-Agent.</string>
