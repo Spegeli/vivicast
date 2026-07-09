@@ -1,6 +1,7 @@
 # Plan: Timeshift-Redesign — natives DVR-Fenster primär, Capture-Engine als Backup
 
-Status: geplant (2026-07-09). **Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
+Status: **Phase 1 + 2 DONE** (2026-07-09, Commits 5bd904b/476ccb3/6f4e508). Phase 3 (Fall B) offen/deferred.
+**Spike-Ergebnis (Phase 0) hat den Ansatz gedreht** — siehe unten.
 
 ## Spike-Erkenntnis (entscheidend)
 
@@ -37,24 +38,29 @@ ausreichend seekbar → Fall A (natives Fenster als Timeline). Sonst → Fall B 
 
 ## Phasen
 
-### Phase 1 — Fall A sauber + Rückbau (jetzt, klein, hoher Nutzen)
-- **Rückbau** des `setBackBuffer` (RAM-OOM-Quelle) + der `SimpleCache`-Timeshift-Disk-Nutzung + der virtuellen
-  `timeshiftWindowMillis`/`liveEdgeOffset`-Maschinerie, soweit sie das native Fenster ersetzt.
-- **Controller/Engine:** Live-Channel mit `seekable=true`; Seek/Live-Edge auf das **native** Timeline-Window
-  abbilden (`seekBy`, `seekToDefaultPosition` für Live). `timeshiftProgressState` an die reale Timeline hängen.
-- **Xtream-Ausgabeformat-Option** (mirror des vorhandenen `logoPriority`-per-Provider-Settings, komplette Kette):
-  Feld `xtreamOutputFormat` (Enum MPEG-TS/HLS, Default HLS) in `ProviderCreateRequest`/`ProviderUpdateRequest`
-  + Provider-Domain; **Room-Spalte + DB-Migration**; **Picker-Zeile im `ProviderEditor` nur bei Xtream sichtbar**
-  (`SettingsChoiceDialog`, wie Logo-Priorität); `PlaybackStreamResolver.resolveXtream` baut `.m3u8`/`.ts` je
-  Option. Catch-up-`.ts`-Pfad bleibt.
-- **Auto-Detect**: nach Start Fenster prüfen; nicht-seekbar → „begrenztes/kein Timeshift"-Hinweis
-  (`player_timeshift_unavailable`).
+### Phase 1 — Fall A sauber + Rückbau ✅ DONE (Commit 476ccb3, 2026-07-09)
+- ✅ **Rückbau** `setBackBuffer` (RAM-OOM-Quelle, ~1GB bei langem Live) + `backBufferMinutes`. Virtuelles
+  `timeshiftWindowMillis`/`liveEdgeOffset`/`seekTimeshiftBy`/`timeshiftProgressState` + Timeshift-Start-Fallback
+  entfernt. `SimpleCache`/`usesDiskCache`-Disk-Pfad bleibt (dormant, Fall-B-Substrat).
+- ✅ **Controller/Engine:** Live-Channel `seekable=true`; `seekBy`/`seekToLiveEdge` delegieren nativ
+  (`player.seekTo` / `seekToDefaultPosition`). `isNativeLiveTimeshift = Channel && request.seekable &&
+  player.isCurrentMediaItemSeekable`. `timeshiftWindowMillis` = native DVR-Tiefe (`player.duration`).
+- ⚠️ **Wichtige Spike-Korrektur (Emulator, CMAF-Live):** `player.currentLiveOffset` ist unzuverlässig (manche
+  Manifeste deklarieren keine Live-Zeit → UNSET), und `duration − position` taugt NICHT als „hinter-Live"-Maß
+  (bei Live ist `position` = Zeit-seit-Join unbegrenzt, `duration` = DVR-Tiefe). **Lösung: Live-Rand = Running-Max
+  der nativen Position**; Offset = `liveEdge − position`; position/duration aufs DVR-Fenster remappt (Progress-Bar
+  100% am Rand). Auf Emulator validiert: Fenster 599s erkannt, −5min-Seek in State+Video, Zurück-an-Rand.
+  Ceiling: kein Wall-Clock-Advance → langer PAUSE am Live-Rand wächst den Offset erst beim Weiterspielen.
+- ✅ **Xtream-Ausgabeformat-Option** (komplette Kette + Editor-UI, DB-Migration 14→15). Commit 5bd904b.
+- ✅ **Auto-Detect** via `isCurrentMediaItemSeekable`; nicht-seekbar → kein Timeshift-UI (`player_timeshift_unavailable`-Hinweis bleibt).
 
-### Phase 2 — UI-Vereinfachung
-- `PlaybackSettingsPanel.kt`: **Timeshift-Toggle, Max-Dauer, Timeshift-Speicher entfernen** (das Fenster kommt
-  vom Server/Fall-B, keine dieser Knöpfe mehr sinnvoll). `PlaybackSettingsState`-Felder + Mapper +
-  `PlaybackPreferences`-Felder zurückbauen (tot lassen ok). Strings raus. Timeshift ist dort verfügbar wo der
-  Stream es hergibt.
+### Phase 2 — UI-Vereinfachung ✅ DONE (Commit 6f4e508, 2026-07-09)
+- ✅ Timeshift-Toggle, Max-Dauer, Timeshift-Speicher aus `PlaybackSettingsPanel` entfernt (+ Picker,
+  `PlaybackTimeshiftStorageMode`-Enum, State-Felder, VM/Mapper). Immer-an, Fenster kommt vom Server.
+- ✅ `PlaybackRequestFactory.channelRequest`: `timeshift`-Param raus, `seekable=true` (native Auto-Detect).
+  `timeshiftConfig()` (app) entfernt.
+- ⏳ Offen (harmlos): `PlaybackPreferences.timeshift*` + Backup-Felder als Alt-Felder gelassen (kein
+  Migrations-Risiko); tote Timeshift-Strings (spawn-task für Cleanup).
 
 ### Phase 3 (dediziert, später) — Fall B Capture-Engine
 Nur für MPEG-TS-ohne-Fenster. Immer-an, rollendes 60-min-Fenster, `TimeshiftRecorder` + `TimeshiftDiskManager`
