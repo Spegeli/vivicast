@@ -6,6 +6,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -46,6 +47,11 @@ interface VivicastPlayerController {
     fun selectAudio(option: PlaybackAudioOption) = Unit
 
     fun selectSubtitle(option: PlaybackSubtitleOption) = Unit
+
+    /** Selects a concrete stream track (from [VivicastPlayerState.audioTracks]/[subtitleTracks]). */
+    fun selectAudioTrack(track: PlaybackTrack) = Unit
+
+    fun selectTextTrack(track: PlaybackTrack) = Unit
 
     fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
 
@@ -89,6 +95,22 @@ enum class PlaybackSubtitleOption { Off, SystemDefault, German, English }
 
 enum class PlaybackAspectRatioMode { Fit, Fill, Zoom }
 
+enum class PlaybackTrackType { Audio, Text }
+
+/**
+ * A selectable audio/text track detected in the current stream. [groupIndex]/[trackIndex] locate it within the
+ * player's `Tracks` so a later override can re-resolve the media group. [label] is the raw stream label (may be
+ * null); the UI derives the display name from [label]/[language].
+ */
+data class PlaybackTrack(
+    val type: PlaybackTrackType,
+    val groupIndex: Int,
+    val trackIndex: Int,
+    val language: String?,
+    val label: String?,
+    val isSelected: Boolean,
+)
+
 // Generous vs the old exact-virtual 2s: native live offset jitters as ExoPlayer speed-adjusts toward the edge.
 private const val LIVE_EDGE_TOLERANCE_MILLIS = 5_000L
 
@@ -102,6 +124,9 @@ data class VivicastPlayerState(
     val audioOption: PlaybackAudioOption = PlaybackAudioOption.SystemDefault,
     val subtitleOption: PlaybackSubtitleOption = PlaybackSubtitleOption.Off,
     val aspectRatioMode: PlaybackAspectRatioMode = PlaybackAspectRatioMode.Fit,
+    // Audio/text tracks actually present in the current stream, for the in-player language picker.
+    val audioTracks: List<PlaybackTrack> = emptyList(),
+    val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val isReconnecting: Boolean = false,
     val videoFrameRate: Float = 0f,
     val error: PlaybackError? = null,
@@ -208,8 +233,24 @@ class DefaultVivicastPlayerController(
     override fun selectSubtitle(option: PlaybackSubtitleOption) {
         if (released) return
         engine.selectSubtitle(option)
-        mutableState.value = mutableState.value.copy(subtitleOption = option)
+        mutableState.value = mutableState.value.copy(subtitleOption = option).withEngineTracks()
     }
+
+    override fun selectAudioTrack(track: PlaybackTrack) {
+        if (released) return
+        engine.selectAudioTrack(track)
+        mutableState.value = mutableState.value.withEngineTracks()
+    }
+
+    override fun selectTextTrack(track: PlaybackTrack) {
+        if (released) return
+        engine.selectTextTrack(track)
+        mutableState.value = mutableState.value.withEngineTracks()
+    }
+
+    // Optimistically refresh the track lists after a selection; the 1s progress poll corrects any async lag.
+    private fun VivicastPlayerState.withEngineTracks(): VivicastPlayerState =
+        copy(audioTracks = engine.audioTracks, subtitleTracks = engine.textTracks)
 
     override fun selectAspectRatio(mode: PlaybackAspectRatioMode) {
         if (released) return
@@ -386,9 +427,13 @@ class DefaultVivicastPlayerController(
                     return@launch
                 }
                 val request = current.request ?: return@launch
-                // Frame rate becomes known shortly after tracks load; picked up on the next poll for AFR.
+                // Frame rate + available tracks become known shortly after tracks load; picked up each poll.
                 mutableState.value = current.withNativeTimeline(request)
-                    .copy(videoFrameRate = engine.videoFrameRate)
+                    .copy(
+                        videoFrameRate = engine.videoFrameRate,
+                        audioTracks = engine.audioTracks,
+                        subtitleTracks = engine.textTracks,
+                    )
             }
         }
     }
@@ -498,6 +543,13 @@ interface PlaybackEngine {
     val isCurrentSeekable: Boolean
         get() = false
 
+    /** Audio/text tracks present in the current stream, for the in-player picker. */
+    val audioTracks: List<PlaybackTrack>
+        get() = emptyList()
+
+    val textTracks: List<PlaybackTrack>
+        get() = emptyList()
+
     suspend fun start(request: PlaybackRequest)
 
     fun pause()
@@ -512,6 +564,10 @@ interface PlaybackEngine {
     fun selectAudio(option: PlaybackAudioOption) = Unit
 
     fun selectSubtitle(option: PlaybackSubtitleOption) = Unit
+
+    fun selectAudioTrack(track: PlaybackTrack) = Unit
+
+    fun selectTextTrack(track: PlaybackTrack) = Unit
 
     fun selectAspectRatio(mode: PlaybackAspectRatioMode) = Unit
 
@@ -610,6 +666,46 @@ class Media3PlaybackEngine(
 
     override val isCurrentSeekable: Boolean
         get() = player.isCurrentMediaItemSeekable
+
+    override val audioTracks: List<PlaybackTrack>
+        get() = readTracks(C.TRACK_TYPE_AUDIO, PlaybackTrackType.Audio)
+
+    override val textTracks: List<PlaybackTrack>
+        get() = readTracks(C.TRACK_TYPE_TEXT, PlaybackTrackType.Text)
+
+    private fun readTracks(trackType: Int, mapped: PlaybackTrackType): List<PlaybackTrack> {
+        val result = mutableListOf<PlaybackTrack>()
+        player.currentTracks.groups.forEachIndexed { groupIndex, group ->
+            if (group.type != trackType) return@forEachIndexed
+            for (trackIndex in 0 until group.length) {
+                if (!group.isTrackSupported(trackIndex)) continue
+                val format = group.getTrackFormat(trackIndex)
+                result += PlaybackTrack(
+                    type = mapped,
+                    groupIndex = groupIndex,
+                    trackIndex = trackIndex,
+                    language = format.language,
+                    label = format.label,
+                    isSelected = group.isTrackSelected(trackIndex),
+                )
+            }
+        }
+        return result
+    }
+
+    override fun selectAudioTrack(track: PlaybackTrack) = applyTrackOverride(C.TRACK_TYPE_AUDIO, track)
+
+    override fun selectTextTrack(track: PlaybackTrack) = applyTrackOverride(C.TRACK_TYPE_TEXT, track)
+
+    /** Pins the given track via a TrackSelectionOverride (re-resolving its media group from the live Tracks). */
+    private fun applyTrackOverride(trackType: Int, track: PlaybackTrack) {
+        val group = player.currentTracks.groups.getOrNull(track.groupIndex)?.mediaTrackGroup ?: return
+        if (track.trackIndex !in 0 until group.length) return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(group, track.trackIndex))
+            .setTrackTypeDisabled(trackType, false)
+            .build()
+    }
 
     override suspend fun start(request: PlaybackRequest) {
         val gate = startGate.arm()

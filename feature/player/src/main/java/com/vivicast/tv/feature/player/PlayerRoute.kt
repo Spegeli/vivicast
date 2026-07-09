@@ -49,13 +49,23 @@ import com.vivicast.tv.core.designsystem.VivicastContentCard
 import com.vivicast.tv.core.designsystem.VivicastPlayerOverlay
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.player.PlaybackAspectRatioMode
-import com.vivicast.tv.core.player.PlaybackAudioOption
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.PlaybackSubtitleOption
+import com.vivicast.tv.core.player.PlaybackTrack
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.player.VivicastPlayerState
+import java.util.Locale
 import kotlinx.coroutines.delay
+
+/**
+ * Display label for a stream track: the stream-provided label, else the localized language name, else the
+ * language code, else a positional fallback. Kept UI-side so localization stays out of the player engine.
+ */
+private fun PlaybackTrack.trackDisplayLabel(): String =
+    label?.takeIf { it.isNotBlank() }
+        ?: language?.let { code -> Locale(code).displayLanguage.ifBlank { code.uppercase(Locale.getDefault()) } }
+        ?: "${trackIndex + 1}"
 
 @Composable
 fun PlayerRoute(
@@ -90,10 +100,6 @@ fun PlayerRoute(
     val retryLabelStr = stringResource(R.string.player_retry_label)
     val timeshiftAtLiveStr = stringResource(R.string.player_timeshift_at_live)
     val timelineHintStr = stringResource(R.string.player_timeline_hint)
-    val audioSystemStr = stringResource(R.string.language_system)
-    val audioDeStr = stringResource(R.string.language_german)
-    val audioEnStr = stringResource(R.string.language_english)
-    val audioOriginalStr = stringResource(R.string.audio_original)
     val subtitleOffStr = stringResource(R.string.value_off)
     var overlayVisible by remember { mutableStateOf(false) }
     var overlayInteractionTick by remember { mutableIntStateOf(0) }
@@ -104,8 +110,6 @@ fun PlayerRoute(
     var autoNextDismissed by remember { mutableStateOf(false) }
     var autoNextStartedForPlaybackId by remember { mutableStateOf<String?>(null) }
     var optionPanel by remember { mutableStateOf<PlayerOptionPanel?>(null) }
-    var fallbackAudioOption by remember { mutableStateOf(PlaybackAudioOption.SystemDefault) }
-    var fallbackSubtitleOption by remember { mutableStateOf(PlaybackSubtitleOption.Off) }
     var fallbackAspectRatioMode by remember { mutableStateOf(PlaybackAspectRatioMode.Fit) }
     val rootFocusRequester = remember { FocusRequester() }
     val timelineFocusRequester = remember { FocusRequester() }
@@ -128,8 +132,8 @@ fun PlayerRoute(
     val progress = controllerState?.progressPercent() ?: fallbackProgress
     val title = request?.title ?: noPlaybackStr
     val badges = controllerState?.badges() ?: emptyList()
-    val audioOption = currentState?.audioOption ?: fallbackAudioOption
-    val subtitleOption = currentState?.subtitleOption ?: fallbackSubtitleOption
+    val audioTracks = currentState?.audioTracks ?: emptyList()
+    val subtitleTracks = currentState?.subtitleTracks ?: emptyList()
     val aspectRatioMode = currentState?.aspectRatioMode ?: fallbackAspectRatioMode
     val playbackId = request?.playbackId
     val hasNextEpisode = request?.mediaType == PlaybackMediaType.Episode && nextEpisodeTitle != null
@@ -359,28 +363,17 @@ fun PlayerRoute(
         when (optionPanel) {
             PlayerOptionPanel.Audio -> PlayerOptionDialog(
                 title = stringResource(R.string.player_audio),
-                options = listOf(
-                    PlayerOptionItem("audio-system", audioSystemStr, audioOption == PlaybackAudioOption.SystemDefault) {
-                        playerController?.selectAudio(PlaybackAudioOption.SystemDefault)
-                            ?: run { fallbackAudioOption = PlaybackAudioOption.SystemDefault }
+                // The stream's actual audio tracks (detected via ExoPlayer Tracks); a pick pins that track.
+                options = audioTracks.map { track ->
+                    PlayerOptionItem(
+                        "audio-${track.groupIndex}-${track.trackIndex}",
+                        track.trackDisplayLabel(),
+                        track.isSelected,
+                    ) {
+                        playerController?.selectAudioTrack(track)
                         optionPanel = null
-                    },
-                    PlayerOptionItem("audio-de", audioDeStr, audioOption == PlaybackAudioOption.German) {
-                        playerController?.selectAudio(PlaybackAudioOption.German)
-                            ?: run { fallbackAudioOption = PlaybackAudioOption.German }
-                        optionPanel = null
-                    },
-                    PlayerOptionItem("audio-en", audioEnStr, audioOption == PlaybackAudioOption.English) {
-                        playerController?.selectAudio(PlaybackAudioOption.English)
-                            ?: run { fallbackAudioOption = PlaybackAudioOption.English }
-                        optionPanel = null
-                    },
-                    PlayerOptionItem("audio-original", audioOriginalStr, audioOption == PlaybackAudioOption.Original) {
-                        playerController?.selectAudio(PlaybackAudioOption.Original)
-                            ?: run { fallbackAudioOption = PlaybackAudioOption.Original }
-                        optionPanel = null
-                    },
-                ),
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(48.dp)
@@ -388,28 +381,27 @@ fun PlayerRoute(
             )
             PlayerOptionPanel.Subtitle -> PlayerOptionDialog(
                 title = stringResource(R.string.player_subtitles),
-                options = listOf(
-                    PlayerOptionItem("subtitle-off", subtitleOffStr, subtitleOption == PlaybackSubtitleOption.Off) {
-                        playerController?.selectSubtitle(PlaybackSubtitleOption.Off)
-                            ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.Off }
-                        optionPanel = null
-                    },
-                    PlayerOptionItem("subtitle-system", audioSystemStr, subtitleOption == PlaybackSubtitleOption.SystemDefault) {
-                        playerController?.selectSubtitle(PlaybackSubtitleOption.SystemDefault)
-                            ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.SystemDefault }
-                        optionPanel = null
-                    },
-                    PlayerOptionItem("subtitle-de", audioDeStr, subtitleOption == PlaybackSubtitleOption.German) {
-                        playerController?.selectSubtitle(PlaybackSubtitleOption.German)
-                            ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.German }
-                        optionPanel = null
-                    },
-                    PlayerOptionItem("subtitle-en", audioEnStr, subtitleOption == PlaybackSubtitleOption.English) {
-                        playerController?.selectSubtitle(PlaybackSubtitleOption.English)
-                            ?: run { fallbackSubtitleOption = PlaybackSubtitleOption.English }
-                        optionPanel = null
-                    },
-                ),
+                // "Aus" plus the stream's actual subtitle tracks.
+                options = buildList {
+                    add(
+                        PlayerOptionItem("subtitle-off", subtitleOffStr, subtitleTracks.none { it.isSelected }) {
+                            playerController?.selectSubtitle(PlaybackSubtitleOption.Off)
+                            optionPanel = null
+                        },
+                    )
+                    subtitleTracks.forEach { track ->
+                        add(
+                            PlayerOptionItem(
+                                "subtitle-${track.groupIndex}-${track.trackIndex}",
+                                track.trackDisplayLabel(),
+                                track.isSelected,
+                            ) {
+                                playerController?.selectTextTrack(track)
+                                optionPanel = null
+                            },
+                        )
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(48.dp)

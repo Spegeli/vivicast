@@ -112,7 +112,10 @@ class M3uPlaybackSmokeTest {
                 assertTrue(started.isTimeshiftEnabled)
 
                 delay(PLAYBACK_STABILITY_MILLIS)
-                if (appContainer.playerController.state.value.status != PlaybackStatus.Error) {
+                val stable = appContainer.playerController.state.value
+                if (stable.status != PlaybackStatus.Error) {
+                    // Track detection ran against a real stream: a playing channel exposes >=1 audio track.
+                    assertTrue(stable.audioTracks.isNotEmpty())
                     return@runBlocking
                 }
             }

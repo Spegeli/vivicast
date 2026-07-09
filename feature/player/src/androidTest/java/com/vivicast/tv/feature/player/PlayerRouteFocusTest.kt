@@ -19,6 +19,8 @@ import com.vivicast.tv.core.player.PlaybackError
 import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.PlaybackSubtitleOption
+import com.vivicast.tv.core.player.PlaybackTrack
+import com.vivicast.tv.core.player.PlaybackTrackType
 import com.vivicast.tv.core.player.VivicastPlayerController
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.designsystem.playerTimelineTag
@@ -151,23 +153,21 @@ class PlayerRouteFocusTest {
         openOverlay()
         compose.onNodeWithTag(playerAudioActionTag()).performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
-        compose.onNodeWithTag(playerOptionTag("audio-de")).performSemanticsAction(SemanticsActions.OnClick)
+        // The overlay lists the stream's detected tracks; pick the English audio track (group 1).
+        compose.onNodeWithTag(playerOptionTag("audio-1-0")).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.onNodeWithTag(playerSubtitleActionTag()).performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
-        compose.onNodeWithTag(playerOptionTag("subtitle-en")).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(playerOptionTag("subtitle-2-0")).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.onNodeWithTag(playerAspectActionTag()).performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(playerOptionDialogTag()).assertIsDisplayed()
         compose.onNodeWithTag(playerOptionTag("aspect-fill")).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.runOnIdle {
-            assertEquals(listOf(PlaybackAudioOption.German), controller.audioSelections)
-            assertEquals(listOf(PlaybackSubtitleOption.English), controller.subtitleSelections)
+            assertEquals(listOf("en"), controller.audioTrackSelections.map { it.language })
+            assertEquals(listOf("en"), controller.textTrackSelections.map { it.language })
             assertEquals(listOf(PlaybackAspectRatioMode.Fill), controller.aspectRatioSelections)
-            assertEquals(PlaybackAudioOption.German, controller.state.value.audioOption)
-            assertEquals(PlaybackSubtitleOption.English, controller.state.value.subtitleOption)
-            assertEquals(PlaybackAspectRatioMode.Fill, controller.state.value.aspectRatioMode)
         }
     }
 
@@ -356,6 +356,13 @@ class PlayerRouteFocusTest {
                 ),
                 positionMillis = 30_000L,
                 durationMillis = 120_000L,
+                audioTracks = listOf(
+                    PlaybackTrack(PlaybackTrackType.Audio, 0, 0, "de", "Deutsch", isSelected = true),
+                    PlaybackTrack(PlaybackTrackType.Audio, 1, 0, "en", "English", isSelected = false),
+                ),
+                subtitleTracks = listOf(
+                    PlaybackTrack(PlaybackTrackType.Text, 2, 0, "en", "English", isSelected = false),
+                ),
             ),
         )
         var pauseCount = 0
@@ -364,6 +371,8 @@ class PlayerRouteFocusTest {
         val seekDeltas = mutableListOf<Long>()
         val audioSelections = mutableListOf<PlaybackAudioOption>()
         val subtitleSelections = mutableListOf<PlaybackSubtitleOption>()
+        val audioTrackSelections = mutableListOf<PlaybackTrack>()
+        val textTrackSelections = mutableListOf<PlaybackTrack>()
         val aspectRatioSelections = mutableListOf<PlaybackAspectRatioMode>()
 
         override val state: StateFlow<VivicastPlayerState> = mutableState
@@ -394,6 +403,14 @@ class PlayerRouteFocusTest {
         override fun selectSubtitle(option: PlaybackSubtitleOption) {
             subtitleSelections += option
             mutableState.value = mutableState.value.copy(subtitleOption = option)
+        }
+
+        override fun selectAudioTrack(track: PlaybackTrack) {
+            audioTrackSelections += track
+        }
+
+        override fun selectTextTrack(track: PlaybackTrack) {
+            textTrackSelections += track
         }
 
         override fun selectAspectRatio(mode: PlaybackAspectRatioMode) {
