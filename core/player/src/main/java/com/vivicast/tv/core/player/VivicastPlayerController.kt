@@ -673,36 +673,42 @@ class Media3PlaybackEngine(
     override val textTracks: List<PlaybackTrack>
         get() = readTracks(C.TRACK_TYPE_TEXT, PlaybackTrackType.Text)
 
+    // One entry per track GROUP (a group's tracks are usually bitrate variants of the same language/version —
+    // ExoPlayer adapts within it), then collapse groups sharing language+label (some streams declare one group
+    // per video variant, e.g. ZDF's 2 audio groups → 3 unique versions). ponytail: matched by group index at
+    // selection time; a mid-watch manifest reshuffle is a rare, self-correcting edge.
     private fun readTracks(trackType: Int, mapped: PlaybackTrackType): List<PlaybackTrack> {
-        val result = mutableListOf<PlaybackTrack>()
+        val perGroup = mutableListOf<PlaybackTrack>()
         player.currentTracks.groups.forEachIndexed { groupIndex, group ->
             if (group.type != trackType) return@forEachIndexed
-            for (trackIndex in 0 until group.length) {
-                if (!group.isTrackSupported(trackIndex)) continue
-                val format = group.getTrackFormat(trackIndex)
-                result += PlaybackTrack(
-                    type = mapped,
-                    groupIndex = groupIndex,
-                    trackIndex = trackIndex,
-                    language = format.language,
-                    label = format.label,
-                    isSelected = group.isTrackSelected(trackIndex),
-                )
-            }
+            val representative = (0 until group.length).firstOrNull { group.isTrackSupported(it) }
+                ?: return@forEachIndexed
+            val format = group.getTrackFormat(representative)
+            perGroup += PlaybackTrack(
+                type = mapped,
+                groupIndex = groupIndex,
+                trackIndex = representative,
+                language = format.language,
+                label = format.label,
+                isSelected = (0 until group.length).any { group.isTrackSelected(it) },
+            )
         }
-        return result
+        return perGroup
+            .groupBy { it.language to it.label }
+            .map { (_, duplicates) -> duplicates.firstOrNull { it.isSelected } ?: duplicates.first() }
     }
 
     override fun selectAudioTrack(track: PlaybackTrack) = applyTrackOverride(C.TRACK_TYPE_AUDIO, track)
 
     override fun selectTextTrack(track: PlaybackTrack) = applyTrackOverride(C.TRACK_TYPE_TEXT, track)
 
-    /** Pins the given track via a TrackSelectionOverride (re-resolving its media group from the live Tracks). */
+    /** Pins the track's whole group via a TrackSelectionOverride (adaptive across its bitrate variants). */
     private fun applyTrackOverride(trackType: Int, track: PlaybackTrack) {
-        val group = player.currentTracks.groups.getOrNull(track.groupIndex)?.mediaTrackGroup ?: return
-        if (track.trackIndex !in 0 until group.length) return
+        val mediaGroup = player.currentTracks.groups.getOrNull(track.groupIndex)?.mediaTrackGroup ?: return
+        val indices = (0 until mediaGroup.length).toList()
+        if (indices.isEmpty()) return
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(group, track.trackIndex))
+            .setOverrideForType(TrackSelectionOverride(mediaGroup, indices))
             .setTrackTypeDisabled(trackType, false)
             .build()
     }
