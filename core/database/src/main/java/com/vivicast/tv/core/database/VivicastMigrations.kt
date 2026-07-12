@@ -269,6 +269,12 @@ object VivicastMigrations {
             db.execSQL("ALTER TABLE providers ADD COLUMN xtreamOutputFormat TEXT NOT NULL DEFAULT 'hls'")
         }
     }
+
+    val Migration15To16: Migration = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE channels ADD COLUMN epgChannelId TEXT DEFAULT NULL")
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

@@ -84,6 +84,9 @@ data class ChannelEntity(
     val channelNumber: String?,
     val name: String,
     val logoUrl: String?,
+    // Raw EPG channel id (M3U tvg-id / Xtream epg_channel_id) used to match this channel to an XMLTV
+    // <channel id>. Kept separate from the prefixed [remoteId] identity. Null/blank = no id to match on.
+    @ColumnInfo(defaultValue = "NULL") val epgChannelId: String? = null,
     val isCatchupAvailable: Boolean,
     val catchupDays: Int,
     val createdAt: Long,

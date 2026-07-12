@@ -110,6 +110,54 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun autoMapMatchesByEpgChannelIdWhenNameDiffers() = runBlocking {
+        // Realistic M3U shape: remoteId is the prefixed stable id, epgChannelId is the raw tvg-id. The
+        // channel name deliberately does NOT match any XMLTV display-name, so only the id tier can hit.
+        seedLiveChannel(
+            providerId = PROVIDER_ID,
+            channelId = "channel-ard",
+            remoteId = "channel:tvg-id:ard.de",
+            name = "Regional Feed 42",
+            catchup = false,
+            epgChannelId = "ard.de",
+        )
+        val source = repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "epg-source-1", name = "Public EPG", sourceConfigKey = "secure:epg-source-1", timeShiftMinutes = 0, isActive = true),
+        )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, source.id, priority = 1)
+
+        val result = repository.importXmltv(PROVIDER_ID, source.id, xmltvFixture())
+
+        assertEquals(1, result.mappingsAdded)
+        val programs = repository.observeProgramsForChannel(PROVIDER_ID, "channel-ard", 0L, Long.MAX_VALUE).first()
+        assertEquals("Tagesschau", programs.single().title)
+    }
+
+    @Test
+    fun autoMapMatchesByNormalizedNameStrippingQuality() = runBlocking {
+        // No id match (epgChannelId null); name "das erste" must match XMLTV display "Das Erste HD" after
+        // normalization (lowercase + HD stripped).
+        seedLiveChannel(
+            providerId = PROVIDER_ID,
+            channelId = "channel-ard",
+            remoteId = "channel:name-group:xyz",
+            name = "das erste",
+            catchup = false,
+            epgChannelId = null,
+        )
+        val source = repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "epg-source-1", name = "Public EPG", sourceConfigKey = "secure:epg-source-1", timeShiftMinutes = 0, isActive = true),
+        )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, source.id, priority = 1)
+
+        val result = repository.importXmltv(PROVIDER_ID, source.id, xmltvFixture())
+
+        assertEquals(1, result.mappingsAdded)
+        val programs = repository.observeProgramsForChannel(PROVIDER_ID, "channel-ard", 0L, Long.MAX_VALUE).first()
+        assertEquals("Tagesschau", programs.single().title)
+    }
+
+    @Test
     fun deactivatingSourceHidesItsProgramsFromDisplayQuery() = runBlocking {
         seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = true)
         repository.saveEpgSource(
@@ -473,6 +521,7 @@ class RoomEpgRepositoryTest {
         remoteId: String,
         name: String,
         catchup: Boolean,
+        epgChannelId: String? = remoteId,
     ) {
         val categoryId = "$providerId-live"
         database.catalogDao().upsertCategories(
@@ -500,6 +549,7 @@ class RoomEpgRepositoryTest {
                     channelNumber = null,
                     name = name,
                     logoUrl = null,
+                    epgChannelId = epgChannelId,
                     isCatchupAvailable = catchup,
                     catchupDays = if (catchup) 7 else 0,
                     createdAt = now,
