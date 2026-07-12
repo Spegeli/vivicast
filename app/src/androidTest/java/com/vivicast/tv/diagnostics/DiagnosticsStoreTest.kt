@@ -1,25 +1,36 @@
 package com.vivicast.tv.diagnostics
 
 import androidx.test.core.app.ApplicationProvider
-import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipInputStream
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiagnosticsStoreTest {
+    private fun about() = DiagnosticsAbout(
+        appVersion = "test",
+        packageName = "com.vivicast.tv",
+        databaseVersion = 1,
+        androidVersion = "test",
+        deviceModel = "test-device",
+        languageTag = "de-DE",
+        timeZoneId = "Europe/Berlin",
+    )
+
     @Test
-    fun exportZipContainsRequiredEntriesAndRedactsSensitiveValues() {
+    fun exportBundlesLogsAndRedactsSensitiveValues() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         File(context.filesDir, "vivicast-diagnostics").deleteRecursively()
         val store = DiagnosticsStore(context) { 1_800_000_000_000L }
+        store.setConfig(enabled = true, retentionDays = 1)
 
-        store.record(
-            event = "playlist_refresh_failed",
-            retentionDays = 1,
+        store.log(
+            category = "refresh",
+            message = "playlist_refresh_failed",
             details = mapOf(
                 "sourceUrl" to "https://example.org/list.m3u?token=secret",
                 "providerName" to "Private Provider",
@@ -28,29 +39,34 @@ class DiagnosticsStoreTest {
         )
 
         val output = ByteArrayOutputStream()
-        store.exportZip(
-            output = output,
-            about = DiagnosticsAbout(
-                appVersion = "test",
-                packageName = "com.vivicast.tv",
-                databaseVersion = 1,
-                androidVersion = "test",
-                deviceModel = "test-device",
-                languageTag = "de-DE",
-                timeZoneId = "Europe/Berlin",
-            ),
-            preferences = DiagnosticsPreferences(diagnosticsLoggingEnabled = true, retentionDays = 1),
-        )
+        store.exportZip(output = output, about = about(), settings = null)
 
         val entries = unzip(output.toByteArray())
-        assertTrue(entries.containsKey("vivicast-diagnostics.log"))
+        val logEntry = entries.keys.firstOrNull { it.startsWith("logs/") && it.endsWith(".log") }
+        assertNotNull("expected a logs/ entry", logEntry)
         assertTrue(entries.containsKey("diagnostics-metadata.json"))
-        val log = entries.getValue("vivicast-diagnostics.log")
+        val log = entries.getValue(logEntry!!)
         assertTrue(log.contains("playlist_refresh_failed"))
         assertTrue(log.contains("status=timeout"))
         assertFalse(log.contains("https://example.org"))
         assertFalse(log.contains("secret"))
         assertFalse(log.contains("Private Provider"))
+    }
+
+    @Test
+    fun loggingIsGatedByTheToggle() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        File(context.filesDir, "vivicast-diagnostics").deleteRecursively()
+        val store = DiagnosticsStore(context) { 1_800_000_000_000L }
+        store.setConfig(enabled = false, retentionDays = 1)
+
+        store.log("player", "should_not_be_written")
+
+        val output = ByteArrayOutputStream()
+        store.exportZip(output = output, about = about(), settings = null)
+        val entries = unzip(output.toByteArray())
+        assertTrue(entries.keys.none { it.startsWith("logs/") })
+        assertTrue(entries.values.none { it.contains("should_not_be_written") })
     }
 
     private fun unzip(bytes: ByteArray): Map<String, String> {

@@ -2,8 +2,6 @@
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
@@ -59,7 +56,6 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
-import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
@@ -201,15 +197,6 @@ internal fun Context.aboutAppState(): AboutAppState {
         deviceModel = deviceModel,
         languageTag = languageTag,
         timeZoneId = timeZoneId,
-        supportInformationText = buildSupportInformation(
-            appVersion = appVersion,
-            packageName = packageName,
-            databaseVersion = VIVICAST_DATABASE_VERSION,
-            androidVersion = Build.VERSION.RELEASE ?: "Unbekannt",
-            deviceModel = deviceModel,
-            languageTag = languageTag,
-            timeZoneId = timeZoneId,
-        ),
     )
 }
 
@@ -225,32 +212,6 @@ internal fun Context.diagnosticsAbout(): DiagnosticsAbout =
             timeZoneId = state.timeZoneId,
         )
     }
-
-internal fun copySupportInformation(context: Context, supportInformation: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Vivicast Support-Informationen", supportInformation))
-    Toast.makeText(context, context.getString(R.string.main_support_info_copied), Toast.LENGTH_SHORT).show()
-}
-
-private fun buildSupportInformation(
-    appVersion: String,
-    packageName: String,
-    databaseVersion: Int,
-    androidVersion: String,
-    deviceModel: String,
-    languageTag: String,
-    timeZoneId: String,
-): String =
-    listOf(
-        "Vivicast Support-Informationen",
-        "App-Version: $appVersion",
-        "Paketname: $packageName",
-        "Datenbank-Version: $databaseVersion",
-        "Android-Version: $androidVersion",
-        "Geraetemodell: $deviceModel",
-        "Sprache: $languageTag",
-        "Zeitzone: $timeZoneId",
-    ).joinToString(separator = "\n")
 
 /**
  * App-layer mapping of the persisted playback prefs onto the engine's [PlaybackTuning] build-time snapshot.

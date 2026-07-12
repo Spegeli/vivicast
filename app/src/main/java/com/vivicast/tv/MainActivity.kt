@@ -97,6 +97,7 @@ import com.vivicast.tv.backup.decryptBackupPayload
 import com.vivicast.tv.backup.isEncryptedBackupContainer
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
+import com.vivicast.tv.diagnostics.PlaybackDiagnostics
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
 import com.vivicast.tv.feature.settings.BackupSettingsState
@@ -142,13 +143,16 @@ import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
 import com.vivicast.tv.worker.isRefreshDue
 import com.vivicast.tv.worker.refreshDelayMillis
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+import java.io.OutputStream
 import java.util.Locale
 import java.util.TimeZone
 
@@ -226,8 +230,8 @@ private fun VivicastApp(
     var pendingSafetyFailedRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
     var showParentalReactivationHint by remember { mutableStateOf(false) }
     var pendingSystemTargetUnavailable by remember { mutableStateOf<SystemTargetUnavailable?>(null) }
-    // Set to the saved backup location after a successful export; shown in a confirmation dialog.
-    var exportSavedLocation by remember { mutableStateOf<String?>(null) }
+    // Set to (title, location) after a successful backup or diagnostics export; shown in a dialog.
+    var savedFileInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
     // Import picks the file first; the encrypted container bytes are held here until the user supplies
     // the passphrase in the App-hoisted BackupImportPassphraseDialog.
     var pendingImportContainerBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -253,24 +257,6 @@ private fun VivicastApp(
         ActivityResultContracts.StartActivityForResult(),
     ) {
         Toast.makeText(context, context.getString(R.string.main_external_player_error), Toast.LENGTH_SHORT).show()
-    }
-    val supportSettingsExportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val message = runCatching {
-                    val json = appContainer.standardBackupExporter.exportSupportSettingsJson()
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.write(json.toByteArray(Charsets.UTF_8))
-                    } ?: error("support export output unavailable")
-                    "Einstellungen exportiert."
-                }.getOrElse {
-                    "Export fehlgeschlagen."
-                }
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
-        }
     }
     var pendingM3uFileImport by remember { mutableStateOf<((String, String) -> Unit)?>(null) }
     var showFileManagerPrompt by remember { mutableStateOf(false) }
@@ -329,34 +315,45 @@ private fun VivicastApp(
     LaunchedEffect(
         loadedPreferences,
         preferences.diagnostics.diagnosticsLoggingEnabled,
-        preferences.diagnostics.retentionDays,
     ) {
-        if (loadedPreferences != null && preferences.diagnostics.diagnosticsLoggingEnabled) {
-            appContainer.diagnosticsStore.setLoggingEnabled(true, preferences.diagnostics.retentionDays)
-        }
-    }
-    val diagnosticsExportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip"),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val message = runCatching {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        appContainer.diagnosticsStore.exportZip(
-                            output = output,
-                            about = context.diagnosticsAbout(),
-                            preferences = preferences.diagnostics,
-                        )
-                    } ?: error("diagnostics output unavailable")
-                    "Diagnoseprotokoll exportiert."
-                }.getOrElse {
-                    "Diagnoseprotokoll konnte nicht exportiert werden."
-                }
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
+        if (loadedPreferences != null) {
+            appContainer.diagnosticsStore.setConfig(
+                enabled = preferences.diagnostics.diagnosticsLoggingEnabled,
+                retentionDays = DIAGNOSTICS_RETENTION_DAYS,
+            )
         }
     }
     val playerState by appContainer.playerController.state.collectAsState()
+    // Diagnostics: log playback errors (gated). ExoPlayer's message is generic — enrich with the recent
+    // codec/audio error from logcat + a plain-language cause + the active format.
+    LaunchedEffect(playerState.error?.playbackId, playerState.error?.retryCount) {
+        val error = playerState.error ?: return@LaunchedEffect
+        if (!appContainer.diagnosticsStore.isLoggingEnabled) return@LaunchedEffect
+        val resolution = "${playerState.videoWidth}x${playerState.videoHeight}"
+        val fps = playerState.videoFrameRate.toString()
+        val audioCh = playerState.audioChannelCount.toString()
+        withContext(Dispatchers.IO) {
+            val codec = PlaybackDiagnostics.recentCodecError()
+            val cause = codec?.let { PlaybackDiagnostics.causeHint(it) } ?: PlaybackDiagnostics.causeHint(error.message)
+            val details = buildMap {
+                put("message", error.message)
+                put("retries", error.retryCount.toString())
+                put("resolution", resolution)
+                put("fps", fps)
+                put("audioCh", audioCh)
+                cause?.let { put("cause", it) }
+                codec?.let { put("codec", it) }
+            }
+            appContainer.diagnosticsStore.log("player", "playback_error", details)
+        }
+    }
+    // Diagnostics: rebuffering/stall — a live stream that hangs triggers a reconnect (often without a
+    // hard error). Log the transition into reconnecting (gated).
+    LaunchedEffect(playerState.isReconnecting) {
+        if (playerState.isReconnecting) {
+            appContainer.diagnosticsStore.log("player", "reconnecting")
+        }
+    }
     var pinSecurityState by remember { mutableStateOf(PinSecurityState()) }
     var pinSecurityLoaded by remember { mutableStateOf(false) }
     val automaticProgressSaveTimes = remember { mutableMapOf<String, Long>() }
@@ -960,10 +957,18 @@ private fun VivicastApp(
                 focusLanguageRowOnEnter = reopenLanguageSettings,
                 onInitialLanguageFocusApplied = { reopenLanguageSettings = false },
                 onTestProviderConnection = { request ->
-                    appContainer.testProviderConnection(request)
+                    appContainer.testProviderConnection(request).also { result ->
+                        result.errorMessage?.let {
+                            appContainer.diagnosticsStore.log("connection", "provider_test_failed", mapOf("error" to it))
+                        }
+                    }
                 },
                 onTestEpgConnection = { url ->
-                    appContainer.testEpgSourceConnection(url)
+                    appContainer.testEpgSourceConnection(url).also { result ->
+                        result.errorMessage?.let {
+                            appContainer.diagnosticsStore.log("connection", "epg_test_failed", mapOf("error" to it))
+                        }
+                    }
                 },
                 onPickM3uFile = { onContent: (String, String) -> Unit ->
                     if (hasRealDocumentPicker(context.packageManager)) {
@@ -999,17 +1004,32 @@ private fun VivicastApp(
                     // Preference write moved to SettingsViewModel (P1-04f2a); only the DiagnosticsStore
                     // system effect stays here.
                     scope.launch {
-                        appContainer.diagnosticsStore.setLoggingEnabled(
+                        appContainer.diagnosticsStore.setConfig(
                             enabled = diagnostics.diagnosticsLoggingEnabled,
-                            retentionDays = diagnostics.retentionDays.coerceIn(1, 7),
+                            retentionDays = DIAGNOSTICS_RETENTION_DAYS,
                         )
                     }
                 },
                 onExportDiagnostics = {
-                    diagnosticsExportLauncher.launch("vivicast-diagnostics.zip")
-                },
-                onCopySupportInformation = {
-                    copySupportInformation(context, context.aboutAppState().supportInformationText)
+                    scope.launch {
+                        // No SAF picker on TV: write the ZIP directly to the public Downloads/Vivicast/Diagnostics
+                        // folder the user can browse to and send.
+                        val location = runCatching {
+                            val about = context.diagnosticsAbout()
+                            val settings = JSONObject(appContainer.standardBackupExporter.exportSupportSettingsJson(indentSpaces = 0))
+                            val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-diagnostics", "zip")
+                            withContext(Dispatchers.IO) {
+                                writeToDownloads(context, "Diagnostics", name, "application/zip") { output ->
+                                    appContainer.diagnosticsStore.exportZip(output = output, about = about, settings = settings)
+                                }
+                            }
+                        }.getOrNull()
+                        if (location != null) {
+                            savedFileInfo = "Diagnose exportiert" to location
+                        } else {
+                            Toast.makeText(context, "Diagnose-Export fehlgeschlagen.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 },
                 onSetPin = { pin ->
                     runCatching { PinSecurity.setPin(pin) }.fold(
@@ -1104,11 +1124,6 @@ private fun VivicastApp(
                         null
                     }
                 },
-                onExportSupportSettings = {
-                    supportSettingsExportLauncher.launch(
-                        timestampedBackupName(context.aboutAppState().appVersion, "Vivicast_settings", "json"),
-                    )
-                },
                 onExportBackup = { passphrase ->
                     requestProtectionUnlock(
                         area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
@@ -1121,12 +1136,12 @@ private fun VivicastApp(
                         scope.launch {
                             val location = runCatching {
                                 val bytes = appContainer.standardBackupExporter.exportBackup(passphrase = secret)
-                                val name = timestampedBackupName(context.aboutAppState().appVersion, "Vivicast_backup", "vcbak")
+                                val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-backup", "vcbak")
                                 saveBackupToDownloads(context, name, bytes)
                             }.getOrNull()
                             secret.fill(' ')
                             if (location != null) {
-                                exportSavedLocation = location
+                                savedFileInfo = "Backup gespeichert" to location
                             } else {
                                 Toast.makeText(context, "Backup konnte nicht gespeichert werden.", Toast.LENGTH_SHORT).show()
                             }
@@ -1337,8 +1352,8 @@ private fun VivicastApp(
         )
     }
 
-    exportSavedLocation?.let { location ->
-        BackupSavedDialog(location = location, onDismiss = { exportSavedLocation = null })
+    savedFileInfo?.let { (title, location) ->
+        FileSavedDialog(title = title, location = location, onDismiss = { savedFileInfo = null })
     }
 
     pendingExternalPlaybackRequest?.let { request ->
@@ -1421,29 +1436,44 @@ private fun timestampedBackupName(appVersion: String, prefix: String, extension:
     return "${prefix}_${timestamp}_v$safeVersion.$extension"
 }
 
-private const val BACKUP_DOWNLOAD_SUBDIR = "Vivicast"
+private const val DOWNLOAD_ROOT = "Vivicast"
+// Retention has no UI knob (the 20 MB cap already drops the oldest logs); a fixed 7-day age prune is the
+// safety net so diagnostics left on forever still self-cleans.
+private const val DIAGNOSTICS_RETENTION_DAYS = 7
 
-// Writes the backup to the public Downloads/Vivicast folder the user can browse to with a file manager
-// (TV file managers offer no write picker). Returns a human-readable location, or null on failure.
-// ponytail: API 29+ uses MediaStore (no permission); older TVs fall back to the app-specific external
-// dir — add a WRITE_EXTERNAL_STORAGE path if public Downloads on pre-Q devices ever matters.
-private fun saveBackupToDownloads(context: Context, fileName: String, bytes: ByteArray): String? =
+// Writes a file into the public Downloads/Vivicast/<subdir> folder a file manager can browse to (TV file
+// managers offer no write picker). [block] fills the output stream. Returns the human-readable location,
+// or null on failure. Used for backups, diagnostics exports and crash logs.
+// ponytail: API 29+ uses MediaStore (no permission); older TVs fall back to the app-specific external dir —
+// add a WRITE_EXTERNAL_STORAGE path if public Downloads on pre-Q devices ever matters.
+private fun writeToDownloads(
+    context: Context,
+    subdir: String,
+    fileName: String,
+    mimeType: String,
+    block: (OutputStream) -> Unit,
+): String? =
     runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val relative = "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_ROOT/$subdir"
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_DOWNLOAD_SUBDIR")
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.RELATIVE_PATH, relative)
             }
             val resolver = context.contentResolver
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@runCatching null
-            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@runCatching null
-            "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_DOWNLOAD_SUBDIR/$fileName"
+            resolver.openOutputStream(uri)?.use(block) ?: return@runCatching null
+            "$relative/$fileName"
         } else {
-            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Backups").apply { mkdirs() }
-            File(dir, fileName).also { it.writeBytes(bytes) }.absolutePath
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "$DOWNLOAD_ROOT/$subdir")
+                .apply { mkdirs() }
+            File(dir, fileName).also { file -> file.outputStream().use(block) }.absolutePath
         }
     }.getOrNull()
+
+private fun saveBackupToDownloads(context: Context, fileName: String, bytes: ByteArray): String? =
+    writeToDownloads(context, "Backups", fileName, "application/octet-stream") { it.write(bytes) }
 
 internal fun PinSecurityState.protectionAreaForRoute(route: String): ParentalProtectionArea? =
     when (route) {

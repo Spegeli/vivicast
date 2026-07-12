@@ -3,12 +3,18 @@ package com.vivicast.tv.core.database
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import java.util.concurrent.Executor
 
 object VivicastDatabaseFactory {
     private const val DATABASE_NAME = "vivicast.db"
 
-    fun create(context: Context): VivicastDatabase =
-        Room.databaseBuilder(
+    // [queryCallback] runs on the query's own thread (direct executor), so it can detect a main-thread
+    // query (the diagnostics slow-DB / freeze hook).
+    fun create(
+        context: Context,
+        queryCallback: RoomDatabase.QueryCallback? = null,
+    ): VivicastDatabase {
+        val builder = Room.databaseBuilder(
             context.applicationContext,
             VivicastDatabase::class.java,
             DATABASE_NAME,
@@ -35,5 +41,9 @@ object VivicastDatabaseFactory {
                 VivicastMigrations.Migration14To15,
                 VivicastMigrations.Migration15To16,
             )
-            .build()
+        if (queryCallback != null) {
+            builder.setQueryCallback(queryCallback, Executor { it.run() })
+        }
+        return builder.build()
+    }
 }

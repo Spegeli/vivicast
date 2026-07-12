@@ -146,7 +146,6 @@ data class AboutAppState(
     val deviceModel: String = "Unbekannt",
     val languageTag: String = "Unbekannt",
     val timeZoneId: String = "Unbekannt",
-    val supportInformationText: String = "",
 )
 
 data class DiagnosticsSettingsState(

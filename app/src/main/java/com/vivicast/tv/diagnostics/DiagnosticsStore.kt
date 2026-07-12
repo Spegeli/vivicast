@@ -2,7 +2,6 @@ package com.vivicast.tv.diagnostics
 
 import android.content.Context
 import android.os.Build
-import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -14,112 +13,147 @@ import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val LOG_ENTRY_NAME = "vivicast-diagnostics.log"
-private const val METADATA_ENTRY_NAME = "diagnostics-metadata.json"
-private const val MAX_TOTAL_BYTES = 20 * 1024 * 1024L
-private const val MAX_SEGMENT_BYTES = 2 * 1024 * 1024L
-private const val MAX_SEGMENTS_PER_SESSION = 3
-private const val MAX_SESSION_LOG_BYTES = 6 * 1024 * 1024L
+private const val ROOT_DIR = "vivicast-diagnostics"
+private const val LOGS_DIR = "logs"
+private const val CRASHES_DIR = "crashes"
+private const val LOG_FILE_PREFIX = "vivicast-"
+private const val LOG_FILE_EXT = "log"
 
+// Flat rolling-file model (replaces the old session/segment model): one growing file per rotation,
+// named by its creation time, in a flat `logs/` folder. Bounds keep the disk in check even if the
+// user leaves diagnostics on forever.
+private const val ROTATE_BYTES = 5L * 1024 * 1024 // new file after 5 MB
+private const val TOTAL_CAP_BYTES = 20L * 1024 * 1024 // keep at most ~20 MB of logs
+
+/**
+ * Central diagnostics sink. Feature code never writes here directly — everything goes through the
+ * app-layer logger and this [log], which applies the central sanitization before writing. The toggle
+ * gates ordinary events; crash logs are written elsewhere (public folder) and are always kept.
+ */
 class DiagnosticsStore(
     context: Context,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
-    private val root = File(context.filesDir, "vivicast-diagnostics")
+    private val root = File(context.filesDir, ROOT_DIR)
+    private val logsDir = File(root, LOGS_DIR)
 
-    fun setLoggingEnabled(enabled: Boolean, retentionDays: Int) {
-        prune(retentionDays)
-        record(if (enabled) "diagnostics_enabled" else "diagnostics_disabled", retentionDays)
+    /** Private crash copies bundled into the export (the reachable copies live in public Downloads). */
+    val crashDir: File = File(root, CRASHES_DIR)
+
+    @Volatile
+    private var enabled = false
+
+    @Volatile
+    private var retentionDays = 1
+
+    @Volatile
+    private var activeFile: File? = null
+
+    /** Fast check so callers can skip expensive enrichment (e.g. a logcat read) when disabled. */
+    val isLoggingEnabled: Boolean
+        get() = enabled
+
+    fun setConfig(enabled: Boolean, retentionDays: Int) {
+        this.enabled = enabled
+        this.retentionDays = retentionDays.coerceIn(1, 7)
+        prune()
     }
 
-    fun record(event: String, retentionDays: Int, details: Map<String, String> = emptyMap()) {
-        if (!root.exists()) root.mkdirs()
+    /** Writes one sanitized event line. No-op when logging is disabled. Thread-safe. */
+    @Synchronized
+    fun log(category: String, message: String, details: Map<String, String> = emptyMap()) {
+        if (!enabled) return
+        logsDir.mkdirs()
         val now = clock()
-        val session = currentSessionDirectory(now)
-        if (!session.exists()) session.mkdirs()
-        val segment = writableSegment(session)
         val detailText = details.entries
             .sortedBy { it.key }
-            .joinToString(separator = " ") { "${sanitize(it.key)}=${sanitizeDetail(it.key, it.value)}" }
+            .joinToString(" ") { "${DiagnosticsSanitizer.token(it.key)}=${DiagnosticsSanitizer.detail(it.key, it.value)}" }
         val line = buildString {
             append(timestamp(now))
-            append(" event=")
-            append(sanitize(event))
+            append(' ')
+            append(DiagnosticsSanitizer.token(category))
+            append(' ')
+            append(DiagnosticsSanitizer.line(message))
             if (detailText.isNotBlank()) {
                 append(' ')
                 append(detailText)
             }
             append('\n')
         }
-        segment.appendText(line, Charsets.UTF_8)
-        segment.setLastModified(now)
-        session.setLastModified(now)
-        prune(retentionDays)
+        currentFile(now).appendText(line, Charsets.UTF_8)
+        prune()
     }
 
+    /** Exports one ZIP: all `logs/`, all private crash copies, and `diagnostics-metadata.json`. */
     fun exportZip(
         output: OutputStream,
         about: DiagnosticsAbout,
-        preferences: DiagnosticsPreferences,
+        settings: JSONObject? = null,
     ) {
-        prune(preferences.retentionDays)
+        prune()
+        val logFiles = logFiles()
+        val crashFiles = crashFiles()
         ZipOutputStream(output).use { zip ->
-            zip.putNextEntry(ZipEntry(LOG_ENTRY_NAME))
-            allSegments().forEach { segment ->
-                segment.forEachLine(Charsets.UTF_8) { line ->
-                    zip.write(sanitize(line).toByteArray(Charsets.UTF_8))
+            logFiles.forEach { file ->
+                zip.putNextEntry(ZipEntry("$LOGS_DIR/${file.name}"))
+                file.forEachLine(Charsets.UTF_8) { line ->
+                    zip.write(DiagnosticsSanitizer.line(line).toByteArray(Charsets.UTF_8))
                     zip.write('\n'.code)
                 }
+                zip.closeEntry()
             }
-            zip.closeEntry()
-
-            zip.putNextEntry(ZipEntry(METADATA_ENTRY_NAME))
-            zip.write(metadata(about, preferences).toString(2).toByteArray(Charsets.UTF_8))
+            crashFiles.forEach { file ->
+                zip.putNextEntry(ZipEntry("$CRASHES_DIR/${file.name}"))
+                zip.write(DiagnosticsSanitizer.redact(file.readText(Charsets.UTF_8)).toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+            zip.putNextEntry(ZipEntry("diagnostics-metadata.json"))
+            zip.write(metadata(about, logFiles, crashFiles, settings).toString(2).toByteArray(Charsets.UTF_8))
             zip.closeEntry()
         }
     }
 
-    private fun currentSessionDirectory(now: Long): File =
-        File(root, "session-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(now))}")
-
-    private fun writableSegment(session: File): File {
-        val existing = session.listFiles { file -> file.name.startsWith("segment-") && file.extension == "log" }
-            ?.sortedBy { it.name }
-            .orEmpty()
-        val current = existing.lastOrNull()
-        if (current != null && current.length() < MAX_SEGMENT_BYTES) return current
-        val nextIndex = existing.size.coerceAtMost(MAX_SEGMENTS_PER_SESSION - 1)
-        return File(session, "segment-${nextIndex.toString().padStart(3, '0')}.log")
+    private fun currentFile(now: Long): File {
+        val current = activeFile
+        if (current != null && current.exists() && current.length() < ROTATE_BYTES) return current
+        val fresh = File(logsDir, "$LOG_FILE_PREFIX${fileStamp(now)}.$LOG_FILE_EXT")
+        activeFile = fresh
+        return fresh
     }
 
-    private fun allSegments(): List<File> =
-        root.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("session-") }
+    private fun logFiles(): List<File> =
+        logsDir.listFiles { file -> file.isFile && file.name.endsWith(".$LOG_FILE_EXT") }
             ?.sortedBy { it.name }
-            ?.flatMap { session ->
-                session.listFiles { file -> file.name.startsWith("segment-") && file.extension == "log" }
-                    ?.sortedBy { it.name }
-                    .orEmpty()
-            }
             .orEmpty()
 
-    private fun prune(retentionDays: Int) {
-        if (!root.exists()) return
+    private fun crashFiles(): List<File> =
+        crashDir.listFiles { file -> file.isFile && file.name.endsWith(".$LOG_FILE_EXT") }
+            ?.sortedBy { it.name }
+            .orEmpty()
+
+    private fun prune() {
+        // 1) retention by age
         val cutoff = clock() - retentionDays.coerceIn(1, 7) * 24L * 60L * 60L * 1000L
-        root.listFiles()
-            ?.filter { it.isDirectory && it.lastModified() < cutoff }
-            ?.forEach { it.deleteRecursively() }
-        while (root.walkTopDown().filter { it.isFile }.sumOf { it.length() } > MAX_TOTAL_BYTES) {
-            val oldest = root.listFiles()
-                ?.filter { it.isDirectory }
-                ?.minByOrNull { it.lastModified() }
-                ?: return
-            oldest.deleteRecursively()
+        logFiles().filter { it.lastModified() < cutoff && it != activeFile }.forEach { it.delete() }
+        // 2) total size cap — drop oldest until under the cap
+        var files = logFiles()
+        while (files.sumOf { it.length() } > TOTAL_CAP_BYTES) {
+            val oldest = files.firstOrNull { it != activeFile } ?: break
+            oldest.delete()
+            files = logFiles()
         }
     }
 
-    private fun metadata(about: DiagnosticsAbout, preferences: DiagnosticsPreferences): JSONObject =
-        JSONObject()
+    private fun metadata(
+        about: DiagnosticsAbout,
+        logFiles: List<File>,
+        crashFiles: List<File>,
+        settings: JSONObject?,
+    ): JSONObject {
+        val fileEntries = logFiles.map { it to it.readMetrics() }
+        val coveredFrom = fileEntries.mapNotNull { it.second.firstAt }.minOrNull()
+        val coveredTo = fileEntries.mapNotNull { it.second.lastAt }.maxOrNull()
+        return JSONObject()
             .put("appVersion", about.appVersion)
             .put("packageName", about.packageName)
             .put("androidVersion", about.androidVersion)
@@ -128,53 +162,55 @@ class DiagnosticsStore(
             .put("language", about.languageTag)
             .put("timeZone", about.timeZoneId)
             .put("exportedAt", timestamp(clock()))
-            .put("retentionDays", preferences.retentionDays.coerceIn(1, 7))
-            .put("limits", limitsJson())
-            .put("sessions", sessionsJson())
-
-    private fun limitsJson(): JSONObject =
-        JSONObject()
-            .put("diagnosticsMaxTotalBytes", MAX_TOTAL_BYTES)
-            .put("diagnosticsMaxSegmentBytes", MAX_SEGMENT_BYTES)
-            .put("diagnosticsMaxSegmentsPerSession", MAX_SEGMENTS_PER_SESSION)
-            .put("diagnosticsMaxSessionLogBytes", MAX_SESSION_LOG_BYTES)
-
-    private fun sessionsJson(): JSONArray =
-        JSONArray().also { sessions ->
-            root.listFiles()
-                ?.filter { it.isDirectory && it.name.startsWith("session-") }
-                ?.sortedBy { it.name }
-                ?.forEach { session ->
-                    val segments = session.listFiles { file -> file.name.startsWith("segment-") && file.extension == "log" }
-                        ?.sortedBy { it.name }
-                        .orEmpty()
-                    sessions.put(
+            .put("retentionDays", retentionDays.coerceIn(1, 7))
+            .put("limits", JSONObject().put("rotateBytes", ROTATE_BYTES).put("totalCapBytes", TOTAL_CAP_BYTES))
+            .put("coveredFrom", coveredFrom ?: JSONObject.NULL)
+            .put("coveredTo", coveredTo ?: JSONObject.NULL)
+            .put("contentTruncated", logFiles.sumOf { it.length() } >= TOTAL_CAP_BYTES)
+            .put("logFiles", JSONArray().also { arr ->
+                fileEntries.forEach { (file, m) ->
+                    arr.put(
                         JSONObject()
-                            .put("sessionId", session.name)
-                            .put("segmentCount", segments.size)
-                            .put("bytes", segments.sumOf { it.length() }),
+                            .put("name", file.name)
+                            .put("firstAt", m.firstAt ?: JSONObject.NULL)
+                            .put("lastAt", m.lastAt ?: JSONObject.NULL)
+                            .put("bytes", file.length())
+                            .put("eventCount", m.eventCount),
                     )
                 }
-        }
+            })
+            .put("crashFiles", JSONArray().also { arr ->
+                crashFiles.forEach { file ->
+                    arr.put(JSONObject().put("name", file.name).put("bytes", file.length()))
+                }
+            })
+            .put("settings", settings ?: JSONObject())
+    }
 
-    private fun sanitize(value: String): String =
-        value
-            .replace(Regex("https?://\\S+"), "[redacted-url]")
-            .replace(Regex("(?i)(token|password|passwd|pwd|cookie|authorization|username|user)=\\S+"), "$1=[redacted]")
-            .replace(Regex("[\\r\\n]+"), " ")
-            .take(2_000)
+    private data class FileMetrics(val firstAt: String?, val lastAt: String?, val eventCount: Int)
 
-    private fun sanitizeDetail(key: String, value: String): String =
-        if (key.contains(Regex("(?i)(provider|content|title|name|search|url|header|cookie|token|password|username)"))) {
-            "[redacted]"
-        } else {
-            sanitize(value)
+    private fun File.readMetrics(): FileMetrics {
+        var first: String? = null
+        var last: String? = null
+        var count = 0
+        forEachLine(Charsets.UTF_8) { line ->
+            if (line.isNotBlank()) {
+                count += 1
+                val stamp = line.substringBefore(' ').takeIf { it.isNotBlank() }
+                if (first == null) first = stamp
+                last = stamp
+            }
         }
+        return FileMetrics(first, last, count)
+    }
 
     private fun timestamp(millis: Long): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }.format(Date(millis))
+
+    private fun fileStamp(millis: Long): String =
+        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(millis))
 }
 
 data class DiagnosticsAbout(

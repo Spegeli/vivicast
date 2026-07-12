@@ -142,8 +142,6 @@ fun SettingsRoute(
     onImportBackup: () -> Unit = {},
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
     onExportDiagnostics: () -> Unit = {},
-    onExportSupportSettings: () -> Unit = {},
-    onCopySupportInformation: () -> Unit = {},
     onRefreshEpgSource: (sourceId: String) -> Unit,
     onClearHistory: (Set<HistoryClearTarget>) -> Unit,
     imageCacheSizeBytes: suspend () -> Long = { 0L },
@@ -412,8 +410,6 @@ fun SettingsRoute(
                                 onDiagnosticsSettingsChanged(diagnostics)
                             },
                             onExportDiagnostics = onExportDiagnostics,
-                            onExportSupportSettings = onExportSupportSettings,
-                            onCopySupportInformation = onCopySupportInformation,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         else -> InfoPanel(

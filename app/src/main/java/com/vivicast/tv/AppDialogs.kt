@@ -394,7 +394,8 @@ internal fun ParentalReactivationHintDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-internal fun BackupSavedDialog(
+internal fun FileSavedDialog(
+    title: String,
     location: String,
     onDismiss: () -> Unit,
 ) {
@@ -405,7 +406,7 @@ internal fun BackupSavedDialog(
         initialFocus = focus,
     ) {
         InfoPanel(
-            title = "Backup gespeichert",
+            title = title,
             body = "Gespeichert unter:\n$location\n\n" +
                 "Mit einem Dateimanager dorthin navigieren, um die Datei zu sichern (z. B. auf USB).",
             modifier = Modifier.fillMaxWidth(),

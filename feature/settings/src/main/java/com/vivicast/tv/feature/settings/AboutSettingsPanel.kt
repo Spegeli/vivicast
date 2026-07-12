@@ -55,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
-import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
@@ -99,32 +98,14 @@ internal fun AboutSettingsPanel(
     diagnosticsSettingsState: DiagnosticsSettingsState,
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
     onExportDiagnostics: () -> Unit,
-    onExportSupportSettings: () -> Unit = {},
-    onCopySupportInformation: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
-    val strDaysSingular = stringResource(R.string.common_days_singular)
-    val strDaysPlural = stringResource(R.string.common_days_plural)
     val toggleDiagnostics = {
         onDiagnosticsSettingsChanged(
             diagnosticsSettingsState.copy(
                 diagnosticsLoggingEnabled = !diagnosticsSettingsState.diagnosticsLoggingEnabled,
             ),
         )
-    }
-    val decreaseRetention = {
-        if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
-            onDiagnosticsSettingsChanged(
-                diagnosticsSettingsState.copy(retentionDays = (diagnosticsSettingsState.retentionDays - 1).coerceAtLeast(1)),
-            )
-        }
-    }
-    val increaseRetention = {
-        if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
-            onDiagnosticsSettingsChanged(
-                diagnosticsSettingsState.copy(retentionDays = (diagnosticsSettingsState.retentionDays + 1).coerceAtMost(7)),
-            )
-        }
     }
     var legalPage by remember { mutableStateOf<AboutLegalPage?>(null) }
     val activeLegalPage = legalPage
@@ -162,14 +143,6 @@ internal fun AboutSettingsPanel(
             VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = state.deviceModel)
         }
         item {
-            InfoPanel(
-                title = stringResource(R.string.about_diagnostics_section),
-                body = stringResource(R.string.about_diagnostics_body),
-                badge = stringResource(R.string.about_diagnostics_badge),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_diagnostics_logging),
                 help = stringResource(R.string.about_help_logging),
@@ -179,44 +152,12 @@ internal fun AboutSettingsPanel(
             )
         }
         item {
-            val days = diagnosticsSettingsState.retentionDays.coerceIn(1, 7)
-            AdjustableSettingsRow(
-                title = stringResource(R.string.about_retention),
-                help = if (diagnosticsSettingsState.diagnosticsLoggingEnabled) {
-                    stringResource(R.string.about_help_retention_on)
-                } else {
-                    stringResource(R.string.about_help_retention_off)
-                },
-                value = if (days == 1) strDaysSingular.format(days) else strDaysPlural.format(days),
-                onDecrease = decreaseRetention,
-                onIncrease = increaseRetention,
-            )
-        }
-        item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_export_diagnostics),
                 help = stringResource(R.string.about_help_export_diagnostics),
                 value = stringResource(R.string.common_export),
                 modifier = Modifier,
                 onClick = onExportDiagnostics,
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_support_export),
-                help = stringResource(R.string.settings_help_support_export),
-                value = stringResource(R.string.settings_support_export_value),
-                modifier = Modifier,
-                onClick = onExportSupportSettings,
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.about_copy_support),
-                help = stringResource(R.string.about_help_copy_support),
-                value = stringResource(R.string.common_copy),
-                modifier = Modifier,
-                onClick = onCopySupportInformation,
             )
         }
         item {

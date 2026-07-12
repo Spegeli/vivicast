@@ -1,6 +1,8 @@
 package com.vivicast.tv.di
 
 import android.content.Context
+import android.os.Looper
+import androidx.room.RoomDatabase
 import androidx.work.WorkManager
 import coil3.ImageLoader
 import coil3.disk.DiskCache
@@ -10,6 +12,7 @@ import okio.Path.Companion.toPath
 import com.vivicast.tv.backup.StandardBackupExporter
 import com.vivicast.tv.backup.StandardBackupRestorer
 import com.vivicast.tv.diagnostics.DiagnosticsStore
+import com.vivicast.tv.diagnostics.StoreRefreshDiagnostics
 import com.vivicast.tv.core.cache.FileMediaCacheStore
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.cache.MediaCacheStore
@@ -75,7 +78,6 @@ import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
 import com.vivicast.tv.worker.DefaultSeriesDetailsRefresher
 import com.vivicast.tv.worker.MaintenanceRefreshOrchestrator
-import com.vivicast.tv.worker.InMemoryRefreshDiagnostics
 import com.vivicast.tv.worker.M3uSourceTooLargeException
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
 import com.vivicast.tv.worker.EpgSourceTooLargeException
@@ -109,7 +111,17 @@ class AppContainer(
     var appStartRefreshTriggered: Boolean = false
 
     val database: VivicastDatabase by lazy {
-        VivicastDatabaseFactory.create(appContext)
+        VivicastDatabaseFactory.create(
+            appContext,
+            // Diagnostics: flag DB queries that run on the main thread (the freeze cause). Gated + cheap.
+            queryCallback = object : RoomDatabase.QueryCallback {
+                override fun onQuery(sqlQuery: String, bindArgs: List<Any?>) {
+                    if (Looper.myLooper() == Looper.getMainLooper() && diagnosticsStore.isLoggingEnabled) {
+                        diagnosticsStore.log("db", "main_thread_query", mapOf("sql" to sqlQuery))
+                    }
+                }
+            },
+        )
     }
 
     val userPreferencesStore: UserPreferencesStore by lazy {
@@ -200,7 +212,7 @@ class AppContainer(
     }
 
     val refreshDiagnostics: RefreshDiagnostics by lazy {
-        InMemoryRefreshDiagnostics()
+        StoreRefreshDiagnostics(diagnosticsStore)
     }
 
     val refreshWorkScheduler: RefreshWorkScheduler by lazy {

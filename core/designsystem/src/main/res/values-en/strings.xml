@@ -262,7 +262,6 @@
     <string name="common_close">Close</string>
     <string name="common_export">Export</string>
     <string name="common_import">Import</string>
-    <string name="common_copy">Copy</string>
     <string name="common_minutes">%d minutes</string>
     <string name="common_hours">%d hours</string>
     <string name="common_seconds">%d seconds</string>
@@ -286,7 +285,6 @@
     <string name="main_passphrase_incorrect">Passphrase incorrect or backup corrupted.</string>
     <string name="main_backup_restored">Backup restored.</string>
     <string name="main_no_external_player">No external player available.</string>
-    <string name="main_support_info_copied">Support information copied.</string>
 
     <!-- Home hero -->
     <string name="home_hero_continue_body">Resume playback from the last position.</string>
@@ -572,9 +570,6 @@
     <string name="settings_backup_passphrase_import_body">Enter the backup passphrase. Without the correct passphrase restore is not possible.</string>
     <string name="settings_backup_passphrase_too_short">Passphrase must be at least 8 characters.</string>
     <string name="settings_backup_passphrase_mismatch">Passphrases do not match.</string>
-    <string name="settings_support_export">Export settings</string>
-    <string name="settings_help_support_export">Readable export for support: settings without URLs or credentials. Not restorable.</string>
-    <string name="settings_support_export_value">File</string>
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d files in local media cache.</string>
@@ -636,18 +631,10 @@
     <string name="about_help_android">Device system version.</string>
     <string name="about_device_model">Device model</string>
     <string name="about_help_device">Non-private technical support information.</string>
-    <string name="about_diagnostics_section">Diagnostics and Support</string>
-    <string name="about_diagnostics_body">General support data may be copied. Log content is not displayed and not copied.</string>
-    <string name="about_diagnostics_badge">Support</string>
     <string name="about_diagnostics_logging">Diagnostic logging</string>
     <string name="about_help_logging">Writes only sanitized technical events to private app storage.</string>
-    <string name="about_retention">Retention period</string>
-    <string name="about_help_retention_on">Limits internal diagnostic sessions to 1 to 7 days.</string>
-    <string name="about_help_retention_off">Remains visible, but cannot be changed when diagnostic logging is off.</string>
     <string name="about_export_diagnostics">Export diagnostics</string>
     <string name="about_help_export_diagnostics">Creates a ZIP with vivicast-diagnostics.log and diagnostics-metadata.json.</string>
-    <string name="about_copy_support">Copy support information</string>
-    <string name="about_help_copy_support">Copies only the visible non-private technical information.</string>
     <string name="settings_legal_privacy_title">Privacy Policy</string>
     <string name="settings_legal_terms_title">Terms of Use</string>
     <string name="settings_help_legal_privacy">How Vivicast handles your data.</string>
