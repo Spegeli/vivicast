@@ -1,8 +1,10 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -49,7 +52,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
@@ -58,12 +60,7 @@ import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
-import com.vivicast.tv.core.designsystem.VivicastButtonRow
 import com.vivicast.tv.core.designsystem.VivicastColors
-import com.vivicast.tv.core.designsystem.VivicastDialog
-import com.vivicast.tv.core.designsystem.VivicastDialogActions
-import com.vivicast.tv.core.designsystem.VivicastDialogError
-import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
@@ -130,8 +127,20 @@ internal fun AboutSettingsPanel(
         }
     }
     var legalPage by remember { mutableStateOf<AboutLegalPage?>(null) }
+    val activeLegalPage = legalPage
+    val legalBackFocus = remember { FocusRequester() }
+    val legalRowFocus = remember { FocusRequester() }
+    val legalTitle = activeLegalPage?.let { stringResource(it.titleRes) }.orEmpty()
+    val legalParagraphs = activeLegalPage?.let { stringResource(it.bodyRes).split("\n\n") }.orEmpty()
+    // Close: move focus back to the (always-composed) legal row FIRST, then drop the overlay. Removing the
+    // overlay while it holds focus would reset focus to the top nav and navigate Home.
+    val closeLegal = {
+        runCatching { legalRowFocus.requestFocus() }
+        legalPage = null
+    }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_app_version_title),
@@ -212,35 +221,73 @@ internal fun AboutSettingsPanel(
         }
         item {
             VivicastSettingsRow(
-                title = stringResource(R.string.about_legal),
-                help = stringResource(R.string.about_help_legal),
+                title = stringResource(R.string.settings_legal_privacy_title),
+                help = stringResource(R.string.settings_help_legal_privacy),
                 value = stringResource(R.string.about_open_value),
-                modifier = Modifier,
-                onClick = { legalPage = AboutLegalPage.Licenses },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.about_privacy),
-                help = stringResource(R.string.about_help_privacy),
-                value = stringResource(R.string.about_open_value),
-                modifier = Modifier,
+                modifier = Modifier.focusRequester(legalRowFocus),
                 onClick = { legalPage = AboutLegalPage.Privacy },
             )
         }
         item {
             VivicastSettingsRow(
-                title = stringResource(R.string.about_third_party),
-                help = stringResource(R.string.about_help_third_party),
+                title = stringResource(R.string.settings_legal_terms_title),
+                help = stringResource(R.string.settings_help_legal_terms),
                 value = stringResource(R.string.about_open_value),
                 modifier = Modifier,
-                onClick = { legalPage = AboutLegalPage.ThirdParty },
+                onClick = { legalPage = AboutLegalPage.Terms },
+            )
+        }
+        }
+
+        // Legal document as a focus-capturing overlay: the About list stays composed underneath so the
+        // focused row is not destroyed (destroying it resets focus to the top nav, which navigates on
+        // focus and would jump to Home). The overlay covers the list and grabs focus on entry.
+        if (activeLegalPage != null) {
+            AboutLegalOverlay(
+                title = legalTitle,
+                paragraphs = legalParagraphs,
+                backFocus = legalBackFocus,
+                firstFocusModifier = firstFocusModifier,
+                onClose = closeLegal,
             )
         }
     }
+}
 
-    legalPage?.let { page ->
-        AboutLegalDialog(page = page, onDismiss = { legalPage = null })
+// Full-panel legal document, drawn over the (still-composed) About list so the focused list row is not
+// destroyed. Paragraphs are focusable so the D-pad scrolls the LazyColumn through the full text.
+@Composable
+private fun AboutLegalOverlay(
+    title: String,
+    paragraphs: List<String>,
+    backFocus: FocusRequester,
+    firstFocusModifier: Modifier,
+    onClose: () -> Unit,
+) {
+    // No visible back button: the system Back/Return key closes the overlay (BackHandler).
+    BackHandler(onBack = onClose)
+    LaunchedEffect(title) { runCatching { backFocus.requestFocus() } }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A1423)),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        item { SectionTitle(text = title) }
+        itemsIndexed(paragraphs) { index, paragraph ->
+            FocusableLegalParagraph(
+                text = paragraph,
+                // First paragraph is the focus entry: it carries the detail requester + entry focus and
+                // blocks Up so focus can't escape to the top nav (which navigates on focus).
+                modifier = if (index == 0) {
+                    firstFocusModifier
+                        .focusRequester(backFocus)
+                        .focusProperties { up = FocusRequester.Cancel }
+                } else {
+                    Modifier
+                },
+            )
+        }
     }
 }
 
@@ -248,34 +295,26 @@ private enum class AboutLegalPage(
     @get:StringRes val titleRes: Int,
     @get:StringRes val bodyRes: Int,
 ) {
-    Licenses(R.string.about_legal_licenses_title, R.string.about_legal_licenses_body),
-    Privacy(R.string.about_legal_privacy_title, R.string.about_legal_privacy_body),
-    ThirdParty(R.string.about_legal_third_party_title, R.string.about_legal_third_party_body),
+    Privacy(R.string.settings_legal_privacy_title, R.string.settings_legal_privacy_body),
+    Terms(R.string.settings_legal_terms_title, R.string.settings_legal_terms_body),
 }
 
+// Inline legal document paragraph: focusable so the D-pad scrolls the LazyColumn through the full text.
 @Composable
-private fun AboutLegalDialog(
-    page: AboutLegalPage,
-    onDismiss: () -> Unit,
-) {
-    val closeFocus = remember { FocusRequester() }
-    VivicastDialog(
-        onDismiss = onDismiss,
-        width = VivicastDialogWidth.Standard,
-        initialFocus = closeFocus,
-    ) {
-        InfoPanel(
-            title = stringResource(page.titleRes),
-            body = stringResource(page.bodyRes),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        VivicastButtonRow {
-            ActionPill(
-                label = stringResource(R.string.common_close),
-                modifier = Modifier.focusRequester(closeFocus),
-                onClick = onDismiss,
+private fun FocusableLegalParagraph(text: String, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .background(
+                color = if (focused) Color.White.copy(alpha = 0.06f) else Color.Transparent,
+                shape = VivicastShapes.CardRadius,
             )
-        }
+            .padding(horizontal = VivicastSpacing.Space3, vertical = VivicastSpacing.Space2),
+    ) {
+        BodyText(text = text, maxLines = Int.MAX_VALUE, modifier = Modifier.fillMaxWidth())
     }
 }
 
