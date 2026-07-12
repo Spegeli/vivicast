@@ -1,6 +1,5 @@
 ﻿package com.vivicast.tv.feature.settings
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
@@ -98,115 +97,63 @@ import java.util.Date
 
 @Composable
 internal fun BackupSettingsPanel(
-    state: BackupSettingsState = BackupSettingsState(),
-    onBackupSettingsChanged: (BackupSettingsState) -> Unit = {},
-    onExportStandardBackup: () -> Unit = {},
-    onImportStandardBackup: () -> Unit = {},
-    onExportEncryptedFullBackup: (String) -> Unit = {},
-    onImportEncryptedFullBackup: (String) -> Unit = {},
+    onExportBackup: (String) -> Unit = {},
+    onImportBackup: () -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    var pendingFullAction by remember { mutableStateOf<BackupFullAction?>(null) }
-    val cycleTarget = {
-        onBackupSettingsChanged(state.copy(target = state.target.next()))
-    }
+    var showExportDialog by remember { mutableStateOf(false) }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_backup_export),
-                help = stringResource(R.string.settings_help_backup_standard),
+                help = stringResource(R.string.settings_help_backup_export),
                 value = stringResource(R.string.settings_backup_select_value),
                 modifier = firstFocusModifier,
                 icon = { SettingsRowIcon("export") },
-                onClick = onExportStandardBackup,
+                onClick = { showExportDialog = true },
             )
         }
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_backup_import),
-                help = stringResource(R.string.settings_help_backup_restore),
+                help = stringResource(R.string.settings_help_backup_import),
                 value = stringResource(R.string.settings_backup_select_value),
                 icon = { SettingsRowIcon("import") },
-                onClick = onImportStandardBackup,
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_backup_target),
-                help = stringResource(R.string.settings_help_backup_target),
-                value = state.target.label(),
-                icon = { SettingsRowIcon("folder") },
-                onClick = cycleTarget,
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_backup_last),
-                help = stringResource(R.string.settings_help_backup_last),
-                value = state.lastBackupAtMillis?.toBackupTimestamp() ?: stringResource(R.string.settings_backup_never),
-                enabled = false,
-                icon = { SettingsRowIcon("clock") },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_backup_full_export),
-                help = stringResource(R.string.settings_help_backup_full_export),
-                value = stringResource(R.string.settings_backup_full_value),
-                icon = { SettingsRowIcon("shield") },
-                onClick = { pendingFullAction = BackupFullAction.Export },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_backup_full_import),
-                help = stringResource(R.string.settings_help_backup_full_import),
-                value = stringResource(R.string.settings_backup_full_value),
-                icon = { SettingsRowIcon("shield") },
-                onClick = { pendingFullAction = BackupFullAction.Import },
+                // Import picks the file first (App-hoisted picker), then prompts for the passphrase.
+                onClick = { onImportBackup() },
             )
         }
     }
 
-    pendingFullAction?.let { action ->
-        FullBackupPassphraseDialog(
-            action = action,
-            onCancel = { pendingFullAction = null },
+    if (showExportDialog) {
+        BackupExportPassphraseDialog(
+            onCancel = { showExportDialog = false },
             onConfirm = { passphrase ->
-                pendingFullAction = null
-                when (action) {
-                    BackupFullAction.Export -> onExportEncryptedFullBackup(passphrase)
-                    BackupFullAction.Import -> onImportEncryptedFullBackup(passphrase)
-                }
+                showExportDialog = false
+                onExportBackup(passphrase)
             },
         )
     }
 }
 
-@Composable
-private fun BackupTargetMode.label(): String = when (this) {
-    BackupTargetMode.LocalStorage -> stringResource(R.string.common_local_storage)
-    BackupTargetMode.Smb -> "SMB"
-    BackupTargetMode.GoogleDrive -> "Google Drive"
-}
-
-// v1 offers only local backup (SMB/Google Drive are post-v1), so the target stays at LocalStorage.
-private fun BackupTargetMode.next(): BackupTargetMode = BackupTargetMode.LocalStorage
-
 internal fun Long.toBackupTimestamp(): String =
     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(this))
 
+private const val MIN_BACKUP_PASSPHRASE_LENGTH = 8
+
 @Composable
-private fun FullBackupPassphraseDialog(
-    action: BackupFullAction,
+private fun BackupExportPassphraseDialog(
     onCancel: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
     var passphrase by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val strPassphraseBody = stringResource(R.string.settings_backup_passphrase_body)
-    val strPassphraseMissing = stringResource(R.string.settings_backup_passphrase_missing)
+    val strBody = stringResource(R.string.settings_backup_passphrase_export_body)
+    val strMissing = stringResource(R.string.settings_backup_passphrase_missing)
+    val strTooShort = stringResource(R.string.settings_backup_passphrase_too_short)
+    val strMismatch = stringResource(R.string.settings_backup_passphrase_mismatch)
     val fieldFocus = remember { FocusRequester() }
 
     VivicastDialog(
@@ -216,8 +163,8 @@ private fun FullBackupPassphraseDialog(
         modifier = Modifier.testTag(fullBackupPassphraseDialogTag()),
     ) {
         InfoPanel(
-            title = stringResource(action.titleRes),
-            body = error ?: strPassphraseBody,
+            title = stringResource(R.string.settings_backup_export),
+            body = error ?: strBody,
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastTextField(
@@ -226,6 +173,7 @@ private fun FullBackupPassphraseDialog(
                 passphrase = it
                 error = null
             },
+            label = stringResource(R.string.settings_backup_passphrase_label),
             secret = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             focusRequester = fieldFocus,
@@ -233,14 +181,28 @@ private fun FullBackupPassphraseDialog(
             isError = error != null,
             maxLength = 100,
         )
+        VivicastTextField(
+            value = confirm,
+            onValueChange = {
+                confirm = it
+                error = null
+            },
+            label = stringResource(R.string.settings_backup_passphrase_confirm_label),
+            secret = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            fieldModifier = Modifier.testTag(fullBackupPassphraseConfirmFieldTag()),
+            isError = error != null,
+            maxLength = 100,
+        )
         VivicastDialogActions(
-            primaryLabel = stringResource(action.confirmLabelRes),
+            primaryLabel = stringResource(R.string.settings_backup_full_action_export),
             onPrimary = {
                 val value = passphrase.trim()
-                if (value.isBlank()) {
-                    error = strPassphraseMissing
-                } else {
-                    onConfirm(value)
+                when {
+                    value.isBlank() -> error = strMissing
+                    value.length < MIN_BACKUP_PASSPHRASE_LENGTH -> error = strTooShort
+                    value != confirm.trim() -> error = strMismatch
+                    else -> onConfirm(value)
                 }
             },
             secondaryLabel = stringResource(R.string.common_cancel),
@@ -251,16 +213,9 @@ private fun FullBackupPassphraseDialog(
     }
 }
 
-private enum class BackupFullAction(
-    @get:StringRes val titleRes: Int,
-    @get:StringRes val confirmLabelRes: Int,
-) {
-    Export(R.string.settings_backup_full_export, R.string.settings_backup_full_action_export),
-    Import(R.string.settings_backup_full_import, R.string.settings_backup_full_action_import),
-}
-
 fun fullBackupPassphraseDialogTag(): String = "full-backup-passphrase-dialog"
 fun fullBackupPassphraseFieldTag(): String = "full-backup-passphrase-field"
+fun fullBackupPassphraseConfirmFieldTag(): String = "full-backup-passphrase-confirm-field"
 fun fullBackupPassphraseCancelTag(): String = "full-backup-passphrase-cancel"
 fun fullBackupPassphraseConfirmTag(): String = "full-backup-passphrase-confirm"
 

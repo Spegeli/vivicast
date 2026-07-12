@@ -36,12 +36,12 @@ class StandardBackupRestorer(
         return restoreValidated(jsonText, validation, continueAfterSafetyBackupFailure)
     }
 
-    suspend fun restoreEncryptedFull(
-        encryptedJsonText: String,
+    suspend fun restoreBackup(
+        container: ByteArray,
         passphrase: CharArray,
         continueAfterSafetyBackupFailure: Boolean = false,
     ): StandardBackupRestoreValidation {
-        val payload = decryptFullBackupPayload(encryptedJsonText, passphrase)
+        val payload = decryptBackupPayload(container, passphrase)
             ?: return StandardBackupRestoreValidation.Invalid("Passphrase falsch oder Backup beschaedigt.")
         return restoreFullPayload(payload, continueAfterSafetyBackupFailure)
     }
@@ -195,6 +195,8 @@ private fun JSONArray.toProviderEntities(now: Long): List<ProviderEntity> =
             refreshIntervalHours = provider.optInt("refreshIntervalHours", 12).coerceIn(1, 168),
             logoPriority = provider.optString("logoPriority", "provider").ifBlank { "provider" },
             xtreamOutputFormat = provider.optString("xtreamOutputFormat", "hls").ifBlank { "hls" },
+            userAgent = provider.nullableString("userAgent"),
+            refreshOnAppStartEnabled = provider.optBoolean("refreshOnAppStartEnabled", true),
             createdAt = now,
             updatedAt = now,
         )

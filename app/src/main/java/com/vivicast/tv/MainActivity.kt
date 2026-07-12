@@ -2,6 +2,7 @@
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -10,6 +11,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -90,9 +93,9 @@ import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
-import com.vivicast.tv.backup.decryptFullBackupPayload
+import com.vivicast.tv.backup.decryptBackupPayload
+import com.vivicast.tv.backup.isEncryptedBackupContainer
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
-import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
@@ -145,6 +148,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 import java.util.TimeZone
 
@@ -220,9 +224,13 @@ private fun VivicastApp(
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
     var pendingStandardRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
     var pendingSafetyFailedRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
+    var showParentalReactivationHint by remember { mutableStateOf(false) }
     var pendingSystemTargetUnavailable by remember { mutableStateOf<SystemTargetUnavailable?>(null) }
-    var pendingEncryptedFullExportPassphrase by remember { mutableStateOf<CharArray?>(null) }
-    var pendingEncryptedFullImportPassphrase by remember { mutableStateOf<CharArray?>(null) }
+    // Set to the saved backup location after a successful export; shown in a confirmation dialog.
+    var exportSavedLocation by remember { mutableStateOf<String?>(null) }
+    // Import picks the file first; the encrypted container bytes are held here until the user supplies
+    // the passphrase in the App-hoisted BackupImportPassphraseDialog.
+    var pendingImportContainerBytes by remember { mutableStateOf<ByteArray?>(null) }
     var unlockedProtectionAreas by remember { mutableStateOf(emptySet<ParentalProtectionArea>()) }
     var topNavigationFocused by remember { mutableStateOf(false) }
     var lastTopNavigationBackAt by remember { mutableStateOf(0L) }
@@ -246,50 +254,21 @@ private fun VivicastApp(
     ) {
         Toast.makeText(context, context.getString(R.string.main_external_player_error), Toast.LENGTH_SHORT).show()
     }
-    val standardBackupExportLauncher = rememberLauncherForActivityResult(
+    val supportSettingsExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 val message = runCatching {
-                    val json = appContainer.standardBackupExporter.exportJson()
+                    val json = appContainer.standardBackupExporter.exportSupportSettingsJson()
                     context.contentResolver.openOutputStream(uri)?.use { output ->
                         output.write(json.toByteArray(Charsets.UTF_8))
-                    } ?: error("backup output unavailable")
-                    appContainer.userPreferencesStore.updateBackup(
-                        appContainer.userPreferencesStore.values.first().backup.copy(
-                            lastBackupAtMillis = System.currentTimeMillis(),
-                        ),
-                    )
-                    "Backup exportiert."
+                    } ?: error("support export output unavailable")
+                    "Einstellungen exportiert."
                 }.getOrElse {
-                    "Backup konnte nicht gespeichert werden."
+                    "Export fehlgeschlagen."
                 }
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-    val standardBackupImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val text = runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                }.getOrNull()
-                if (text.isNullOrBlank()) {
-                    Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                when (val validation = validateStandardBackupForRestore(text)) {
-                    is StandardBackupRestoreValidation.Valid -> {
-                        pendingStandardRestore = PendingStandardRestore(text, validation.preview)
-                    }
-                    is StandardBackupRestoreValidation.Invalid -> {
-                        Toast.makeText(context, validation.message, Toast.LENGTH_SHORT).show()
-                    }
-                    is StandardBackupRestoreValidation.SafetyBackupFailed -> Unit
-                }
             }
         }
     }
@@ -322,75 +301,24 @@ private fun VivicastApp(
             }
         }
     }
-    val encryptedFullBackupExportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        val passphrase = pendingEncryptedFullExportPassphrase
-        pendingEncryptedFullExportPassphrase = null
-        if (uri != null && passphrase != null) {
-            scope.launch {
-                val message = runCatching {
-                    val json = appContainer.standardBackupExporter.exportEncryptedFullJson(
-                        passphrase = passphrase,
-                        appVersion = context.aboutAppState().appVersion,
-                        packageName = context.packageName,
-                    )
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.write(json.toByteArray(Charsets.UTF_8))
-                    } ?: error("backup output unavailable")
-                    appContainer.userPreferencesStore.updateBackup(
-                        appContainer.userPreferencesStore.values.first().backup.copy(
-                            lastBackupAtMillis = System.currentTimeMillis(),
-                        ),
-                    )
-                    "Vollbackup exportiert."
-                }.getOrElse {
-                    "Vollbackup konnte nicht gespeichert werden."
-                }
-                passphrase.fill('\u0000')
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            passphrase?.fill('\u0000')
-        }
-    }
     val encryptedFullBackupImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        val passphrase = pendingEncryptedFullImportPassphrase
-        pendingEncryptedFullImportPassphrase = null
-        if (uri != null && passphrase != null) {
+        if (uri != null) {
             scope.launch {
-                val text = runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 }.getOrNull()
-                if (text.isNullOrBlank()) {
-                    passphrase.fill('\u0000')
-                    Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                val payload = decryptFullBackupPayload(text, passphrase)
-                passphrase.fill('\u0000')
-                if (payload == null) {
-                    Toast.makeText(context, context.getString(R.string.main_passphrase_incorrect), Toast.LENGTH_SHORT).show()
-                    return@launch
-                }
-                when (val validation = validateFullBackupPayloadForRestore(payload)) {
-                    is StandardBackupRestoreValidation.Valid -> {
-                        pendingStandardRestore = PendingStandardRestore(
-                            jsonText = payload,
-                            preview = validation.preview,
-                            encryptedFull = true,
-                        )
-                    }
-                    is StandardBackupRestoreValidation.Invalid -> {
-                        Toast.makeText(context, validation.message, Toast.LENGTH_SHORT).show()
-                    }
-                    is StandardBackupRestoreValidation.SafetyBackupFailed -> Unit
+                when {
+                    bytes == null || bytes.isEmpty() ->
+                        Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
+                    // Reject a support/settings export (or any non-encrypted file) before asking for a passphrase.
+                    !isEncryptedBackupContainer(bytes) ->
+                        Toast.makeText(context, context.getString(R.string.main_backup_not_restorable), Toast.LENGTH_SHORT).show()
+                    // Valid encrypted container: now prompt for the passphrase.
+                    else -> pendingImportContainerBytes = bytes
                 }
             }
-        } else {
-            passphrase?.fill('\u0000')
         }
     }
     var loadedPreferences by remember { mutableStateOf<UserPreferences?>(null) }
@@ -470,7 +398,18 @@ private fun VivicastApp(
                     pendingSafetyFailedRestore = null
                     pinSecurityState = PinSecurityState()
                     unlockedProtectionAreas = emptySet()
+                    // Restored providers/EPG are config only; re-fetch so the catalog + EPG rebuild and the
+                    // pending favorites/history/progress bind.
+                    appContainer.providerRepository.observeProviders().first()
+                        .filter { it.isActive }
+                        .forEach { appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(it.id) }
+                    appContainer.epgSourceRepository.observeEpgSources().first()
+                        .filter { it.isActive }
+                        .forEach { appContainer.refreshWorkScheduler.enqueueEpgRefresh(it.id) }
                     appContainer.syncWatchNext()
+                    if (restore.preview.parentalProtectionWasActive) {
+                        showParentalReactivationHint = true
+                    }
                     Toast.makeText(context, context.getString(R.string.main_backup_restored), Toast.LENGTH_SHORT).show()
                 }
                 is StandardBackupRestoreValidation.SafetyBackupFailed -> {
@@ -1165,51 +1104,47 @@ private fun VivicastApp(
                         null
                     }
                 },
-                onExportStandardBackup = {
-                    requestProtectionUnlock(
-                        area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
-                        title = "Backup exportieren",
-                        forcePrompt = true,
-                    ) {
-                        standardBackupExportLauncher.launch("vivicast-standard-backup.json")
-                    }
+                onExportSupportSettings = {
+                    supportSettingsExportLauncher.launch(
+                        timestampedBackupName(context.aboutAppState().appVersion, "Vivicast_settings", "json"),
+                    )
                 },
-                onImportStandardBackup = {
-                    requestProtectionUnlock(
-                        area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
-                        title = "Backup wiederherstellen",
-                        forcePrompt = true,
-                    ) {
-                        standardBackupImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*"))
-                    }
-                },
-                onBackupSettingsChanged = { backupState ->
-                    scope.launch {
-                        appContainer.userPreferencesStore.updateBackup(
-                            preferences.backup.copy(target = backupState.target.toDataStoreBackupTargetPreference()),
-                        )
-                    }
-                },
-                onExportEncryptedFullBackup = { passphrase ->
+                onExportBackup = { passphrase ->
                     requestProtectionUnlock(
                         area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
                         title = "Vollbackup exportieren",
                         forcePrompt = true,
                     ) {
-                        pendingEncryptedFullExportPassphrase?.fill('\u0000')
-                        pendingEncryptedFullExportPassphrase = passphrase.toCharArray()
-                        encryptedFullBackupExportLauncher.launch("vivicast-full-backup.json")
+                        // TV file managers offer no write picker; write to a fixed public Downloads folder
+                        // the user can browse to afterwards.
+                        val secret = passphrase.toCharArray()
+                        scope.launch {
+                            val location = runCatching {
+                                val bytes = appContainer.standardBackupExporter.exportBackup(passphrase = secret)
+                                val name = timestampedBackupName(context.aboutAppState().appVersion, "Vivicast_backup", "vcbak")
+                                saveBackupToDownloads(context, name, bytes)
+                            }.getOrNull()
+                            secret.fill(' ')
+                            if (location != null) {
+                                exportSavedLocation = location
+                            } else {
+                                Toast.makeText(context, "Backup konnte nicht gespeichert werden.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 },
-                onImportEncryptedFullBackup = { passphrase ->
+                onImportBackup = {
                     requestProtectionUnlock(
                         area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
                         title = "Vollbackup wiederherstellen",
                         forcePrompt = true,
                     ) {
-                        pendingEncryptedFullImportPassphrase?.fill('\u0000')
-                        pendingEncryptedFullImportPassphrase = passphrase.toCharArray()
-                        encryptedFullBackupImportLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*"))
+                        // Pick the file first; the passphrase is asked afterwards in BackupImportPassphraseDialog.
+                        if (hasRealDocumentPicker(context.packageManager)) {
+                            encryptedFullBackupImportLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+                        } else {
+                            showFileManagerPrompt = true
+                        }
                     }
                 },
                 onRefreshEpgSource = { sourceId ->
@@ -1375,6 +1310,37 @@ private fun VivicastApp(
         )
     }
 
+    pendingImportContainerBytes?.let { container ->
+        BackupImportPassphraseDialog(
+            onDismiss = { pendingImportContainerBytes = null },
+            onSubmit = { entered ->
+                pendingImportContainerBytes = null
+                val passphrase = entered.toCharArray()
+                val payload = decryptBackupPayload(container, passphrase)
+                passphrase.fill(' ')
+                when {
+                    payload == null ->
+                        Toast.makeText(context, context.getString(R.string.main_passphrase_incorrect), Toast.LENGTH_SHORT).show()
+                    else -> when (val validation = validateFullBackupPayloadForRestore(payload)) {
+                        is StandardBackupRestoreValidation.Valid ->
+                            pendingStandardRestore = PendingStandardRestore(
+                                jsonText = payload,
+                                preview = validation.preview,
+                                encryptedFull = true,
+                            )
+                        is StandardBackupRestoreValidation.Invalid ->
+                            Toast.makeText(context, validation.message, Toast.LENGTH_SHORT).show()
+                        is StandardBackupRestoreValidation.SafetyBackupFailed -> Unit
+                    }
+                }
+            },
+        )
+    }
+
+    exportSavedLocation?.let { location ->
+        BackupSavedDialog(location = location, onDismiss = { exportSavedLocation = null })
+    }
+
     pendingExternalPlaybackRequest?.let { request ->
         ExternalPlayerChoiceDialog(
             request = request,
@@ -1404,6 +1370,10 @@ private fun VivicastApp(
             onDismiss = { pendingSafetyFailedRestore = null },
             onContinue = { runStandardRestore(restore, continueAfterSafetyBackupFailure = true) },
         )
+    }
+
+    if (showParentalReactivationHint) {
+        ParentalReactivationHintDialog(onDismiss = { showParentalReactivationHint = false })
     }
 }
 
@@ -1443,6 +1413,37 @@ internal data class SystemTargetUnavailable(
     val title: String,
     val body: String,
 )
+
+// SAF suggested backup file name in the TiviMate-style layout: <prefix>_<yyyyMMdd>_<HHmmss>_v<version>.<ext>
+private fun timestampedBackupName(appVersion: String, prefix: String, extension: String): String {
+    val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+    val safeVersion = appVersion.trim().takeIf { it.isNotBlank() } ?: "unknown"
+    return "${prefix}_${timestamp}_v$safeVersion.$extension"
+}
+
+private const val BACKUP_DOWNLOAD_SUBDIR = "Vivicast"
+
+// Writes the backup to the public Downloads/Vivicast folder the user can browse to with a file manager
+// (TV file managers offer no write picker). Returns a human-readable location, or null on failure.
+// ponytail: API 29+ uses MediaStore (no permission); older TVs fall back to the app-specific external
+// dir — add a WRITE_EXTERNAL_STORAGE path if public Downloads on pre-Q devices ever matters.
+private fun saveBackupToDownloads(context: Context, fileName: String, bytes: ByteArray): String? =
+    runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_DOWNLOAD_SUBDIR")
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@runCatching null
+            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@runCatching null
+            "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_DOWNLOAD_SUBDIR/$fileName"
+        } else {
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Backups").apply { mkdirs() }
+            File(dir, fileName).also { it.writeBytes(bytes) }.absolutePath
+        }
+    }.getOrNull()
 
 internal fun PinSecurityState.protectionAreaForRoute(route: String): ParentalProtectionArea? =
     when (route) {

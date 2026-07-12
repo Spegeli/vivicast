@@ -278,6 +278,7 @@
     <string name="main_exit_confirmation">Press back again to exit</string>
     <string name="main_external_player_error">Progress could not be automatically determined.</string>
     <string name="main_backup_file_invalid">Backup file invalid.</string>
+    <string name="main_backup_not_restorable">Not a restorable backup. (The settings export is for support only, not for restoring.)</string>
     <string name="main_m3u_file_invalid">M3U file invalid.</string>
     <string name="main_m3u_file_too_large">M3U file is too large.</string>
     <string name="main_m3u_file_imported">M3U file imported.</string>
@@ -561,11 +562,22 @@
     <!-- Settings - Backup full -->
     <string name="settings_backup_passphrase_body">Enter backup passphrase. It is not saved and protects the included credentials.</string>
     <string name="settings_backup_passphrase_missing">Passphrase missing.</string>
-    <string name="settings_backup_full_action_export">Export</string>
-    <string name="settings_backup_full_action_import">Import</string>
+    <string name="settings_backup_full_action_export">Create backup</string>
+    <string name="settings_backup_full_action_import">Restore</string>
     <string name="settings_help_backup_last">Timestamp of the last successful export on this device.</string>
     <string name="settings_help_backup_full_export">Encrypted with backup passphrase and includes source credentials.</string>
     <string name="settings_help_backup_full_import">Restore requires the backup passphrase and replaces backup scope.</string>
+    <string name="settings_help_backup_export">Encrypted backup incl. credentials. Passphrase required.</string>
+    <string name="settings_help_backup_import">Restore requires the passphrase and replaces the entire backup scope.</string>
+    <string name="settings_backup_passphrase_label">Passphrase</string>
+    <string name="settings_backup_passphrase_confirm_label">Repeat passphrase</string>
+    <string name="settings_backup_passphrase_export_body">Set a passphrase. The backup contains your credentials, encrypted. Without this passphrase the backup is unrecoverable.</string>
+    <string name="settings_backup_passphrase_import_body">Enter the backup passphrase. Without the correct passphrase restore is not possible.</string>
+    <string name="settings_backup_passphrase_too_short">Passphrase must be at least 8 characters.</string>
+    <string name="settings_backup_passphrase_mismatch">Passphrases do not match.</string>
+    <string name="settings_support_export">Export settings</string>
+    <string name="settings_help_support_export">Readable export for support: settings without URLs or credentials. Not restorable.</string>
+    <string name="settings_support_export_value">File</string>
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d files in local media cache.</string>

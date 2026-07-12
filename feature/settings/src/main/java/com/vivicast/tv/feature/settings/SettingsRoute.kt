@@ -138,13 +138,11 @@ fun SettingsRoute(
     onChangePin: (String, String) -> String? = { _, _ -> null },
     onDisablePin: (String) -> String? = { null },
     onProtectionChanged: (ParentalProtectionArea, Boolean) -> String? = { _, _ -> null },
-    onExportStandardBackup: () -> Unit = {},
-    onImportStandardBackup: () -> Unit = {},
-    onBackupSettingsChanged: (BackupSettingsState) -> Unit = {},
-    onExportEncryptedFullBackup: (String) -> Unit = {},
-    onImportEncryptedFullBackup: (String) -> Unit = {},
+    onExportBackup: (String) -> Unit = {},
+    onImportBackup: () -> Unit = {},
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
     onExportDiagnostics: () -> Unit = {},
+    onExportSupportSettings: () -> Unit = {},
     onCopySupportInformation: () -> Unit = {},
     onRefreshEpgSource: (sourceId: String) -> Unit,
     onClearHistory: (Set<HistoryClearTarget>) -> Unit,
@@ -402,12 +400,8 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionBackup -> BackupSettingsPanel(
-                            state = backupSettingsState,
-                            onBackupSettingsChanged = onBackupSettingsChanged,
-                            onExportStandardBackup = onExportStandardBackup,
-                            onImportStandardBackup = onImportStandardBackup,
-                            onExportEncryptedFullBackup = onExportEncryptedFullBackup,
-                            onImportEncryptedFullBackup = onImportEncryptedFullBackup,
+                            onExportBackup = onExportBackup,
+                            onImportBackup = onImportBackup,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionAbout -> AboutSettingsPanel(
@@ -418,6 +412,7 @@ fun SettingsRoute(
                                 onDiagnosticsSettingsChanged(diagnostics)
                             },
                             onExportDiagnostics = onExportDiagnostics,
+                            onExportSupportSettings = onExportSupportSettings,
                             onCopySupportInformation = onCopySupportInformation,
                             firstFocusModifier = detailFirstFocusModifier,
                         )

@@ -31,7 +31,13 @@ private fun JSONObject.validateBackupForRestore(
     expectedMode: String,
     allowSecrets: Boolean,
 ): StandardBackupRestoreValidation {
-    if (optInt("schemaVersion", -1) != STANDARD_BACKUP_SCHEMA_VERSION) {
+    // Migration seam: a version at or below the current one is readable (directly, or after a future
+    // migration); a newer version is rejected. The database version in the file is only informational.
+    val schemaVersion = optInt("schemaVersion", -1)
+    if (schemaVersion < 0) {
+        return StandardBackupRestoreValidation.Invalid("Backup-Datei ungültig.")
+    }
+    if (schemaVersion > STANDARD_BACKUP_SCHEMA_VERSION) {
         return StandardBackupRestoreValidation.Invalid("Backup-Version nicht unterstützt.")
     }
     if (optString("exportMode") != expectedMode) {

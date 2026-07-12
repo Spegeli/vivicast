@@ -79,7 +79,6 @@ import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
-import com.vivicast.tv.backup.decryptFullBackupPayload
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
 import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout

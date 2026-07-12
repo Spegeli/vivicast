@@ -102,6 +102,7 @@ internal fun AboutSettingsPanel(
     diagnosticsSettingsState: DiagnosticsSettingsState,
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
     onExportDiagnostics: () -> Unit,
+    onExportSupportSettings: () -> Unit = {},
     onCopySupportInformation: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
@@ -189,6 +190,15 @@ internal fun AboutSettingsPanel(
                 value = stringResource(R.string.common_export),
                 modifier = Modifier,
                 onClick = onExportDiagnostics,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_support_export),
+                help = stringResource(R.string.settings_help_support_export),
+                value = stringResource(R.string.settings_support_export_value),
+                modifier = Modifier,
+                onClick = onExportSupportSettings,
             )
         }
         item {

@@ -395,8 +395,8 @@ class AppContainer(
             if (!directory.exists() && !directory.mkdirs()) {
                 false
             } else {
-                val file = File(directory, "standard-${System.currentTimeMillis()}.json")
-                file.writeText(standardBackupExporter.exportJson(indentSpaces = 0), Charsets.UTF_8)
+                val file = File(directory, "snapshot-${System.currentTimeMillis()}.json")
+                file.writeText(standardBackupExporter.exportInternalSnapshotJson(indentSpaces = 0), Charsets.UTF_8)
                 true
             }
         }.getOrDefault(false)

@@ -173,7 +173,7 @@ class StandardBackupTest {
                 pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
                 clock = { 123L },
             )
-            val payload = exporter.buildFullBackupPayloadJson(indentSpaces = 0)
+            val payload = exporter.buildBackupPayloadJson(indentSpaces = 0)
             val json = JSONObject(payload)
             val providerSource = json.getJSONArray("providers").getJSONObject(0).getJSONObject("source")
 
@@ -191,13 +191,11 @@ class StandardBackupTest {
             assertFalse(payload.contains("1234"))
             assertFalse(json.getJSONObject("security").has("pin"))
 
-            val encrypted = exporter.exportEncryptedFullJson(
-                passphrase = "full-passphrase".toCharArray(),
-                appVersion = "0.1-test",
-            )
-            assertFalse(encrypted.contains("fixture-password"))
+            val encrypted = exporter.exportBackup(passphrase = "full-passphrase".toCharArray())
+            assertTrue(isEncryptedBackupContainer(encrypted))
+            assertFalse(String(encrypted, Charsets.ISO_8859_1).contains("fixture-password"))
             assertTrue(
-                decryptFullBackupPayload(encrypted, "full-passphrase".toCharArray())
+                decryptBackupPayload(encrypted, "full-passphrase".toCharArray())
                     ?.contains("fixture-password") == true,
             )
         } finally {
@@ -221,7 +219,7 @@ class StandardBackupTest {
                 secureValueStore = secureStore,
                 pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
                 clock = { 123L },
-            ).exportJson(indentSpaces = 0)
+            ).exportInternalSnapshotJson(indentSpaces = 0)
 
             val result = validateStandardBackupForRestore(json)
 
@@ -465,10 +463,7 @@ class StandardBackupTest {
                 secureValueStore = sourceSecureStore,
                 pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
                 clock = { 123L },
-            ).exportEncryptedFullJson(
-                passphrase = "correct-passphrase".toCharArray(),
-                appVersion = "0.1-test",
-            )
+            ).exportBackup(passphrase = "correct-passphrase".toCharArray())
 
             targetDatabase.providerDao().upsertProvider(
                 providerEntity().copy(id = "old-provider", stableKey = "old-stable", sourceConfigKey = "old-key"),
@@ -487,12 +482,12 @@ class StandardBackupTest {
                 },
             )
 
-            assertTrue(restorer.restoreEncryptedFull(encrypted, "wrong-passphrase".toCharArray()) is StandardBackupRestoreValidation.Invalid)
+            assertTrue(restorer.restoreBackup(encrypted, "wrong-passphrase".toCharArray()) is StandardBackupRestoreValidation.Invalid)
             assertEquals(0, safetyBackupAttempts)
             assertEquals("old-stable", targetDatabase.providerDao().getProviders().single().stableKey)
             assertEquals("https://old.example.org/list.m3u", targetSecureStore.read(SecureKey("old-key:m3u_url")))
 
-            assertTrue(restorer.restoreEncryptedFull(encrypted, "correct-passphrase".toCharArray()) is StandardBackupRestoreValidation.Valid)
+            assertTrue(restorer.restoreBackup(encrypted, "correct-passphrase".toCharArray()) is StandardBackupRestoreValidation.Valid)
             assertEquals(1, safetyBackupAttempts)
             val restoredProvider = targetDatabase.providerDao().getProviders().single()
             assertEquals("xtream-stable", restoredProvider.stableKey)
@@ -581,31 +576,24 @@ class StandardBackupTest {
     @Test
     fun encryptedFullBackupRoundTripsPayloadAndRejectsWrongPassphrase() {
         val payload = """{"secret":"xtream-secret-token","pin":"must-not-be-restored"}"""
-        val encrypted = encryptFullBackupPayload(
+        val encrypted = encryptBackupPayload(
             payloadJson = payload,
             passphrase = "correct horse".toCharArray(),
-            exportedAtMillis = 123L,
-            appVersion = "0.1-test",
-            packageName = "com.vivicast.tv",
-            databaseVersion = 7,
-            dataSections = listOf("providers", "secureValues"),
             iterations = 1_000,
         )
-        val container = JSONObject(encrypted)
 
-        assertEquals("ENCRYPTED_FULL", container.getString("exportMode"))
-        assertEquals("0.1-test", container.getString("appVersion"))
-        assertEquals("com.vivicast.tv", container.getString("packageName"))
-        assertEquals(7, container.getInt("databaseVersion"))
-        assertEquals("providers", container.getJSONArray("dataSections").getString(0))
-        assertEquals("secureValues", container.getJSONArray("dataSections").getString(1))
-        assertEquals("PBKDF2WithHmacSHA256", container.getJSONObject("kdf").getString("algorithm"))
-        assertEquals("AES-GCM", container.getJSONObject("cipher").getString("algorithm"))
-        assertFalse(encrypted.contains("xtream-secret-token"))
-        assertFalse(encrypted.contains("must-not-be-restored"))
+        // Whole file is an opaque binary container: recognisable by magic, no plaintext payload.
+        assertTrue(isEncryptedBackupContainer(encrypted))
+        val asText = String(encrypted, Charsets.ISO_8859_1)
+        assertFalse(asText.contains("xtream-secret-token"))
+        assertFalse(asText.contains("must-not-be-restored"))
+        assertFalse(asText.contains("secret"))
 
-        assertEquals(payload, decryptFullBackupPayload(encrypted, "correct horse".toCharArray()))
-        assertNull(decryptFullBackupPayload(encrypted, "wrong horse".toCharArray()))
+        assertEquals(payload, decryptBackupPayload(encrypted, "correct horse".toCharArray()))
+        assertNull(decryptBackupPayload(encrypted, "wrong horse".toCharArray()))
+        // A truncated / non-container blob is rejected.
+        assertFalse(isEncryptedBackupContainer(byteArrayOf(1, 2, 3)))
+        assertNull(decryptBackupPayload(byteArrayOf(1, 2, 3), "correct horse".toCharArray()))
     }
 }
 

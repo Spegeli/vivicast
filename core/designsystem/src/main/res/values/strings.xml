@@ -278,6 +278,7 @@
     <string name="main_exit_confirmation">Zum Beenden erneut zurück</string>
     <string name="main_external_player_error">Fortschritt konnte nicht automatisch ermittelt werden.</string>
     <string name="main_backup_file_invalid">Backup-Datei ungültig.</string>
+    <string name="main_backup_not_restorable">Kein wiederherstellbares Backup. (Der Einstellungs-Export ist nur für Support, nicht zum Wiederherstellen.)</string>
     <string name="main_m3u_file_invalid">M3U-Datei ungültig.</string>
     <string name="main_m3u_file_too_large">M3U-Datei ist zu groß.</string>
     <string name="main_m3u_file_imported">M3U-Datei übernommen.</string>
@@ -562,11 +563,22 @@
     <!-- Settings - Backup full -->
     <string name="settings_backup_passphrase_body">Backup-Passphrase eingeben. Sie wird nicht gespeichert und schützt enthaltene Zugangsdaten.</string>
     <string name="settings_backup_passphrase_missing">Passphrase fehlt.</string>
-    <string name="settings_backup_full_action_export">Exportieren</string>
-    <string name="settings_backup_full_action_import">Importieren</string>
+    <string name="settings_backup_full_action_export">Backup erstellen</string>
+    <string name="settings_backup_full_action_import">Wiederherstellen</string>
     <string name="settings_help_backup_last">Zeitpunkt des letzten erfolgreichen Exports auf diesem Gerät.</string>
     <string name="settings_help_backup_full_export">Verschlüsselt mit Backup-Passphrase und enthält Quellen-Zugangsdaten.</string>
     <string name="settings_help_backup_full_import">Restore erfordert die Backup-Passphrase und ersetzt den Backup-Umfang.</string>
+    <string name="settings_help_backup_export">Verschlüsseltes Backup inkl. Zugangsdaten. Passphrase erforderlich.</string>
+    <string name="settings_help_backup_import">Restore erfordert die Passphrase und ersetzt den gesamten Backup-Umfang.</string>
+    <string name="settings_backup_passphrase_label">Passphrase</string>
+    <string name="settings_backup_passphrase_confirm_label">Passphrase wiederholen</string>
+    <string name="settings_backup_passphrase_export_body">Passphrase setzen. Das Backup enthält deine Zugangsdaten verschlüsselt. Ohne diese Passphrase ist das Backup unwiederbringlich.</string>
+    <string name="settings_backup_passphrase_import_body">Passphrase des Backups eingeben. Ohne die richtige Passphrase ist keine Wiederherstellung möglich.</string>
+    <string name="settings_backup_passphrase_too_short">Passphrase muss mindestens 8 Zeichen haben.</string>
+    <string name="settings_backup_passphrase_mismatch">Passphrasen stimmen nicht überein.</string>
+    <string name="settings_support_export">Einstellungen exportieren</string>
+    <string name="settings_help_support_export">Lesbarer Export für Support: Einstellungen ohne URLs und Zugangsdaten. Nicht wiederherstellbar.</string>
+    <string name="settings_support_export_value">Datei</string>
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d Dateien im lokalen Mediencache.</string>

@@ -1,7 +1,6 @@
 package com.vivicast.tv.backup
 
 import com.vivicast.tv.core.database.VivicastDatabase
-import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
@@ -64,30 +63,32 @@ class StandardBackupExporter(
         )
     }
 
-    suspend fun exportJson(indentSpaces: Int = 2): String =
+    /** Internal, best-effort snapshot of the current state (sanitized, no secrets) for the pre-restore safety backup. */
+    suspend fun exportInternalSnapshotJson(indentSpaces: Int = 2): String =
         buildDocument().toJsonString(indentSpaces)
 
-    suspend fun buildFullBackupPayloadJson(indentSpaces: Int = 2): String =
-        buildFullBackupPayloadJsonObject(exportedAtMillis = clock()).toString(indentSpaces)
-
-    suspend fun exportEncryptedFullJson(
-        passphrase: CharArray,
-        appVersion: String,
-        packageName: String = "com.vivicast.tv",
-    ): String {
-        val exportedAtMillis = clock()
-        return encryptFullBackupPayload(
-            payloadJson = buildFullBackupPayloadJsonObject(exportedAtMillis).toString(0),
-            passphrase = passphrase,
-            exportedAtMillis = exportedAtMillis,
-            appVersion = appVersion,
-            packageName = packageName,
-            databaseVersion = VIVICAST_DATABASE_VERSION,
-            dataSections = FULL_BACKUP_DATA_SECTIONS,
+    /** Support/settings export: readable JSON with settings + non-secret metadata, but no source URLs and
+     *  no secrets. Not a restorable backup — for sending to support. */
+    suspend fun exportSupportSettingsJson(indentSpaces: Int = 2): String {
+        val document = buildDocument()
+        val secretFree = document.copy(
+            providers = document.providers.map { it.copy(source = null) },
+            epgSources = document.epgSources.map { it.copy(url = null) },
         )
+        return secretFree.toJsonString(indentSpaces)
     }
 
-    private suspend fun buildFullBackupPayloadJsonObject(exportedAtMillis: Long): JSONObject {
+    suspend fun buildBackupPayloadJson(indentSpaces: Int = 2): String =
+        buildBackupPayloadJsonObject(exportedAtMillis = clock()).toString(indentSpaces)
+
+    /** Returns the whole encrypted .vcbak as opaque bytes (binary container, see [encryptBackupPayload]). */
+    suspend fun exportBackup(passphrase: CharArray): ByteArray =
+        encryptBackupPayload(
+            payloadJson = buildBackupPayloadJsonObject(clock()).toString(0),
+            passphrase = passphrase,
+        )
+
+    private suspend fun buildBackupPayloadJsonObject(exportedAtMillis: Long): JSONObject {
         val providers = database.providerDao().getProviders()
         val epgSources = database.epgDao().getEpgSources()
         val providersByStableKey = providers.associateBy { it.stableKey }
@@ -120,6 +121,8 @@ class StandardBackupExporter(
             refreshIntervalHours = refreshIntervalHours,
             logoPriority = logoPriority,
             xtreamOutputFormat = xtreamOutputFormat,
+            userAgent = userAgent,
+            refreshOnAppStartEnabled = refreshOnAppStartEnabled,
             source = when (type) {
                 PROVIDER_TYPE_M3U -> secureValueStore.read(SecureKey("$sourceConfigKey:$FIELD_M3U_URL"))
                     ?.let(::standardBackupM3uUrlOrNull)
@@ -247,16 +250,6 @@ private fun ChannelHistoryEntity.toBackupChannelHistory(
 }
 
 private val BACKUP_CATEGORY_TYPES = listOf("LIVE", "MOVIE", "SERIES")
-private val FULL_BACKUP_DATA_SECTIONS = listOf(
-    "preferences",
-    "providers",
-    "providerSources",
-    "epgSources",
-    "favorites",
-    "playbackProgress",
-    "channelHistory",
-    "searchHistory",
-)
 private const val PROVIDER_TYPE_M3U = "M3U"
 private const val PROVIDER_TYPE_XTREAM = "XTREAM"
 private const val FIELD_M3U_URL = "m3u_url"

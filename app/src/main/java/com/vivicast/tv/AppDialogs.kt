@@ -83,7 +83,6 @@ import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
-import com.vivicast.tv.backup.decryptFullBackupPayload
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
 import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
@@ -202,7 +201,8 @@ internal fun SystemTargetUnavailableDialog(
 }
 
 // Auf Android TV löst ACTION_OPEN_DOCUMENT nur auf den Framework-Stub auf (keine echte
-// Dateiauswahl). Echter Picker = mindestens ein nicht-Stub-Handler.
+// Dateiauswahl). Echter Picker = mindestens ein nicht-Stub-Handler. Nur der Import nutzt einen
+// Datei-Picker; der Export schreibt ohne Picker in einen festen Ordner.
 internal fun hasRealDocumentPicker(pm: PackageManager): Boolean {
     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
         .addCategory(Intent.CATEGORY_OPENABLE)
@@ -259,6 +259,53 @@ internal fun FileManagerMissingDialog(
             )
             ActionPill(stringResource(R.string.common_cancel), onClick = onDismiss)
         }
+    }
+}
+
+// Import passphrase prompt shown AFTER the file was picked and validated as an encrypted container,
+// so the user picks the file first (like the M3U import) and only then supplies the passphrase.
+@Composable
+internal fun BackupImportPassphraseDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val strBody = stringResource(R.string.settings_backup_passphrase_import_body)
+    val strMissing = stringResource(R.string.settings_backup_passphrase_missing)
+    val fieldFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = fieldFocus,
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.settings_backup_import),
+            body = error ?: strBody,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastTextField(
+            value = passphrase,
+            onValueChange = {
+                passphrase = it
+                error = null
+            },
+            label = null,
+            secret = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            focusRequester = fieldFocus,
+            isError = error != null,
+            maxLength = 100,
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.settings_backup_full_action_import),
+            onPrimary = {
+                val value = passphrase.trim()
+                if (value.isBlank()) error = strMissing else onSubmit(value)
+            },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onDismiss,
+        )
     }
 }
 
@@ -320,6 +367,53 @@ internal fun StandardRestoreConfirmDialog(
             secondaryLabel = "Abbrechen",
             onSecondary = onDismiss,
             secondaryFocusRequester = cancelFocus,
+        )
+    }
+}
+
+@Composable
+internal fun ParentalReactivationHintDialog(onDismiss: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = focus,
+    ) {
+        InfoPanel(
+            title = "Kindersicherung deaktiviert",
+            body = "Die Kindersicherung war vor dem Backup aktiv und wurde nach dem Restore deaktiviert. " +
+                "Du kannst sie in Einstellungen > Kindersicherung neu einrichten.",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ActionPill(
+            label = "Verstanden",
+            modifier = Modifier.focusRequester(focus),
+            onClick = onDismiss,
+        )
+    }
+}
+
+@Composable
+internal fun BackupSavedDialog(
+    location: String,
+    onDismiss: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = focus,
+    ) {
+        InfoPanel(
+            title = "Backup gespeichert",
+            body = "Gespeichert unter:\n$location\n\n" +
+                "Mit einem Dateimanager dorthin navigieren, um die Datei zu sichern (z. B. auf USB).",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ActionPill(
+            label = "Verstanden",
+            modifier = Modifier.focusRequester(focus),
+            onClick = onDismiss,
         )
     }
 }

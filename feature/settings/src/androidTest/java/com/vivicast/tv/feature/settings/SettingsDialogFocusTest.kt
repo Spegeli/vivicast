@@ -159,37 +159,17 @@ class SettingsDialogFocusTest {
 
         compose.setContent {
             BackupSettingsPanel(
-                onExportEncryptedFullBackup = { submitted = it },
+                onExportBackup = { submitted = it },
             )
         }
 
-        compose.onNodeWithText("Vollbackup exportieren").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithText("Backup exportieren").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(fullBackupPassphraseDialogTag()).assertIsDisplayed()
         compose.onNodeWithTag(fullBackupPassphraseFieldTag()).performTextInput("secret-pass")
+        compose.onNodeWithTag(fullBackupPassphraseConfirmFieldTag()).performTextInput("secret-pass")
         compose.onNodeWithTag(fullBackupPassphraseConfirmTag()).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.waitUntil(timeoutMillis = 5_000) { submitted == "secret-pass" }
-    }
-
-    @Test
-    fun backupPanelShowsTargetAndLastBackupMetadata() {
-        var submitted: BackupSettingsState? = null
-
-        compose.setContent {
-            BackupSettingsPanel(
-                state = BackupSettingsState(),
-                onBackupSettingsChanged = { submitted = it },
-            )
-        }
-
-        compose.onNodeWithText("Backup-Ziel").assertIsDisplayed()
-        compose.onNodeWithText("Lokaler Speicher").assertIsDisplayed()
-        compose.onNodeWithText("Letzte Sicherung").assertIsDisplayed()
-        compose.onNodeWithText("Nie").assertIsDisplayed()
-
-        compose.onNodeWithText("Backup-Ziel").performSemanticsAction(SemanticsActions.OnClick)
-
-        compose.waitUntil(timeoutMillis = 5_000) { submitted?.target == BackupTargetMode.Smb }
     }
 }
 
