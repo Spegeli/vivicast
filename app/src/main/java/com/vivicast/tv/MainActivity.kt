@@ -1217,9 +1217,9 @@ private fun VivicastApp(
                     // success, so the interval clock restarts and the loop won't immediately re-refresh.
                     appContainer.refreshWorkScheduler.enqueueEpgRefresh(sourceId)
                 },
-                onClearHistory = { target ->
+                onClearHistory = { targets ->
                     scope.launch {
-                        appContainer.clearHistory(target)
+                        targets.forEach { appContainer.clearHistory(it) }
                     }
                 },
             )

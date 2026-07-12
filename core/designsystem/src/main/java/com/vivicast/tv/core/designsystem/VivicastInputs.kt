@@ -401,6 +401,50 @@ fun VivicastSettingsRow(
     }
 }
 
+/**
+ * Multi-select checkbox visual (rounded box + checkmark). Pure visual, like [VivicastToggle]: put it
+ * inside a focusable row (e.g. [VivicastFocusSurface]) that flips the [checked] state on click.
+ */
+@Composable
+fun VivicastCheckbox(checked: Boolean, enabled: Boolean = true, modifier: Modifier = Modifier) {
+    val boxColor = when {
+        !enabled -> VivicastColors.SurfaceHigh
+        checked -> VivicastColors.Accent
+        else -> VivicastColors.Surface
+    }
+    val borderColor = if (checked && enabled) VivicastColors.Accent else Color(0x66344A62)
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(boxColor)
+            .border(width = VivicastBorders.Hairline, color = borderColor, shape = RoundedCornerShape(6.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Canvas(modifier = Modifier.size(14.dp)) {
+                val w = size.width
+                val h = size.height
+                val stroke = 2.dp.toPx()
+                drawLine(
+                    color = Color.White,
+                    start = Offset(w * 0.12f, h * 0.55f),
+                    end = Offset(w * 0.42f, h * 0.82f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = Color.White,
+                    start = Offset(w * 0.42f, h * 0.82f),
+                    end = Offset(w * 0.88f, h * 0.20f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun VivicastToggle(isOn: Boolean, enabled: Boolean = true, modifier: Modifier = Modifier) {
     val trackColor = when {

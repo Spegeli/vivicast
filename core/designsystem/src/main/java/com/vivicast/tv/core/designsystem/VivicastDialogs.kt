@@ -91,6 +91,7 @@ fun VivicastDialogActions(
     secondaryLabel: String,
     onSecondary: () -> Unit,
     modifier: Modifier = Modifier,
+    primaryEnabled: Boolean = true,
     tertiaryLabel: String? = null,
     onTertiary: () -> Unit = {},
     primaryTestTag: String? = null,
@@ -116,6 +117,7 @@ fun VivicastDialogActions(
         }
         ActionPill(
             label = primaryLabel,
+            enabled = primaryEnabled,
             modifier = Modifier
                 .then(if (primaryFocusRequester != null) Modifier.focusRequester(primaryFocusRequester) else Modifier)
                 .then(if (primaryTestTag != null) Modifier.testTag(primaryTestTag) else Modifier),

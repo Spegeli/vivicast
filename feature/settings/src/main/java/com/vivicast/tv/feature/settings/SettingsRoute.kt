@@ -147,7 +147,7 @@ fun SettingsRoute(
     onExportDiagnostics: () -> Unit = {},
     onCopySupportInformation: () -> Unit = {},
     onRefreshEpgSource: (sourceId: String) -> Unit,
-    onClearHistory: (HistoryClearTarget) -> Unit,
+    onClearHistory: (Set<HistoryClearTarget>) -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore, epgSourceRepository, providerRepository),

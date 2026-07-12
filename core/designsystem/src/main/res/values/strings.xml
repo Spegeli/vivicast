@@ -577,7 +577,13 @@
     <string name="settings_maintenance_confirm_badge">Bestätigung</string>
 
     <string name="settings_cache_clear_row_help">Entfernt lokal gespeicherte Medienbilder. Providerdaten bleiben erhalten.</string>
-    <string name="settings_history_clear_row_help">Löscht Live-TV-Verlauf, Filme, Serien und Suchverlauf.</string>
+    <string name="settings_history_clear_row_help">Wählt aus, welche Verläufe gelöscht werden.</string>
+    <string name="settings_history_clear_value">Auswählen</string>
+    <string name="maintenance_history_dialog_body">Wähle aus, welche Verläufe gelöscht werden sollen. Providerdaten und Favoriten bleiben erhalten.</string>
+    <string name="maintenance_history_category_live_tv">Live-TV</string>
+    <string name="maintenance_history_category_movies">Filme</string>
+    <string name="maintenance_history_category_series">Serien</string>
+    <string name="maintenance_history_category_search">Suche</string>
 
     <string name="maintenance_cache_clear_title">Cache leeren</string>
     <string name="maintenance_cache_clear_row_help">Entfernt lokal gespeicherte Medienbilder.</string>

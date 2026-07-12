@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
+import com.vivicast.tv.core.designsystem.VivicastCheckbox
+import com.vivicast.tv.core.designsystem.VivicastFocusSurface
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
@@ -100,15 +102,28 @@ import java.util.Date
 internal fun MaintenanceSettingsPanel(
     cacheSettingsState: CacheSettingsState,
     onClearCache: () -> Unit,
-    onClearHistory: (HistoryClearTarget) -> Unit,
+    onClearHistory: (Set<HistoryClearTarget>) -> Unit,
     onReloadCacheStats: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
     var message by remember { mutableStateOf<String?>(null) }
-    var pendingAction by remember { mutableStateOf<MaintenanceAction?>(null) }
+    var showCacheDialog by remember { mutableStateOf(false) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    // Move focus back onto the "Verlauf löschen" row after the history popup closes (cancel or delete),
+    // matching the return-focus pattern used elsewhere (e.g. ProviderSettingsPanel).
+    var restoreHistoryFocus by remember { mutableStateOf(false) }
+    val historyRowFocus = remember { FocusRequester() }
     val strCacheRefreshed = stringResource(R.string.settings_cache_refreshed)
     val strCacheCleared = stringResource(R.string.settings_cache_cleared)
     val strHistoryCleared = stringResource(R.string.settings_history_cleared)
+
+    LaunchedEffect(restoreHistoryFocus) {
+        if (restoreHistoryFocus) {
+            awaitFrame()
+            runCatching { historyRowFocus.requestFocus() }
+            restoreHistoryFocus = false
+        }
+    }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
 
@@ -130,9 +145,7 @@ internal fun MaintenanceSettingsPanel(
                 title = stringResource(R.string.settings_cache_clear),
                 help = stringResource(R.string.settings_cache_clear_row_help),
                 value = stringResource(R.string.settings_cache_clear_value),
-                onClick = {
-                    pendingAction = MaintenanceAction.ClearCache
-                },
+                onClick = { showCacheDialog = true },
             )
         }
 
@@ -140,21 +153,9 @@ internal fun MaintenanceSettingsPanel(
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_history_clear),
                 help = stringResource(R.string.settings_history_clear_row_help),
-                value = stringResource(R.string.settings_history_clear_all_value),
-                onClick = {
-                    pendingAction = MaintenanceAction.ClearAllHistory
-                },
-            )
-        }
-
-        items(MaintenanceAction.SelectiveHistoryActions) { action ->
-            VivicastSettingsRow(
-                title = stringResource(action.rowTitleRes),
-                help = stringResource(action.rowHelpRes),
-                value = stringResource(R.string.common_delete),
-                onClick = {
-                    pendingAction = action
-                },
+                value = stringResource(R.string.settings_history_clear_value),
+                modifier = Modifier.focusRequester(historyRowFocus),
+                onClick = { showHistoryDialog = true },
             )
         }
 
@@ -169,21 +170,29 @@ internal fun MaintenanceSettingsPanel(
         }
     }
 
-    pendingAction?.let { action ->
-        MaintenanceConfirmDialog(
-            action = action,
-            onCancel = { pendingAction = null },
+    if (showCacheDialog) {
+        CacheClearConfirmDialog(
+            onCancel = { showCacheDialog = false },
             onConfirm = {
-                pendingAction = null
-                when (action) {
-                    MaintenanceAction.ClearCache -> {
-                        onClearCache()
-                        message = strCacheCleared
-                    }
-                    else -> {
-                        onClearHistory(requireNotNull(action.historyTarget))
-                        message = strHistoryCleared
-                    }
+                showCacheDialog = false
+                onClearCache()
+                message = strCacheCleared
+            },
+        )
+    }
+
+    if (showHistoryDialog) {
+        HistoryClearDialog(
+            onCancel = {
+                showHistoryDialog = false
+                restoreHistoryFocus = true
+            },
+            onConfirm = { selection ->
+                showHistoryDialog = false
+                restoreHistoryFocus = true
+                if (selection.isNotEmpty()) {
+                    onClearHistory(selection)
+                    message = strHistoryCleared
                 }
             },
         )
@@ -191,8 +200,7 @@ internal fun MaintenanceSettingsPanel(
 }
 
 @Composable
-private fun MaintenanceConfirmDialog(
-    action: MaintenanceAction,
+private fun CacheClearConfirmDialog(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -201,16 +209,16 @@ private fun MaintenanceConfirmDialog(
         onDismiss = onCancel,
         width = VivicastDialogWidth.Standard,
         initialFocus = cancelFocus,
-        modifier = Modifier.testTag(action.dialogTag),
+        modifier = Modifier.testTag("settings-clear-cache-dialog"),
     ) {
         InfoPanel(
-            title = stringResource(action.confirmTitleRes),
-            body = stringResource(action.bodyRes),
+            title = stringResource(R.string.maintenance_cache_clear_confirm),
+            body = stringResource(R.string.maintenance_cache_clear_body),
             badge = stringResource(R.string.settings_maintenance_confirm_badge),
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastDialogActions(
-            primaryLabel = stringResource(action.confirmLabelRes),
+            primaryLabel = stringResource(R.string.maintenance_cache_clear_label),
             onPrimary = onConfirm,
             secondaryLabel = stringResource(R.string.common_cancel),
             onSecondary = onCancel,
@@ -219,76 +227,74 @@ private fun MaintenanceConfirmDialog(
     }
 }
 
-private enum class MaintenanceAction(
-    @get:StringRes val rowTitleRes: Int,
-    @get:StringRes val rowHelpRes: Int,
-    @get:StringRes val confirmTitleRes: Int,
-    @get:StringRes val bodyRes: Int,
-    @get:StringRes val confirmLabelRes: Int,
-    val dialogTag: String,
-    val historyTarget: HistoryClearTarget? = null,
-) {
-    ClearCache(
-        rowTitleRes = R.string.maintenance_cache_clear_title,
-        rowHelpRes = R.string.maintenance_cache_clear_row_help,
-        confirmTitleRes = R.string.maintenance_cache_clear_confirm,
-        bodyRes = R.string.maintenance_cache_clear_body,
-        confirmLabelRes = R.string.maintenance_cache_clear_label,
-        dialogTag = "settings-clear-cache-dialog",
-    ),
-    ClearLiveTvHistory(
-        rowTitleRes = R.string.maintenance_live_tv_title,
-        rowHelpRes = R.string.maintenance_live_tv_row_help,
-        confirmTitleRes = R.string.maintenance_live_tv_confirm,
-        bodyRes = R.string.maintenance_live_tv_body,
-        confirmLabelRes = R.string.common_delete,
-        dialogTag = "settings-clear-live-tv-history-dialog",
-        historyTarget = HistoryClearTarget.LiveTv,
-    ),
-    ClearMovieHistory(
-        rowTitleRes = R.string.maintenance_movie_title,
-        rowHelpRes = R.string.maintenance_movie_row_help,
-        confirmTitleRes = R.string.maintenance_movie_confirm,
-        bodyRes = R.string.maintenance_movie_body,
-        confirmLabelRes = R.string.common_delete,
-        dialogTag = "settings-clear-movie-history-dialog",
-        historyTarget = HistoryClearTarget.Movies,
-    ),
-    ClearSeriesHistory(
-        rowTitleRes = R.string.maintenance_series_title,
-        rowHelpRes = R.string.maintenance_series_row_help,
-        confirmTitleRes = R.string.maintenance_series_confirm,
-        bodyRes = R.string.maintenance_series_body,
-        confirmLabelRes = R.string.common_delete,
-        dialogTag = "settings-clear-series-history-dialog",
-        historyTarget = HistoryClearTarget.Series,
-    ),
-    ClearSearchHistory(
-        rowTitleRes = R.string.maintenance_search_title,
-        rowHelpRes = R.string.maintenance_search_row_help,
-        confirmTitleRes = R.string.maintenance_search_confirm,
-        bodyRes = R.string.maintenance_search_body,
-        confirmLabelRes = R.string.common_delete,
-        dialogTag = "settings-clear-search-history-dialog",
-        historyTarget = HistoryClearTarget.Search,
-    ),
-    ClearAllHistory(
-        rowTitleRes = R.string.maintenance_all_title,
-        rowHelpRes = R.string.maintenance_all_row_help,
-        confirmTitleRes = R.string.maintenance_all_confirm,
-        bodyRes = R.string.maintenance_all_body,
-        confirmLabelRes = R.string.maintenance_all_label,
-        dialogTag = "settings-clear-history-dialog",
-        historyTarget = HistoryClearTarget.All,
-    );
+// The four selectable history categories, in display order. Live-TV first = initial popup focus.
+private val HistoryCategories: List<Pair<HistoryClearTarget, Int>> = listOf(
+    HistoryClearTarget.LiveTv to R.string.maintenance_history_category_live_tv,
+    HistoryClearTarget.Movies to R.string.maintenance_history_category_movies,
+    HistoryClearTarget.Series to R.string.maintenance_history_category_series,
+    HistoryClearTarget.Search to R.string.maintenance_history_category_search,
+)
 
-    companion object {
-        val SelectiveHistoryActions = listOf(
-            ClearLiveTvHistory,
-            ClearMovieHistory,
-            ClearSeriesHistory,
-            ClearSearchHistory,
+@Composable
+private fun HistoryClearDialog(
+    onCancel: () -> Unit,
+    onConfirm: (Set<HistoryClearTarget>) -> Unit,
+) {
+    var selected by remember { mutableStateOf(emptySet<HistoryClearTarget>()) }
+    val firstFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        title = stringResource(R.string.settings_history_clear),
+        initialFocus = firstFocus,
+        modifier = Modifier.testTag("settings-clear-history-dialog"),
+    ) {
+        BodyText(stringResource(R.string.maintenance_history_dialog_body))
+        HistoryCategories.forEachIndexed { index, (target, labelRes) ->
+            HistoryCategoryRow(
+                label = stringResource(labelRes),
+                checked = target in selected,
+                onToggle = {
+                    selected = if (target in selected) selected - target else selected + target
+                },
+                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+            )
+        }
+        VivicastDialogActions(
+            primaryLabel = stringResource(R.string.common_delete),
+            onPrimary = { onConfirm(selected) },
+            primaryEnabled = selected.isNotEmpty(),
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
         )
+    }
+}
+
+@Composable
+private fun HistoryCategoryRow(
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    VivicastFocusSurface(
+        onClick = onToggle,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(VivicastCardSizes.CompactSettingsRowHeight),
+        contentPadding = 0.dp,
+        focusScale = 1.0f,
+    ) { _ ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = VivicastSpacing.Space3),
+        ) {
+            VivicastCheckbox(checked = checked)
+            Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
+            BodyText(label, maxLines = 1)
+        }
     }
 }
 
