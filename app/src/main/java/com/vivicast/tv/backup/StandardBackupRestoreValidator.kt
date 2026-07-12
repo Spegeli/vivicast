@@ -15,7 +15,6 @@ data class StandardBackupRestorePreview(
 
 sealed interface StandardBackupRestoreValidation {
     data class Valid(val preview: StandardBackupRestorePreview) : StandardBackupRestoreValidation
-    data class SafetyBackupFailed(val preview: StandardBackupRestorePreview) : StandardBackupRestoreValidation
     data class Invalid(val message: String) : StandardBackupRestoreValidation
 }
 

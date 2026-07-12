@@ -21,7 +21,6 @@ import com.vivicast.tv.core.datastore.TransparencyLevel
 internal fun DiagnosticsPreferences.toSettingsDiagnosticsState(): DiagnosticsSettingsState =
     DiagnosticsSettingsState(
         diagnosticsLoggingEnabled = diagnosticsLoggingEnabled,
-        retentionDays = retentionDays.coerceIn(1, 7),
     )
 
 internal fun LanguagePreference.toSettingsLanguage(): SettingsLanguage =

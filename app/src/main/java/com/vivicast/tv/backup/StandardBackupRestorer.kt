@@ -26,44 +26,31 @@ class StandardBackupRestorer(
     private val secureValueStore: SecureValueStore,
     private val pinSecurityStateStore: PinSecurityStateStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
-    private val createInternalSafetyBackup: suspend () -> Boolean = { true },
 ) {
-    suspend fun restore(
-        jsonText: String,
-        continueAfterSafetyBackupFailure: Boolean = false,
-    ): StandardBackupRestoreValidation {
+    suspend fun restore(jsonText: String): StandardBackupRestoreValidation {
         val validation = validateStandardBackupForRestore(jsonText)
-        return restoreValidated(jsonText, validation, continueAfterSafetyBackupFailure)
+        return restoreValidated(jsonText, validation)
     }
 
     suspend fun restoreBackup(
         container: ByteArray,
         passphrase: CharArray,
-        continueAfterSafetyBackupFailure: Boolean = false,
     ): StandardBackupRestoreValidation {
         val payload = decryptBackupPayload(container, passphrase)
             ?: return StandardBackupRestoreValidation.Invalid("Passphrase falsch oder Backup beschaedigt.")
-        return restoreFullPayload(payload, continueAfterSafetyBackupFailure)
+        return restoreFullPayload(payload)
     }
 
-    suspend fun restoreFullPayload(
-        jsonText: String,
-        continueAfterSafetyBackupFailure: Boolean = false,
-    ): StandardBackupRestoreValidation {
+    suspend fun restoreFullPayload(jsonText: String): StandardBackupRestoreValidation {
         val validation = validateFullBackupPayloadForRestore(jsonText)
-        return restoreValidated(jsonText, validation, continueAfterSafetyBackupFailure)
+        return restoreValidated(jsonText, validation)
     }
 
     private suspend fun restoreValidated(
         jsonText: String,
         validation: StandardBackupRestoreValidation,
-        continueAfterSafetyBackupFailure: Boolean,
     ): StandardBackupRestoreValidation {
         if (validation !is StandardBackupRestoreValidation.Valid) return validation
-        val safetyBackupSucceeded = runCatching { createInternalSafetyBackup() }.getOrDefault(false)
-        if (!safetyBackupSucceeded && !continueAfterSafetyBackupFailure) {
-            return StandardBackupRestoreValidation.SafetyBackupFailed(validation.preview)
-        }
 
         val json = JSONObject(jsonText)
         val providers = json.optJSONArray("providers") ?: JSONArray()
@@ -123,6 +110,19 @@ class StandardBackupRestorer(
         deleteOldSecrets(oldProviders, oldEpgSources)
         writeRestoredSecrets(providers, epgSources)
         pinSecurityStateStore.clear()
+        // Re-apply the backed-up app settings (audit #3): general/appearance/playback/history/epg/backup
+        // + expanded Live-TV groups. selectedProviderId + parental control stay reset below — providers
+        // are re-selected and the PIN is re-armed by the user (reactivation hint), whatever the backup held.
+        json.optJSONObject("preferences")?.let { prefs ->
+            val restored = userPreferencesFromStandardBackupJson(prefs)
+            userPreferencesStore.updateGeneral(restored.general)
+            userPreferencesStore.updateAppearance(restored.appearance)
+            userPreferencesStore.updatePlayback(restored.playback)
+            userPreferencesStore.updateHistory(restored.history)
+            userPreferencesStore.updateEpg(restored.epg)
+            userPreferencesStore.updateBackup(restored.backup)
+            userPreferencesStore.updateExpandedLiveTvProviderIds(restored.expandedLiveTvProviderIds)
+        }
         userPreferencesStore.updateSelectedProviderId(null)
         userPreferencesStore.updateParentalControl(ParentalControlPreferences())
         return validation

@@ -130,6 +130,8 @@ data class VivicastPlayerState(
     val audioTracks: List<PlaybackTrack> = emptyList(),
     val subtitleTracks: List<PlaybackTrack> = emptyList(),
     val isReconnecting: Boolean = false,
+    // True while ExoPlayer is in STATE_BUFFERING. A rebuffer/stall when status is already Playing.
+    val isBuffering: Boolean = false,
     val videoFrameRate: Float = 0f,
     // Active stream info for the overlay badges (0 = unknown).
     val videoWidth: Int = 0,
@@ -166,6 +168,7 @@ class DefaultVivicastPlayerController(
     private var reconnectJob: Job? = null
     private var engineErrorJob: Job? = null
     private var engineEndedJob: Job? = null
+    private var engineBufferingJob: Job? = null
     // Running maximum of the native playback position for the current live channel = the live edge in the
     // position timeline (currentLiveOffset is unreliable — some manifests don't declare live timing). Behind-live
     // offset derives as liveEdge - position, so any native seek is reflected without extra bookkeeping.
@@ -183,6 +186,11 @@ class DefaultVivicastPlayerController(
         engineEndedJob = scope.launch(dispatcher) {
             engine.playbackEnded.collect { playbackId ->
                 handlePlaybackEnded(playbackId)
+            }
+        }
+        engineBufferingJob = scope.launch(dispatcher) {
+            engine.bufferingChanges.collect { buffering ->
+                setBuffering(buffering)
             }
         }
     }
@@ -297,6 +305,8 @@ class DefaultVivicastPlayerController(
         engineErrorJob = null
         engineEndedJob?.cancel()
         engineEndedJob = null
+        engineBufferingJob?.cancel()
+        engineBufferingJob = null
         stopProgressPolling()
         engine.release()
         liveEdgePositionMillis = 0L
@@ -455,6 +465,14 @@ class DefaultVivicastPlayerController(
     private fun playingState(request: PlaybackRequest): VivicastPlayerState =
         VivicastPlayerState(status = PlaybackStatus.Playing, request = request).withNativeTimeline(request)
 
+    // Mid-stream rebuffering signal for diagnostics; additive flag only, no behavior change.
+    private fun setBuffering(buffering: Boolean) {
+        val current = mutableState.value
+        if (current.isBuffering != buffering) {
+            mutableState.value = current.copy(isBuffering = buffering)
+        }
+    }
+
     /** True for a live channel whose stream exposes a native seek window (HLS DVR) — the timeshift case. */
     private fun isNativeLiveTimeshift(request: PlaybackRequest): Boolean =
         request.mediaType == PlaybackMediaType.Channel && request.seekable && engine.isCurrentSeekable
@@ -540,6 +558,10 @@ interface PlaybackEngine {
     val playbackEnded: Flow<String>
         get() = emptyFlow()
 
+    // Emits true when the engine enters STATE_BUFFERING, false on STATE_READY — for the rebuffer signal.
+    val bufferingChanges: Flow<Boolean>
+        get() = emptyFlow()
+
     val currentPositionMillis: Long
 
     val durationMillis: Long
@@ -613,6 +635,7 @@ class Media3PlaybackEngine(
     private var player: ExoPlayer = buildExoPlayer(appContext, builtTuning)
     private val playbackErrorEvents = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val playbackEndedEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val bufferingEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 8)
     private val startGate = PlaybackStartGate()
     private var activePlaybackId: String? = null
     // Remembered so it can be re-attached to a freshly rebuilt player.
@@ -642,7 +665,11 @@ class Media3PlaybackEngine(
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
-                Player.STATE_READY -> startGate.onReady()
+                Player.STATE_BUFFERING -> bufferingEvents.tryEmit(true)
+                Player.STATE_READY -> {
+                    startGate.onReady()
+                    bufferingEvents.tryEmit(false)
+                }
                 Player.STATE_ENDED -> activePlaybackId?.let { playbackEndedEvents.tryEmit(it) }
             }
         }
@@ -663,6 +690,7 @@ class Media3PlaybackEngine(
 
     override val playbackErrors: Flow<Throwable> = playbackErrorEvents
     override val playbackEnded: Flow<String> = playbackEndedEvents
+    override val bufferingChanges: Flow<Boolean> = bufferingEvents
 
     override fun attachVideoSurface(surfaceView: SurfaceView) {
         videoSurfaceView = surfaceView

@@ -289,10 +289,8 @@ internal class SettingsViewModel(
 
     /** Persists the preference only; the DiagnosticsStore/system effect stays in the app layer. */
     fun onDiagnosticsSettingsChanged(diagnostics: DiagnosticsSettingsState) = updateDiagnostics {
-        it.copy(
-            diagnosticsLoggingEnabled = diagnostics.diagnosticsLoggingEnabled,
-            retentionDays = diagnostics.retentionDays.coerceIn(1, 7),
-        )
+        // retentionDays is fixed at 7 days internally (no UI control); copy() preserves the stored value.
+        it.copy(diagnosticsLoggingEnabled = diagnostics.diagnosticsLoggingEnabled)
     }
 
     fun onPlaybackSettingsChanged(playback: PlaybackSettingsState) = updatePlayback {

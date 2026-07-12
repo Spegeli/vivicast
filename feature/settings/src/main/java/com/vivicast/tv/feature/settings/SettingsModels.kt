@@ -150,7 +150,6 @@ data class AboutAppState(
 
 data class DiagnosticsSettingsState(
     val diagnosticsLoggingEnabled: Boolean = false,
-    val retentionDays: Int = 1,
 )
 
 enum class HistoryClearTarget {

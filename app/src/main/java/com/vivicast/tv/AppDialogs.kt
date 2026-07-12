@@ -84,7 +84,6 @@ import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
-import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState
@@ -415,35 +414,6 @@ internal fun FileSavedDialog(
             label = "Verstanden",
             modifier = Modifier.focusRequester(focus),
             onClick = onDismiss,
-        )
-    }
-}
-
-@Composable
-internal fun StandardRestoreSafetyFailedDialog(
-    restore: PendingStandardRestore,
-    onDismiss: () -> Unit,
-    onContinue: () -> Unit,
-) {
-    val preview = restore.preview
-    val cancelFocus = remember { FocusRequester() }
-    VivicastDialog(
-        onDismiss = onDismiss,
-        width = VivicastDialogWidth.Standard,
-        initialFocus = cancelFocus,
-    ) {
-        InfoPanel(
-            title = "Sicherheitsbackup fehlgeschlagen",
-            body = "Lokale Daten bleiben unveraendert. Du kannst abbrechen oder den Restore bewusst ohne internes Sicherheitsbackup fortsetzen.",
-            badge = "${preview.providerCount} Quellen",
-            modifier = Modifier.fillMaxWidth(),
-        )
-        VivicastDialogActions(
-            primaryLabel = "Fortsetzen",
-            onPrimary = onContinue,
-            secondaryLabel = "Abbrechen",
-            onSecondary = onDismiss,
-            secondaryFocusRequester = cancelFocus,
         )
     }
 }

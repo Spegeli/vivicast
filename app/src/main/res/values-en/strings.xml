@@ -113,14 +113,7 @@
     <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>
 
     <!-- About -->
-    <string name="about_app_info">App information</string>
-    <string name="about_copy_version">Copy version information</string>
-    <string name="about_copied">Copied.</string>
-    <string name="about_diagnostics">Diagnostics &amp; Support</string>
-    <string name="about_legal">License notices</string>
-    <string name="about_privacy">Privacy information</string>
     <string name="about_open_value">Open</string>
-    <string name="about_third_party">Third-party licenses</string>
 
     <!-- Home screen -->
     <string name="home_favorites">Favorites</string>

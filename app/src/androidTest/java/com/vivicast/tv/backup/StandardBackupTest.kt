@@ -13,12 +13,15 @@ import com.vivicast.tv.core.database.model.SearchHistoryEntity
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.BackupPreferences
 import com.vivicast.tv.core.datastore.BackupTargetPreference
+import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
+import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.GeneralPreferences
 import com.vivicast.tv.core.datastore.HistoryPreferences
 import com.vivicast.tv.core.datastore.ParentalControlPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
+import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.security.PinSecurity
@@ -375,58 +378,47 @@ class StandardBackupTest {
     }
 
     @Test
-    fun restorerRequiresExplicitContinueWhenSafetyBackupFails() = runBlocking {
+    fun restorerReappliesBackedUpPreferences() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
         val secureStore = FakeSecureValueStore()
+        val preferencesStore = FakePreferencesStore(UserPreferences(selectedProviderId = "current-provider"))
         try {
-            database.providerDao().upsertProvider(providerEntity().copy(id = "old-provider", stableKey = "old-stable", sourceConfigKey = "old-key"))
-            secureStore.write(SecureKey("old-key:m3u_url"), "https://old.example.org/list.m3u")
-
-            val valid = StandardBackupDocument(
+            val backup = StandardBackupDocument(
                 exportedAtMillis = 123L,
-                providers = listOf(
-                    StandardBackupProvider(
-                        stableKey = "new-provider",
-                        name = "New Provider",
-                        type = "M3U",
-                        isActive = true,
-                        status = "ACTIVE",
-                        includeLiveTv = true,
-                        includeMovies = true,
-                        includeSeries = true,
-                        refreshIntervalHours = 12,
-                        logoPriority = "provider",
-                        source = StandardBackupProviderSource(m3uUrl = "https://example.org/public.m3u"),
+                preferences = UserPreferences(
+                    selectedProviderId = "should-not-be-restored",
+                    general = GeneralPreferences(resumeLastChannelOnStart = true),
+                    appearance = AppearancePreferences(
+                        backgroundColor = ThemeColor.AmoledDark,
+                        fontScale = FontScalePreference.Large,
+                    ),
+                    playback = PlaybackPreferences(
+                        bufferSize = BufferSizePreference.ExtraLarge,
+                        afrEnabled = true,
+                        audioPassthroughEnabled = true,
+                        autoNextCountdownSeconds = 42,
                     ),
                 ),
             ).toJsonString(indentSpaces = 0)
-            var safetyBackupAttempts = 0
             val restorer = StandardBackupRestorer(
                 database = database,
-                userPreferencesStore = FakePreferencesStore(UserPreferences()),
+                userPreferencesStore = preferencesStore,
                 secureValueStore = secureStore,
                 pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
-                createInternalSafetyBackup = {
-                    safetyBackupAttempts += 1
-                    false
-                },
             )
 
-            assertTrue(restorer.restore(valid) is StandardBackupRestoreValidation.SafetyBackupFailed)
-            assertEquals(1, safetyBackupAttempts)
-            assertEquals("old-stable", database.providerDao().getProviders().single().stableKey)
-            assertEquals("https://old.example.org/list.m3u", secureStore.read(SecureKey("old-key:m3u_url")))
-
-            assertTrue(
-                restorer.restore(
-                    jsonText = valid,
-                    continueAfterSafetyBackupFailure = true,
-                ) is StandardBackupRestoreValidation.Valid,
-            )
-            assertEquals(2, safetyBackupAttempts)
-            assertEquals("new-provider", database.providerDao().getProviders().single().stableKey)
-            assertNull(secureStore.read(SecureKey("old-key:m3u_url")))
+            assertTrue(restorer.restore(backup) is StandardBackupRestoreValidation.Valid)
+            // Audit #3: backed-up settings are re-applied on restore...
+            assertEquals(ThemeColor.AmoledDark, preferencesStore.appearance.backgroundColor)
+            assertEquals(FontScalePreference.Large, preferencesStore.appearance.fontScale)
+            assertEquals(BufferSizePreference.ExtraLarge, preferencesStore.playback.bufferSize)
+            assertTrue(preferencesStore.playback.afrEnabled)
+            assertTrue(preferencesStore.playback.audioPassthroughEnabled)
+            assertEquals(42, preferencesStore.playback.autoNextCountdownSeconds)
+            assertTrue(preferencesStore.general.resumeLastChannelOnStart)
+            // ...but the provider selection stays reset (re-selected by the user).
+            assertNull(preferencesStore.selectedProviderId)
         } finally {
             database.close()
         }
@@ -469,26 +461,19 @@ class StandardBackupTest {
                 providerEntity().copy(id = "old-provider", stableKey = "old-stable", sourceConfigKey = "old-key"),
             )
             targetSecureStore.write(SecureKey("old-key:m3u_url"), "https://old.example.org/list.m3u")
-            var safetyBackupAttempts = 0
             val restorer = StandardBackupRestorer(
                 database = targetDatabase,
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = targetSecureStore,
                 pinSecurityStateStore = targetPinStore,
                 clock = { 1_000L },
-                createInternalSafetyBackup = {
-                    safetyBackupAttempts += 1
-                    true
-                },
             )
 
             assertTrue(restorer.restoreBackup(encrypted, "wrong-passphrase".toCharArray()) is StandardBackupRestoreValidation.Invalid)
-            assertEquals(0, safetyBackupAttempts)
             assertEquals("old-stable", targetDatabase.providerDao().getProviders().single().stableKey)
             assertEquals("https://old.example.org/list.m3u", targetSecureStore.read(SecureKey("old-key:m3u_url")))
 
             assertTrue(restorer.restoreBackup(encrypted, "correct-passphrase".toCharArray()) is StandardBackupRestoreValidation.Valid)
-            assertEquals(1, safetyBackupAttempts)
             val restoredProvider = targetDatabase.providerDao().getProviders().single()
             assertEquals("xtream-stable", restoredProvider.stableKey)
             assertEquals("ACTIVE", restoredProvider.status)
@@ -528,17 +513,12 @@ class StandardBackupTest {
                 providerEntity().copy(id = "old-provider", stableKey = "old-stable", sourceConfigKey = "old-key"),
             )
             secureStore.write(SecureKey("old-key:m3u_url"), "https://old.example.org/list.m3u")
-            var safetyBackupAttempts = 0
             val restorer = StandardBackupRestorer(
                 database = database,
                 userPreferencesStore = preferencesStore,
                 secureValueStore = secureStore,
                 pinSecurityStateStore = pinStore,
                 clock = { 1_000L },
-                createInternalSafetyBackup = {
-                    safetyBackupAttempts += 1
-                    true
-                },
             )
             val backup = largeUserDataBackupDocument().toJsonString(indentSpaces = 0)
 
@@ -559,7 +539,6 @@ class StandardBackupTest {
             )
 
             assertTrue(result is StandardBackupRestoreValidation.Valid)
-            assertEquals(1, safetyBackupAttempts)
             assertEquals("large-provider", database.providerDao().getProviders().single().stableKey)
             assertNull(secureStore.read(SecureKey("old-key:m3u_url")))
             assertEquals(LARGE_FAVORITE_COUNT, favorites.size)
@@ -776,6 +755,12 @@ private class FakePreferencesStore(
         private set
     var parentalControl: ParentalControlPreferences = preferences.parentalControl
         private set
+    var general: GeneralPreferences = preferences.general
+        private set
+    var appearance: AppearancePreferences = preferences.appearance
+        private set
+    var playback: PlaybackPreferences = preferences.playback
+        private set
 
     override val values: Flow<UserPreferences> = flowOf(preferences)
 
@@ -783,9 +768,9 @@ private class FakePreferencesStore(
         selectedProviderId = providerId
     }
 
-    override suspend fun updateGeneral(general: GeneralPreferences) = Unit
-    override suspend fun updateAppearance(appearance: AppearancePreferences) = Unit
-    override suspend fun updatePlayback(playback: PlaybackPreferences) = Unit
+    override suspend fun updateGeneral(general: GeneralPreferences) { this.general = general }
+    override suspend fun updateAppearance(appearance: AppearancePreferences) { this.appearance = appearance }
+    override suspend fun updatePlayback(playback: PlaybackPreferences) { this.playback = playback }
     override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit

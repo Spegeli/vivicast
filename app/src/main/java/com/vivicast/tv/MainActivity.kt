@@ -227,7 +227,6 @@ private fun VivicastApp(
     var pendingExternalPlaybackRequest by remember { mutableStateOf<PlaybackRequest?>(null) }
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
     var pendingStandardRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
-    var pendingSafetyFailedRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
     var showParentalReactivationHint by remember { mutableStateOf(false) }
     var pendingSystemTargetUnavailable by remember { mutableStateOf<SystemTargetUnavailable?>(null) }
     // Set to (title, location) after a successful backup or diagnostics export; shown in a dialog.
@@ -354,6 +353,13 @@ private fun VivicastApp(
             appContainer.diagnosticsStore.log("player", "reconnecting")
         }
     }
+    // Diagnostics: mid-stream rebuffering (STATE_BUFFERING while already Playing) — the common "stutter"
+    // that isn't a hard error. Initial load buffers under status=Starting, so this only fires on a stall.
+    LaunchedEffect(playerState.isBuffering) {
+        if (playerState.isBuffering && playerState.status == PlaybackStatus.Playing) {
+            appContainer.diagnosticsStore.log("player", "rebuffering")
+        }
+    }
     var pinSecurityState by remember { mutableStateOf(PinSecurityState()) }
     var pinSecurityLoaded by remember { mutableStateOf(false) }
     val automaticProgressSaveTimes = remember { mutableMapOf<String, Long>() }
@@ -373,26 +379,17 @@ private fun VivicastApp(
         }
     }
 
-    fun runStandardRestore(
-        restore: PendingStandardRestore,
-        continueAfterSafetyBackupFailure: Boolean = false,
-    ) {
+    fun runStandardRestore(restore: PendingStandardRestore) {
         scope.launch {
             val result = if (restore.encryptedFull) {
-                appContainer.standardBackupRestorer.restoreFullPayload(
-                    jsonText = restore.jsonText,
-                    continueAfterSafetyBackupFailure = continueAfterSafetyBackupFailure,
-                )
+                appContainer.standardBackupRestorer.restoreFullPayload(jsonText = restore.jsonText)
             } else {
-                appContainer.standardBackupRestorer.restore(
-                    jsonText = restore.jsonText,
-                    continueAfterSafetyBackupFailure = continueAfterSafetyBackupFailure,
-                )
+                appContainer.standardBackupRestorer.restore(jsonText = restore.jsonText)
             }
             when (result) {
                 is StandardBackupRestoreValidation.Valid -> {
                     pendingStandardRestore = null
-                    pendingSafetyFailedRestore = null
+                    appContainer.diagnosticsStore.log("backup", "restore_ok")
                     pinSecurityState = PinSecurityState()
                     unlockedProtectionAreas = emptySet()
                     // Restored providers/EPG are config only; re-fetch so the catalog + EPG rebuild and the
@@ -409,17 +406,9 @@ private fun VivicastApp(
                     }
                     Toast.makeText(context, context.getString(R.string.main_backup_restored), Toast.LENGTH_SHORT).show()
                 }
-                is StandardBackupRestoreValidation.SafetyBackupFailed -> {
-                    pendingStandardRestore = null
-                    pendingSafetyFailedRestore = PendingStandardRestore(
-                        jsonText = restore.jsonText,
-                        preview = result.preview,
-                        encryptedFull = restore.encryptedFull,
-                    )
-                }
                 is StandardBackupRestoreValidation.Invalid -> {
                     pendingStandardRestore = null
-                    pendingSafetyFailedRestore = null
+                    appContainer.diagnosticsStore.log("backup", "restore_failed", mapOf("reason" to result.message))
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                 }
             }
@@ -1140,6 +1129,10 @@ private fun VivicastApp(
                                 saveBackupToDownloads(context, name, bytes)
                             }.getOrNull()
                             secret.fill(' ')
+                            appContainer.diagnosticsStore.log(
+                                "backup",
+                                if (location != null) "export_ok" else "export_failed",
+                            )
                             if (location != null) {
                                 savedFileInfo = "Backup gespeichert" to location
                             } else {
@@ -1176,6 +1169,8 @@ private fun VivicastApp(
                 clearImageCache = {
                     appContainer.imageLoader.diskCache?.clear()
                     appContainer.imageLoader.memoryCache?.clear()
+                    // Part of the user-initiated cache clear (mediaCacheStore.clear runs in the VM just before).
+                    appContainer.diagnosticsStore.log("cache", "cleared")
                 },
             )
         },
@@ -1334,8 +1329,10 @@ private fun VivicastApp(
                 val payload = decryptBackupPayload(container, passphrase)
                 passphrase.fill(' ')
                 when {
-                    payload == null ->
+                    payload == null -> {
+                        appContainer.diagnosticsStore.log("backup", "passphrase_wrong")
                         Toast.makeText(context, context.getString(R.string.main_passphrase_incorrect), Toast.LENGTH_SHORT).show()
+                    }
                     else -> when (val validation = validateFullBackupPayloadForRestore(payload)) {
                         is StandardBackupRestoreValidation.Valid ->
                             pendingStandardRestore = PendingStandardRestore(
@@ -1345,7 +1342,6 @@ private fun VivicastApp(
                             )
                         is StandardBackupRestoreValidation.Invalid ->
                             Toast.makeText(context, validation.message, Toast.LENGTH_SHORT).show()
-                        is StandardBackupRestoreValidation.SafetyBackupFailed -> Unit
                     }
                 }
             },
@@ -1379,13 +1375,6 @@ private fun VivicastApp(
         )
     }
 
-    pendingSafetyFailedRestore?.let { restore ->
-        StandardRestoreSafetyFailedDialog(
-            restore = restore,
-            onDismiss = { pendingSafetyFailedRestore = null },
-            onContinue = { runStandardRestore(restore, continueAfterSafetyBackupFailure = true) },
-        )
-    }
 
     if (showParentalReactivationHint) {
         ParentalReactivationHintDialog(onDismiss = { showParentalReactivationHint = false })

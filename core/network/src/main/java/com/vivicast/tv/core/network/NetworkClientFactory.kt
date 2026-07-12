@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.network
 
 import android.util.Log
+import java.io.IOException
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
@@ -21,6 +22,9 @@ class NetworkClientFactory {
     fun createOkHttpClient(
         userAgentProvider: () -> String = { DEFAULT_USER_AGENT },
         trustAllCertificates: Boolean = false,
+        // Called only on a failing request (non-2xx or IOException) with host + code/duration — never a
+        // path/query. The sink itself gates on the diagnostics toggle, so the happy path stays untouched.
+        networkEventLogger: NetworkEventLogger? = null,
     ): OkHttpClient {
         val builder = OkHttpClient.Builder()
             // Explicit timeouts: dead host fails at connect; a stalled but trickling
@@ -42,6 +46,22 @@ class NetworkClientFactory {
                 }
                 chain.proceed(request)
             }
+        if (networkEventLogger != null) {
+            builder.addInterceptor { chain ->
+                val request = chain.request()
+                val startNs = System.nanoTime()
+                try {
+                    chain.proceed(request).also { response ->
+                        if (!response.isSuccessful) {
+                            networkEventLogger(request.url.host, response.code, elapsedMs(startNs), null)
+                        }
+                    }
+                } catch (e: IOException) {
+                    networkEventLogger(request.url.host, null, elapsedMs(startNs), e.javaClass.simpleName)
+                    throw e
+                }
+            }
+        }
         if (trustAllCertificates) {
             builder.applyInsecureTrustManager()
         }
@@ -74,6 +94,11 @@ class NetworkClientFactory {
         hostnameVerifier { _, _ -> true }
     }
 }
+
+/** host, HTTP status (null for a transport/IO failure), elapsed ms, error class name (null for non-2xx). */
+typealias NetworkEventLogger = (host: String, statusCode: Int?, durationMs: Long, error: String?) -> Unit
+
+private fun elapsedMs(startNs: Long): Long = (System.nanoTime() - startNs) / 1_000_000
 
 private fun String.normalizedUserAgent(): String =
     trim().takeIf { it.isNotBlank() } ?: DEFAULT_USER_AGENT

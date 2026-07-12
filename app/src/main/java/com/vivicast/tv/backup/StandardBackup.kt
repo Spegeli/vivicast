@@ -1,5 +1,11 @@
 package com.vivicast.tv.backup
 
+import com.vivicast.tv.core.datastore.AppearancePreferences
+import com.vivicast.tv.core.datastore.BackupPreferences
+import com.vivicast.tv.core.datastore.EpgPreferences
+import com.vivicast.tv.core.datastore.GeneralPreferences
+import com.vivicast.tv.core.datastore.HistoryPreferences
+import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.domain.model.Provider
@@ -178,6 +184,7 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("launchOnBoot", general.launchOnBoot)
             .put("doubleBackToExit", general.doubleBackToExit)
             .put("backgroundRefreshEnabled", general.backgroundRefreshEnabled)
+            .put("resumeLastChannelOnStart", general.resumeLastChannelOnStart)
             .put("globalUserAgent", general.globalUserAgent))
         .put("appearance", JSONObject()
             .put("backgroundColor", appearance.backgroundColor.name)
@@ -191,6 +198,7 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("audioDecoder", playback.audioDecoder.name)
             .put("videoDecoder", playback.videoDecoder.name)
             .put("afrEnabled", playback.afrEnabled)
+            .put("audioPassthroughEnabled", playback.audioPassthroughEnabled)
             .put("preferredAudioLanguage", playback.preferredAudioLanguage)
             .put("preferredSubtitleLanguage", playback.preferredSubtitleLanguage)
             .put("externalPlayer", playback.externalPlayer.name)
@@ -208,6 +216,94 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("refreshOnPlaylistChangeEnabled", epg.refreshOnPlaylistChangeEnabled))
         .put("backup", JSONObject()
             .put("targetType", backup.target.name))
+
+/**
+ * Reverse of [toStandardBackupJson]. Rebuilds the user preferences from a backup's `preferences` block
+ * so a restore actually re-applies theme/playback/general/epg/backup settings (see audit #3).
+ * `selectedProviderId` is deliberately NOT restored (providers get re-selected). Fields absent from an
+ * older backup, and unknown enum names, fall back to the current data-class defaults — never crash.
+ */
+fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
+    val d = UserPreferences()
+    val general = json.optJSONObject("general")
+    val appearance = json.optJSONObject("appearance")
+    val playback = json.optJSONObject("playback")
+    val history = json.optJSONObject("history")
+    val epg = json.optJSONObject("epg")
+    val backup = json.optJSONObject("backup")
+    val expanded = json.optJSONArray("expandedLiveTvProviderIds")
+    return UserPreferences(
+        general = GeneralPreferences(
+            launchOnBoot = general.bool("launchOnBoot", d.general.launchOnBoot),
+            doubleBackToExit = general.bool("doubleBackToExit", d.general.doubleBackToExit),
+            backgroundRefreshEnabled = general.bool("backgroundRefreshEnabled", d.general.backgroundRefreshEnabled),
+            resumeLastChannelOnStart = general.bool("resumeLastChannelOnStart", d.general.resumeLastChannelOnStart),
+            globalUserAgent = general.str("globalUserAgent", d.general.globalUserAgent),
+            lastSettingsSection = d.general.lastSettingsSection, // transient UI breadcrumb — intentionally not backed up
+        ),
+        appearance = AppearancePreferences(
+            backgroundColor = appearance.enum("backgroundColor", d.appearance.backgroundColor),
+            accentColor = appearance.enum("accentColor", d.appearance.accentColor),
+            transparency = appearance.enum("transparency", d.appearance.transparency),
+            fontScale = appearance.enum("fontScale", d.appearance.fontScale),
+            language = appearance.enum("language", d.appearance.language),
+            animationSpeed = appearance.enum("animationSpeed", d.appearance.animationSpeed),
+        ),
+        playback = PlaybackPreferences(
+            bufferSize = playback.enum("bufferSize", d.playback.bufferSize),
+            audioDecoder = playback.enum("audioDecoder", d.playback.audioDecoder),
+            videoDecoder = playback.enum("videoDecoder", d.playback.videoDecoder),
+            afrEnabled = playback.bool("afrEnabled", d.playback.afrEnabled),
+            audioPassthroughEnabled = playback.bool("audioPassthroughEnabled", d.playback.audioPassthroughEnabled),
+            preferredAudioLanguage = playback.nullableStr("preferredAudioLanguage"),
+            preferredSubtitleLanguage = playback.nullableStr("preferredSubtitleLanguage"),
+            externalPlayer = playback.enum("externalPlayer", d.playback.externalPlayer),
+            autoNextEnabled = playback.bool("autoNextEnabled", d.playback.autoNextEnabled),
+            autoNextCountdownSeconds = playback.int("autoNextCountdownSeconds", d.playback.autoNextCountdownSeconds),
+        ),
+        history = HistoryPreferences(
+            enabled = history.bool("enabled", d.history.enabled),
+            maxRecentChannels = history.int("maxRecentChannels", d.history.maxRecentChannels),
+            watchedThresholdPercent = history.int("watchedThresholdPercent", d.history.watchedThresholdPercent),
+        ),
+        expandedLiveTvProviderIds = expanded.toStringSet(),
+        epg = EpgPreferences(
+            refreshIntervalHours = epg.int("refreshIntervalHours", d.epg.refreshIntervalHours),
+            pastRetentionDays = epg.int("pastRetentionDays", d.epg.pastRetentionDays),
+            refreshOnAppStartEnabled = epg.bool("refreshOnAppStartEnabled", d.epg.refreshOnAppStartEnabled),
+            refreshOnPlaylistChangeEnabled = epg.bool("refreshOnPlaylistChangeEnabled", d.epg.refreshOnPlaylistChangeEnabled),
+        ),
+        backup = BackupPreferences(
+            target = backup.enum("targetType", d.backup.target),
+        ),
+    )
+}
+
+private fun JSONObject?.bool(key: String, default: Boolean): Boolean =
+    if (this != null && has(key) && !isNull(key)) optBoolean(key, default) else default
+
+private fun JSONObject?.int(key: String, default: Int): Int =
+    if (this != null && has(key) && !isNull(key)) optInt(key, default) else default
+
+private fun JSONObject?.str(key: String, default: String): String =
+    if (this != null && has(key) && !isNull(key)) optString(key, default).ifBlank { default } else default
+
+private fun JSONObject?.nullableStr(key: String): String? =
+    if (this != null && has(key) && !isNull(key)) optString(key).trim().takeIf { it.isNotBlank() } else null
+
+private inline fun <reified T : Enum<T>> JSONObject?.enum(key: String, default: T): T {
+    val name = if (this != null && has(key) && !isNull(key)) optString(key).takeIf { it.isNotBlank() } else null
+    return name?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: default
+}
+
+private fun JSONArray?.toStringSet(): Set<String> {
+    if (this == null) return emptySet()
+    val result = LinkedHashSet<String>(length())
+    for (index in 0 until length()) {
+        optString(index).trim().takeIf { it.isNotBlank() }?.let(result::add)
+    }
+    return result
+}
 
 private fun StandardBackupProvider.toJson(): JSONObject =
     JSONObject()

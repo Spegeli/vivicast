@@ -113,14 +113,7 @@
     <string name="settings_playlist_empty_body">Füge eine Wiedergabeliste hinzu, um Inhalte zu importieren.</string>
 
     <!-- About -->
-    <string name="about_app_info">App-Informationen</string>
-    <string name="about_copy_version">Versionsinformationen kopieren</string>
-    <string name="about_copied">Kopiert.</string>
-    <string name="about_diagnostics">Diagnose und Support</string>
-    <string name="about_legal">Lizenzhinweise</string>
-    <string name="about_privacy">Datenschutzinformationen</string>
     <string name="about_open_value">Öffnen</string>
-    <string name="about_third_party">Drittanbieter-Lizenzen</string>
 
     <!-- Home screen -->
     <string name="home_favorites">Favoriten</string>

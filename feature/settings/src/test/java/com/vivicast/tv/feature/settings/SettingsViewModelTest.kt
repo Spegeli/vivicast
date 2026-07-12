@@ -192,8 +192,6 @@ class SettingsViewModelTest {
         assertEquals(5, state.epg.pastRetentionDays)
         assertEquals(false, state.epg.refreshOnAppStartEnabled)
         assertEquals(true, state.diagnostics.diagnosticsLoggingEnabled)
-        // retentionDays coerced into 1..7
-        assertEquals(7, state.diagnostics.retentionDays)
         scope.cancel()
     }
 
@@ -216,10 +214,11 @@ class SettingsViewModelTest {
         val store = FakeUserPreferencesStore()
         val vm = newViewModel(scope, store)
 
-        vm.onDiagnosticsSettingsChanged(DiagnosticsSettingsState(diagnosticsLoggingEnabled = true, retentionDays = 42))
+        vm.onDiagnosticsSettingsChanged(DiagnosticsSettingsState(diagnosticsLoggingEnabled = true))
 
         assertEquals(true, store.flow.value.diagnostics.diagnosticsLoggingEnabled)
-        assertEquals(7, store.flow.value.diagnostics.retentionDays)
+        // retentionDays is no longer UI-driven (fixed at 7 days internally); the stored field is untouched.
+        assertEquals(1, store.flow.value.diagnostics.retentionDays)
         // Unrelated DataStore-only diagnostics field preserved.
         assertEquals(true, store.flow.value.diagnostics.keepLastSessionSummary)
         scope.cancel()

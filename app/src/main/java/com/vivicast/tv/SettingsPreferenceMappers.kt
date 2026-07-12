@@ -85,7 +85,6 @@ import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
 import com.vivicast.tv.backup.StandardBackupRestoreValidation
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
-import com.vivicast.tv.backup.validateStandardBackupForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState

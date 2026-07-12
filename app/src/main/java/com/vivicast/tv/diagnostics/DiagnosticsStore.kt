@@ -49,6 +49,12 @@ class DiagnosticsStore(
     @Volatile
     private var activeFile: File? = null
 
+    // Count of log files evicted by the size cap (not age). Signals real data loss in the export
+    // metadata. In-memory: resets on process restart — good enough for a single diagnose session.
+    // ponytail: in-memory counter, persist only if cross-restart truncation reporting is ever needed.
+    @Volatile
+    private var discardedByCap = 0
+
     /** Fast check so callers can skip expensive enrichment (e.g. a logcat read) when disabled. */
     val isLoggingEnabled: Boolean
         get() = enabled
@@ -81,7 +87,6 @@ class DiagnosticsStore(
             append('\n')
         }
         currentFile(now).appendText(line, Charsets.UTF_8)
-        prune()
     }
 
     /** Exports one ZIP: all `logs/`, all private crash copies, and `diagnostics-metadata.json`. */
@@ -118,6 +123,9 @@ class DiagnosticsStore(
         if (current != null && current.exists() && current.length() < ROTATE_BYTES) return current
         val fresh = File(logsDir, "$LOG_FILE_PREFIX${fileStamp(now)}.$LOG_FILE_EXT")
         activeFile = fresh
+        // Rotation point: bound age/size here instead of on every line (per-line prune would do a
+        // directory stat + delete scan for each event, amplifying the very freeze it's meant to detect).
+        prune()
         return fresh
     }
 
@@ -140,6 +148,7 @@ class DiagnosticsStore(
         while (files.sumOf { it.length() } > TOTAL_CAP_BYTES) {
             val oldest = files.firstOrNull { it != activeFile } ?: break
             oldest.delete()
+            discardedByCap += 1
             files = logFiles()
         }
     }
@@ -166,7 +175,8 @@ class DiagnosticsStore(
             .put("limits", JSONObject().put("rotateBytes", ROTATE_BYTES).put("totalCapBytes", TOTAL_CAP_BYTES))
             .put("coveredFrom", coveredFrom ?: JSONObject.NULL)
             .put("coveredTo", coveredTo ?: JSONObject.NULL)
-            .put("contentTruncated", logFiles.sumOf { it.length() } >= TOTAL_CAP_BYTES)
+            .put("contentTruncated", discardedByCap > 0)
+            .put("droppedFiles", discardedByCap)
             .put("logFiles", JSONArray().also { arr ->
                 fileEntries.forEach { (file, m) ->
                     arr.put(

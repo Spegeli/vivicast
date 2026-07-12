@@ -274,7 +274,7 @@
     <string name="main_exit_confirmation">Press back again to exit</string>
     <string name="main_external_player_error">Progress could not be automatically determined.</string>
     <string name="main_backup_file_invalid">Backup file invalid.</string>
-    <string name="main_backup_not_restorable">Not a restorable backup. (The settings export is for support only, not for restoring.)</string>
+    <string name="main_backup_not_restorable">Not a valid Vivicast backup. Please choose an encrypted .vcbak file.</string>
     <string name="main_m3u_file_invalid">M3U file invalid.</string>
     <string name="main_m3u_file_too_large">M3U file is too large.</string>
     <string name="main_m3u_file_imported">M3U file imported.</string>

@@ -21,7 +21,7 @@ class MaintenanceRefreshOrchestratorTest {
             cacheCleaner = object : CacheCleaner {
                 override suspend fun cleanup() { calls += "cache" }
             },
-            diagnostics = InMemoryRefreshDiagnostics(),
+            diagnostics = RecordingRefreshDiagnostics(),
         )
 
         try {
@@ -36,7 +36,7 @@ class MaintenanceRefreshOrchestratorTest {
     @Test
     fun refreshRunsLogosThenCache() = runBlocking {
         val calls = mutableListOf<String>()
-        val diagnostics = InMemoryRefreshDiagnostics()
+        val diagnostics = RecordingRefreshDiagnostics()
         val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = object : LogoRefresher {
                 override suspend fun refreshLogos() { calls += "refresh-logos" }
@@ -54,4 +54,9 @@ class MaintenanceRefreshOrchestratorTest {
         assertEquals(0, report.epgSourcesCollected)
         assertEquals(RefreshDiagnosticType.RefreshCompleted, diagnostics.events.last().type)
     }
+}
+
+private class RecordingRefreshDiagnostics : RefreshDiagnostics {
+    val events = mutableListOf<RefreshDiagnosticEvent>()
+    override fun record(event: RefreshDiagnosticEvent) { events += event }
 }

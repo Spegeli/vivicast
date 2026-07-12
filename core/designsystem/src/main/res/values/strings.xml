@@ -274,7 +274,7 @@
     <string name="main_exit_confirmation">Zum Beenden erneut zurück</string>
     <string name="main_external_player_error">Fortschritt konnte nicht automatisch ermittelt werden.</string>
     <string name="main_backup_file_invalid">Backup-Datei ungültig.</string>
-    <string name="main_backup_not_restorable">Kein wiederherstellbares Backup. (Der Einstellungs-Export ist nur für Support, nicht zum Wiederherstellen.)</string>
+    <string name="main_backup_not_restorable">Kein gültiges Vivicast-Backup. Bitte eine verschlüsselte .vcbak-Datei wählen.</string>
     <string name="main_m3u_file_invalid">M3U-Datei ungültig.</string>
     <string name="main_m3u_file_too_large">M3U-Datei ist zu groß.</string>
     <string name="main_m3u_file_imported">M3U-Datei übernommen.</string>

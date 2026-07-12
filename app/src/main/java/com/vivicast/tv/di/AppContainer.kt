@@ -158,7 +158,6 @@ class AppContainer(
             userPreferencesStore = userPreferencesStore,
             secureValueStore = secureValueStore,
             pinSecurityStateStore = pinSecurityStateStore,
-            createInternalSafetyBackup = { createStandardRestoreSafetyBackup() },
         )
     }
 
@@ -182,6 +181,19 @@ class AppContainer(
         NetworkClientFactory().createOkHttpClient(
             userAgentProvider = userAgentPolicy::current,
             trustAllCertificates = BuildConfig.DEBUG,
+            // Log failing HTTP (host + code/duration, no path/query) — covers every network layer at once
+            // (logos, xtream sub-calls, EPG, connection tests). The store no-ops when logging is off.
+            networkEventLogger = { host, statusCode, durationMs, error ->
+                diagnosticsStore.log(
+                    category = "network",
+                    message = if (error != null) "io_error" else "http_$statusCode",
+                    details = buildMap {
+                        put("host", host)
+                        put("durationMs", durationMs.toString())
+                        error?.let { put("error", it) }
+                    },
+                )
+            },
         )
     }
 
@@ -363,6 +375,7 @@ class AppContainer(
             refreshEpgOnPlaylistChangeProvider = {
                 userPreferencesStore.values.first().epg.refreshOnPlaylistChangeEnabled
             },
+            diagnostics = refreshDiagnostics,
         )
     }
 
@@ -400,18 +413,6 @@ class AppContainer(
     suspend fun syncWatchNext() {
         watchNextSynchronizer.sync()
     }
-
-    private suspend fun createStandardRestoreSafetyBackup(): Boolean =
-        runCatching {
-            val directory = File(appContext.filesDir, "restore-safety-backups")
-            if (!directory.exists() && !directory.mkdirs()) {
-                false
-            } else {
-                val file = File(directory, "snapshot-${System.currentTimeMillis()}.json")
-                file.writeText(standardBackupExporter.exportInternalSnapshotJson(indentSpaces = 0), Charsets.UTF_8)
-                true
-            }
-        }.getOrDefault(false)
 
     val testProviderConnectionUseCase: TestProviderConnectionUseCase by lazy {
         TestProviderConnectionUseCase(

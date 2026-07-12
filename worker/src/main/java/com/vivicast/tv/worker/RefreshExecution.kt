@@ -45,6 +45,9 @@ class DefaultRefreshWorkerRunner(
     private val seriesDetailsRefresher: SeriesDetailsRefresher,
     private val scheduler: RefreshWorkScheduler,
     private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
+    // Per-item refresh results feed the diagnostics log — the primary signal for "import failed" reports.
+    private val diagnostics: RefreshDiagnostics = NoOpRefreshDiagnostics,
+    private val clock: () -> Long = { System.currentTimeMillis() },
 ) : RefreshWorkerRunner {
     override suspend fun runMaintenanceRefresh(): RefreshWorkerResult =
         // The maintenance orchestrator only runs logos + cache now (playlists/EPG are per-item workers),
@@ -58,6 +61,7 @@ class DefaultRefreshWorkerRunner(
     override suspend fun runPlaylistRefresh(providerId: String?): RefreshWorkerResult {
         val target = providerId?.takeIf { it.isNotBlank() }?.let(::PlaylistRefreshTarget)
             ?: return RefreshWorkerResult.Failure
+        val startedAt = clock()
         return runCancellableCatching { playlistRefresher.refresh(target) }
             .fold(
                 onSuccess = { outcome ->
@@ -72,6 +76,9 @@ class DefaultRefreshWorkerRunner(
                         if (refreshEpgOnPlaylistChangeProvider()) {
                             outcome.epgSourceIds.forEach { scheduler.enqueueEpgRefresh(it) }
                         }
+                        recordRefresh(RefreshDiagnosticType.PlaylistRefreshSucceeded, target.providerId, startedAt)
+                    } else if (!outcome.skipped) {
+                        recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt)
                     }
                     when {
                         outcome.success -> RefreshWorkerResult.Success
@@ -81,7 +88,10 @@ class DefaultRefreshWorkerRunner(
                         else -> RefreshWorkerResult.Retry
                     }
                 },
-                onFailure = { RefreshWorkerResult.Retry },
+                onFailure = { error ->
+                    recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt, error)
+                    RefreshWorkerResult.Retry
+                },
             )
     }
 
@@ -97,19 +107,46 @@ class DefaultRefreshWorkerRunner(
     override suspend fun runEpgRefresh(epgSourceId: String?): RefreshWorkerResult {
         val target = epgSourceId?.takeIf { it.isNotBlank() }?.let(::EpgRefreshTarget)
             ?: return RefreshWorkerResult.Failure
+        val startedAt = clock()
         return runCancellableCatching { epgRefresher.refresh(target) }
             .fold(
-                onSuccess = {
+                onSuccess = { outcome ->
+                    if (outcome.success) {
+                        recordRefresh(RefreshDiagnosticType.EpgRefreshSucceeded, target.epgSourceId, startedAt)
+                    } else if (!outcome.skipped) {
+                        recordRefresh(RefreshDiagnosticType.EpgRefreshFailed, target.epgSourceId, startedAt)
+                    }
                     when {
-                        it.success -> RefreshWorkerResult.Success
-                        it.skipped -> RefreshWorkerResult.Success
+                        outcome.success -> RefreshWorkerResult.Success
+                        outcome.skipped -> RefreshWorkerResult.Success
                         else -> RefreshWorkerResult.Retry
                     }
                 },
-                onFailure = { RefreshWorkerResult.Retry },
+                onFailure = { error ->
+                    recordRefresh(RefreshDiagnosticType.EpgRefreshFailed, target.epgSourceId, startedAt, error)
+                    RefreshWorkerResult.Retry
+                },
             )
     }
 
+    // Records one per-item refresh result. `target` is a provider/EPG-source id (not a URL/credential);
+    // durations + error reason are what a "why did the refresh fail" report needs. URLs in the error text
+    // are redacted downstream (StoreRefreshDiagnostics → DiagnosticsSanitizer).
+    // ponytail: item counts (channels imported/skipped) not surfaced — would need extra outcome fields;
+    // add when success/fail + reason isn't enough to diagnose.
+    private fun recordRefresh(
+        type: RefreshDiagnosticType,
+        target: String,
+        startedAt: Long,
+        error: Throwable? = null,
+    ) {
+        val metadata = buildMap {
+            put("target", target)
+            put("durationMs", (clock() - startedAt).toString())
+            error?.let { put("error", it.message ?: it::class.java.simpleName) }
+        }
+        diagnostics.record(RefreshDiagnosticEvent(type, type.name, metadata))
+    }
 }
 
 class DefaultPlaylistRefresher(

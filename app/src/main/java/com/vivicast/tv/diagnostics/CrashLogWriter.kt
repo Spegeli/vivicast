@@ -1,5 +1,6 @@
 package com.vivicast.tv.diagnostics
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
@@ -62,7 +63,10 @@ class CrashLogWriter(
             pruneDir(privateCrashDir)
         }
         // Public copy — reachable via a file manager even if the app never starts again.
-        runCatching { writePublic(fileName, content.toByteArray(Charsets.UTF_8)) }
+        runCatching {
+            writePublic(fileName, content.toByteArray(Charsets.UTF_8))
+            prunePublic()
+        }
     }
 
     private fun writePublic(fileName: String, bytes: ByteArray) {
@@ -78,6 +82,35 @@ class CrashLogWriter(
         } else {
             val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), CRASH_SUBDIR).apply { mkdirs() }
             File(dir, fileName).writeBytes(bytes)
+        }
+    }
+
+    // Public crashes accumulate forever otherwise. Keep the newest MAX_CRASH_FILES, drop the rest.
+    private fun prunePublic() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            pruneDir(File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), CRASH_SUBDIR))
+            return
+        }
+        val resolver = context.contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
+        val args = arrayOf("%$CRASH_SUBDIR%", "$CRASH_PREFIX%")
+        // Filenames embed yyyyMMdd_HHmmss, so DISPLAY_NAME ASC is chronological (oldest first).
+        val ids = mutableListOf<Long>()
+        resolver.query(
+            collection,
+            arrayOf(MediaStore.Downloads._ID),
+            selection,
+            args,
+            "${MediaStore.Downloads.DISPLAY_NAME} ASC",
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+            while (cursor.moveToNext()) ids.add(cursor.getLong(idColumn))
+        }
+        if (ids.size > MAX_CRASH_FILES) {
+            ids.take(ids.size - MAX_CRASH_FILES).forEach { id ->
+                runCatching { resolver.delete(ContentUris.withAppendedId(collection, id), null, null) }
+            }
         }
     }
 

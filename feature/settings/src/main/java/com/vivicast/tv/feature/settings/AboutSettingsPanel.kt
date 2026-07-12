@@ -111,12 +111,14 @@ internal fun AboutSettingsPanel(
     val activeLegalPage = legalPage
     val legalBackFocus = remember { FocusRequester() }
     val legalRowFocus = remember { FocusRequester() }
+    val legalTermsRowFocus = remember { FocusRequester() }
     val legalTitle = activeLegalPage?.let { stringResource(it.titleRes) }.orEmpty()
     val legalParagraphs = activeLegalPage?.let { stringResource(it.bodyRes).split("\n\n") }.orEmpty()
-    // Close: move focus back to the (always-composed) legal row FIRST, then drop the overlay. Removing the
+    // Close: move focus back to the row that OPENED the overlay FIRST, then drop the overlay. Removing the
     // overlay while it holds focus would reset focus to the top nav and navigate Home.
     val closeLegal = {
-        runCatching { legalRowFocus.requestFocus() }
+        val target = if (legalPage == AboutLegalPage.Terms) legalTermsRowFocus else legalRowFocus
+        runCatching { target.requestFocus() }
         legalPage = null
     }
 
@@ -174,7 +176,7 @@ internal fun AboutSettingsPanel(
                 title = stringResource(R.string.settings_legal_terms_title),
                 help = stringResource(R.string.settings_help_legal_terms),
                 value = stringResource(R.string.about_open_value),
-                modifier = Modifier,
+                modifier = Modifier.focusRequester(legalTermsRowFocus),
                 onClick = { legalPage = AboutLegalPage.Terms },
             )
         }

@@ -6,7 +6,9 @@ package com.vivicast.tv.diagnostics
  * values, tokens and private URLs must never be logged or exported (PRD-11).
  */
 object DiagnosticsSanitizer {
-    private val URL = Regex("https?://\\S+")
+    // Any scheme://… — not just http/https. IPTV streams use rtsp/rtmp/udp/mms and carry host +
+    // often credentials; those must never survive into a log line or the logcat snapshot.
+    private val URL = Regex("[a-zA-Z][a-zA-Z0-9+.-]*://\\S+")
     private val SECRET = Regex("(?i)(token|password|passwd|pwd|cookie|authorization|username|user)=\\S+")
     private val SENSITIVE_KEY = Regex("(?i)(provider|content|title|name|search|url|header|cookie|token|password|username)")
 
