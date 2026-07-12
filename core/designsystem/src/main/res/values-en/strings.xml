@@ -575,7 +575,7 @@
     <string name="settings_history_clear_all_value">All</string>
     <string name="settings_maintenance_confirm_badge">Confirmation</string>
 
-    <string name="settings_cache_clear_row_help">Removes locally cached media images. Provider data remains.</string>
+    <string name="settings_cache_clear_row_help">Clears the app\'s image cache. Provider data and history remain.</string>
     <string name="settings_history_clear_row_help">Choose which histories to delete.</string>
     <string name="settings_history_clear_value">Choose</string>
     <string name="maintenance_history_dialog_body">Choose which histories to delete. Provider data and favorites remain.</string>
@@ -587,7 +587,7 @@
     <string name="maintenance_cache_clear_title">Clear cache</string>
     <string name="maintenance_cache_clear_row_help">Removes locally cached media images.</string>
     <string name="maintenance_cache_clear_confirm">Clear cache?</string>
-    <string name="maintenance_cache_clear_body">Only locally cached media images are deleted. Provider data, history, favorites, EPG, and credentials remain.</string>
+    <string name="maintenance_cache_clear_body">The app\'s image cache (logos, posters, thumbnails) is cleared. Provider data, history, favorites, EPG, and credentials remain.</string>
     <string name="maintenance_cache_clear_label">Clear cache</string>
 
     <string name="maintenance_live_tv_title">Delete Live TV history</string>

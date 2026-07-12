@@ -576,7 +576,7 @@
     <string name="settings_history_clear_all_value">Alles</string>
     <string name="settings_maintenance_confirm_badge">Bestätigung</string>
 
-    <string name="settings_cache_clear_row_help">Entfernt lokal gespeicherte Medienbilder. Providerdaten bleiben erhalten.</string>
+    <string name="settings_cache_clear_row_help">Leert den Bild-Cache der App. Providerdaten und Verlauf bleiben erhalten.</string>
     <string name="settings_history_clear_row_help">Wählt aus, welche Verläufe gelöscht werden.</string>
     <string name="settings_history_clear_value">Auswählen</string>
     <string name="maintenance_history_dialog_body">Wähle aus, welche Verläufe gelöscht werden sollen. Providerdaten und Favoriten bleiben erhalten.</string>
@@ -588,7 +588,7 @@
     <string name="maintenance_cache_clear_title">Cache leeren</string>
     <string name="maintenance_cache_clear_row_help">Entfernt lokal gespeicherte Medienbilder.</string>
     <string name="maintenance_cache_clear_confirm">Cache leeren?</string>
-    <string name="maintenance_cache_clear_body">Es werden nur lokal gespeicherte Medienbilder gelöscht. Providerdaten, Verlauf, Favoriten, EPG und Zugangsdaten bleiben erhalten.</string>
+    <string name="maintenance_cache_clear_body">Der Bild-Cache der App (Logos, Poster, Vorschaubilder) wird geleert. Providerdaten, Verlauf, Favoriten, EPG und Zugangsdaten bleiben erhalten.</string>
     <string name="maintenance_cache_clear_label">Cache leeren</string>
 
     <string name="maintenance_live_tv_title">Live-TV-Verlauf löschen</string>

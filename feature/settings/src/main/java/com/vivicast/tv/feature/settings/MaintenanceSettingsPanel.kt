@@ -300,6 +300,7 @@ private fun HistoryCategoryRow(
 
 private fun formatCacheSize(sizeBytes: Long): String {
     val megabytes = sizeBytes / (1024L * 1024L)
+    if (megabytes < 1L) return "${sizeBytes / 1024L} KB"
     if (megabytes < 1024L) return "$megabytes MB"
     val gigabytes = megabytes / 1024L
     val remainingMegabytes = megabytes % 1024L

@@ -148,9 +148,18 @@ fun SettingsRoute(
     onCopySupportInformation: () -> Unit = {},
     onRefreshEpgSource: (sourceId: String) -> Unit,
     onClearHistory: (Set<HistoryClearTarget>) -> Unit,
+    imageCacheSizeBytes: suspend () -> Long = { 0L },
+    clearImageCache: suspend () -> Unit = {},
 ) {
     val viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModelFactory(userPreferencesStore, mediaCacheStore, epgSourceRepository, providerRepository),
+        factory = SettingsViewModelFactory(
+            userPreferencesStore,
+            mediaCacheStore,
+            epgSourceRepository,
+            providerRepository,
+            imageCacheSizeBytes,
+            clearImageCache,
+        ),
     )
     val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val routeScope = rememberCoroutineScope()

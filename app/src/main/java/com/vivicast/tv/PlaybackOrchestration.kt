@@ -127,13 +127,15 @@ import java.util.TimeZone
 
 internal suspend fun AppContainer.resolveChannelLogoModel(channel: Channel): Any? {
     val logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: return null
+    // Prefetched file if the refresh worker warmed it; otherwise the URL itself, which Coil now loads
+    // directly (see AppContainer.imageLoader). Same key for both so a later prefetch stays consistent.
     return mediaCacheStore.getEntry(
         MediaCacheKey(
             type = MediaCacheType.ChannelLogo,
             ownerId = channel.id,
             sourceUrl = logoUrl,
         ),
-    )?.file
+    )?.file ?: logoUrl
 }
 
 internal suspend fun AppContainer.resolveMovieImageModel(movie: Movie, type: MediaCacheType): Any? {
@@ -148,7 +150,7 @@ internal suspend fun AppContainer.resolveMovieImageModel(movie: Movie, type: Med
             ownerId = movie.id,
             sourceUrl = sourceUrl,
         ),
-    )?.file
+    )?.file ?: sourceUrl
 }
 
 internal suspend fun AppContainer.resolveSeriesImageModel(series: Series, type: MediaCacheType): Any? {
@@ -163,7 +165,7 @@ internal suspend fun AppContainer.resolveSeriesImageModel(series: Series, type: 
             ownerId = series.id,
             sourceUrl = sourceUrl,
         ),
-    )?.file
+    )?.file ?: sourceUrl
 }
 
 internal suspend fun AppContainer.resolveEpisodeImageModel(episode: Episode): Any? {
@@ -174,7 +176,7 @@ internal suspend fun AppContainer.resolveEpisodeImageModel(episode: Episode): An
             ownerId = episode.id,
             sourceUrl = sourceUrl,
         ),
-    )?.file
+    )?.file ?: sourceUrl
 }
 
 internal suspend fun AppContainer.openChannelPlayback(

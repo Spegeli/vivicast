@@ -1222,6 +1222,11 @@ private fun VivicastApp(
                         targets.forEach { appContainer.clearHistory(it) }
                     }
                 },
+                imageCacheSizeBytes = { appContainer.imageLoader.diskCache?.size ?: 0L },
+                clearImageCache = {
+                    appContainer.imageLoader.diskCache?.clear()
+                    appContainer.imageLoader.memoryCache?.clear()
+                },
             )
         },
     )

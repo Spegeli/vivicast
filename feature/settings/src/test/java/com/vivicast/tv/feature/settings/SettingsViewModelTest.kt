@@ -253,6 +253,31 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun cacheStats_addImageCacheSize_andClearInvokesImageClear() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val cacheStore = FakeMediaCacheStore(MediaCacheStats(totalSizeBytes = 1000, fileCount = 3))
+        var imageCleared = false
+        val vm = SettingsViewModel(
+            FakeUserPreferencesStore(),
+            cacheStore,
+            FakeEpgSourceRepository(),
+            FakeProviderRepository(),
+            imageCacheSizeBytes = { 500L },
+            clearImageCache = { imageCleared = true },
+            scope = scope,
+        )
+
+        vm.onReloadCacheStats()
+        assertEquals(1500L, vm.uiState.value.cache.totalSizeBytes) // media 1000 + Coil 500
+        assertEquals(3, vm.uiState.value.cache.fileCount)
+
+        vm.onClearCache()
+        assertEquals(true, cacheStore.cleared)
+        assertEquals(true, imageCleared)
+        scope.cancel()
+    }
+
+    @Test
     fun initialState_containsEpgSourcesAndProviders() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val epgRepo = FakeEpgSourceRepository(initialSources = listOf(epgSource("s1", "Source 1")))

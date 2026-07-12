@@ -2,7 +2,6 @@ package com.vivicast.tv.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.vivicast.tv.core.cache.MediaCacheStats
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
@@ -49,6 +48,10 @@ internal class SettingsViewModel(
     private val mediaCacheStore: MediaCacheStore,
     private val epgSourceRepository: EpgSourceRepository,
     private val providerRepository: ProviderRepository,
+    // Coil image cache is App-owned (Context/Coil types stay out of the VM): the App passes its size
+    // and a clear action as suspend lambdas so the cache row reflects the whole app image cache.
+    private val imageCacheSizeBytes: suspend () -> Long = { 0L },
+    private val clearImageCache: suspend () -> Unit = {},
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -146,21 +149,30 @@ internal class SettingsViewModel(
         )
     }
 
-    /** Loads the media cache stats into the state (mirrors the original App reload). */
+    /** Loads the combined image cache stats (prefetch file store + Coil disk cache) into the state. */
     fun onReloadCacheStats() {
         coroutineScope.launch {
-            currentCache = mediaCacheStore.stats().toCacheSettingsState()
+            currentCache = loadCacheState()
             recomposeState()
         }
     }
 
-    /** Clears the media cache and reloads the stats afterwards, mirroring the original behaviour. */
+    /** Clears both the prefetch file store and the Coil image cache, then reloads the stats. */
     fun onClearCache() {
         coroutineScope.launch {
             mediaCacheStore.clear()
-            currentCache = mediaCacheStore.stats().toCacheSettingsState()
+            clearImageCache()
+            currentCache = loadCacheState()
             recomposeState()
         }
+    }
+
+    private suspend fun loadCacheState(): CacheSettingsState {
+        val stats = mediaCacheStore.stats()
+        return CacheSettingsState(
+            totalSizeBytes = stats.totalSizeBytes + imageCacheSizeBytes(),
+            fileCount = stats.fileCount,
+        )
     }
 
     /** Selects the EPG-area provider whose links are observed (shared by editor + manual mapping). */
@@ -356,5 +368,3 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
     diagnostics = diagnostics.toSettingsDiagnosticsState(),
 )
 
-private fun MediaCacheStats.toCacheSettingsState(): CacheSettingsState =
-    CacheSettingsState(totalSizeBytes = totalSizeBytes, fileCount = fileCount)

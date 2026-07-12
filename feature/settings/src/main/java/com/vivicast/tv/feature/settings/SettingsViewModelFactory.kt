@@ -17,9 +17,18 @@ internal class SettingsViewModelFactory(
     private val mediaCacheStore: MediaCacheStore,
     private val epgSourceRepository: EpgSourceRepository,
     private val providerRepository: ProviderRepository,
+    private val imageCacheSizeBytes: suspend () -> Long = { 0L },
+    private val clearImageCache: suspend () -> Unit = {},
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         @Suppress("UNCHECKED_CAST")
-        return SettingsViewModel(userPreferencesStore, mediaCacheStore, epgSourceRepository, providerRepository) as T
+        return SettingsViewModel(
+            userPreferencesStore,
+            mediaCacheStore,
+            epgSourceRepository,
+            providerRepository,
+            imageCacheSizeBytes,
+            clearImageCache,
+        ) as T
     }
 }

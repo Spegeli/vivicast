@@ -2,6 +2,11 @@ package com.vivicast.tv.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import okio.Path.Companion.toPath
 import com.vivicast.tv.backup.StandardBackupExporter
 import com.vivicast.tv.backup.StandardBackupRestorer
 import com.vivicast.tv.diagnostics.DiagnosticsStore
@@ -203,6 +208,22 @@ class AppContainer(
 
     val mediaCacheStore: MediaCacheStore by lazy {
         FileMediaCacheStore(File(appContext.cacheDir, "media"))
+    }
+
+    // Shared Coil loader for all AsyncImage rendering. Uses the app OkHttpClient (global User-Agent +
+    // debug TLS trust) so remote logos/posters load directly from their URL, and keeps a bounded disk
+    // cache. VivicastApplication returns this as the SingletonImageLoader.
+    val imageLoader: ImageLoader by lazy {
+        ImageLoader.Builder(appContext)
+            .components { add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient })) }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(File(appContext.cacheDir, "image_cache").absolutePath.toPath())
+                    .maxSizeBytes(100L * 1024 * 1024) // 100 MB on-disk cap (TV storage is scarce)
+                    .build()
+            }
+            .memoryCache { MemoryCache.Builder().maxSizePercent(appContext, 0.15).build() }
+            .build()
     }
 
     private val m3uStreamReferenceStore: M3uStreamReferenceStore by lazy {
