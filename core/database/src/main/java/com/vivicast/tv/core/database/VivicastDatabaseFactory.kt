@@ -2,6 +2,7 @@ package com.vivicast.tv.core.database
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 
 object VivicastDatabaseFactory {
     private const val DATABASE_NAME = "vivicast.db"
@@ -13,6 +14,10 @@ object VivicastDatabaseFactory {
             DATABASE_NAME,
         )
             .addCallback(VivicastDatabaseCallbacks.SearchFtsCallback)
+            // WAL guarantees readers see the last committed snapshot concurrently with a write, so a
+            // long import/refresh transaction doesn't block the UI's read queries (the first-emit block
+            // from Room's trigger sync is handled by warming the InvalidationTracker at startup).
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addMigrations(
                 VivicastMigrations.Migration1To2,
                 VivicastMigrations.Migration2To3,

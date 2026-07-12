@@ -24,6 +24,9 @@ class VivicastApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         CoroutineScope(Dispatchers.IO).launch {
+            // Warm the DB invalidation triggers before any refresh import can hold the writer, so the
+            // first Flow subscription (Settings/Home right after a cold start) emits immediately.
+            appContainer.warmDatabaseObservers()
             appContainer.installWorkerRunner()
         }
     }

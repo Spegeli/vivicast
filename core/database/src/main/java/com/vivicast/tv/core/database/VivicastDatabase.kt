@@ -69,3 +69,29 @@ abstract class VivicastDatabase : RoomDatabase() {
 }
 
 const val VIVICAST_DATABASE_VERSION = 16
+
+/**
+ * Installs the InvalidationTracker triggers for the UI-observed tables eagerly at startup. Room installs
+ * these lazily on the first Flow observer via a WRITE (`syncTriggers`); if that first observer subscribes
+ * while a long import/refresh transaction holds the writer, its initial emission blocks until the import
+ * commits — so the UI shows empty lists (e.g. "No playlists configured") until the refresh finishes.
+ * Warming here, before any import runs, means later Flow subscriptions reuse the installed triggers and
+ * emit the current WAL snapshot immediately. The no-op observer stays for the app's lifetime to keep the
+ * triggers installed.
+ */
+fun VivicastDatabase.warmInvalidationTracker() {
+    invalidationTracker.addObserver(
+        object : androidx.room.InvalidationTracker.Observer(
+            UI_OBSERVED_TABLES.first(),
+            *UI_OBSERVED_TABLES.drop(1).toTypedArray(),
+        ) {
+            override fun onInvalidated(tables: Set<String>) = Unit
+        },
+    )
+}
+
+private val UI_OBSERVED_TABLES = arrayOf(
+    "providers", "categories", "channels", "movies", "series", "seasons", "episodes",
+    "epg_sources", "epg_channels", "provider_epg_sources", "epg_channel_mappings", "epg_programs",
+    "playback_progress", "channel_history", "favorites", "search_history",
+)

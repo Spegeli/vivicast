@@ -15,6 +15,7 @@ import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.VivicastDatabaseFactory
+import com.vivicast.tv.core.database.warmInvalidationTracker
 import com.vivicast.tv.core.datastore.DataStoreUserPreferencesStore
 import com.vivicast.tv.core.datastore.DEFAULT_GLOBAL_USER_AGENT
 import com.vivicast.tv.core.datastore.UserPreferencesStore
@@ -355,6 +356,15 @@ class AppContainer(
 
     fun installWorkerRunner() {
         RefreshWorkerRegistry.install(refreshWorkerRunner)
+    }
+
+    /**
+     * Warms the DB InvalidationTracker at startup so the first Flow subscription (e.g. Settings opening
+     * during the startup refresh) doesn't block behind an import transaction. Call before any refresh is
+     * enqueued. Opens the DB — run off the main thread.
+     */
+    fun warmDatabaseObservers() {
+        database.warmInvalidationTracker()
     }
 
     /**
