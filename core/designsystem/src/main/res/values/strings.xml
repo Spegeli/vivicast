@@ -439,8 +439,8 @@
     <string name="settings_help_double_back">Erfordert aus der Top Navigation eine zweite Zurück-Bestätigung.</string>
     <string name="settings_help_language">Systemstandard oder feste App-Sprache.</string>
     <string name="settings_help_background_refresh">Playlisten und EPG aktualisieren, während die App im Hintergrund läuft.</string>
-    <string name="settings_help_resume_last_channel">Öffnet beim App-Start automatisch den zuletzt gesehenen Sender, sofern er noch erreichbar ist.</string>
-    <string name="settings_help_user_agent">Gilt appweit für HTTP-Anfragen. Leer nutzt den App-Standard.</string>
+    <string name="settings_help_resume_last_channel">Öffnet beim App-Start automatisch den zuletzt gesehenen Kanal, sofern er noch erreichbar ist.</string>
+    <string name="settings_help_user_agent">Gilt appweit für HTTP-Anfragen. Leer setzt beim Speichern Vivicast/1.0.</string>
 
     <!-- Settings - Playback help texts -->
     <string name="settings_help_next_stream">Wird beim nächsten Stream-Start angewendet.</string>
@@ -564,7 +564,7 @@
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d Dateien im lokalen Mediencache.</string>
-    <string name="settings_cache_refreshed">Cache Informationen wurden aktualisiert.</string>
+    <string name="settings_cache_refreshed">Medien-Cache wurde aktualisiert.</string>
     <string name="settings_cache_cleared">Cache wurde geleert.</string>
     <string name="settings_history_cleared">Verlauf wurde gelöscht.</string>
     <string name="settings_maintenance_confirm_badge">Bestätigung</string>

@@ -383,6 +383,7 @@
     <string name="movies_label_cast">Cast</string>
     <string name="movies_label_progress">Progress</string>
     <string name="series_type_badge">Series</string>
+    <string name="category_uncategorized">Uncategorized</string>
     <string name="player_timeshift_at_live">Timeshift window active. Live edge reached.</string>
     <string name="player_timeshift_offset">Timeshift: %s behind live.</string>
     <string name="player_timeline_hint">Timeline controls position.</string>
@@ -439,7 +440,7 @@
     <string name="settings_help_language">System default or fixed app language.</string>
     <string name="settings_help_background_refresh">Update playlists and EPG while the app runs in the background.</string>
     <string name="settings_help_resume_last_channel">On app startup, automatically opens the last watched channel if it is still reachable.</string>
-    <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty uses the app default.</string>
+    <string name="settings_help_user_agent">Applies app-wide to HTTP requests. Empty saves Vivicast/1.0.</string>
 
     <!-- Settings - Playback help texts -->
     <string name="settings_help_next_stream">Applied on next stream start.</string>
@@ -563,7 +564,7 @@
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d files in local media cache.</string>
-    <string name="settings_cache_refreshed">Cache information updated.</string>
+    <string name="settings_cache_refreshed">Media cache updated.</string>
     <string name="settings_cache_cleared">Cache cleared.</string>
     <string name="settings_history_cleared">History deleted.</string>
     <string name="settings_maintenance_confirm_badge">Confirmation</string>

@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Presentation-state holder for the DataStore-backed settings sections (General, Appearance,
- * Playback, plus the persisted last-selected section). Observes [UserPreferencesStore.values],
+ * Playback). Observes [UserPreferencesStore.values],
  * maps to an immutable [SettingsUiState] and writes changes back via the store.
  *
  * No Android Context/Resources, no Compose types, no navigation, no localized strings. App/System

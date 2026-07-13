@@ -76,19 +76,13 @@
     <string name="settings_pin_set">Set PIN</string>
     <string name="settings_pin_change">Change PIN</string>
     <string name="settings_pin_disable">Disable parental controls</string>
-    <string name="settings_pin_set_value">Set</string>
-    <string name="settings_pin_change_value">Change</string>
     <string name="settings_pin_disable_value">Disable</string>
     <string name="settings_protect_settings">Protect settings</string>
     <string name="settings_protect_movies">Protect movies</string>
     <string name="settings_protect_series">Protect series</string>
     <string name="settings_protect_adult">Protect adult content</string>
-    <string name="settings_lock_session">Lock session access</string>
-    <string name="settings_lock_session_value">No access</string>
-    <string name="settings_pin_required">PIN required</string>
 
     <!-- Cache/History settings -->
-    <string name="settings_cache_info">Cache information</string>
     <string name="settings_cache_clear">Clear cache</string>
     <string name="settings_history_clear">Clear history</string>
     <string name="settings_cache_clear_value">Execute</string>
@@ -96,13 +90,7 @@
     <!-- Backup settings -->
     <string name="settings_backup_export">Export backup</string>
     <string name="settings_backup_import">Import backup</string>
-    <string name="settings_backup_target">Backup target</string>
-    <string name="settings_backup_last">Last backup</string>
-    <string name="settings_backup_full_export">Full backup export</string>
-    <string name="settings_backup_full_import">Full backup import</string>
     <string name="settings_backup_select_value">Select</string>
-    <string name="settings_backup_full_value">Passphrase</string>
-    <string name="settings_backup_never">Never</string>
 
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Add playlist</string>

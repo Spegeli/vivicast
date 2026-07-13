@@ -67,7 +67,8 @@ Add two rows to `AboutSettingsPanel`: **Build-Nummer** (from `BuildConfig`) and 
 - **D22** remove the dead "Sitzungsfreigabe sperren" row (`ParentalControlPanel.kt:185-192`) + its strings
   `settings_lock_session`/`_value`. (`state.lockedUntilMillis` stays — used app-side.)
 - **D35** diagnostics retention → single fixed value; remove the configurable `DiagnosticsRetentionDays`
-  DataStore key + `retentionDays` plumbing that is already always the `DIAGNOSTICS_RETENTION_DAYS` constant.
+  DataStore key + `retentionDays` plumbing. (As built: `DiagnosticsStore` holds `private val retentionDays = 7`
+  — a fixed field, not a named top-level constant.)
   Touches `DiagnosticsStore.kt`, `MainActivity.kt` (:279/:976), `DataStoreUserPreferencesStore.kt:85`,
   the diagnostics test. Open Q: confirm the fixed value = **7 days**.
 
@@ -162,4 +163,5 @@ After investigation the deferred items were reconciled + removed (owner-approved
 **Intentionally kept:** `AboutAppState.languageTag`/`timeZoneId` (audit D39) — NOT dead; they feed the
 diagnostics-export metadata via `SettingsPreferenceMappers`. Left in place.
 
-**Still open:** G6 features (D10 group management, D15 logos folder + P-5, D17 accent colors) — separate round.
+**Still open:** G6 features — **D10** per-playlist channel-group management and **D17** predefined accent
+colors + contrast guard. (**D15** logos folder + P-5 — DONE 2026-07-13, committed in f65fc8f.)
