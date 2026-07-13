@@ -174,6 +174,11 @@ Follow these for all new/changed app code (they encode the completed remediation
   message mapping stays App-side.
 - **Designsystem:** `VivicastComponents.kt` no longer exists — components live in `VivicastSurfaces /
   Layout / Badges / Panels / Dialogs / Inputs / Cards / Navigation / Player`.
+- **Strings live ONLY in `:core:designsystem`** — `res/values/strings.xml` (German, default) +
+  `res/values-en/strings.xml` (English). **Do NOT add a `strings.xml` (or any `<string>`) to `app/` or any
+  `feature/*` module.** The application module's resources override library resources at merge time, so an
+  app-module string silently shadows the designsystem value (this caused corrected labels to not render —
+  see commit `97330fa`). Add every new/renamed user-facing string to both designsystem locale files.
 - Run `.\gradlew.bat detekt` before structural changes; don't grow the baseline without justification.
 
 ## Android Development

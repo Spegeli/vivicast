@@ -42,3 +42,29 @@ subprojects {
         }
     }
 }
+
+// Strings must live ONLY in :core:designsystem (see CLAUDE.md § Mandatory Architecture Rules). A <string>
+// in app/ or a feature/ module silently shadows the designsystem value at resource-merge time (application
+// resources override library resources), which once made corrected labels stop rendering (commit 97330fa).
+// This guard fails the build on any stray <string> outside :core:designsystem. Hooked into the `detekt`
+// architecture gate; also runnable standalone via `./gradlew checkStringsOnlyInDesignsystem`.
+// File list captured at configuration time so it stays configuration-cache-safe.
+val strayStringResourceFiles = subprojects
+    .filter { it.path != ":core:designsystem" }
+    .flatMap { it.fileTree("src/main/res").matching { include("values*/strings.xml") }.files }
+
+tasks.register("checkStringsOnlyInDesignsystem") {
+    group = "verification"
+    description = "Fails if any module other than :core:designsystem defines a <string> resource."
+    doLast {
+        val offenders = strayStringResourceFiles.filter { it.readText().contains("<string ") }
+        if (offenders.isNotEmpty()) {
+            throw GradleException(
+                "Strings must live only in :core:designsystem (see CLAUDE.md). Move these into " +
+                    "core/designsystem res:" + offenders.joinToString("\n  ", "\n  ") { it.path },
+            )
+        }
+    }
+}
+
+tasks.named("detekt").configure { dependsOn("checkStringsOnlyInDesignsystem") }
