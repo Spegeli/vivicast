@@ -1,7 +1,9 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -31,9 +33,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusEnterExitScope
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -116,6 +121,27 @@ private fun settingsSectionsList() = listOf(
     stringResource(R.string.settings_section_about),
 )
 
+// Right detail panel focus bounds: LEFT (at the left edge) returns to the current section; UP/DOWN
+// stop at the ends. Only fires when there's no focus target left inside the group, so internal
+// navigation (rows, button groups) is unaffected.
+private fun FocusEnterExitScope.exitDetailPanel(section: FocusRequester) {
+    when (requestedFocusDirection) {
+        FocusDirection.Left -> section.requestFocus()
+        FocusDirection.Up, FocusDirection.Down -> cancelFocusChange()
+        else -> {}
+    }
+}
+
+// Left section rail focus bounds: LEFT stops (leftmost pane); UP from the top section exits to the
+// top-nav gear. RIGHT (→ detail) and internal UP/DOWN between sections are unaffected.
+private fun FocusEnterExitScope.exitSectionRail(topNav: FocusRequester) {
+    when (requestedFocusDirection) {
+        FocusDirection.Left -> cancelFocusChange()
+        FocusDirection.Up -> topNav.requestFocus()
+        else -> {}
+    }
+}
+
 @Composable
 fun SettingsRoute(
     providerRepository: ProviderRepository,
@@ -125,6 +151,7 @@ fun SettingsRoute(
     parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
     backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
+    topNavFocusRequester: FocusRequester,
     initialSelectedSection: String? = null,
     focusLanguageRowOnEnter: Boolean = false,
     onInitialLanguageFocusApplied: () -> Unit = {},
@@ -175,6 +202,8 @@ fun SettingsRoute(
     }
     val detailFocusRequester = remember { FocusRequester() }
     var pendingDetailFocus by remember { mutableStateOf(false) }
+    // True while focus is inside the right detail panel — gates the settings-scoped BACK (detail → rail).
+    var detailFocused by remember { mutableStateOf(false) }
     val sectionFocusRequesters = remember(settingsSections) {
         settingsSections.associateWith { FocusRequester() }
     }
@@ -207,6 +236,13 @@ fun SettingsRoute(
         }
     }
 
+    // Settings-scoped BACK: from the detail panel, return to the current section in the rail first;
+    // only a further BACK from the rail falls through to the global handler (→ top-nav gear). Inline
+    // editors/overlays carry their own (more-nested) BackHandler, so they still close first.
+    BackHandler(enabled = detailFocused) {
+        selectedSectionFocusRequester.requestFocus()
+    }
+
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
@@ -217,7 +253,14 @@ fun SettingsRoute(
                 contentPadding = VivicastSpacing.Space3,
             ) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    // Rail focus bounds: LEFT stops (leftmost pane); UP from the top section exits to the
+                    // top-nav gear. RIGHT (→ detail) stays per-item; BACK (→ gear) stays global.
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusGroup()
+                        .focusProperties {
+                            onExit = { exitSectionRail(topNavFocusRequester) }
+                        },
                     verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
                 ) {
                     SettingsPanelTitle(stringResource(R.string.settings_title))
@@ -295,7 +338,18 @@ fun SettingsRoute(
                 modifier = Modifier.weight(0.78f).fillMaxSize(),
                 contentPadding = VivicastSpacing.Space4,
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+                Column(
+                    // Detail focus bounds: LEFT (at the panel's left edge) returns to the current section;
+                    // UP/DOWN stop at the ends. Internal navigation (rows, button groups) is unaffected —
+                    // an exit target only applies when there's no focus target left inside the group.
+                    modifier = Modifier
+                        .focusGroup()
+                        .onFocusChanged { detailFocused = it.hasFocus }
+                        .focusProperties {
+                            onExit = { exitDetailPanel(selectedSectionFocusRequester) }
+                        },
+                    verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+                ) {
                     SettingsPanelTitle(selectedSection)
                     when (selectedSection) {
                         sectionGeneral -> GeneralSettingsPanel(

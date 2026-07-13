@@ -1,5 +1,6 @@
 ﻿package com.vivicast.tv.feature.settings
 
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -94,6 +95,7 @@ class SettingsRouteInitialSectionTest {
                 userPreferencesStore = EmptyUserPreferencesStore,
                 mediaCacheStore = EmptyMediaCacheStore,
                 aboutAppState = AboutAppState(),
+                topNavFocusRequester = FocusRequester(),
                 initialSelectedSection = initialSelectedSection,
                 onTestProviderConnection = { ProviderConnectionTestResult(errorMessage = null, summary = null) },
                 onProviderSaved = {},

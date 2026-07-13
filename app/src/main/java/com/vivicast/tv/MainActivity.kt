@@ -903,6 +903,7 @@ private fun VivicastApp(
                     lastBackupAtMillis = preferences.backup.lastBackupAtMillis,
                 ),
                 aboutAppState = context.aboutAppState(),
+                topNavFocusRequester = topNavigationFocusRequester,
                 initialSelectedSection = preferences.general.lastSettingsSection,
                 focusLanguageRowOnEnter = reopenLanguageSettings,
                 onInitialLanguageFocusApplied = { reopenLanguageSettings = false },
