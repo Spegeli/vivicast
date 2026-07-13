@@ -106,7 +106,7 @@ internal fun EpgGlobalSettings(
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         // Global auto-refresh interval — applies to every EPG source (button → shared interval popup).
         VivicastSettingsRow(
-            title = stringResource(R.string.settings_provider_update_interval),
+            title = stringResource(R.string.settings_epg_global_interval),
             help = "",
             value = intervalLabel(preferences.refreshIntervalHours),
             forceTextValue = true,

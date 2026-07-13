@@ -76,7 +76,13 @@ class DefaultRefreshWorkerRunner(
                         if (refreshEpgOnPlaylistChangeProvider()) {
                             outcome.epgSourceIds.forEach { scheduler.enqueueEpgRefresh(it) }
                         }
-                        recordRefresh(RefreshDiagnosticType.PlaylistRefreshSucceeded, target.providerId, startedAt)
+                        recordRefresh(
+                            RefreshDiagnosticType.PlaylistRefreshSucceeded, target.providerId, startedAt,
+                            extra = mapOf(
+                                "channels" to outcome.channelsImported.toString(),
+                                "skipped" to outcome.skippedEntries.toString(),
+                            ),
+                        )
                     } else if (!outcome.skipped) {
                         recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt)
                     }
@@ -112,7 +118,15 @@ class DefaultRefreshWorkerRunner(
             .fold(
                 onSuccess = { outcome ->
                     if (outcome.success) {
-                        recordRefresh(RefreshDiagnosticType.EpgRefreshSucceeded, target.epgSourceId, startedAt)
+                        recordRefresh(
+                            RefreshDiagnosticType.EpgRefreshSucceeded, target.epgSourceId, startedAt,
+                            extra = mapOf(
+                                "channels" to outcome.channels.toString(),
+                                "mappingsAdded" to outcome.mappingsAdded.toString(),
+                                "mappingsUpdated" to outcome.mappingsUpdated.toString(),
+                                "programs" to outcome.programsImported.toString(),
+                            ),
+                        )
                     } else if (!outcome.skipped) {
                         recordRefresh(RefreshDiagnosticType.EpgRefreshFailed, target.epgSourceId, startedAt)
                     }
@@ -130,24 +144,33 @@ class DefaultRefreshWorkerRunner(
     }
 
     // Records one per-item refresh result. `target` is a provider/EPG-source id (not a URL/credential);
-    // durations + error reason are what a "why did the refresh fail" report needs. URLs in the error text
-    // are redacted downstream (StoreRefreshDiagnostics → DiagnosticsSanitizer).
-    // ponytail: item counts (channels imported/skipped) not surfaced — would need extra outcome fields;
-    // add when success/fail + reason isn't enough to diagnose.
+    // durations + error reason are what a "why did the refresh fail" report needs. `extra` carries the
+    // sanitized import counts (channels/mappings/programs) on success. URLs in the error text are redacted
+    // downstream (StoreRefreshDiagnostics → DiagnosticsSanitizer).
     private fun recordRefresh(
         type: RefreshDiagnosticType,
         target: String,
         startedAt: Long,
         error: Throwable? = null,
+        extra: Map<String, String> = emptyMap(),
     ) {
         val metadata = buildMap {
             put("target", target)
             put("durationMs", (clock() - startedAt).toString())
             error?.let { put("error", it.message ?: it::class.java.simpleName) }
+            putAll(extra)
         }
         diagnostics.record(RefreshDiagnosticEvent(type, type.name, metadata))
     }
 }
+
+// Status + sanitized import counts returned by the per-type playlist refresh, so the caller can both
+// set the provider status and record the counts in the diagnostics event.
+private data class PlaylistImportSummary(
+    val status: ProviderStatus,
+    val channels: Int,
+    val skipped: Int,
+)
 
 class DefaultPlaylistRefresher(
     private val providerRepository: ProviderRepository,
@@ -172,17 +195,19 @@ class DefaultPlaylistRefresher(
         try {
             providerRepository.setProviderStatus(provider.id, ProviderStatus.Refreshing)
             return runCatching {
-                val successStatus = when (val credentials = providerRepository.getCredentials(provider.id)) {
+                val summary = when (val credentials = providerRepository.getCredentials(provider.id)) {
                     is ProviderCredentials.M3u -> refreshM3uProvider(provider, credentials)
                     is ProviderCredentials.Xtream -> refreshXtreamProvider(provider, credentials)
                     null -> throw RefreshAuthenticationException("Provider credentials are missing.")
                 }
-                providerRepository.setProviderStatus(provider.id, successStatus)
+                providerRepository.setProviderStatus(provider.id, summary.status)
                 PlaylistRefreshOutcome(
                     providerId = provider.id,
                     success = true,
                     epgSourceIds = epgSourceReader.getActiveSourceIdsForProvider(provider.id),
                     needsSeriesDetailsRefresh = provider.type == ProviderType.Xtream && provider.includeSeries,
+                    channelsImported = summary.channels,
+                    skippedEntries = summary.skipped,
                 )
             }.getOrElse { error ->
                 // A cancelled refresh (worker stopped) is not a provider error — propagate without
@@ -196,7 +221,7 @@ class DefaultPlaylistRefresher(
         }
     }
 
-    private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u): ProviderStatus {
+    private suspend fun refreshM3uProvider(provider: Provider, credentials: ProviderCredentials.M3u): PlaylistImportSummary {
         require(provider.type == ProviderType.M3u) { "Provider type mismatch." }
         val source = if (credentials.sourceMode.isAutomaticallyRefreshable) {
             textFetcher.fetch(
@@ -214,10 +239,14 @@ class DefaultPlaylistRefresher(
         if (!credentials.sourceMode.isAutomaticallyRefreshable) {
             TransientM3uSourceStore.clear(provider.id)
         }
-        return if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active
+        return PlaylistImportSummary(
+            status = if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active,
+            channels = result.channelsAdded + result.channelsUpdated,
+            skipped = result.skippedEntries,
+        )
     }
 
-    private suspend fun refreshXtreamProvider(provider: Provider, credentials: ProviderCredentials.Xtream): ProviderStatus {
+    private suspend fun refreshXtreamProvider(provider: Provider, credentials: ProviderCredentials.Xtream): PlaylistImportSummary {
         require(provider.type == ProviderType.Xtream) { "Provider type mismatch." }
         val xtreamCredentials = XtreamCredentials(
             serverUrl = credentials.serverUrl,
@@ -263,7 +292,7 @@ class DefaultPlaylistRefresher(
             // per-series loop does not block/kill the main catalog refresh. See needsSeriesDetailsRefresh.
             seriesInfos = emptyList(),
         )
-        catalogImportRepository.importXtreamCatalog(provider.id, catalog)
+        val result = catalogImportRepository.importXtreamCatalog(provider.id, catalog)
         // Best-effort account snapshot (expiry + max connections). A user_info failure must NOT
         // fail the catalog refresh that already succeeded, so it is isolated in runCancellableCatching.
         runCancellableCatching {
@@ -274,7 +303,12 @@ class DefaultPlaylistRefresher(
                 maxConnections = userInfo.maxConnections,
             )
         }
-        return ProviderStatus.Active
+        // Xtream import has no per-entry "skipped" concept; report live channels only for the count.
+        return PlaylistImportSummary(
+            status = ProviderStatus.Active,
+            channels = result.channels.added + result.channels.updated,
+            skipped = 0,
+        )
     }
 }
 
@@ -385,14 +419,27 @@ class DefaultEpgRefresher(
             val activeProviderIds = source.providerIds.filter { providerId ->
                 providerRepository.getProvider(providerId)?.isActive == true
             }
+            var mappingsAdded = 0
+            var mappingsUpdated = 0
+            var programsImported = 0
             activeProviderIds.forEach { providerId ->
-                epgImportRepository.importXmltv(providerId, source.id, document)
+                val importResult = epgImportRepository.importXmltv(providerId, source.id, document)
+                mappingsAdded += importResult.mappingsAdded
+                mappingsUpdated += importResult.mappingsUpdated
+                programsImported += importResult.programsImported
             }
             epgImportRepository.cleanupProgramsOutsideRetention(
                 nowMillis = clock(),
                 pastDays = epgPastRetentionDaysProvider(),
             )
-            return EpgRefreshOutcome(target.epgSourceId, success = true)
+            return EpgRefreshOutcome(
+                target.epgSourceId,
+                success = true,
+                channels = document.channels.size,
+                mappingsAdded = mappingsAdded,
+                mappingsUpdated = mappingsUpdated,
+                programsImported = programsImported,
+            )
         } finally {
             epgImportRepository.setEpgSourceRefreshing(source.id, refreshing = false)
             refreshRunGuard.exit(source.id)

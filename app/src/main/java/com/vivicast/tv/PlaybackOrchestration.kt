@@ -49,7 +49,6 @@ import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.AccentColor
 import com.vivicast.tv.core.datastore.AnimationSpeedPreference
-import com.vivicast.tv.core.datastore.BackupTargetPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
@@ -75,6 +74,7 @@ import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState
+import com.vivicast.tv.data.provider.LOGO_PRIORITY_LOCAL
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
@@ -84,8 +84,6 @@ import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
-import com.vivicast.tv.feature.settings.BackupSettingsState
-import com.vivicast.tv.feature.settings.BackupTargetMode
 import com.vivicast.tv.feature.settings.DiagnosticsSettingsState
 import com.vivicast.tv.feature.settings.EpgSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
@@ -117,16 +115,31 @@ import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.Series
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 import java.util.TimeZone
 
 internal suspend fun AppContainer.resolveChannelLogoModel(channel: Channel): Any? {
-    val logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: return null
-    // Prefetched file if the refresh worker warmed it; otherwise the URL itself, which Coil now loads
-    // directly (see AppContainer.imageLoader). Same key for both so a later prefetch stays consistent.
+    // ponytail: per-channel getProvider read (cheap single-row); memoize per provider if it ever profiles hot.
+    val logoPriority = providerRepository.getProvider(channel.providerId)?.logoPriority
+    // A matching local file that still exists on disk. The index is empty unless a folder is configured, and
+    // the exists() check makes a folder/file deleted outside the app (path still stored) skip silently and
+    // fall through to the playlist/EPG logo — no error, no dead image.
+    suspend fun localLogo(): File? = withContext(Dispatchers.IO) {
+        localLogoIndex.lookup(channel.epgChannelId, channel.name)?.takeIf { it.exists() }
+    }
+    // LOCAL priority: a local file wins outright (chain: Local → Playlist → EPG).
+    if (logoPriority == LOGO_PRIORITY_LOCAL) localLogo()?.let { return it }
+    // Playlist vs EPG order is resolved in SQL (effectiveLogoUrl → channel.logoUrl). When it yields nothing
+    // (no playlist logo, no linked/mapped EPG icon), the local folder is the final fallback for every
+    // priority: Playlist → EPG → Local, EPG → Playlist → Local, Local → Playlist → EPG.
+    val logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: return localLogo()
+    // Prefetched file if the refresh worker warmed it; otherwise the URL itself, which Coil loads directly.
     return mediaCacheStore.getEntry(
         MediaCacheKey(
             type = MediaCacheType.ChannelLogo,
@@ -262,12 +275,6 @@ internal suspend fun AppContainer.clearHistory(target: HistoryClearTarget) {
         HistoryClearTarget.Movies -> playbackRepository.clearMovieProgress()
         HistoryClearTarget.Series -> playbackRepository.clearSeriesProgress()
         HistoryClearTarget.Search -> mediaRepository.clearSearchHistory()
-        HistoryClearTarget.All -> {
-            playbackRepository.clearLiveTvHistory()
-            playbackRepository.clearMovieProgress()
-            playbackRepository.clearSeriesProgress()
-            mediaRepository.clearSearchHistory()
-        }
     }
 }
 

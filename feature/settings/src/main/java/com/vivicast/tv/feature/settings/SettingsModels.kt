@@ -58,17 +58,6 @@ data class CacheSettingsState(
     val fileCount: Int = 0,
 )
 
-data class BackupSettingsState(
-    val target: BackupTargetMode = BackupTargetMode.LocalStorage,
-    val lastBackupAtMillis: Long? = null,
-)
-
-enum class BackupTargetMode {
-    LocalStorage,
-    Smb,
-    GoogleDrive,
-}
-
 data class EpgSettingsState(
     val refreshIntervalHours: Int = 24,
     val pastRetentionDays: Int = 1,
@@ -140,10 +129,12 @@ enum class PlaybackSubtitleLanguage {
 
 data class AboutAppState(
     val appVersion: String = "Unbekannt",
+    val buildNumber: String = "0",
     val packageName: String = "com.vivicast.tv",
     val databaseVersion: Int = 0,
     val androidVersion: String = "Unbekannt",
     val deviceModel: String = "Unbekannt",
+    val playerEngine: String = "Media3/ExoPlayer",
     val languageTag: String = "Unbekannt",
     val timeZoneId: String = "Unbekannt",
 )
@@ -157,6 +148,5 @@ enum class HistoryClearTarget {
     Movies,
     Series,
     Search,
-    All,
 }
 

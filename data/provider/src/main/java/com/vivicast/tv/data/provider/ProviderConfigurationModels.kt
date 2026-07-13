@@ -89,14 +89,20 @@ const val REFRESH_INTERVAL_OFF = 0
 val REFRESH_INTERVAL_OPTIONS_HOURS = listOf(REFRESH_INTERVAL_OFF, 2, 4, 8, 16, 24, 48, 72, 96, 120, 144, 168)
 
 // Per-provider logo source preference. PLAYLIST (default) prefers the playlist's own channel logo and
-// falls back to a mapped EPG source's <icon>; EPG reverses that order. Resolved at read time in the
-// channel query (see CatalogDao effective-logo projection).
+// falls back to a mapped EPG source's <icon>; EPG reverses that order (both resolved in the CatalogDao
+// effective-logo projection). LOCAL prefers a matching file from the user's local logos folder (resolved
+// App-side in resolveChannelLogoModel), falling back to the playlist order on no match.
 const val LOGO_PRIORITY_PLAYLIST = "playlist"
 const val LOGO_PRIORITY_EPG = "epg"
+const val LOGO_PRIORITY_LOCAL = "local"
 
-/** Normalizes any stored value (including the legacy "provider") to the two supported priorities. */
+/** Normalizes any stored value (including the legacy "provider") to the supported priorities. */
 fun normalizeLogoPriority(value: String?): String =
-    if (value == LOGO_PRIORITY_EPG) LOGO_PRIORITY_EPG else LOGO_PRIORITY_PLAYLIST
+    when (value) {
+        LOGO_PRIORITY_EPG -> LOGO_PRIORITY_EPG
+        LOGO_PRIORITY_LOCAL -> LOGO_PRIORITY_LOCAL
+        else -> LOGO_PRIORITY_PLAYLIST
+    }
 
 // Per-Xtream-provider live output format (mirrors TVMate's per-playlist switch). HLS (default) requests
 // `…/live/…/id.m3u8` → a server DVR window ExoPlayer can seek natively where the panel provides one; MPEG-TS

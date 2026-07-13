@@ -262,8 +262,6 @@ internal class SettingsViewModel(
 
     fun onResumeLastChannelChanged(enabled: Boolean) = updateGeneral { it.copy(resumeLastChannelOnStart = enabled) }
 
-    fun onSelectedSectionChanged(section: String) = updateGeneral { it.copy(lastSettingsSection = section) }
-
     /** Persists the preference only; LocaleHelper/recreate stay in the app layer. */
     fun onLanguageChanged(language: SettingsLanguage) =
         updateAppearance { it.copy(language = language.toDataStoreLanguagePreference()) }
@@ -289,7 +287,7 @@ internal class SettingsViewModel(
 
     /** Persists the preference only; the DiagnosticsStore/system effect stays in the app layer. */
     fun onDiagnosticsSettingsChanged(diagnostics: DiagnosticsSettingsState) = updateDiagnostics {
-        // retentionDays is fixed at 7 days internally (no UI control); copy() preserves the stored value.
+        // Retention is fixed at 7 days in DiagnosticsStore; there is no persisted/UI retention field.
         it.copy(diagnosticsLoggingEnabled = diagnostics.diagnosticsLoggingEnabled)
     }
 

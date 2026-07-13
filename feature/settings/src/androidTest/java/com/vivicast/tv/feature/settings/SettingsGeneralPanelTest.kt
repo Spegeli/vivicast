@@ -84,7 +84,7 @@ class SettingsGeneralPanelTest {
         compose.onAllNodesWithText("Schriftgr\u00f6\u00dfe").assertCountEquals(1)
         compose.onAllNodesWithText("Animationen").assertCountEquals(1)
         compose.onAllNodesWithText("Globale Logo-Standardreihenfolge").assertCountEquals(0)
-        compose.onAllNodesWithText("Logos-Ordner").assertCountEquals(0)
+        compose.onAllNodesWithText("Logos-Ordner").assertCountEquals(1)
         compose.onAllNodesWithText("EPG-Darstellung").assertCountEquals(0)
         compose.onAllNodesWithText("Vorbereitet").assertCountEquals(0)
     }

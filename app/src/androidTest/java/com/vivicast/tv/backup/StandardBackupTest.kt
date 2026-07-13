@@ -12,14 +12,12 @@ import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.SearchHistoryEntity
 import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.BackupPreferences
-import com.vivicast.tv.core.datastore.BackupTargetPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.GeneralPreferences
 import com.vivicast.tv.core.datastore.HistoryPreferences
-import com.vivicast.tv.core.datastore.ParentalControlPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.UserPreferences
@@ -92,9 +90,7 @@ class StandardBackupTest {
         assertFalse(security.has("failedAttempts"))
         assertFalse(security.has("lockoutCount"))
         assertFalse(json.getJSONObject("preferences").has("cache"))
-        val backup = json.getJSONObject("preferences").getJSONObject("backup")
-        assertEquals(BackupTargetPreference.LocalStorage.name, backup.getString("targetType"))
-        assertFalse(backup.has("lastBackupAtMillis"))
+        assertFalse(json.getJSONObject("preferences").has("backup"))
 
         val text = json.toString()
         assertFalse(text.contains("protectSettings", ignoreCase = true))
@@ -371,7 +367,6 @@ class StandardBackupTest {
             assertEquals("dune", database.searchDao().getSearchHistory().single().query)
             assertFalse(pinStore.read().hasPin)
             assertNull(preferencesStore.selectedProviderId)
-            assertFalse(preferencesStore.parentalControl.pinEnabled)
         } finally {
             database.close()
         }
@@ -753,8 +748,6 @@ private class FakePreferencesStore(
 ) : UserPreferencesStore {
     var selectedProviderId: String? = preferences.selectedProviderId
         private set
-    var parentalControl: ParentalControlPreferences = preferences.parentalControl
-        private set
     var general: GeneralPreferences = preferences.general
         private set
     var appearance: AppearancePreferences = preferences.appearance
@@ -768,15 +761,13 @@ private class FakePreferencesStore(
         selectedProviderId = providerId
     }
 
+    override suspend fun updateLocalLogoFolder(path: String?) = Unit
     override suspend fun updateGeneral(general: GeneralPreferences) { this.general = general }
     override suspend fun updateAppearance(appearance: AppearancePreferences) { this.appearance = appearance }
     override suspend fun updatePlayback(playback: PlaybackPreferences) { this.playback = playback }
     override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
-    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
-        this.parentalControl = parentalControl
-    }
 
     override suspend fun updateEpg(epg: EpgPreferences) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit

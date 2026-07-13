@@ -148,7 +148,7 @@ fun ParentalControlSettingsPanel(
                 VivicastSettingsRow(
                     title = stringResource(R.string.settings_pin_disable),
                     help = stringResource(R.string.settings_help_pin_change),
-                    value = stringResource(R.string.settings_pin_disable_value),
+                    value = stringResource(R.string.about_open_value),
                     icon = { SettingsRowIcon("lock_off") },
                     onClick = { dialog = PinDialogMode.Disable },
                 )
@@ -182,14 +182,6 @@ fun ParentalControlSettingsPanel(
             onClick = { changeProtection(ParentalProtectionArea.AdultContent, !state.protectAdultContent) },
             hasPin = state.hasPin,
         )
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_lock_session),
-                help = stringResource(R.string.settings_help_protect_unlocks),
-                value = stringResource(R.string.settings_lock_session_value),
-                icon = { SettingsRowIcon("lock") },
-            )
-        }
     }
 
     dialog?.let { mode ->

@@ -133,6 +133,9 @@ internal fun AboutSettingsPanel(
             )
         }
         item {
+            VivicastSettingsRow(title = stringResource(R.string.about_build_number), help = stringResource(R.string.about_help_build), value = state.buildNumber)
+        }
+        item {
             VivicastSettingsRow(title = stringResource(R.string.about_package_name), help = stringResource(R.string.about_help_package), value = state.packageName)
         }
         item {
@@ -143,6 +146,9 @@ internal fun AboutSettingsPanel(
         }
         item {
             VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = state.deviceModel)
+        }
+        item {
+            VivicastSettingsRow(title = stringResource(R.string.about_player_engine), help = stringResource(R.string.about_help_player_engine), value = state.playerEngine)
         }
         item {
             VivicastSettingsRow(

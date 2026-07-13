@@ -65,8 +65,7 @@ internal fun TransparencyLevel.toSettingsTransparency(): SettingsTransparency =
     when (this) {
         TransparencyLevel.Percent0 -> SettingsTransparency.Percent0
         TransparencyLevel.Percent25 -> SettingsTransparency.Percent25
-        TransparencyLevel.Percent50,
-        TransparencyLevel.Percent75 -> SettingsTransparency.Percent50
+        TransparencyLevel.Percent50 -> SettingsTransparency.Percent50
     }
 
 internal fun SettingsTransparency.toDataStoreTransparencyLevel(): TransparencyLevel =
@@ -128,7 +127,6 @@ internal fun PlaybackBufferSizeMode.toDataStoreBufferSizePreference(): BufferSiz
 
 internal fun DecoderPreference.toSettingsDecoderMode(): PlaybackDecoderMode =
     when (this) {
-        DecoderPreference.Automatic,
         DecoderPreference.Hardware -> PlaybackDecoderMode.Hardware
         DecoderPreference.Software -> PlaybackDecoderMode.Software
     }

@@ -11,7 +11,6 @@ import com.vivicast.tv.core.database.model.PlaybackProgressEntity
 import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.database.model.SearchHistoryEntity
-import com.vivicast.tv.core.datastore.ParentalControlPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureKey
@@ -124,7 +123,6 @@ class StandardBackupRestorer(
             userPreferencesStore.updateExpandedLiveTvProviderIds(restored.expandedLiveTvProviderIds)
         }
         userPreferencesStore.updateSelectedProviderId(null)
-        userPreferencesStore.updateParentalControl(ParentalControlPreferences())
         return validation
     }
 

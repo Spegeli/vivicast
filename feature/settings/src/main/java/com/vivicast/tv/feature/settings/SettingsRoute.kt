@@ -149,8 +149,11 @@ fun SettingsRoute(
     userPreferencesStore: UserPreferencesStore,
     mediaCacheStore: MediaCacheStore,
     parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
-    backupSettingsState: BackupSettingsState = BackupSettingsState(),
     aboutAppState: AboutAppState,
+    localLogoFolder: String? = null,
+    onPickLogoFolder: () -> Unit = {},
+    onRescanLogos: () -> Unit = {},
+    onRemoveLogoFolder: () -> Unit = {},
     topNavFocusRequester: FocusRequester,
     initialSelectedSection: String? = null,
     focusLanguageRowOnEnter: Boolean = false,
@@ -213,8 +216,8 @@ fun SettingsRoute(
         .focusRequester(detailFocusRequester)
         .focusProperties { left = selectedSectionFocusRequester }
     val selectSection: (String) -> Unit = { section ->
+        // Section selection is local UI state only; Settings always reopens on Allgemein.
         selectedSection = section
-        viewModel.onSelectedSectionChanged(section)
     }
 
     LaunchedEffect(Unit) {
@@ -377,6 +380,7 @@ fun SettingsRoute(
                             onSetProviderEnabled = viewModel::setProviderEnabled,
                             onDeleteProvider = viewModel::deleteProvider,
                             onTestProviderConnection = onTestProviderConnection,
+                            localLogosConfigured = localLogoFolder != null,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
                             epgSources = settingsUiState.epgSources,
@@ -429,6 +433,10 @@ fun SettingsRoute(
                         sectionAppearance -> AppearanceSettingsPanel(
                             state = settingsUiState.appearance,
                             onAppearanceSettingsChanged = viewModel::onAppearanceSettingsChanged,
+                            localLogoFolder = localLogoFolder,
+                            onPickLogoFolder = onPickLogoFolder,
+                            onRescanLogos = onRescanLogos,
+                            onRemoveLogoFolder = onRemoveLogoFolder,
                             firstFocusModifier = detailFirstFocusModifier,
                         )
                         sectionPlayback -> PlaybackSettingsPanel(

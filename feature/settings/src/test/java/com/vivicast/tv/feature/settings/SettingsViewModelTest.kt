@@ -14,7 +14,6 @@ import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.GeneralPreferences
 import com.vivicast.tv.core.datastore.HistoryPreferences
 import com.vivicast.tv.core.datastore.LanguagePreference
-import com.vivicast.tv.core.datastore.ParentalControlPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.UserPreferences
@@ -148,18 +147,6 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun onSelectedSectionChanged_persistsSection() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val store = FakeUserPreferencesStore()
-        val vm = newViewModel(scope, store)
-
-        vm.onSelectedSectionChanged("EPG")
-
-        assertEquals("EPG", store.flow.value.general.lastSettingsSection)
-        scope.cancel()
-    }
-
-    @Test
     fun onAppearanceSettingsChanged_writesPreference() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val store = FakeUserPreferencesStore()
@@ -183,7 +170,7 @@ class SettingsViewModelTest {
         val store = FakeUserPreferencesStore(
             UserPreferences(
                 epg = EpgPreferences(pastRetentionDays = 5, refreshOnAppStartEnabled = false),
-                diagnostics = DiagnosticsPreferences(diagnosticsLoggingEnabled = true, retentionDays = 9),
+                diagnostics = DiagnosticsPreferences(diagnosticsLoggingEnabled = true),
             ),
         )
         val vm = newViewModel(scope, store)
@@ -217,8 +204,6 @@ class SettingsViewModelTest {
         vm.onDiagnosticsSettingsChanged(DiagnosticsSettingsState(diagnosticsLoggingEnabled = true))
 
         assertEquals(true, store.flow.value.diagnostics.diagnosticsLoggingEnabled)
-        // retentionDays is no longer UI-driven (fixed at 7 days internally); the stored field is untouched.
-        assertEquals(1, store.flow.value.diagnostics.retentionDays)
         // Unrelated DataStore-only diagnostics field preserved.
         assertEquals(true, store.flow.value.diagnostics.keepLastSessionSummary)
         scope.cancel()
@@ -595,6 +580,7 @@ private class FakeUserPreferencesStore(
     val flow = MutableStateFlow(initial)
     override val values: Flow<UserPreferences> = flow
 
+    override suspend fun updateLocalLogoFolder(path: String?) = Unit
     override suspend fun updateGeneral(general: GeneralPreferences) {
         flow.value = flow.value.copy(general = general)
     }
@@ -619,7 +605,6 @@ private class FakeUserPreferencesStore(
     override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
-    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit
 }
 

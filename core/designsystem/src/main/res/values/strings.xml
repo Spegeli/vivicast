@@ -28,7 +28,7 @@
     <string name="settings_double_back">Doppelte Zurück-Taste zum Beenden</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_background_refresh">Hintergrundaktualisierung erlauben</string>
-    <string name="settings_resume_last_channel">Zuletzt gesehenen Sender beim Start fortsetzen</string>
+    <string name="settings_resume_last_channel">Zuletzt gesehenen Kanal beim Start fortsetzen</string>
     <string name="settings_user_agent">User-Agent</string>
 
     <!-- Start destinations -->
@@ -79,19 +79,17 @@
     <string name="settings_pin_set">PIN setzen</string>
     <string name="settings_pin_change">PIN ändern</string>
     <string name="settings_pin_disable">Kindersicherung deaktivieren</string>
-    <string name="settings_pin_set_value">Setzen</string>
-    <string name="settings_pin_change_value">Ändern</string>
+    <string name="settings_pin_set_value">Nicht gesetzt</string>
+    <string name="settings_pin_change_value">Gesetzt</string>
     <string name="settings_pin_disable_value">Deaktivieren</string>
     <string name="settings_protect_settings">Einstellungen schützen</string>
     <string name="settings_protect_movies">Filme schützen</string>
     <string name="settings_protect_series">Serien schützen</string>
     <string name="settings_protect_adult">Inhalte ab 18 schützen</string>
-    <string name="settings_lock_session">Sitzungsfreigabe sperren</string>
-    <string name="settings_lock_session_value">Keine Freigabe</string>
-    <string name="settings_pin_required">PIN erforderlich</string>
+    <string name="settings_pin_required">Deaktiviert</string>
 
     <!-- Cache/History settings -->
-    <string name="settings_cache_info">Cache Informationen</string>
+    <string name="settings_cache_info">Medien-Cache</string>
     <string name="settings_cache_clear">Cache leeren</string>
     <string name="settings_history_clear">Verlauf löschen</string>
     <string name="settings_cache_clear_value">Ausführen</string>
@@ -99,13 +97,7 @@
     <!-- Backup settings -->
     <string name="settings_backup_export">Backup exportieren</string>
     <string name="settings_backup_import">Backup importieren</string>
-    <string name="settings_backup_target">Backup-Ziel</string>
-    <string name="settings_backup_last">Letzte Sicherung</string>
-    <string name="settings_backup_full_export">Vollbackup exportieren</string>
-    <string name="settings_backup_full_import">Vollbackup importieren</string>
     <string name="settings_backup_select_value">Auswählen</string>
-    <string name="settings_backup_full_value">Passphrase</string>
-    <string name="settings_backup_never">Nie</string>
 
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Wiedergabeliste hinzufügen</string>
@@ -116,9 +108,6 @@
     <string name="settings_playlist_empty_body">Füge eine Wiedergabeliste hinzu, um Inhalte zu importieren.</string>
 
     <!-- About -->
-    <string name="about_app_info">App-Informationen</string>
-    <string name="about_copy_version">Versionsinformationen kopieren</string>
-    <string name="about_copied">Kopiert.</string>
     <string name="about_diagnostics">Diagnose und Support</string>
     <string name="about_open_value">Öffnen</string>
 
@@ -206,7 +195,7 @@
 
     <!-- Theme options -->
     <string name="theme_dark">Standard dunkel</string>
-    <string name="theme_dark_contrast">Dunkel Kontrast</string>
+    <string name="theme_dark_contrast">Dunkel kontrastreich</string>
     <string name="theme_amoled">AMOLED dunkel</string>
 
     <!-- Accent colors -->
@@ -289,6 +278,7 @@
     <string name="file_picker_root_media">App-Ordner (ohne Berechtigung)</string>
     <string name="main_passphrase_incorrect">Passphrase falsch oder Backup beschädigt.</string>
     <string name="main_backup_restored">Backup wiederhergestellt.</string>
+    <string name="main_backup_restore_failed">Wiederherstellung fehlgeschlagen: Speicher- oder Datenzugriff nicht möglich.</string>
     <string name="main_no_external_player">Kein externer Player verfügbar.</string>
 
     <!-- Home hero -->
@@ -517,7 +507,7 @@
 
     <!-- Settings - User-Agent dialog -->
     <string name="settings_ua_invalid_chars">User-Agent enthält ungültige Steuerzeichen.</string>
-    <string name="settings_ua_default_hint">Leer lassen und speichern, um den Standard-User-Agent zu verwenden.</string>
+    <string name="settings_ua_default_hint">Leer lassen setzt beim Speichern automatisch den Standard-User-Agent Vivicast/1.0.</string>
 
     <!-- Settings - EPG manual mapping -->
     <string name="settings_epg_manual_mapping">Manuelle Zuordnung</string>
@@ -546,7 +536,6 @@
     <string name="settings_help_protect_movies">Öffnet Filme erst nach PIN-Freigabe.</string>
     <string name="settings_help_protect_series">Öffnet Serien erst nach PIN-Freigabe.</string>
     <string name="settings_help_protect_adult">Blendet geschützte Erwachseneninhalte ohne Freigabe aus.</string>
-    <string name="settings_help_protect_unlocks">Aktive Freigaben bleiben im Speicher und werden nicht gesichert.</string>
     <string name="settings_pin_current_required">Aktuelle PIN vollständig eingeben.</string>
     <string name="settings_pin_four_digits">Neue PIN muss vier Ziffern haben.</string>
     <string name="settings_pin_mismatch">Neue PIN stimmt nicht überein.</string>
@@ -556,9 +545,7 @@
     <string name="settings_pin_placeholder">4 Ziffern</string>
 
     <!-- Settings - Backup help -->
-    <string name="settings_help_backup_standard">Standard-Backup ohne geheime Zugangswerte.</string>
     <string name="settings_help_backup_restore">Restore ersetzt den Backup-Umfang nach Validierung und Bestätigung.</string>
-    <string name="settings_help_backup_target">SMB- und Google-Drive-Anmeldung werden nicht im Standard-Backup gespeichert.</string>
 
     <!-- Settings - Backup full -->
     <string name="settings_backup_passphrase_body">Backup-Passphrase eingeben. Sie wird nicht gespeichert und schützt enthaltene Zugangsdaten.</string>
@@ -566,9 +553,6 @@
     <string name="settings_backup_full_action_export">Backup erstellen</string>
     <string name="settings_backup_creating">Backup wird erstellt …</string>
     <string name="settings_backup_full_action_import">Wiederherstellen</string>
-    <string name="settings_help_backup_last">Zeitpunkt des letzten erfolgreichen Exports auf diesem Gerät.</string>
-    <string name="settings_help_backup_full_export">Verschlüsselt mit Backup-Passphrase und enthält Quellen-Zugangsdaten.</string>
-    <string name="settings_help_backup_full_import">Restore erfordert die Backup-Passphrase und ersetzt den Backup-Umfang.</string>
     <string name="settings_help_backup_export">Verschlüsseltes Backup inkl. Zugangsdaten. Passphrase erforderlich.</string>
     <string name="settings_help_backup_import">Restore erfordert die Passphrase und ersetzt den gesamten Backup-Umfang.</string>
     <string name="settings_backup_passphrase_label">Passphrase</string>
@@ -583,7 +567,6 @@
     <string name="settings_cache_refreshed">Cache Informationen wurden aktualisiert.</string>
     <string name="settings_cache_cleared">Cache wurde geleert.</string>
     <string name="settings_history_cleared">Verlauf wurde gelöscht.</string>
-    <string name="settings_history_clear_all_value">Alles</string>
     <string name="settings_maintenance_confirm_badge">Bestätigung</string>
 
     <string name="settings_cache_clear_row_help">Leert den Bild-Cache der App. Providerdaten und Verlauf bleiben erhalten.</string>
@@ -621,15 +604,11 @@
     <string name="maintenance_search_confirm">Suchverlauf löschen?</string>
     <string name="maintenance_search_body">Der Suchverlauf wird gelöscht. Wiedergabeverlauf, Providerdaten und Favoriten bleiben erhalten.</string>
 
-    <string name="maintenance_all_title">Gesamten Verlauf löschen</string>
-    <string name="maintenance_all_row_help">Löscht Live-TV, Filme, Serien und Suche.</string>
-    <string name="maintenance_all_confirm">Gesamten Verlauf löschen?</string>
-    <string name="maintenance_all_body">Live-TV-Verlauf, Film- und Serienfortschritt sowie Suchverlauf werden gelöscht. Providerdaten und Favoriten bleiben erhalten.</string>
-    <string name="maintenance_all_label">Alles löschen</string>
-
     <!-- About section -->
     <string name="about_app_version_title">App-Version</string>
     <string name="about_help_version">Installierte App-Version.</string>
+    <string name="about_build_number">Build-Nummer</string>
+    <string name="about_help_build">Interne Build-Nummer der App.</string>
     <string name="about_package_name">Paketname</string>
     <string name="about_help_package">Android Application ID.</string>
     <string name="about_db_version">Datenbank-Version</string>
@@ -638,6 +617,8 @@
     <string name="about_help_android">Systemversion des Geräts.</string>
     <string name="about_device_model">Gerätemodell</string>
     <string name="about_help_device">Nicht-private technische Supportinformation.</string>
+    <string name="about_player_engine">Player-Engine</string>
+    <string name="about_help_player_engine">Verwendeter Wiedergabe-Player.</string>
     <string name="about_diagnostics_logging">Diagnoseprotokollierung</string>
     <string name="about_help_logging">Schreibt nur bereinigte technische Ereignisse in privaten App-Speicher.</string>
     <string name="about_export_diagnostics">Diagnoseprotokoll exportieren</string>
@@ -653,15 +634,6 @@
     <string name="settings_legal_terms_body">1. Geltung\nMit Installation oder Nutzung von Vivicast stimmst du diesen Nutzungsbedingungen zu. Wenn du nicht zustimmst, nutze die App bitte nicht.\n\n2. Was Vivicast ist – und was nicht\nVivicast ist ein Player und Verwaltungswerkzeug für IPTV-Quellen. Vivicast stellt selbst keine Inhalte, Sender, Streams, Playlists oder Zugangsdaten bereit, hostet keine Inhalte und vermittelt keinen Zugang zu Medien. Sämtliche Inhalte stammen aus Quellen, die du selbst hinzufügst.\n\n3. Deine Verantwortung\nDu bist allein verantwortlich für die Quellen, die du hinzufügst, sowie dafür, dass du zu deren Nutzung berechtigt bist und geltendes Recht einhältst. Die Aufnahme einer Playlist in Vivicast bedeutet keine Empfehlung ihrer Inhalte; zwischen uns und den Anbietern deiner Inhalte besteht keine Verbindung.\n\n4. Open-Source-Lizenz\nVivicast ist quelloffen und wird unter der GNU General Public License, Version 3 (GPL-3.0) bereitgestellt. Nutzung, Weitergabe und Änderung richten sich nach den Bedingungen dieser Lizenz. Der Quelltext ist verfügbar unter: https://github.com/Spegeli/vivicast\n\n5. Keine Gewährleistung\nVivicast wird „wie besehen“ und „wie verfügbar“ bereitgestellt, ohne jegliche Gewährleistung. Wir garantieren nicht, dass die App ununterbrochen, fehlerfrei oder mit einer bestimmten Quelle oder einem bestimmten Dienst kompatibel läuft oder deine Anforderungen erfüllt.\n\n6. Haftungsbeschränkung\nSoweit gesetzlich zulässig, haften wir nicht für Schäden aus der Nutzung der App – einschließlich Schäden im Zusammenhang mit Inhalten, die du über die App abrufst. Zwingende gesetzliche Haftung (z. B. bei Vorsatz oder grober Fahrlässigkeit) bleibt unberührt.\n\n7. Freistellung\nSoweit gesetzlich zulässig, stellst du uns von Ansprüchen Dritter frei, die aus den von dir hinzugefügten Quellen oder Inhalten entstehen.\n\n8. Unzulässige Nutzung\nDu darfst Vivicast nicht für rechtswidrige Zwecke einsetzen, insbesondere nicht zum Zugriff auf Inhalte, zu denen du nicht berechtigt bist.\n\n9. Änderungen\nDiese Bedingungen können mit künftigen Versionen angepasst werden. Die aktuelle Fassung ist stets in der App einsehbar.\n\n10. Anwendbares Recht\nEs gilt das Recht der Bundesrepublik Deutschland, soweit keine zwingenden verbraucherschützenden Vorschriften deines Wohnsitzlandes entgegenstehen.\n\n11. Kontakt\nKontakt und Rückfragen über das öffentliche Projekt-Repository (GitHub-Issues): https://github.com/Spegeli/vivicast/issues</string>
 
     <!-- Settings - Provider editor step titles and bodies -->
-    <string name="settings_provider_step_type_title">Quelltyp wählen</string>
-    <string name="settings_provider_step_m3u_input_title">M3U Eingabeart</string>
-    <string name="settings_provider_step_m3u_url_title">M3U URL</string>    <string name="settings_provider_step_xtream_title">Xtream Codes</string>
-
-    <string name="settings_provider_step_name_body">Name ist ein Pflichtfeld und muss eindeutig sein.</string>
-    <string name="settings_provider_step_type_body">Der Quelltyp kann nach dem Speichern nicht geändert werden.</string>
-    <string name="settings_provider_step_m3u_input_body">Wähle URL, Datei oder Zwischenablage.</string>
-    <string name="settings_provider_step_m3u_url_body">HTTPS wird bevorzugt. HTTP wird sichtbar als unsicher behandelt.</string>    <string name="settings_provider_step_xtream_body">Server, Benutzername und Passwort werden für den Verbindungstest benötigt.</string>
-    <string name="settings_provider_step_edit_body">Typ bleibt unverändert. Geänderte Quellen müssen erneut getestet werden.</string>
 
     <!-- Settings - Validation messages -->
     <string name="validation_name_missing">Name fehlt.</string>
@@ -730,6 +702,7 @@
     <string name="settings_provider_interval_label">Intervall</string>
     <string name="settings_provider_update_title">Aktualisierung</string>
     <string name="settings_provider_update_interval">Update Intervall</string>
+    <string name="settings_epg_global_interval">Globales Aktualisierungsintervall</string>
     <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
     <string name="settings_provider_epg_sources">EPG Quellen</string>
     <string name="settings_provider_logo_priority">Logo-Priorität</string>
@@ -737,7 +710,19 @@
     <string name="settings_provider_output_hls">HLS</string>
     <string name="settings_provider_output_ts">MPEG-TS</string>
     <string name="settings_provider_logo_priority_playlist">Logos aus der Playlist bevorzugen</string>
-    <string name="settings_provider_logo_priority_epg">Bevorzuge Logos von EPG</string>
+    <string name="settings_provider_logo_priority_epg">Logos aus EPG bevorzugen</string>
+    <string name="settings_provider_logo_priority_local">Logos aus lokalem Ordner bevorzugen</string>
+    <string name="settings_logos_folder">Logos-Ordner</string>
+    <string name="settings_help_logos_folder">Lokaler Ordner mit Sender-Logos. Dateiname = tvg-id oder Sendername; Unterordner werden mitgelesen.</string>
+    <string name="settings_value_not_set">Nicht gesetzt</string>
+    <string name="settings_logos_rescan">Logos neu einlesen</string>
+    <string name="settings_help_logos_rescan">Liest den Logos-Ordner erneut ein, z.B. nach dem Hinzufügen oder Löschen von Dateien.</string>
+    <string name="settings_logos_remove">Logos-Ordner entfernen</string>
+    <string name="settings_help_logos_remove">Entfernt den Logos-Ordner. Wiedergabelisten fallen dann auf Playlist-/EPG-Logos zurück.</string>
+    <string name="settings_logos_remove_value">Entfernen</string>
+    <string name="main_logos_folder_removed">Logos-Ordner entfernt.</string>
+    <string name="settings_logos_rescan_value">Ausführen</string>
+    <string name="main_logos_rescanned">Logos neu eingelesen.</string>
     <string name="settings_provider_ua_hint">Leer lassen für den globalen User-Agent.</string>
     <string name="settings_provider_epg_none">Noch keine EPG-Quellen angelegt.</string>
     <string name="settings_provider_test_connection">Testen</string>

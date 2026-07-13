@@ -79,19 +79,17 @@
     <string name="settings_pin_set">Set PIN</string>
     <string name="settings_pin_change">Change PIN</string>
     <string name="settings_pin_disable">Disable parental controls</string>
-    <string name="settings_pin_set_value">Set</string>
-    <string name="settings_pin_change_value">Change</string>
+    <string name="settings_pin_set_value">Not set</string>
+    <string name="settings_pin_change_value">Set</string>
     <string name="settings_pin_disable_value">Disable</string>
     <string name="settings_protect_settings">Protect settings</string>
     <string name="settings_protect_movies">Protect movies</string>
     <string name="settings_protect_series">Protect series</string>
     <string name="settings_protect_adult">Protect adult content</string>
-    <string name="settings_lock_session">Lock session access</string>
-    <string name="settings_lock_session_value">No access</string>
-    <string name="settings_pin_required">PIN required</string>
+    <string name="settings_pin_required">Disabled</string>
 
     <!-- Cache/History settings -->
-    <string name="settings_cache_info">Cache information</string>
+    <string name="settings_cache_info">Media cache</string>
     <string name="settings_cache_clear">Clear cache</string>
     <string name="settings_history_clear">Clear history</string>
     <string name="settings_cache_clear_value">Execute</string>
@@ -99,13 +97,7 @@
     <!-- Backup settings -->
     <string name="settings_backup_export">Export backup</string>
     <string name="settings_backup_import">Import backup</string>
-    <string name="settings_backup_target">Backup target</string>
-    <string name="settings_backup_last">Last backup</string>
-    <string name="settings_backup_full_export">Full backup export</string>
-    <string name="settings_backup_full_import">Full backup import</string>
     <string name="settings_backup_select_value">Select</string>
-    <string name="settings_backup_full_value">Passphrase</string>
-    <string name="settings_backup_never">Never</string>
 
     <!-- Playlist settings -->
     <string name="settings_playlist_add">Add playlist</string>
@@ -116,9 +108,6 @@
     <string name="settings_playlist_empty_body">Add a playlist to start importing content.</string>
 
     <!-- About -->
-    <string name="about_app_info">App information</string>
-    <string name="about_copy_version">Copy version information</string>
-    <string name="about_copied">Copied.</string>
     <string name="about_diagnostics">Diagnostics &amp; Support</string>
     <string name="about_open_value">Open</string>
 
@@ -289,6 +278,7 @@
     <string name="file_picker_root_media">App folder (no permission needed)</string>
     <string name="main_passphrase_incorrect">Passphrase incorrect or backup corrupted.</string>
     <string name="main_backup_restored">Backup restored.</string>
+    <string name="main_backup_restore_failed">Restore failed: storage or data access unavailable.</string>
     <string name="main_no_external_player">No external player available.</string>
 
     <!-- Home hero -->
@@ -516,7 +506,7 @@
 
     <!-- Settings - User-Agent dialog -->
     <string name="settings_ua_invalid_chars">User-Agent contains invalid control characters.</string>
-    <string name="settings_ua_default_hint">Leave empty and save to use the default user agent.</string>
+    <string name="settings_ua_default_hint">Leaving it empty saves the default user agent Vivicast/1.0.</string>
 
     <!-- Settings - EPG manual mapping -->
     <string name="settings_epg_manual_mapping">Manual Mapping</string>
@@ -545,7 +535,6 @@
     <string name="settings_help_protect_movies">Opens movies only after PIN approval.</string>
     <string name="settings_help_protect_series">Opens series only after PIN approval.</string>
     <string name="settings_help_protect_adult">Hides protected adult content without approval.</string>
-    <string name="settings_help_protect_unlocks">Active unlocks stay in memory and are not backed up.</string>
     <string name="settings_pin_current_required">Enter current PIN completely.</string>
     <string name="settings_pin_four_digits">New PIN must be four digits.</string>
     <string name="settings_pin_mismatch">New PINs do not match.</string>
@@ -555,9 +544,7 @@
     <string name="settings_pin_placeholder">4 digits</string>
 
     <!-- Settings - Backup help -->
-    <string name="settings_help_backup_standard">Standard backup without secret credentials.</string>
     <string name="settings_help_backup_restore">Restore replaces backup scope after validation and confirmation.</string>
-    <string name="settings_help_backup_target">SMB and Google Drive credentials are not included in the standard backup.</string>
 
     <!-- Settings - Backup full -->
     <string name="settings_backup_passphrase_body">Enter backup passphrase. It is not saved and protects the included credentials.</string>
@@ -565,9 +552,6 @@
     <string name="settings_backup_full_action_export">Create backup</string>
     <string name="settings_backup_creating">Creating backup …</string>
     <string name="settings_backup_full_action_import">Restore</string>
-    <string name="settings_help_backup_last">Timestamp of the last successful export on this device.</string>
-    <string name="settings_help_backup_full_export">Encrypted with backup passphrase and includes source credentials.</string>
-    <string name="settings_help_backup_full_import">Restore requires the backup passphrase and replaces backup scope.</string>
     <string name="settings_help_backup_export">Encrypted backup incl. credentials. Passphrase required.</string>
     <string name="settings_help_backup_import">Restore requires the passphrase and replaces the entire backup scope.</string>
     <string name="settings_backup_passphrase_label">Passphrase</string>
@@ -582,7 +566,6 @@
     <string name="settings_cache_refreshed">Cache information updated.</string>
     <string name="settings_cache_cleared">Cache cleared.</string>
     <string name="settings_history_cleared">History deleted.</string>
-    <string name="settings_history_clear_all_value">All</string>
     <string name="settings_maintenance_confirm_badge">Confirmation</string>
 
     <string name="settings_cache_clear_row_help">Clears the app\'s image cache. Provider data and history remain.</string>
@@ -620,15 +603,11 @@
     <string name="maintenance_search_confirm">Delete search history?</string>
     <string name="maintenance_search_body">Search history will be deleted. Playback history, provider data, and favorites remain.</string>
 
-    <string name="maintenance_all_title">Delete all history</string>
-    <string name="maintenance_all_row_help">Deletes Live TV, movies, series, and search.</string>
-    <string name="maintenance_all_confirm">Delete all history?</string>
-    <string name="maintenance_all_body">Live TV history, movie and series progress, and search history will be deleted. Provider data and favorites remain.</string>
-    <string name="maintenance_all_label">Delete all</string>
-
     <!-- About section -->
     <string name="about_app_version_title">App version</string>
     <string name="about_help_version">Installed app version.</string>
+    <string name="about_build_number">Build number</string>
+    <string name="about_help_build">Internal app build number.</string>
     <string name="about_package_name">Package name</string>
     <string name="about_help_package">Android Application ID.</string>
     <string name="about_db_version">Database version</string>
@@ -637,6 +616,8 @@
     <string name="about_help_android">Device system version.</string>
     <string name="about_device_model">Device model</string>
     <string name="about_help_device">Non-private technical support information.</string>
+    <string name="about_player_engine">Player engine</string>
+    <string name="about_help_player_engine">Playback engine in use.</string>
     <string name="about_diagnostics_logging">Diagnostic logging</string>
     <string name="about_help_logging">Writes only sanitized technical events to private app storage.</string>
     <string name="about_export_diagnostics">Export diagnostics</string>
@@ -652,15 +633,6 @@
     <string name="settings_legal_terms_body">1. Acceptance\nBy installing or using Vivicast you agree to these Terms of Use. If you do not agree, please do not use the app.\n\n2. What Vivicast is – and is not\nVivicast is a player and management tool for IPTV sources. Vivicast itself provides no content, channels, streams, playlists, or credentials, hosts no content, and grants no access to media. All content comes from sources you add yourself.\n\n3. Your responsibility\nYou are solely responsible for the sources you add and for ensuring that you are entitled to use them and comply with applicable law. Including a playlist in Vivicast does not constitute an endorsement of its content; there is no relationship between us and the providers of your content.\n\n4. Open-source license\nVivicast is open source and is provided under the GNU General Public License, Version 3 (GPL-3.0). Use, distribution, and modification are governed by the terms of that license. The source code is available at: https://github.com/Spegeli/vivicast\n\n5. No warranty\nVivicast is provided \"as is\" and \"as available\", without any warranty. We do not guarantee that the app runs uninterrupted, error-free, or compatibly with any particular source or service, or that it meets your requirements.\n\n6. Limitation of liability\nTo the extent permitted by law, we are not liable for damages arising from use of the app – including damages related to content you access through the app. Mandatory statutory liability (e.g. for intent or gross negligence) remains unaffected.\n\n7. Indemnification\nTo the extent permitted by law, you indemnify us against third-party claims arising from the sources or content you add.\n\n8. Prohibited use\nYou may not use Vivicast for unlawful purposes, in particular not to access content you are not entitled to.\n\n9. Changes\nThese terms may be adjusted with future versions. The current version is always viewable in the app.\n\n10. Governing law\nThe law of the Federal Republic of Germany applies, unless mandatory consumer-protection provisions of your country of residence prevail.\n\n11. Contact\nContact and questions via the public project repository (GitHub Issues): https://github.com/Spegeli/vivicast/issues</string>
 
     <!-- Settings - Provider editor step titles and bodies -->
-    <string name="settings_provider_step_type_title">Select source type</string>
-    <string name="settings_provider_step_m3u_input_title">M3U input method</string>
-    <string name="settings_provider_step_m3u_url_title">M3U URL</string>    <string name="settings_provider_step_xtream_title">Xtream Codes</string>
-
-    <string name="settings_provider_step_name_body">Name is required and must be unique.</string>
-    <string name="settings_provider_step_type_body">Source type cannot be changed after saving.</string>
-    <string name="settings_provider_step_m3u_input_body">Select URL, file, or clipboard.</string>
-    <string name="settings_provider_step_m3u_url_body">HTTPS is preferred. HTTP is visibly treated as insecure.</string>    <string name="settings_provider_step_xtream_body">Server, username, and password are required for the connection test.</string>
-    <string name="settings_provider_step_edit_body">Type remains unchanged. Modified sources must be tested again.</string>
 
     <!-- Settings - Validation messages -->
     <string name="validation_name_missing">Name missing.</string>
@@ -729,6 +701,7 @@
     <string name="settings_provider_interval_label">Interval</string>
     <string name="settings_provider_update_title">Update</string>
     <string name="settings_provider_update_interval">Update interval</string>
+    <string name="settings_epg_global_interval">Global refresh interval</string>
     <string name="settings_provider_refresh_on_start">Refresh on app start</string>
     <string name="settings_provider_epg_sources">EPG sources</string>
     <string name="settings_provider_logo_priority">Logo priority</string>
@@ -737,6 +710,18 @@
     <string name="settings_provider_output_ts">MPEG-TS</string>
     <string name="settings_provider_logo_priority_playlist">Prefer logos from playlist</string>
     <string name="settings_provider_logo_priority_epg">Prefer logos from EPG</string>
+    <string name="settings_provider_logo_priority_local">Prefer logos from local folder</string>
+    <string name="settings_logos_folder">Logos folder</string>
+    <string name="settings_help_logos_folder">Local folder with channel logos. Filename = tvg-id or channel name; subfolders are included.</string>
+    <string name="settings_value_not_set">Not set</string>
+    <string name="settings_logos_rescan">Rescan logos</string>
+    <string name="settings_help_logos_rescan">Re-reads the logos folder, e.g. after adding or removing files.</string>
+    <string name="settings_logos_remove">Remove logos folder</string>
+    <string name="settings_help_logos_remove">Removes the logos folder. Playlists then fall back to playlist/EPG logos.</string>
+    <string name="settings_logos_remove_value">Remove</string>
+    <string name="main_logos_folder_removed">Logos folder removed.</string>
+    <string name="settings_logos_rescan_value">Run</string>
+    <string name="main_logos_rescanned">Logos rescanned.</string>
     <string name="settings_provider_ua_hint">Leave empty to use the global User-Agent.</string>
     <string name="settings_provider_epg_none">No EPG sources created yet.</string>
     <string name="settings_provider_test_connection">Test</string>

@@ -9,6 +9,7 @@ import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import okio.Path.Companion.toPath
+import com.vivicast.tv.LocalLogoIndex
 import com.vivicast.tv.backup.StandardBackupExporter
 import com.vivicast.tv.backup.StandardBackupRestorer
 import com.vivicast.tv.diagnostics.DiagnosticsStore
@@ -234,6 +235,10 @@ class AppContainer(
     val mediaCacheStore: MediaCacheStore by lazy {
         FileMediaCacheStore(File(appContext.cacheDir, "media"))
     }
+
+    // In-memory index of the user's local logos folder (LOGO_PRIORITY_LOCAL). Rebuilt on app-start, on
+    // folder change, and on the manual "Logos neu einlesen" action.
+    val localLogoIndex: LocalLogoIndex by lazy { LocalLogoIndex() }
 
     // Shared Coil loader for all AsyncImage rendering. Uses the app OkHttpClient (global User-Agent +
     // debug TLS trust) so remote logos/posters load directly from their URL, and keeps a bounded disk

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -46,7 +47,6 @@ import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.AccentColor
 import com.vivicast.tv.core.datastore.AnimationSpeedPreference
-import com.vivicast.tv.core.datastore.BackupTargetPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
@@ -89,8 +89,6 @@ import com.vivicast.tv.diagnostics.DiagnosticsAbout
 import com.vivicast.tv.feature.settings.CacheSettingsState
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
-import com.vivicast.tv.feature.settings.BackupSettingsState
-import com.vivicast.tv.feature.settings.BackupTargetMode
 import com.vivicast.tv.feature.settings.DiagnosticsSettingsState
 import com.vivicast.tv.feature.settings.EpgSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
@@ -151,13 +149,12 @@ internal fun FontScalePreference.toFontScaleFactor(): Float =
 
 /**
  * Transparency enum → panel/overlay surface-opacity multiplier (normative: 0%→1.0, 25%→0.75, 50%→0.5).
- * Spec supports only 0/25/50; the stale `Percent75` datastore value is clamped to the 50% opacity.
  */
 internal fun TransparencyLevel.toSurfaceOpacity(): Float =
     when (this) {
         TransparencyLevel.Percent0 -> 1.00f
         TransparencyLevel.Percent25 -> 0.75f
-        TransparencyLevel.Percent50, TransparencyLevel.Percent75 -> 0.50f
+        TransparencyLevel.Percent50 -> 0.50f
     }
 
 internal fun SettingsLanguage.toLocaleKey(): String =
@@ -167,33 +164,21 @@ internal fun SettingsLanguage.toLocaleKey(): String =
         SettingsLanguage.English -> "English"
     }
 
-internal fun BackupTargetPreference.toSettingsBackupTargetMode(): BackupTargetMode =
-    when (this) {
-        BackupTargetPreference.LocalStorage -> BackupTargetMode.LocalStorage
-        // v1 supports only local backup; SMB/Google Drive are reserved for post-v1. Coerce any older
-        // persisted value to local so an unsupported target never surfaces (backwards-compatible read).
-        BackupTargetPreference.Smb, BackupTargetPreference.GoogleDrive -> BackupTargetMode.LocalStorage
-    }
-
-internal fun BackupTargetMode.toDataStoreBackupTargetPreference(): BackupTargetPreference =
-    when (this) {
-        BackupTargetMode.LocalStorage -> BackupTargetPreference.LocalStorage
-        BackupTargetMode.Smb -> BackupTargetPreference.Smb
-        BackupTargetMode.GoogleDrive -> BackupTargetPreference.GoogleDrive
-    }
-
 internal fun Context.aboutAppState(): AboutAppState {
     val packageInfo = packageManager.getPackageInfo(packageName, 0)
     val deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".trim().ifBlank { "Unbekannt" }
     val languageTag = Locale.getDefault().toLanguageTag()
     val timeZoneId = TimeZone.getDefault().id
     val appVersion = packageInfo.versionName ?: "Unbekannt"
+    val buildNumber = PackageInfoCompat.getLongVersionCode(packageInfo).toString()
     return AboutAppState(
         appVersion = appVersion,
+        buildNumber = buildNumber,
         packageName = packageName,
         databaseVersion = VIVICAST_DATABASE_VERSION,
         androidVersion = Build.VERSION.RELEASE ?: "Unbekannt",
         deviceModel = deviceModel,
+        playerEngine = "Media3/ExoPlayer",
         languageTag = languageTag,
         timeZoneId = timeZoneId,
     )
@@ -255,7 +240,6 @@ private fun BufferSizePreference.toBufferTier(): BufferTier =
 private fun DecoderPreference.toDecoderMode(): DecoderMode =
     when (this) {
         DecoderPreference.Software -> DecoderMode.Software
-        // Automatic is unreachable from the UI (spec only exposes HW/SW); treat it as Hardware.
-        DecoderPreference.Hardware, DecoderPreference.Automatic -> DecoderMode.Hardware
+        DecoderPreference.Hardware -> DecoderMode.Hardware
     }
 

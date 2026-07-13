@@ -43,8 +43,8 @@ class DiagnosticsStore(
     @Volatile
     private var enabled = false
 
-    @Volatile
-    private var retentionDays = 1
+    // Diagnostics logs are kept a fixed 7 days; retention is not user-configurable (D35).
+    private val retentionDays = 7
 
     @Volatile
     private var activeFile: File? = null
@@ -59,9 +59,8 @@ class DiagnosticsStore(
     val isLoggingEnabled: Boolean
         get() = enabled
 
-    fun setConfig(enabled: Boolean, retentionDays: Int) {
+    fun setConfig(enabled: Boolean) {
         this.enabled = enabled
-        this.retentionDays = retentionDays.coerceIn(1, 7)
         prune()
     }
 
@@ -141,7 +140,7 @@ class DiagnosticsStore(
 
     private fun prune() {
         // 1) retention by age
-        val cutoff = clock() - retentionDays.coerceIn(1, 7) * 24L * 60L * 60L * 1000L
+        val cutoff = clock() - retentionDays * 24L * 60L * 60L * 1000L
         logFiles().filter { it.lastModified() < cutoff && it != activeFile }.forEach { it.delete() }
         // 2) total size cap — drop oldest until under the cap
         var files = logFiles()
@@ -171,7 +170,7 @@ class DiagnosticsStore(
             .put("language", about.languageTag)
             .put("timeZone", about.timeZoneId)
             .put("exportedAt", timestamp(clock()))
-            .put("retentionDays", retentionDays.coerceIn(1, 7))
+            .put("retentionDays", retentionDays)
             .put("limits", JSONObject().put("rotateBytes", ROTATE_BYTES).put("totalCapBytes", TOTAL_CAP_BYTES))
             .put("coveredFrom", coveredFrom ?: JSONObject.NULL)
             .put("coveredTo", coveredTo ?: JSONObject.NULL)

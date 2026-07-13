@@ -259,6 +259,7 @@ private fun ChannelEntity.toDomain(): Channel =
         logoUrl = logoUrl,
         isCatchupAvailable = isCatchupAvailable,
         catchupDays = catchupDays,
+        epgChannelId = epgChannelId,
     )
 
 private fun MovieEntity.toDomain(): Movie =

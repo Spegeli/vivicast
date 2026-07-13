@@ -26,7 +26,7 @@ class DiagnosticsStoreTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         File(context.filesDir, "vivicast-diagnostics").deleteRecursively()
         val store = DiagnosticsStore(context) { 1_800_000_000_000L }
-        store.setConfig(enabled = true, retentionDays = 1)
+        store.setConfig(enabled = true)
 
         store.log(
             category = "refresh",
@@ -58,7 +58,7 @@ class DiagnosticsStoreTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         File(context.filesDir, "vivicast-diagnostics").deleteRecursively()
         val store = DiagnosticsStore(context) { 1_800_000_000_000L }
-        store.setConfig(enabled = false, retentionDays = 1)
+        store.setConfig(enabled = false)
 
         store.log("player", "should_not_be_written")
 

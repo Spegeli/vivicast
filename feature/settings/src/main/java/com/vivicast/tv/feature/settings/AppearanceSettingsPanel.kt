@@ -137,6 +137,10 @@ private enum class AppearancePicker { Theme, Accent, Transparency, Font, Animati
 internal fun AppearanceSettingsPanel(
     state: AppearanceSettingsState = AppearanceSettingsState(),
     onAppearanceSettingsChanged: (AppearanceSettingsState) -> Unit = {},
+    localLogoFolder: String? = null,
+    onPickLogoFolder: () -> Unit = {},
+    onRescanLogos: () -> Unit = {},
+    onRemoveLogoFolder: () -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
     var openPicker by remember { mutableStateOf<AppearancePicker?>(null) }
@@ -191,6 +195,35 @@ internal fun AppearanceSettingsPanel(
                 icon = { SettingsRowIcon("animation") },
                 onClick = { openPicker = AppearancePicker.Animation },
             )
+        }
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_logos_folder),
+                help = stringResource(R.string.settings_help_logos_folder),
+                value = localLogoFolder ?: stringResource(R.string.settings_value_not_set),
+                forceTextValue = true,
+                onClick = onPickLogoFolder,
+            )
+        }
+        if (localLogoFolder != null) {
+            item {
+                VivicastSettingsRow(
+                    title = stringResource(R.string.settings_logos_rescan),
+                    help = stringResource(R.string.settings_help_logos_rescan),
+                    value = stringResource(R.string.settings_logos_rescan_value),
+                    forceTextValue = true,
+                    onClick = onRescanLogos,
+                )
+            }
+            item {
+                VivicastSettingsRow(
+                    title = stringResource(R.string.settings_logos_remove),
+                    help = stringResource(R.string.settings_help_logos_remove),
+                    value = stringResource(R.string.settings_logos_remove_value),
+                    forceTextValue = true,
+                    onClick = onRemoveLogoFolder,
+                )
+            }
         }
     }
 

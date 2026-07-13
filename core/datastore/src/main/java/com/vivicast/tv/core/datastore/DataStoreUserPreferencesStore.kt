@@ -24,6 +24,7 @@ class DataStoreUserPreferencesStore(
         dataStore.data.map { preferences ->
             UserPreferences(
                 selectedProviderId = preferences[Keys.SelectedProviderId],
+                localLogoFolder = preferences[Keys.LocalLogoFolder],
                 general = GeneralPreferences(
                     launchOnBoot = preferences[Keys.LaunchOnBoot] ?: false,
                     doubleBackToExit = preferences[Keys.DoubleBackToExit] ?: true,
@@ -31,7 +32,6 @@ class DataStoreUserPreferencesStore(
                     resumeLastChannelOnStart = preferences[Keys.ResumeLastChannelOnStart] ?: false,
                     globalUserAgent = preferences[Keys.GlobalUserAgent]?.takeIf { it.isNotBlank() }
                         ?: DEFAULT_GLOBAL_USER_AGENT,
-                    lastSettingsSection = preferences[Keys.LastSettingsSection],
                 ),
                 appearance = AppearancePreferences(
                     backgroundColor = preferences.enumValue(Keys.BackgroundColor, ThemeColor.Dark),
@@ -55,18 +55,9 @@ class DataStoreUserPreferencesStore(
                 ),
                 history = HistoryPreferences(
                     enabled = preferences[Keys.HistoryEnabled] ?: true,
-                    maxRecentChannels = 50,
-                    watchedThresholdPercent = 95,
                 ),
                 searchHistory = preferences[Keys.SearchHistory].toSearchHistory(),
                 expandedLiveTvProviderIds = preferences[Keys.ExpandedLiveTvProviderIds].toStoredIdSet(),
-                parentalControl = ParentalControlPreferences(
-                    pinEnabled = preferences[Keys.PinEnabled] ?: false,
-                    protectSettings = preferences[Keys.ProtectSettings] ?: false,
-                    protectMovies = preferences[Keys.ProtectMovies] ?: false,
-                    protectSeries = preferences[Keys.ProtectSeries] ?: false,
-                    protectAdultContent = preferences[Keys.ProtectAdultContent] ?: false,
-                ),
                 epg = EpgPreferences(
                     refreshIntervalHours = (preferences[Keys.EpgRefreshIntervalHours] ?: 24).coerceIn(0, 168),
                     pastRetentionDays = (preferences[Keys.EpgPastRetentionDays] ?: 1).coerceIn(1, 14),
@@ -74,15 +65,12 @@ class DataStoreUserPreferencesStore(
                     refreshOnPlaylistChangeEnabled = preferences[Keys.EpgRefreshOnPlaylistChangeEnabled] ?: true,
                 ),
                 backup = BackupPreferences(
-                    target = preferences.enumValue(Keys.BackupTarget, BackupTargetPreference.LocalStorage),
-                    lastBackupAtMillis = preferences[Keys.LastBackupAtMillis]?.takeIf { it > 0L },
                     lastExportDir = preferences[Keys.LastBackupExportDir],
                 ),
                 diagnostics = DiagnosticsPreferences(
                     diagnosticsLoggingEnabled = preferences[Keys.DiagnosticsLoggingEnabled]
                         ?: preferences[Keys.LegacyDiagnosticsEnabled]
                         ?: false,
-                    retentionDays = (preferences[Keys.DiagnosticsRetentionDays] ?: 1).coerceIn(1, 7),
                     keepLastSessionSummary = preferences[Keys.KeepLastSessionSummary] ?: true,
                     lastExportDir = preferences[Keys.LastDiagnosticsExportDir],
                 ),
@@ -99,6 +87,16 @@ class DataStoreUserPreferencesStore(
         }
     }
 
+    override suspend fun updateLocalLogoFolder(path: String?) {
+        dataStore.edit { preferences ->
+            if (path.isNullOrBlank()) {
+                preferences.remove(Keys.LocalLogoFolder)
+            } else {
+                preferences[Keys.LocalLogoFolder] = path
+            }
+        }
+    }
+
     override suspend fun updateGeneral(general: GeneralPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.LaunchOnBoot] = general.launchOnBoot
@@ -106,7 +104,6 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.BackgroundRefreshEnabled] = general.backgroundRefreshEnabled
             preferences[Keys.ResumeLastChannelOnStart] = general.resumeLastChannelOnStart
             preferences[Keys.GlobalUserAgent] = general.globalUserAgent.trim().ifBlank { DEFAULT_GLOBAL_USER_AGENT }
-            preferences.setNullable(Keys.LastSettingsSection, general.lastSettingsSection)
         }
     }
 
@@ -154,16 +151,6 @@ class DataStoreUserPreferencesStore(
         }
     }
 
-    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) {
-        dataStore.edit { preferences ->
-            preferences[Keys.PinEnabled] = parentalControl.pinEnabled
-            preferences[Keys.ProtectSettings] = parentalControl.protectSettings
-            preferences[Keys.ProtectMovies] = parentalControl.protectMovies
-            preferences[Keys.ProtectSeries] = parentalControl.protectSeries
-            preferences[Keys.ProtectAdultContent] = parentalControl.protectAdultContent
-        }
-    }
-
     override suspend fun updateEpg(epg: EpgPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.EpgRefreshIntervalHours] = epg.refreshIntervalHours.coerceIn(0, 168)
@@ -175,8 +162,6 @@ class DataStoreUserPreferencesStore(
 
     override suspend fun updateBackup(backup: BackupPreferences) {
         dataStore.edit { preferences ->
-            preferences[Keys.BackupTarget] = backup.target.name
-            preferences.setNullable(Keys.LastBackupAtMillis, backup.lastBackupAtMillis)
             preferences.setNullable(Keys.LastBackupExportDir, backup.lastExportDir)
         }
     }
@@ -184,7 +169,6 @@ class DataStoreUserPreferencesStore(
     override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) {
         dataStore.edit { preferences ->
             preferences[Keys.DiagnosticsLoggingEnabled] = diagnostics.diagnosticsLoggingEnabled
-            preferences[Keys.DiagnosticsRetentionDays] = diagnostics.retentionDays.coerceIn(1, 7)
             preferences[Keys.KeepLastSessionSummary] = diagnostics.keepLastSessionSummary
             preferences.setNullable(Keys.LastDiagnosticsExportDir, diagnostics.lastExportDir)
             preferences.remove(Keys.LegacyDiagnosticsEnabled)
@@ -209,13 +193,13 @@ class DataStoreUserPreferencesStore(
 
     private object Keys {
         val SelectedProviderId = stringPreferencesKey("selected_provider_id")
+        val LocalLogoFolder = stringPreferencesKey("local_logo_folder")
 
         val LaunchOnBoot = booleanPreferencesKey("launch_on_boot")
         val DoubleBackToExit = booleanPreferencesKey("double_back_to_exit")
         val BackgroundRefreshEnabled = booleanPreferencesKey("background_refresh_enabled")
         val ResumeLastChannelOnStart = booleanPreferencesKey("resume_last_channel_on_start")
         val GlobalUserAgent = stringPreferencesKey("global_user_agent")
-        val LastSettingsSection = stringPreferencesKey("last_settings_section")
 
         val BackgroundColor = stringPreferencesKey("background_color")
         val AccentColor = stringPreferencesKey("accent_color")
@@ -239,23 +223,15 @@ class DataStoreUserPreferencesStore(
         val SearchHistory = stringPreferencesKey("search_history")
         val ExpandedLiveTvProviderIds = stringPreferencesKey("expanded_live_tv_provider_ids")
 
-        val PinEnabled = booleanPreferencesKey("pin_enabled")
-        val ProtectSettings = booleanPreferencesKey("protect_settings")
-        val ProtectMovies = booleanPreferencesKey("protect_movies")
-        val ProtectSeries = booleanPreferencesKey("protect_series")
-        val ProtectAdultContent = booleanPreferencesKey("protect_adult_content")
 
         val EpgRefreshIntervalHours = intPreferencesKey("epg_refresh_interval_hours")
         val EpgPastRetentionDays = intPreferencesKey("epg_past_retention_days")
         val EpgRefreshOnAppStartEnabled = booleanPreferencesKey("epg_refresh_on_app_start_enabled")
         val EpgRefreshOnPlaylistChangeEnabled = booleanPreferencesKey("epg_refresh_on_playlist_change_enabled")
-        val BackupTarget = stringPreferencesKey("backup_target")
-        val LastBackupAtMillis = longPreferencesKey("last_backup_at_millis")
         val LastBackupExportDir = stringPreferencesKey("last_backup_export_dir")
         val LastDiagnosticsExportDir = stringPreferencesKey("last_diagnostics_export_dir")
         val DiagnosticsLoggingEnabled = booleanPreferencesKey("diagnostics_logging_enabled")
         val LegacyDiagnosticsEnabled = booleanPreferencesKey("diagnostics_enabled")
-        val DiagnosticsRetentionDays = intPreferencesKey("diagnostics_retention_days")
         val KeepLastSessionSummary = booleanPreferencesKey("keep_last_session_summary")
     }
 }

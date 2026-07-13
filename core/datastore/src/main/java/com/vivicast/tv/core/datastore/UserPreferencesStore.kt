@@ -6,13 +6,13 @@ interface UserPreferencesStore {
     val values: Flow<UserPreferences>
 
     suspend fun updateSelectedProviderId(providerId: String?)
+    suspend fun updateLocalLogoFolder(path: String?)
     suspend fun updateGeneral(general: GeneralPreferences)
     suspend fun updateAppearance(appearance: AppearancePreferences)
     suspend fun updatePlayback(playback: PlaybackPreferences)
     suspend fun updateHistory(history: HistoryPreferences)
     suspend fun updateSearchHistory(searchHistory: List<String>)
     suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>)
-    suspend fun updateParentalControl(parentalControl: ParentalControlPreferences)
     suspend fun updateEpg(epg: EpgPreferences)
     suspend fun updateBackup(backup: BackupPreferences)
     suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences)
@@ -20,13 +20,14 @@ interface UserPreferencesStore {
 
 data class UserPreferences(
     val selectedProviderId: String? = null,
+    // Device-local absolute path to the user's logos folder (for LOGO_PRIORITY_LOCAL). Not part of a backup.
+    val localLogoFolder: String? = null,
     val general: GeneralPreferences = GeneralPreferences(),
     val appearance: AppearancePreferences = AppearancePreferences(),
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val history: HistoryPreferences = HistoryPreferences(),
     val searchHistory: List<String> = emptyList(),
     val expandedLiveTvProviderIds: Set<String> = emptySet(),
-    val parentalControl: ParentalControlPreferences = ParentalControlPreferences(),
     val epg: EpgPreferences = EpgPreferences(),
     val backup: BackupPreferences = BackupPreferences(),
     val diagnostics: DiagnosticsPreferences = DiagnosticsPreferences(),
@@ -38,7 +39,6 @@ data class GeneralPreferences(
     val backgroundRefreshEnabled: Boolean = true,
     val resumeLastChannelOnStart: Boolean = false,
     val globalUserAgent: String = DEFAULT_GLOBAL_USER_AGENT,
-    val lastSettingsSection: String? = null,
 )
 
 data class AppearancePreferences(
@@ -65,16 +65,6 @@ data class PlaybackPreferences(
 
 data class HistoryPreferences(
     val enabled: Boolean = true,
-    val maxRecentChannels: Int = 50,
-    val watchedThresholdPercent: Int = 95,
-)
-
-data class ParentalControlPreferences(
-    val pinEnabled: Boolean = false,
-    val protectSettings: Boolean = false,
-    val protectMovies: Boolean = false,
-    val protectSeries: Boolean = false,
-    val protectAdultContent: Boolean = false,
 )
 
 data class EpgPreferences(
@@ -86,15 +76,12 @@ data class EpgPreferences(
 )
 
 data class BackupPreferences(
-    val target: BackupTargetPreference = BackupTargetPreference.LocalStorage,
-    val lastBackupAtMillis: Long? = null,
     // Device-local last export folder for the in-app picker (never part of a backup container).
     val lastExportDir: String? = null,
 )
 
 data class DiagnosticsPreferences(
     val diagnosticsLoggingEnabled: Boolean = false,
-    val retentionDays: Int = 1,
     val keepLastSessionSummary: Boolean = true,
     // Device-local last export folder for the in-app picker.
     val lastExportDir: String? = null,
@@ -104,7 +91,7 @@ enum class ThemeColor { Dark, HighContrastDark, AmoledDark }
 
 enum class AccentColor { Blue }
 
-enum class TransparencyLevel { Percent0, Percent25, Percent50, Percent75 }
+enum class TransparencyLevel { Percent0, Percent25, Percent50 }
 
 enum class FontScalePreference { Small, Medium, Large, ExtraLarge }
 
@@ -114,10 +101,9 @@ enum class AnimationSpeedPreference { Off, Slow, Normal, Fast }
 
 enum class BufferSizePreference { Off, Small, Medium, Large, ExtraLarge }
 
-enum class DecoderPreference { Automatic, Hardware, Software }
+enum class DecoderPreference { Hardware, Software }
 
 enum class ExternalPlayerPreference { Internal, External, AskEveryTime }
 
-enum class BackupTargetPreference { LocalStorage, Smb, GoogleDrive }
 
 const val DEFAULT_GLOBAL_USER_AGENT = "Vivicast/1.0"

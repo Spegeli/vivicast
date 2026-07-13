@@ -82,6 +82,7 @@ import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_EPG
+import com.vivicast.tv.data.provider.LOGO_PRIORITY_LOCAL
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
 import com.vivicast.tv.data.provider.XTREAM_OUTPUT_HLS
 import com.vivicast.tv.data.provider.XTREAM_OUTPUT_TS
@@ -123,6 +124,7 @@ internal fun ProviderEditor(
     signals: ProviderEditorSignals,
     actions: ProviderEditorActions,
     epgLinks: ProviderEpgLinkInfo = ProviderEpgLinkInfo(),
+    localLogosConfigured: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val dialogs = remember { ProviderEditorDialogState() }
@@ -295,7 +297,7 @@ internal fun ProviderEditor(
         }
     }
 
-    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink)
+    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink, localLogosConfigured)
 }
 
 /** Open/closed flags for the editor's popups (name / interval / User-Agent / EPG sources). */
@@ -316,6 +318,7 @@ private fun ProviderEditorDialogs(
     isDuplicateName: (String) -> Boolean,
     onEditorChange: (ProviderEditorState) -> Unit,
     onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit,
+    localLogosConfigured: Boolean,
 ) {
     if (dialogs.showName) {
         NameEditDialog(
@@ -360,7 +363,11 @@ private fun ProviderEditorDialogs(
     if (dialogs.showLogoPriority) {
         SettingsChoiceDialog(
             title = stringResource(R.string.settings_provider_logo_priority),
-            options = listOf(LOGO_PRIORITY_PLAYLIST, LOGO_PRIORITY_EPG),
+            options = buildList {
+                add(LOGO_PRIORITY_PLAYLIST)
+                add(LOGO_PRIORITY_EPG)
+                if (localLogosConfigured) add(LOGO_PRIORITY_LOCAL)
+            },
             selected = editor.logoPriority,
             label = { logoPriorityLabel(it) },
             onSelect = { value ->
@@ -855,10 +862,10 @@ private val INTERVAL_DIALOG_MAX_HEIGHT = 340.dp
 
 @Composable
 internal fun logoPriorityLabel(priority: String): String =
-    if (priority == LOGO_PRIORITY_EPG) {
-        stringResource(R.string.settings_provider_logo_priority_epg)
-    } else {
-        stringResource(R.string.settings_provider_logo_priority_playlist)
+    when (priority) {
+        LOGO_PRIORITY_EPG -> stringResource(R.string.settings_provider_logo_priority_epg)
+        LOGO_PRIORITY_LOCAL -> stringResource(R.string.settings_provider_logo_priority_local)
+        else -> stringResource(R.string.settings_provider_logo_priority_playlist)
     }
 
 /** Per-playlist User-Agent editor — mirrors the global one; empty saves as "use the global UA". */

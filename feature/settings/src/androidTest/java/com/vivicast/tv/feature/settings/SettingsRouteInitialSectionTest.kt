@@ -19,7 +19,6 @@ import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.GeneralPreferences
 import com.vivicast.tv.core.datastore.HistoryPreferences
-import com.vivicast.tv.core.datastore.ParentalControlPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
@@ -110,13 +109,13 @@ class SettingsRouteInitialSectionTest {
 private object EmptyUserPreferencesStore : UserPreferencesStore {
     override val values: Flow<UserPreferences> = flowOf(UserPreferences())
     override suspend fun updateSelectedProviderId(providerId: String?) = Unit
+    override suspend fun updateLocalLogoFolder(path: String?) = Unit
     override suspend fun updateGeneral(general: GeneralPreferences) = Unit
     override suspend fun updateAppearance(appearance: AppearancePreferences) = Unit
     override suspend fun updatePlayback(playback: PlaybackPreferences) = Unit
     override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
-    override suspend fun updateParentalControl(parentalControl: ParentalControlPreferences) = Unit
     override suspend fun updateEpg(epg: EpgPreferences) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit
     override suspend fun updateDiagnostics(diagnostics: DiagnosticsPreferences) = Unit

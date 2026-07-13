@@ -19,8 +19,6 @@ import com.vivicast.tv.iptv.xmltv.XmltvProgram
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
-import java.text.Normalizer
-import java.util.Locale
 import java.util.UUID
 
 class RoomEpgRepository(
@@ -318,15 +316,15 @@ class RoomEpgRepository(
         // Tier 1: exact match of the channel's raw EPG id (tvg-id / epg_channel_id) against the XMLTV
         // <channel id>. Tier 2 (fallback): normalized-name match. Kept separate so an id hit outranks a
         // name hit and carries higher confidence.
-        val xmlById = xmltvChannels.associateBy { it.id.normalize() }
+        val xmlById = xmltvChannels.associateBy { smartMatchKey(it.id) }
         val xmlByName = xmltvChannels.flatMap { xmlChannel ->
-            xmlChannel.displayNames.map { displayName -> displayName.normalizeName() to xmlChannel }
+            xmlChannel.displayNames.map { displayName -> smartMatchKey(displayName) to xmlChannel }
         }.filter { it.first.isNotBlank() }.toMap()
         return channels.mapNotNull { channel ->
             if (channel.id in ignoredChannelIds) return@mapNotNull null
-            val idMatch = channel.epgChannelId?.trim()?.takeIf { it.isNotBlank() }?.let { xmlById[it.normalize()] }
+            val idMatch = channel.epgChannelId?.let { smartMatchKey(it) }?.takeIf { it.isNotEmpty() }?.let { xmlById[it] }
             val match = idMatch
-                ?: xmlByName[channel.name.normalizeName()]
+                ?: smartMatchKey(channel.name).takeIf { it.isNotEmpty() }?.let { xmlByName[it] }
                 ?: return@mapNotNull null
             val existing = existingMappings.firstOrNull { it.channelId == channel.id && !it.isManual }
             EpgChannelMappingEntity(
@@ -416,27 +414,8 @@ class RoomEpgRepository(
         fun epgChannelRowId(epgSourceId: String, remoteId: String): String =
             "$epgSourceId:epg-channel:${stableHash(remoteId)}"
 
-        fun String.normalize(): String =
-            trim().lowercase(Locale.ROOT)
-
-        // Quality/format tokens dropped from channel names before name-matching so "ZDF HD" matches "ZDF".
-        private val EPG_NAME_NOISE = setOf("hd", "uhd", "fhd", "sd", "4k", "8k", "hq", "hevc", "h264", "h265")
-
-        // Aggressive name normalization for EPG name-matching only (NOT for ids/titles): strip diacritics,
-        // bracketed tags and separators, drop quality tokens, collapse whitespace. A tuning knob is the
-        // [EPG_NAME_NOISE] set. e.g. "SAT.1 HD" -> "sat 1", "Das Erste [HD]" -> "das erste".
-        fun String.normalizeName(): String {
-            val withoutDiacritics = Normalizer.normalize(this, Normalizer.Form.NFD)
-                .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-            return withoutDiacritics
-                .lowercase(Locale.ROOT)
-                .replace(Regex("[\\[({][^\\]})]*[\\]})]"), " ")
-                .replace(Regex("[._\\-:|/]"), " ")
-                .split(Regex("\\s+"))
-                .filter { it.isNotBlank() && it !in EPG_NAME_NOISE }
-                .joinToString(separator = " ")
-                .trim()
-        }
+        // Programme-title normalization (loose). Channel recognition uses smartMatchKey (ChannelNameNormalize).
+        fun String.normalize(): String = normalizeChannelMatchKey(this)
 
         fun stableHash(value: String): String {
             val messageDigest = requireNotNull(SHA256.get()).apply { reset() }

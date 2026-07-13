@@ -205,17 +205,13 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("autoNextEnabled", playback.autoNextEnabled)
             .put("autoNextCountdownSeconds", playback.autoNextCountdownSeconds))
         .put("history", JSONObject()
-            .put("enabled", history.enabled)
-            .put("maxRecentChannels", history.maxRecentChannels)
-            .put("watchedThresholdPercent", history.watchedThresholdPercent))
+            .put("enabled", history.enabled))
         .put("expandedLiveTvProviderIds", JSONArray(expandedLiveTvProviderIds.toList()))
         .put("epg", JSONObject()
             .put("refreshIntervalHours", epg.refreshIntervalHours)
             .put("pastRetentionDays", epg.pastRetentionDays)
             .put("refreshOnAppStartEnabled", epg.refreshOnAppStartEnabled)
             .put("refreshOnPlaylistChangeEnabled", epg.refreshOnPlaylistChangeEnabled))
-        .put("backup", JSONObject()
-            .put("targetType", backup.target.name))
 
 /**
  * Reverse of [toStandardBackupJson]. Rebuilds the user preferences from a backup's `preferences` block
@@ -230,7 +226,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
     val playback = json.optJSONObject("playback")
     val history = json.optJSONObject("history")
     val epg = json.optJSONObject("epg")
-    val backup = json.optJSONObject("backup")
     val expanded = json.optJSONArray("expandedLiveTvProviderIds")
     return UserPreferences(
         general = GeneralPreferences(
@@ -239,7 +234,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
             backgroundRefreshEnabled = general.bool("backgroundRefreshEnabled", d.general.backgroundRefreshEnabled),
             resumeLastChannelOnStart = general.bool("resumeLastChannelOnStart", d.general.resumeLastChannelOnStart),
             globalUserAgent = general.str("globalUserAgent", d.general.globalUserAgent),
-            lastSettingsSection = d.general.lastSettingsSection, // transient UI breadcrumb — intentionally not backed up
         ),
         appearance = AppearancePreferences(
             backgroundColor = appearance.enum("backgroundColor", d.appearance.backgroundColor),
@@ -263,8 +257,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
         ),
         history = HistoryPreferences(
             enabled = history.bool("enabled", d.history.enabled),
-            maxRecentChannels = history.int("maxRecentChannels", d.history.maxRecentChannels),
-            watchedThresholdPercent = history.int("watchedThresholdPercent", d.history.watchedThresholdPercent),
         ),
         expandedLiveTvProviderIds = expanded.toStringSet(),
         epg = EpgPreferences(
@@ -273,9 +265,7 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
             refreshOnAppStartEnabled = epg.bool("refreshOnAppStartEnabled", d.epg.refreshOnAppStartEnabled),
             refreshOnPlaylistChangeEnabled = epg.bool("refreshOnPlaylistChangeEnabled", d.epg.refreshOnPlaylistChangeEnabled),
         ),
-        backup = BackupPreferences(
-            target = backup.enum("targetType", d.backup.target),
-        ),
+        backup = BackupPreferences(),
     )
 }
 

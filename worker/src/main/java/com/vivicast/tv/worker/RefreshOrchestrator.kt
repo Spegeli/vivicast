@@ -68,6 +68,9 @@ data class PlaylistRefreshOutcome(
     // from a failure: the caller must NOT retry (the in-flight run covers it), else the whole playlist is
     // re-fetched/re-imported a few seconds later.
     val skipped: Boolean = false,
+    // Import counts for the diagnostics event (sanitized numbers only). 0 on skip/fail.
+    val channelsImported: Int = 0,
+    val skippedEntries: Int = 0,
 )
 
 data class EpgRefreshTarget(
@@ -79,6 +82,12 @@ data class EpgRefreshOutcome(
     val success: Boolean,
     // See PlaylistRefreshOutcome.skipped — already refreshing in-process, do not retry.
     val skipped: Boolean = false,
+    // Import counts for the diagnostics event (sanitized numbers only). Summed across the source's
+    // active providers; 0 on skip/fail.
+    val channels: Int = 0,
+    val mappingsAdded: Int = 0,
+    val mappingsUpdated: Int = 0,
+    val programsImported: Int = 0,
 )
 
 data class RefreshReport(

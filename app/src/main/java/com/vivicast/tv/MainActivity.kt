@@ -57,7 +57,6 @@ import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.AccentColor
 import com.vivicast.tv.core.datastore.AnimationSpeedPreference
-import com.vivicast.tv.core.datastore.BackupTargetPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
@@ -96,11 +95,10 @@ import com.vivicast.tv.backup.decryptBackupPayload
 import com.vivicast.tv.backup.isEncryptedBackupContainer
 import com.vivicast.tv.backup.validateFullBackupPayloadForRestore
 import com.vivicast.tv.diagnostics.DiagnosticsAbout
+import com.vivicast.tv.diagnostics.DiagnosticsStore
 import com.vivicast.tv.diagnostics.PlaybackDiagnostics
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
-import com.vivicast.tv.feature.settings.BackupSettingsState
-import com.vivicast.tv.feature.settings.BackupTargetMode
 import com.vivicast.tv.feature.settings.DiagnosticsSettingsState
 import com.vivicast.tv.feature.settings.EpgSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
@@ -142,6 +140,7 @@ import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Series
 import com.vivicast.tv.worker.isRefreshDue
 import com.vivicast.tv.worker.refreshDelayMillis
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -276,9 +275,14 @@ private fun VivicastApp(
         if (loadedPreferences != null) {
             appContainer.diagnosticsStore.setConfig(
                 enabled = preferences.diagnostics.diagnosticsLoggingEnabled,
-                retentionDays = DIAGNOSTICS_RETENTION_DAYS,
             )
         }
+    }
+    // Rebuild the local-logo index on app-start (first loaded prefs) and whenever the folder pref changes.
+    LaunchedEffect(loadedPreferences?.localLogoFolder) {
+        val folder = loadedPreferences?.localLogoFolder?.let { File(it) }
+        val count = appContainer.localLogoIndex.rebuild(folder)
+        appContainer.diagnosticsStore.logLogoIndex(folder, count)
     }
     val playerState by appContainer.playerController.state.collectAsState()
     // Diagnostics: log playback errors (gated). ExoPlayer's message is generic — enrich with the recent
@@ -340,10 +344,22 @@ private fun VivicastApp(
     fun runStandardRestore(restore: PendingStandardRestore) {
         scope.launch {
             restoreInProgress = true
-            val result = if (restore.encryptedFull) {
-                appContainer.standardBackupRestorer.restoreFullPayload(jsonText = restore.jsonText)
-            } else {
-                appContainer.standardBackupRestorer.restore(jsonText = restore.jsonText)
+            val result = try {
+                if (restore.encryptedFull) {
+                    appContainer.standardBackupRestorer.restoreFullPayload(jsonText = restore.jsonText)
+                } else {
+                    appContainer.standardBackupRestorer.restore(jsonText = restore.jsonText)
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                // Storage / database / keystore IO failure mid-restore — surface it instead of letting the
+                // coroutine crash with the confirm dialog stuck on its spinner.
+                appContainer.diagnosticsStore.log("backup", "restore_failed", mapOf("reason" to (error.message ?: "io_error")))
+                restoreInProgress = false
+                pendingStandardRestore = null
+                Toast.makeText(context, context.getString(R.string.main_backup_restore_failed), Toast.LENGTH_LONG).show()
+                return@launch
             }
             when (result) {
                 is StandardBackupRestoreValidation.Valid -> {
@@ -898,13 +914,36 @@ private fun VivicastApp(
                     protectSeries = pinSecurityState.protectSeries,
                     protectAdultContent = pinSecurityState.protectAdultContent,
                 ),
-                backupSettingsState = BackupSettingsState(
-                    target = preferences.backup.target.toSettingsBackupTargetMode(),
-                    lastBackupAtMillis = preferences.backup.lastBackupAtMillis,
-                ),
                 aboutAppState = context.aboutAppState(),
+                localLogoFolder = preferences.localLogoFolder,
+                onPickLogoFolder = {
+                    filePickerRequest = FilePickerRequest(
+                        title = context.getString(R.string.settings_logos_folder),
+                        mode = FilePickerMode.FOLDER,
+                        startDir = preferences.localLogoFolder?.let { File(it) },
+                        onPick = { folder ->
+                            // Persisting the path triggers the rebuild via the localLogoFolder LaunchedEffect.
+                            scope.launch { appContainer.userPreferencesStore.updateLocalLogoFolder(folder.absolutePath) }
+                        },
+                    )
+                },
+                onRescanLogos = {
+                    // Same folder → the pref doesn't change, so rescan explicitly (for files added/removed live).
+                    scope.launch {
+                        val folder = preferences.localLogoFolder?.let { File(it) }
+                        val count = appContainer.localLogoIndex.rebuild(folder)
+                        appContainer.diagnosticsStore.logLogoIndex(folder, count)
+                        Toast.makeText(context, context.getString(R.string.main_logos_rescanned), Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onRemoveLogoFolder = {
+                    // Clearing the pref triggers the localLogoFolder LaunchedEffect, which empties the index.
+                    scope.launch {
+                        appContainer.userPreferencesStore.updateLocalLogoFolder(null)
+                        Toast.makeText(context, context.getString(R.string.main_logos_folder_removed), Toast.LENGTH_SHORT).show()
+                    }
+                },
                 topNavFocusRequester = topNavigationFocusRequester,
-                initialSelectedSection = preferences.general.lastSettingsSection,
                 focusLanguageRowOnEnter = reopenLanguageSettings,
                 onInitialLanguageFocusApplied = { reopenLanguageSettings = false },
                 onTestProviderConnection = { request ->
@@ -973,7 +1012,6 @@ private fun VivicastApp(
                     scope.launch {
                         appContainer.diagnosticsStore.setConfig(
                             enabled = diagnostics.diagnosticsLoggingEnabled,
-                            retentionDays = DIAGNOSTICS_RETENTION_DAYS,
                         )
                     }
                 },
@@ -1454,9 +1492,6 @@ private fun timestampedBackupName(appVersion: String, prefix: String, extension:
 }
 
 private const val DOWNLOAD_ROOT = "Vivicast"
-// Retention has no UI knob (the 20 MB cap already drops the oldest logs); a fixed 7-day age prune is the
-// safety net so diagnostics left on forever still self-cleans.
-private const val DIAGNOSTICS_RETENTION_DAYS = 7
 
 // Writes a file into the public Downloads/Vivicast/<subdir> folder a file manager can browse to (TV file
 // managers offer no write picker). [block] fills the output stream. Returns the human-readable location,
@@ -1574,6 +1609,15 @@ private fun Episode.toSeriesTarget(categoryId: String?): SeriesTarget =
 
 private fun Int.floorMod(modulus: Int): Int =
     ((this % modulus) + modulus) % modulus
+
+// Diagnostics for a local-logo-folder scan: logs/index_built (files=N), or logos/folder_unreadable when the
+// folder was set but isn't a readable directory (rebuild returns -1). Sanitized count only — never the path.
+// A null folder (folder removed / never set) logs nothing, so removing the folder doesn't record files=0.
+private fun DiagnosticsStore.logLogoIndex(folder: File?, count: Int) {
+    if (folder == null) return
+    if (count < 0) log("logos", "folder_unreadable")
+    else log("logos", "index_built", mapOf("files" to count.toString()))
+}
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_SETTINGS = "settings"

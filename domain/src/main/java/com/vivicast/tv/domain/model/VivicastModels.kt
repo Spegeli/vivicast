@@ -66,6 +66,8 @@ data class Channel(
     val isCatchupAvailable: Boolean,
     val catchupDays: Int,
     val stableKey: String = id,
+    // Raw tvg-id (EPG channel id), used for local-logo-folder matching. Null when the source had no tvg-id.
+    val epgChannelId: String? = null,
 )
 
 data class Movie(

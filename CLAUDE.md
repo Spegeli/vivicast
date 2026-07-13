@@ -25,7 +25,9 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 - **Default start area:** Home (unless changed by supported settings)
 - **Visible UI language:** German with umlauts. Required terms: `Kanäle`, `Über die App`. Exception: `Home` stays as-is.
 - **No** server backend, account system, cloud sync, telemetry, external metadata provider, or automatic provider merging in PRD v1
-- **No** provider-specific header/cookie/User-Agent in PRD v1 — only global User-Agent under Allgemein
+- **No** provider-specific header/cookie in PRD v1. A **per-provider User-Agent override is allowed**
+  (the global User-Agent under Allgemein is the default; a playlist may override it) — see
+  `docs/SETTINGS-DOCS-CODE-AUDIT.md` D6
 
 ## Current Architecture Status
 

@@ -75,7 +75,10 @@ class RefreshExecutionTest {
 
         val outcome = refresher.refresh(PlaylistRefreshTarget(provider.id))
 
-        assertEquals(PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = listOf("epg-1")), outcome)
+        assertEquals(
+            PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = listOf("epg-1"), channelsImported = 1),
+            outcome,
+        )
         assertEquals(listOf(ProviderStatus.Refreshing, ProviderStatus.Active), providerRepository.statuses)
         assertEquals(listOf("https://playlist.example/list.m3u?token=secret"), textFetcher.urls)
         assertEquals(provider.id, catalogRepository.m3uProviderId)
@@ -187,7 +190,10 @@ class RefreshExecutionTest {
 
         val outcome = refresher.refresh(PlaylistRefreshTarget(provider.id))
 
-        assertEquals(PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList()), outcome)
+        assertEquals(
+            PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList(), channelsImported = 1),
+            outcome,
+        )
         assertEquals(emptyList<String>(), textFetcher.urls)
         assertEquals("ARD", catalogRepository.m3uPlaylist?.channels?.single()?.name)
     }
@@ -301,7 +307,7 @@ class RefreshExecutionTest {
 
         val outcome = refresher.refresh(EpgRefreshTarget("epg-1"))
 
-        assertEquals(EpgRefreshOutcome("epg-1", success = true), outcome)
+        assertEquals(EpgRefreshOutcome("epg-1", success = true, channels = 1, programsImported = 1), outcome)
         assertEquals(listOf(activeProvider.id), importRepository.providerIds)
         assertEquals("Morning News", importRepository.documents.single().programs.single().title)
         assertEquals(listOf(2), importRepository.retentionRequests)
