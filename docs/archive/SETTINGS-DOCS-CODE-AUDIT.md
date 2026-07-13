@@ -1,5 +1,11 @@
 # Settings — Docs vs. Code Audit
 
+> **COMPLETED & ARCHIVED (2026-07-13).** All decisions here were executed: docs→code doc rewrites (Round 1
+> + 2) done corpus-wide; code→docs + fix + cleanup done and committed (`f65fc8f`, `4e2cf43`, `97330fa`),
+> incl. the post-audit re-check that unshadowed S-1/K-values and removed the redundant app-module string
+> duplicate set. **Only G6 builds D10 + D17 remain** — tracked in `plans/d10-group-management-d17-accent-colors.md`
+> (D15 shipped in `f65fc8f`). Kept for the full D1–D40 + Round-2 rationale; historical, not an active reference.
+
 Status: audit only (no file changed). Scope: **Einstellungen-Bereich only** (Allgemein, Wiedergabelisten,
 EPG, Optik, Wiedergabe, Kindersicherung, Speicher & Verlauf, Backup, Über die App). Home / Live-TV /
 Filme / Serien / Player / Suche are out of scope.
