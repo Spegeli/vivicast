@@ -76,6 +76,7 @@ class DataStoreUserPreferencesStore(
                 backup = BackupPreferences(
                     target = preferences.enumValue(Keys.BackupTarget, BackupTargetPreference.LocalStorage),
                     lastBackupAtMillis = preferences[Keys.LastBackupAtMillis]?.takeIf { it > 0L },
+                    lastExportDir = preferences[Keys.LastBackupExportDir],
                 ),
                 diagnostics = DiagnosticsPreferences(
                     diagnosticsLoggingEnabled = preferences[Keys.DiagnosticsLoggingEnabled]
@@ -83,6 +84,7 @@ class DataStoreUserPreferencesStore(
                         ?: false,
                     retentionDays = (preferences[Keys.DiagnosticsRetentionDays] ?: 1).coerceIn(1, 7),
                     keepLastSessionSummary = preferences[Keys.KeepLastSessionSummary] ?: true,
+                    lastExportDir = preferences[Keys.LastDiagnosticsExportDir],
                 ),
             )
         }
@@ -175,6 +177,7 @@ class DataStoreUserPreferencesStore(
         dataStore.edit { preferences ->
             preferences[Keys.BackupTarget] = backup.target.name
             preferences.setNullable(Keys.LastBackupAtMillis, backup.lastBackupAtMillis)
+            preferences.setNullable(Keys.LastBackupExportDir, backup.lastExportDir)
         }
     }
 
@@ -183,6 +186,7 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.DiagnosticsLoggingEnabled] = diagnostics.diagnosticsLoggingEnabled
             preferences[Keys.DiagnosticsRetentionDays] = diagnostics.retentionDays.coerceIn(1, 7)
             preferences[Keys.KeepLastSessionSummary] = diagnostics.keepLastSessionSummary
+            preferences.setNullable(Keys.LastDiagnosticsExportDir, diagnostics.lastExportDir)
             preferences.remove(Keys.LegacyDiagnosticsEnabled)
         }
     }
@@ -247,6 +251,8 @@ class DataStoreUserPreferencesStore(
         val EpgRefreshOnPlaylistChangeEnabled = booleanPreferencesKey("epg_refresh_on_playlist_change_enabled")
         val BackupTarget = stringPreferencesKey("backup_target")
         val LastBackupAtMillis = longPreferencesKey("last_backup_at_millis")
+        val LastBackupExportDir = stringPreferencesKey("last_backup_export_dir")
+        val LastDiagnosticsExportDir = stringPreferencesKey("last_diagnostics_export_dir")
         val DiagnosticsLoggingEnabled = booleanPreferencesKey("diagnostics_logging_enabled")
         val LegacyDiagnosticsEnabled = booleanPreferencesKey("diagnostics_enabled")
         val DiagnosticsRetentionDays = intPreferencesKey("diagnostics_retention_days")

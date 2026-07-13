@@ -26,8 +26,8 @@ Detailed Windows/Android setup: `docs/setup/windows-android-setup.md`
 # Open Android Studio
 .\scripts\open-android-studio.ps1
 
-# Start Android TV emulator
-.\scripts\start-tv-emulator.ps1
+# Start Android TV emulator (-Api 36 default / Android 16; -Api 28 = Android 9 floor)
+.\scripts\start-tv-emulator.ps1 -Api 28
 
 # Build / test / architecture gates
 .\gradlew.bat detekt

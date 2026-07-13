@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -227,6 +226,8 @@ private fun VivicastApp(
     var pendingExternalPlaybackRequest by remember { mutableStateOf<PlaybackRequest?>(null) }
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
     var pendingStandardRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
+    // True while a restore runs — keeps the confirm dialog open with a button spinner.
+    var restoreInProgress by remember { mutableStateOf(false) }
     var showParentalReactivationHint by remember { mutableStateOf(false) }
     var pendingSystemTargetUnavailable by remember { mutableStateOf<SystemTargetUnavailable?>(null) }
     // Set to (title, location) after a successful backup or diagnostics export; shown in a dialog.
@@ -257,55 +258,12 @@ private fun VivicastApp(
     ) {
         Toast.makeText(context, context.getString(R.string.main_external_player_error), Toast.LENGTH_SHORT).show()
     }
-    var pendingM3uFileImport by remember { mutableStateOf<((String, String) -> Unit)?>(null) }
-    var showFileManagerPrompt by remember { mutableStateOf(false) }
-    val m3uFileImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        val onContent = pendingM3uFileImport
-        pendingM3uFileImport = null
-        if (uri != null && onContent != null) {
-            scope.launch {
-                val fileName = queryDisplayName(context, uri)
-                val text = runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                }.getOrNull()
-                when {
-                    text.isNullOrBlank() -> Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
-                    text.length > MAX_M3U_INLINE_SOURCE_CHARS ->
-                        Toast.makeText(context, context.getString(R.string.main_m3u_file_too_large), Toast.LENGTH_SHORT).show()
-                    // Cheap structure sanity check on pick; full channel/movie/series classification runs
-                    // later on "Check file". A valid M3U has at least one #EXTINF entry.
-                    !text.contains("#EXTINF", ignoreCase = true) ->
-                        Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
-                    else -> {
-                        onContent(fileName, text)
-                        Toast.makeText(context, context.getString(R.string.main_m3u_file_imported), Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-    val encryptedFullBackupImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val bytes = runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                }.getOrNull()
-                when {
-                    bytes == null || bytes.isEmpty() ->
-                        Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
-                    // Reject a support/settings export (or any non-encrypted file) before asking for a passphrase.
-                    !isEncryptedBackupContainer(bytes) ->
-                        Toast.makeText(context, context.getString(R.string.main_backup_not_restorable), Toast.LENGTH_SHORT).show()
-                    // Valid encrypted container: now prompt for the passphrase.
-                    else -> pendingImportContainerBytes = bytes
-                }
-            }
-        }
-    }
+    // Single in-app picker (SAF replacement). Set to open it; onPick fires with the chosen File.
+    var filePickerRequest by remember { mutableStateOf<FilePickerRequest?>(null) }
+    // Backup export: the folder chosen in the picker, held while the passphrase dialog is shown.
+    var pendingBackupExportDir by remember { mutableStateOf<File?>(null) }
+    // True while the backup is being written — keeps the passphrase dialog open with a button spinner.
+    var backupExporting by remember { mutableStateOf(false) }
     var loadedPreferences by remember { mutableStateOf<UserPreferences?>(null) }
     LaunchedEffect(appContainer) {
         appContainer.userPreferencesStore.values.collectLatest { loadedPreferences = it }
@@ -381,6 +339,7 @@ private fun VivicastApp(
 
     fun runStandardRestore(restore: PendingStandardRestore) {
         scope.launch {
+            restoreInProgress = true
             val result = if (restore.encryptedFull) {
                 appContainer.standardBackupRestorer.restoreFullPayload(jsonText = restore.jsonText)
             } else {
@@ -388,6 +347,7 @@ private fun VivicastApp(
             }
             when (result) {
                 is StandardBackupRestoreValidation.Valid -> {
+                    restoreInProgress = false
                     pendingStandardRestore = null
                     appContainer.diagnosticsStore.log("backup", "restore_ok")
                     pinSecurityState = PinSecurityState()
@@ -407,6 +367,7 @@ private fun VivicastApp(
                     Toast.makeText(context, context.getString(R.string.main_backup_restored), Toast.LENGTH_SHORT).show()
                 }
                 is StandardBackupRestoreValidation.Invalid -> {
+                    restoreInProgress = false
                     pendingStandardRestore = null
                     appContainer.diagnosticsStore.log("backup", "restore_failed", mapOf("reason" to result.message))
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
@@ -960,15 +921,31 @@ private fun VivicastApp(
                     }
                 },
                 onPickM3uFile = { onContent: (String, String) -> Unit ->
-                    if (hasRealDocumentPicker(context.packageManager)) {
-                        pendingM3uFileImport = onContent
-                        m3uFileImportLauncher.launch(
-                            arrayOf("application/vnd.apple.mpegurl", "audio/x-mpegurl", "text/plain", "*/*"),
-                        )
-                    } else {
-                        // Android TV ohne echten SAF-Picker: Hinweis statt System-Stub-Toast.
-                        showFileManagerPrompt = true
-                    }
+                    filePickerRequest = FilePickerRequest(
+                        title = context.getString(R.string.main_pick_m3u_title),
+                        mode = FilePickerMode.FILE,
+                        extensions = setOf("m3u", "m3u8"),
+                        onPick = { file ->
+                            scope.launch {
+                                val text = withContext(Dispatchers.IO) {
+                                    runCatching { file.readText(Charsets.UTF_8) }.getOrNull()
+                                }
+                                when {
+                                    text.isNullOrBlank() ->
+                                        Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
+                                    text.length > MAX_M3U_INLINE_SOURCE_CHARS ->
+                                        Toast.makeText(context, context.getString(R.string.main_m3u_file_too_large), Toast.LENGTH_SHORT).show()
+                                    // Cheap structure sanity check on pick; full classification runs later on "Check file".
+                                    !text.contains("#EXTINF", ignoreCase = true) ->
+                                        Toast.makeText(context, context.getString(R.string.main_m3u_file_invalid), Toast.LENGTH_SHORT).show()
+                                    else -> {
+                                        onContent(file.name, text)
+                                        Toast.makeText(context, context.getString(R.string.main_m3u_file_imported), Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        },
+                    )
                 },
                 onProviderSaved = { providerId ->
                     // Saving is a foreground action: refresh once now (stamps lastRefreshAt on success, so
@@ -1000,25 +977,34 @@ private fun VivicastApp(
                     }
                 },
                 onExportDiagnostics = {
-                    scope.launch {
-                        // No SAF picker on TV: write the ZIP directly to the public Downloads/Vivicast/Diagnostics
-                        // folder the user can browse to and send.
-                        val location = runCatching {
-                            val about = context.diagnosticsAbout()
-                            val settings = JSONObject(appContainer.standardBackupExporter.exportSupportSettingsJson(indentSpaces = 0))
-                            val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-diagnostics", "zip")
-                            withContext(Dispatchers.IO) {
-                                writeToDownloads(context, "Diagnostics", name, "application/zip") { output ->
-                                    appContainer.diagnosticsStore.exportZip(output = output, about = about, settings = settings)
+                    // Let the user pick a target folder (opens at the last one used for diagnostics).
+                    filePickerRequest = FilePickerRequest(
+                        title = context.getString(R.string.main_pick_export_folder_title),
+                        mode = FilePickerMode.FOLDER,
+                        startDir = preferences.diagnostics.lastExportDir?.let { File(it) },
+                        onPick = { folder ->
+                            scope.launch {
+                                val location = runCatching {
+                                    val about = context.diagnosticsAbout()
+                                    val settings = JSONObject(appContainer.standardBackupExporter.exportSupportSettingsJson(indentSpaces = 0))
+                                    val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-diagnostics", "zip")
+                                    withContext(Dispatchers.IO) {
+                                        writeToUserFolderOrFallback(context, folder, "Diagnostics", name, "application/zip") { output ->
+                                            appContainer.diagnosticsStore.exportZip(output = output, about = about, settings = settings)
+                                        }
+                                    }
+                                }.getOrNull()
+                                if (location != null) {
+                                    appContainer.userPreferencesStore.updateDiagnostics(
+                                        preferences.diagnostics.copy(lastExportDir = folder.absolutePath),
+                                    )
+                                    savedFileInfo = "Diagnose exportiert" to location
+                                } else {
+                                    Toast.makeText(context, "Diagnose-Export fehlgeschlagen.", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        }.getOrNull()
-                        if (location != null) {
-                            savedFileInfo = "Diagnose exportiert" to location
-                        } else {
-                            Toast.makeText(context, "Diagnose-Export fehlgeschlagen.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                        },
+                    )
                 },
                 onSetPin = { pin ->
                     runCatching { PinSecurity.setPin(pin) }.fold(
@@ -1113,32 +1099,19 @@ private fun VivicastApp(
                         null
                     }
                 },
-                onExportBackup = { passphrase ->
+                onExportBackup = {
                     requestProtectionUnlock(
                         area = ParentalProtectionArea.Settings.takeIf { pinSecurityState.protectSettings },
                         title = "Vollbackup exportieren",
                         forcePrompt = true,
                     ) {
-                        // TV file managers offer no write picker; write to a fixed public Downloads folder
-                        // the user can browse to afterwards.
-                        val secret = passphrase.toCharArray()
-                        scope.launch {
-                            val location = runCatching {
-                                val bytes = appContainer.standardBackupExporter.exportBackup(passphrase = secret)
-                                val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-backup", "vcbak")
-                                saveBackupToDownloads(context, name, bytes)
-                            }.getOrNull()
-                            secret.fill(' ')
-                            appContainer.diagnosticsStore.log(
-                                "backup",
-                                if (location != null) "export_ok" else "export_failed",
-                            )
-                            if (location != null) {
-                                savedFileInfo = "Backup gespeichert" to location
-                            } else {
-                                Toast.makeText(context, "Backup konnte nicht gespeichert werden.", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        // Pick the target folder first (opens at the last one used); the passphrase is asked after.
+                        filePickerRequest = FilePickerRequest(
+                            title = context.getString(R.string.main_pick_export_folder_title),
+                            mode = FilePickerMode.FOLDER,
+                            startDir = preferences.backup.lastExportDir?.let { File(it) },
+                            onPick = { folder -> pendingBackupExportDir = folder },
+                        )
                     }
                 },
                 onImportBackup = {
@@ -1148,11 +1121,26 @@ private fun VivicastApp(
                         forcePrompt = true,
                     ) {
                         // Pick the file first; the passphrase is asked afterwards in BackupImportPassphraseDialog.
-                        if (hasRealDocumentPicker(context.packageManager)) {
-                            encryptedFullBackupImportLauncher.launch(arrayOf("application/octet-stream", "*/*"))
-                        } else {
-                            showFileManagerPrompt = true
-                        }
+                        filePickerRequest = FilePickerRequest(
+                            title = context.getString(R.string.main_pick_backup_title),
+                            mode = FilePickerMode.FILE,
+                            extensions = setOf("vcbak"),
+                            onPick = { file ->
+                                scope.launch {
+                                    val bytes = withContext(Dispatchers.IO) {
+                                        runCatching { file.readBytes() }.getOrNull()
+                                    }
+                                    when {
+                                        bytes == null || bytes.isEmpty() ->
+                                            Toast.makeText(context, context.getString(R.string.main_backup_file_invalid), Toast.LENGTH_SHORT).show()
+                                        // Reject a support/settings export (or any non-encrypted file) before asking for a passphrase.
+                                        !isEncryptedBackupContainer(bytes) ->
+                                            Toast.makeText(context, context.getString(R.string.main_backup_not_restorable), Toast.LENGTH_SHORT).show()
+                                        else -> pendingImportContainerBytes = bytes
+                                    }
+                                }
+                            },
+                        )
                     }
                 },
                 onRefreshEpgSource = { sourceId ->
@@ -1310,12 +1298,50 @@ private fun VivicastApp(
         )
     }
 
-    if (showFileManagerPrompt) {
-        FileManagerMissingDialog(
-            onDismiss = { showFileManagerPrompt = false },
-            onSearch = {
-                showFileManagerPrompt = false
-                openFileManagerSearch(context)
+    filePickerRequest?.let { request ->
+        FilePickerDialog(
+            title = request.title,
+            mode = request.mode,
+            startDir = request.startDir,
+            fileExtensions = request.extensions,
+            onDismiss = { filePickerRequest = null },
+            onPick = { file ->
+                filePickerRequest = null
+                request.onPick(file)
+            },
+        )
+    }
+
+    // Backup export step 2: after the folder is chosen, ask for the passphrase, then write into it.
+    // The dialog stays open with a button spinner while the backup is written in the background.
+    pendingBackupExportDir?.let { folder ->
+        BackupExportPassphraseDialog(
+            exporting = backupExporting,
+            onDismiss = { if (!backupExporting) pendingBackupExportDir = null },
+            onSubmit = { passphrase ->
+                backupExporting = true
+                val secret = passphrase.toCharArray()
+                scope.launch {
+                    val location = runCatching {
+                        val bytes = appContainer.standardBackupExporter.exportBackup(passphrase = secret)
+                        val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-backup", "vcbak")
+                        withContext(Dispatchers.IO) {
+                            writeToUserFolderOrFallback(context, folder, "Backups", name, "application/octet-stream") { it.write(bytes) }
+                        }
+                    }.getOrNull()
+                    secret.fill(' ')
+                    appContainer.diagnosticsStore.log("backup", if (location != null) "export_ok" else "export_failed")
+                    backupExporting = false
+                    pendingBackupExportDir = null
+                    if (location != null) {
+                        appContainer.userPreferencesStore.updateBackup(
+                            preferences.backup.copy(lastExportDir = folder.absolutePath),
+                        )
+                        savedFileInfo = "Backup gespeichert" to location
+                    } else {
+                        Toast.makeText(context, "Backup konnte nicht gespeichert werden.", Toast.LENGTH_SHORT).show()
+                    }
+                }
             },
         )
     }
@@ -1370,7 +1396,8 @@ private fun VivicastApp(
     pendingStandardRestore?.let { restore ->
         StandardRestoreConfirmDialog(
             restore = restore,
-            onDismiss = { pendingStandardRestore = null },
+            restoring = restoreInProgress,
+            onDismiss = { if (!restoreInProgress) pendingStandardRestore = null },
             onConfirm = { runStandardRestore(restore) },
         )
     }
@@ -1461,8 +1488,31 @@ private fun writeToDownloads(
         }
     }.getOrNull()
 
-private fun saveBackupToDownloads(context: Context, fileName: String, bytes: ByteArray): String? =
-    writeToDownloads(context, "Backups", fileName, "application/octet-stream") { it.write(bytes) }
+// Writes into the user-picked [folder] via the File API; on failure (no permission / not writable)
+// falls back to the fixed public Downloads/Vivicast target. Returns the location string or null.
+private fun writeToUserFolderOrFallback(
+    context: Context,
+    folder: File,
+    subdir: String,
+    fileName: String,
+    mimeType: String,
+    block: (OutputStream) -> Unit,
+): String? {
+    val direct = runCatching {
+        if (!folder.exists()) folder.mkdirs()
+        File(folder, fileName).also { it.outputStream().use(block) }.absolutePath
+    }.getOrNull()
+    return direct ?: writeToDownloads(context, subdir, fileName, mimeType, block)
+}
+
+// The in-app picker's open request. onPick fires with the chosen file (FILE) or folder (FOLDER).
+private data class FilePickerRequest(
+    val title: String,
+    val mode: FilePickerMode,
+    val onPick: (File) -> Unit,
+    val startDir: File? = null,
+    val extensions: Set<String>? = null,
+)
 
 internal fun PinSecurityState.protectionAreaForRoute(route: String): ParentalProtectionArea? =
     when (route) {

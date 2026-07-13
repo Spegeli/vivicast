@@ -278,10 +278,15 @@
     <string name="main_m3u_file_invalid">M3U-Datei ungültig.</string>
     <string name="main_m3u_file_too_large">M3U-Datei ist zu groß.</string>
     <string name="main_m3u_file_imported">M3U-Datei übernommen.</string>
-    <string name="settings_provider_file_no_manager_title">Keine Dateiauswahl verfügbar</string>
-    <string name="settings_provider_file_no_manager_body">Auf diesem Gerät ist kein Dateimanager installiert, der die Dateiauswahl unterstützt. Installiere einen Dateimanager aus dem Play Store und versuche es danach erneut – oder nutze stattdessen die URL-Eingabe.</string>
-    <string name="settings_provider_file_install_manager">Im Play Store suchen</string>
-    <string name="settings_provider_file_no_store">Kein Play Store verfügbar. Bitte nutze stattdessen die URL-Eingabe.</string>
+    <string name="main_pick_m3u_title">M3U-Datei wählen</string>
+    <string name="main_pick_backup_title">Backup-Datei wählen</string>
+    <string name="main_pick_export_folder_title">Zielordner wählen</string>
+    <string name="file_picker_pick_location">Speicherort wählen</string>
+    <string name="file_picker_use_folder">Diesen Ordner verwenden</string>
+    <string name="file_picker_no_access">Speicherzugriff auf diesem Gerät nicht möglich. Nutze den App-Ordner: lege die Datei per Dateimanager oder USB dort ab.</string>
+    <string name="file_picker_root_internal">Interner Speicher</string>
+    <string name="file_picker_root_removable">Wechselspeicher</string>
+    <string name="file_picker_root_media">App-Ordner (ohne Berechtigung)</string>
     <string name="main_passphrase_incorrect">Passphrase falsch oder Backup beschädigt.</string>
     <string name="main_backup_restored">Backup wiederhergestellt.</string>
     <string name="main_no_external_player">Kein externer Player verfügbar.</string>
@@ -559,6 +564,7 @@
     <string name="settings_backup_passphrase_body">Backup-Passphrase eingeben. Sie wird nicht gespeichert und schützt enthaltene Zugangsdaten.</string>
     <string name="settings_backup_passphrase_missing">Passphrase fehlt.</string>
     <string name="settings_backup_full_action_export">Backup erstellen</string>
+    <string name="settings_backup_creating">Backup wird erstellt …</string>
     <string name="settings_backup_full_action_import">Wiederherstellen</string>
     <string name="settings_help_backup_last">Zeitpunkt des letzten erfolgreichen Exports auf diesem Gerät.</string>
     <string name="settings_help_backup_full_export">Verschlüsselt mit Backup-Passphrase und enthält Quellen-Zugangsdaten.</string>

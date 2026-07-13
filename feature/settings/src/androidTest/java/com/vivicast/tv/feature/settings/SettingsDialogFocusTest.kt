@@ -154,22 +154,19 @@ class SettingsDialogFocusTest {
     }
 
     @Test
-    fun fullBackupPassphraseDialogSubmitsExportPassphrase() {
-        var submitted: String? = null
+    fun exportBackupRowTriggersExportFlow() {
+        // Passphrase entry moved App-side (after the folder picker); the panel row just starts the flow.
+        var triggered = false
 
         compose.setContent {
             BackupSettingsPanel(
-                onExportBackup = { submitted = it },
+                onExportBackup = { triggered = true },
             )
         }
 
         compose.onNodeWithText("Backup exportieren").performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithTag(fullBackupPassphraseDialogTag()).assertIsDisplayed()
-        compose.onNodeWithTag(fullBackupPassphraseFieldTag()).performTextInput("secret-pass")
-        compose.onNodeWithTag(fullBackupPassphraseConfirmFieldTag()).performTextInput("secret-pass")
-        compose.onNodeWithTag(fullBackupPassphraseConfirmTag()).performSemanticsAction(SemanticsActions.OnClick)
 
-        compose.waitUntil(timeoutMillis = 5_000) { submitted == "secret-pass" }
+        compose.waitUntil(timeoutMillis = 5_000) { triggered }
     }
 }
 

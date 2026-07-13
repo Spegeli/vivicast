@@ -97,12 +97,10 @@ import java.util.Date
 
 @Composable
 internal fun BackupSettingsPanel(
-    onExportBackup: (String) -> Unit = {},
+    onExportBackup: () -> Unit = {},
     onImportBackup: () -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    var showExportDialog by remember { mutableStateOf(false) }
-
     LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
             VivicastSettingsRow(
@@ -111,7 +109,8 @@ internal fun BackupSettingsPanel(
                 value = stringResource(R.string.settings_backup_select_value),
                 modifier = firstFocusModifier,
                 icon = { SettingsRowIcon("export") },
-                onClick = { showExportDialog = true },
+                // Export picks the target folder first (App-hoisted picker), then prompts for the passphrase.
+                onClick = { onExportBackup() },
             )
         }
         item {
@@ -125,97 +124,9 @@ internal fun BackupSettingsPanel(
             )
         }
     }
-
-    if (showExportDialog) {
-        BackupExportPassphraseDialog(
-            onCancel = { showExportDialog = false },
-            onConfirm = { passphrase ->
-                showExportDialog = false
-                onExportBackup(passphrase)
-            },
-        )
-    }
 }
 
 internal fun Long.toBackupTimestamp(): String =
     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(this))
 
-private const val MIN_BACKUP_PASSPHRASE_LENGTH = 8
-
-@Composable
-private fun BackupExportPassphraseDialog(
-    onCancel: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var passphrase by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    val strBody = stringResource(R.string.settings_backup_passphrase_export_body)
-    val strMissing = stringResource(R.string.settings_backup_passphrase_missing)
-    val strTooShort = stringResource(R.string.settings_backup_passphrase_too_short)
-    val strMismatch = stringResource(R.string.settings_backup_passphrase_mismatch)
-    val fieldFocus = remember { FocusRequester() }
-
-    VivicastDialog(
-        onDismiss = onCancel,
-        width = VivicastDialogWidth.Standard,
-        initialFocus = fieldFocus,
-        modifier = Modifier.testTag(fullBackupPassphraseDialogTag()),
-    ) {
-        InfoPanel(
-            title = stringResource(R.string.settings_backup_export),
-            body = error ?: strBody,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        VivicastTextField(
-            value = passphrase,
-            onValueChange = {
-                passphrase = it
-                error = null
-            },
-            label = stringResource(R.string.settings_backup_passphrase_label),
-            secret = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            focusRequester = fieldFocus,
-            fieldModifier = Modifier.testTag(fullBackupPassphraseFieldTag()),
-            isError = error != null,
-            maxLength = 100,
-        )
-        VivicastTextField(
-            value = confirm,
-            onValueChange = {
-                confirm = it
-                error = null
-            },
-            label = stringResource(R.string.settings_backup_passphrase_confirm_label),
-            secret = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            fieldModifier = Modifier.testTag(fullBackupPassphraseConfirmFieldTag()),
-            isError = error != null,
-            maxLength = 100,
-        )
-        VivicastDialogActions(
-            primaryLabel = stringResource(R.string.settings_backup_full_action_export),
-            onPrimary = {
-                val value = passphrase.trim()
-                when {
-                    value.isBlank() -> error = strMissing
-                    value.length < MIN_BACKUP_PASSPHRASE_LENGTH -> error = strTooShort
-                    value != confirm.trim() -> error = strMismatch
-                    else -> onConfirm(value)
-                }
-            },
-            secondaryLabel = stringResource(R.string.common_cancel),
-            onSecondary = onCancel,
-            primaryTestTag = fullBackupPassphraseConfirmTag(),
-            secondaryTestTag = fullBackupPassphraseCancelTag(),
-        )
-    }
-}
-
-fun fullBackupPassphraseDialogTag(): String = "full-backup-passphrase-dialog"
-fun fullBackupPassphraseFieldTag(): String = "full-backup-passphrase-field"
-fun fullBackupPassphraseConfirmFieldTag(): String = "full-backup-passphrase-confirm-field"
-fun fullBackupPassphraseCancelTag(): String = "full-backup-passphrase-cancel"
-fun fullBackupPassphraseConfirmTag(): String = "full-backup-passphrase-confirm"
 

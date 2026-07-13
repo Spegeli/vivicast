@@ -278,10 +278,15 @@
     <string name="main_m3u_file_invalid">M3U file invalid.</string>
     <string name="main_m3u_file_too_large">M3U file is too large.</string>
     <string name="main_m3u_file_imported">M3U file imported.</string>
-    <string name="settings_provider_file_no_manager_title">No file picker available</string>
-    <string name="settings_provider_file_no_manager_body">This device has no file manager that supports file selection. Install a file manager from the Play Store and try again — or use the URL input instead.</string>
-    <string name="settings_provider_file_install_manager">Search Play Store</string>
-    <string name="settings_provider_file_no_store">No Play Store available. Please use the URL input instead.</string>
+    <string name="main_pick_m3u_title">Pick an M3U file</string>
+    <string name="main_pick_backup_title">Pick a backup file</string>
+    <string name="main_pick_export_folder_title">Choose target folder</string>
+    <string name="file_picker_pick_location">Pick a location</string>
+    <string name="file_picker_use_folder">Use this folder</string>
+    <string name="file_picker_no_access">Storage access isn\'t available on this device. Use the app folder: drop the file there via a file manager or USB.</string>
+    <string name="file_picker_root_internal">Internal storage</string>
+    <string name="file_picker_root_removable">Removable storage</string>
+    <string name="file_picker_root_media">App folder (no permission needed)</string>
     <string name="main_passphrase_incorrect">Passphrase incorrect or backup corrupted.</string>
     <string name="main_backup_restored">Backup restored.</string>
     <string name="main_no_external_player">No external player available.</string>
@@ -558,6 +563,7 @@
     <string name="settings_backup_passphrase_body">Enter backup passphrase. It is not saved and protects the included credentials.</string>
     <string name="settings_backup_passphrase_missing">Passphrase missing.</string>
     <string name="settings_backup_full_action_export">Create backup</string>
+    <string name="settings_backup_creating">Creating backup …</string>
     <string name="settings_backup_full_action_import">Restore</string>
     <string name="settings_help_backup_last">Timestamp of the last successful export on this device.</string>
     <string name="settings_help_backup_full_export">Encrypted with backup passphrase and includes source credentials.</string>

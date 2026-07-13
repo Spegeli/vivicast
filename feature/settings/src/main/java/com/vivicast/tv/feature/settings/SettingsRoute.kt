@@ -138,7 +138,7 @@ fun SettingsRoute(
     onChangePin: (String, String) -> String? = { _, _ -> null },
     onDisablePin: (String) -> String? = { null },
     onProtectionChanged: (ParentalProtectionArea, Boolean) -> String? = { _, _ -> null },
-    onExportBackup: (String) -> Unit = {},
+    onExportBackup: () -> Unit = {},
     onImportBackup: () -> Unit = {},
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
     onExportDiagnostics: () -> Unit = {},

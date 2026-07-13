@@ -88,12 +88,16 @@ data class EpgPreferences(
 data class BackupPreferences(
     val target: BackupTargetPreference = BackupTargetPreference.LocalStorage,
     val lastBackupAtMillis: Long? = null,
+    // Device-local last export folder for the in-app picker (never part of a backup container).
+    val lastExportDir: String? = null,
 )
 
 data class DiagnosticsPreferences(
     val diagnosticsLoggingEnabled: Boolean = false,
     val retentionDays: Int = 1,
     val keepLastSessionSummary: Boolean = true,
+    // Device-local last export folder for the in-app picker.
+    val lastExportDir: String? = null,
 )
 
 enum class ThemeColor { Dark, HighContrastDark, AmoledDark }

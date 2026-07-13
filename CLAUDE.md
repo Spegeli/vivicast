@@ -109,7 +109,8 @@ Don't ask for decisions already clearly covered by active docs.
 app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPreferenceMappers
                 (App/Context-only mappers), PlaybackOrchestration (thin App host: image resolvers +
                 open*/save delegation + clearHistory), Backup, Diagnostics, WatchNext, AndroidTV
-                Search, other app-hoisted effects (SAF, PIN, scheduler, locale/recreate)
+                Search, in-app file picker (FilePickerDialog + StorageAccess), other app-hoisted
+                effects (PIN, scheduler, locale/recreate)
 core/
   cache/      ← M3uStreamReferenceStore, MediaCache
   common/     ← AppResult
@@ -159,10 +160,11 @@ Follow these for all new/changed app code (they encode the completed remediation
 - `AppContainer` contains **no** business logic — only wiring/delegation.
 - Time logic uses an injectable clock; dispatcher logic uses an injectable `CoroutineDispatcher`
   (default `Dispatchers.IO`).
-- **App-hoisted stays App-hoisted:** SAF/ActivityResult, Keystore/PIN/Security, Context/PackageManager/
-  Clipboard, WorkManager/Scheduler, Navigation, Locale/`recreate`, `playerController.play`, player
-  state loop / WatchNext / throttle map, Backup, Diagnostics export / support copy, Global Refresh,
-  Clear History, M3U file picker.
+- **App-hoisted stays App-hoisted:** ActivityResult (permission requests, external player),
+  Keystore/PIN/Security, Context/PackageManager/Clipboard, WorkManager/Scheduler, Navigation,
+  Locale/`recreate`, `playerController.play`, player state loop / WatchNext / throttle map, Backup,
+  Diagnostics export, Global Refresh, Clear History, in-app file picker (`FilePickerDialog` /
+  `StorageAccess` — the TV-safe SAF replacement; M3U + backup import + export folder selection).
 - **Settings:** follow `docs/SETTINGS-APP-HOISTED-DECISIONS.md`.
 - **Playback:** `PlaybackRequestFactory` / `PlaybackProgressRecorder` in `:data:playback`;
   `playerController.play` / `timeshiftConfig()` / WatchNext / `clearHistory` stay App-hoisted.
@@ -175,6 +177,8 @@ Follow these for all new/changed app code (they encode the completed remediation
 ## Android Development
 
 - Use Android TV emulator via `scripts\start-tv-emulator.ps1` as primary test environment
+  (`-Api 36` = Android 16 ceiling, default; `-Api 28` = Android 9 floor, mirrors the physical test
+  device). Test structural / storage / permission changes on **both** floor and ceiling.
 - No APK installs on physical device unless user explicitly requests it
 - Run compile checkpoints after structural or behavior changes
 - Use Android Studio Compose Preview for visual iteration

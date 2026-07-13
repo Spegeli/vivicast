@@ -1,17 +1,10 @@
 ﻿package com.vivicast.tv
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
@@ -199,68 +192,6 @@ internal fun SystemTargetUnavailableDialog(
     }
 }
 
-// Auf Android TV löst ACTION_OPEN_DOCUMENT nur auf den Framework-Stub auf (keine echte
-// Dateiauswahl). Echter Picker = mindestens ein nicht-Stub-Handler. Nur der Import nutzt einen
-// Datei-Picker; der Export schreibt ohne Picker in einen festen Ordner.
-internal fun hasRealDocumentPicker(pm: PackageManager): Boolean {
-    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-        .addCategory(Intent.CATEGORY_OPENABLE)
-        .setType("*/*")
-    @Suppress("DEPRECATION", "QueryPermissionsNeeded")
-    return pm.queryIntentActivities(intent, 0)
-        .any { it.activityInfo?.packageName != "com.android.tv.frameworkpackagestubs" }
-}
-
-internal fun queryDisplayName(context: Context, uri: Uri): String {
-    val fromResolver = runCatching {
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst() && cursor.columnCount > 0) cursor.getString(0) else null
-        }
-    }.getOrNull()
-    return fromResolver?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment.orEmpty()
-}
-
-internal fun openFileManagerSearch(context: Context) {
-    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=file%20manager&c=apps"))
-    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=file%20manager&c=apps"))
-    try {
-        context.startActivity(market)
-    } catch (_: ActivityNotFoundException) {
-        try {
-            context.startActivity(web)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, context.getString(R.string.settings_provider_file_no_store), Toast.LENGTH_LONG).show()
-        }
-    }
-}
-
-@Composable
-internal fun FileManagerMissingDialog(
-    onDismiss: () -> Unit,
-    onSearch: () -> Unit,
-) {
-    val firstFocus = remember { FocusRequester() }
-    VivicastDialog(
-        onDismiss = onDismiss,
-        width = VivicastDialogWidth.Standard,
-        initialFocus = firstFocus,
-    ) {
-        InfoPanel(
-            title = stringResource(R.string.settings_provider_file_no_manager_title),
-            body = stringResource(R.string.settings_provider_file_no_manager_body),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        VivicastButtonRow {
-            ActionPill(
-                stringResource(R.string.settings_provider_file_install_manager),
-                modifier = Modifier.focusRequester(firstFocus),
-                onClick = onSearch,
-            )
-            ActionPill(stringResource(R.string.common_cancel), onClick = onDismiss)
-        }
-    }
-}
-
 // Import passphrase prompt shown AFTER the file was picked and validated as an encrypted container,
 // so the user picks the file first (like the M3U import) and only then supplies the passphrase.
 @Composable
@@ -291,6 +222,7 @@ internal fun BackupImportPassphraseDialog(
             },
             label = null,
             secret = true,
+            allowReveal = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             focusRequester = fieldFocus,
             isError = error != null,
@@ -338,6 +270,7 @@ internal fun ExternalPlayerChoiceDialog(
 @Composable
 internal fun StandardRestoreConfirmDialog(
     restore: PendingStandardRestore,
+    restoring: Boolean,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -361,7 +294,8 @@ internal fun StandardRestoreConfirmDialog(
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastDialogActions(
-            primaryLabel = "Wiederherstellen",
+            primaryLabel = if (restoring) "Wird wiederhergestellt …" else "Wiederherstellen",
+            primaryLoading = restoring,
             onPrimary = onConfirm,
             secondaryLabel = "Abbrechen",
             onSecondary = onDismiss,
@@ -384,13 +318,92 @@ internal fun ParentalReactivationHintDialog(onDismiss: () -> Unit) {
                 "Du kannst sie in Einstellungen > Kindersicherung neu einrichten.",
             modifier = Modifier.fillMaxWidth(),
         )
-        ActionPill(
-            label = "Verstanden",
-            modifier = Modifier.focusRequester(focus),
-            onClick = onDismiss,
+        VivicastButtonRow {
+            ActionPill(
+                label = "Verstanden",
+                modifier = Modifier.focusRequester(focus),
+                onClick = onDismiss,
+            )
+        }
+    }
+}
+
+// Export passphrase prompt shown AFTER the target folder was picked (App-hoisted picker), so the
+// user chooses the folder first and only then supplies the passphrase — then the backup is written.
+@Composable
+internal fun BackupExportPassphraseDialog(
+    exporting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val strBody = stringResource(R.string.settings_backup_passphrase_export_body)
+    val strMissing = stringResource(R.string.settings_backup_passphrase_missing)
+    val strTooShort = stringResource(R.string.settings_backup_passphrase_too_short)
+    val strMismatch = stringResource(R.string.settings_backup_passphrase_mismatch)
+    val fieldFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = fieldFocus,
+    ) {
+        InfoPanel(
+            title = stringResource(R.string.settings_backup_export),
+            body = error ?: strBody,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastTextField(
+            value = passphrase,
+            onValueChange = {
+                passphrase = it
+                error = null
+            },
+            label = stringResource(R.string.settings_backup_passphrase_label),
+            secret = true,
+            allowReveal = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            focusRequester = fieldFocus,
+            isError = error != null,
+            maxLength = 100,
+        )
+        VivicastTextField(
+            value = confirm,
+            onValueChange = {
+                confirm = it
+                error = null
+            },
+            label = stringResource(R.string.settings_backup_passphrase_confirm_label),
+            secret = true,
+            allowReveal = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            isError = error != null,
+            maxLength = 100,
+        )
+        VivicastDialogActions(
+            primaryLabel = if (exporting) {
+                stringResource(R.string.settings_backup_creating)
+            } else {
+                stringResource(R.string.settings_backup_full_action_export)
+            },
+            primaryLoading = exporting,
+            onPrimary = {
+                val value = passphrase.trim()
+                when {
+                    value.isBlank() -> error = strMissing
+                    value.length < MIN_BACKUP_PASSPHRASE_LENGTH -> error = strTooShort
+                    value != confirm.trim() -> error = strMismatch
+                    else -> onSubmit(value)
+                }
+            },
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onDismiss,
         )
     }
 }
+
+private const val MIN_BACKUP_PASSPHRASE_LENGTH = 8
 
 @Composable
 internal fun FileSavedDialog(
@@ -410,11 +423,13 @@ internal fun FileSavedDialog(
                 "Mit einem Dateimanager dorthin navigieren, um die Datei zu sichern (z. B. auf USB).",
             modifier = Modifier.fillMaxWidth(),
         )
-        ActionPill(
-            label = "Verstanden",
-            modifier = Modifier.focusRequester(focus),
-            onClick = onDismiss,
-        )
+        VivicastButtonRow {
+            ActionPill(
+                label = "Verstanden",
+                modifier = Modifier.focusRequester(focus),
+                onClick = onDismiss,
+            )
+        }
     }
 }
 
