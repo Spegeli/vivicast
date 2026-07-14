@@ -58,7 +58,6 @@ internal fun FontScalePreference.toSettingsFontScale(): SettingsFontScale =
         FontScalePreference.Small -> SettingsFontScale.Small
         FontScalePreference.Medium -> SettingsFontScale.Medium
         FontScalePreference.Large -> SettingsFontScale.Large
-        FontScalePreference.ExtraLarge -> SettingsFontScale.ExtraLarge
     }
 
 internal fun SettingsFontScale.toDataStoreFontScalePreference(): FontScalePreference =
@@ -66,7 +65,6 @@ internal fun SettingsFontScale.toDataStoreFontScalePreference(): FontScalePrefer
         SettingsFontScale.Small -> FontScalePreference.Small
         SettingsFontScale.Medium -> FontScalePreference.Medium
         SettingsFontScale.Large -> FontScalePreference.Large
-        SettingsFontScale.ExtraLarge -> FontScalePreference.ExtraLarge
     }
 
 internal fun AnimationSpeedPreference.toSettingsAnimationSpeed(): SettingsAnimationSpeed =

@@ -18,8 +18,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -52,9 +54,16 @@ fun VivicastDialog(
         LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
     }
     Dialog(onDismissRequest = onDismiss) {
-        // Dialogs must stay opaque regardless of the panel-transparency setting (spec: no strong
-        // transparency on dialogs), so re-provide full opacity around the dialog's glass panel.
-        CompositionLocalProvider(LocalSurfaceOpacity provides 1f) {
+        // A Dialog is a separate window: its AndroidComposeView re-provides LocalDensity from the platform
+        // density, dropping the app-root fontScale override — so re-apply the app font-scale factor here
+        // (LocalFontScale is a custom local that survives the window boundary). Same platform base as the
+        // root window, so density.fontScale * factor reproduces the root scaling exactly.
+        // Also re-provide full opacity: dialogs stay opaque regardless of the panel-transparency setting.
+        val density = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides Density(density.density, density.fontScale * LocalFontScale.current),
+            LocalSurfaceOpacity provides 1f,
+        ) {
             VivicastGlassPanel(
                 modifier = modifier
                     .vivicastDialogWidth(width)

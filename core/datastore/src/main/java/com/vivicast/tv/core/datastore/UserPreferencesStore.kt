@@ -108,7 +108,7 @@ enum class TransparencyLevel {
     Percent60, Percent70, Percent80, Percent90, Percent100,
 }
 
-enum class FontScalePreference { Small, Medium, Large, ExtraLarge }
+enum class FontScalePreference { Small, Medium, Large }
 
 enum class LanguagePreference { System, German, English }
 

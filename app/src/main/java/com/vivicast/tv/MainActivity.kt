@@ -66,6 +66,7 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
+import com.vivicast.tv.core.designsystem.LocalFontScale
 import com.vivicast.tv.core.designsystem.LocalSurfaceOpacity
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
@@ -185,6 +186,9 @@ class MainActivity : ComponentActivity() {
                         fontScale = baseDensity.fontScale * preferences.appearance.fontScale.toFontScaleFactor(),
                     ),
                     LocalSurfaceOpacity provides preferences.appearance.transparency.toSurfaceOpacity(),
+                    // Carried to dialogs/popups (separate windows) which re-provide LocalDensity and thus
+                    // lose the root fontScale override; VivicastDialog re-applies this factor.
+                    LocalFontScale provides preferences.appearance.fontScale.toFontScaleFactor(),
                 ) {
                     VivicastApp(
                         appContainer = appContainer,

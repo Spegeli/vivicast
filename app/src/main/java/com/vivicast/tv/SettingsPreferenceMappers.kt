@@ -144,8 +144,7 @@ internal fun FontScalePreference.toFontScaleFactor(): Float =
     when (this) {
         FontScalePreference.Small -> 0.90f
         FontScalePreference.Medium -> 1.00f
-        FontScalePreference.Large -> 1.12f
-        FontScalePreference.ExtraLarge -> 1.25f
+        FontScalePreference.Large -> 1.10f
     }
 
 /**

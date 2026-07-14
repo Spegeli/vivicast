@@ -220,6 +220,15 @@ val LocalVivicastColors = staticCompositionLocalOf { VivicastColorScheme.Default
  */
 val LocalSurfaceOpacity = staticCompositionLocalOf { 1f }
 
+/**
+ * App font-scale multiplier from the "Schriftgröße" setting (App provides it at the composition root:
+ * Small 0.90, Medium 1.00, Large 1.10). The root already scales all sp text via a LocalDensity override,
+ * but a Dialog/Popup is a separate window whose own AndroidComposeView re-provides LocalDensity from the
+ * platform density — shadowing that override. This custom local survives the window boundary, so dialogs
+ * can re-apply the same factor. Default 1.0.
+ */
+val LocalFontScale = staticCompositionLocalOf { 1f }
+
 /** Scales a color's alpha by [factor] (clamped) — used to fade panel fill by [LocalSurfaceOpacity]. */
 fun Color.scaledAlpha(factor: Float): Color = copy(alpha = alpha * factor.coerceIn(0f, 1f))
 

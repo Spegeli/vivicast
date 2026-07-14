@@ -137,7 +137,6 @@ private fun SettingsFontScale.label(): String = when (this) {
     SettingsFontScale.Small -> stringResource(R.string.font_small)
     SettingsFontScale.Medium -> stringResource(R.string.font_medium)
     SettingsFontScale.Large -> stringResource(R.string.font_large)
-    SettingsFontScale.ExtraLarge -> stringResource(R.string.font_very_large)
 }
 
 @Composable

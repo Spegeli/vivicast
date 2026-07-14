@@ -155,12 +155,12 @@ class SettingsViewModelTest {
         vm.onAppearanceSettingsChanged(
             AppearanceSettingsState(
                 themeMode = SettingsThemeMode.Cyan,
-                fontScale = SettingsFontScale.ExtraLarge,
+                fontScale = SettingsFontScale.Large,
             ),
         )
 
         assertEquals(ThemeColor.Cyan, store.flow.value.appearance.backgroundColor)
-        assertEquals(FontScalePreference.ExtraLarge, store.flow.value.appearance.fontScale)
+        assertEquals(FontScalePreference.Large, store.flow.value.appearance.fontScale)
         scope.cancel()
     }
 

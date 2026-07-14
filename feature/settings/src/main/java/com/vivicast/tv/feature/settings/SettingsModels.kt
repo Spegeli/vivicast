@@ -45,7 +45,6 @@ enum class SettingsFontScale {
     Small,
     Medium,
     Large,
-    ExtraLarge,
 }
 
 enum class SettingsAnimationSpeed {

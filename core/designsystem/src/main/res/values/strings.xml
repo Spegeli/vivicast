@@ -216,7 +216,6 @@
     <string name="font_small">Klein</string>
     <string name="font_medium">Mittel</string>
     <string name="font_large">Groß</string>
-    <string name="font_very_large">Sehr groß</string>
 
     <!-- Animation speed -->
     <string name="anim_fast">Schnell</string>
