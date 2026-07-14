@@ -127,6 +127,8 @@ internal fun EpgSettingsPanel(
     var showEditor by remember { mutableStateOf(false) }
     var showManualMapping by remember { mutableStateOf(false) }
     var showGlobalSettings by remember { mutableStateOf(false) }
+    // Drives the editor Save spinner while the async save + auto-refresh runs (mirrors the playlist editor).
+    var epgSaving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
     // Where focus lands once the overview returns after leaving the inline editor / manual mapping.
@@ -234,25 +236,30 @@ internal fun EpgSettingsPanel(
                         return@EpgSourceEditor
                     }
                     scope.launch {
-                        onSaveEpgSource(editor.toEditRequest())
-                            .onSuccess { source ->
-                                // Auto-refresh the saved source (like a playlist refreshes on save). An
-                                // inactive source is a no-op in the worker, so this is always safe.
-                                onRefreshEpgSource(source.id)
-                                // Close the editor and return to the overview focused on the saved
-                                // source (like the playlist editor), instead of leaving focus on a
-                                // control that recomposition removes → escaping to the top nav (Home).
-                                onParkFocusBeforeEditor()
-                                pendingOverviewFocus = EpgOverviewFocusTarget.Source(source.id)
-                                selectedSourceId = null
-                                editor = EpgSourceEditorState.newSource()
-                                showEditor = false
-                                resetConnectionTest()
-                                message = strEpgSourceSaved
-                            }
-                            .onFailure { error ->
-                                message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
-                            }
+                        epgSaving = true
+                        try {
+                            onSaveEpgSource(editor.toEditRequest())
+                                .onSuccess { source ->
+                                    // Auto-refresh the saved source (like a playlist refreshes on save). An
+                                    // inactive source is a no-op in the worker, so this is always safe.
+                                    onRefreshEpgSource(source.id)
+                                    // Close the editor and return to the overview focused on the saved
+                                    // source (like the playlist editor), instead of leaving focus on a
+                                    // control that recomposition removes → escaping to the top nav (Home).
+                                    onParkFocusBeforeEditor()
+                                    pendingOverviewFocus = EpgOverviewFocusTarget.Source(source.id)
+                                    selectedSourceId = null
+                                    editor = EpgSourceEditorState.newSource()
+                                    showEditor = false
+                                    resetConnectionTest()
+                                    message = strEpgSourceSaved
+                                }
+                                .onFailure { error ->
+                                    message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
+                                }
+                        } finally {
+                            epgSaving = false
+                        }
                     }
                 },
                 onCancel = dismissEditor,
@@ -293,6 +300,7 @@ internal fun EpgSettingsPanel(
                         }
                     }
                 },
+                saving = epgSaving,
                 modifier = Modifier.fillMaxSize(),
             )
         }

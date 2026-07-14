@@ -582,6 +582,7 @@
     <string name="maintenance_cache_clear_confirm">Clear cache?</string>
     <string name="maintenance_cache_clear_body">The app\'s image cache (logos, posters, thumbnails) is cleared. Provider data, history, favorites, EPG, and credentials remain.</string>
     <string name="maintenance_cache_clear_label">Clear cache</string>
+    <string name="maintenance_cache_clearing">Clearing…</string>
 
     <string name="maintenance_live_tv_title">Delete Live TV history</string>
     <string name="maintenance_live_tv_row_help">Deletes recently watched Live TV channels.</string>
@@ -621,6 +622,7 @@
     <string name="about_diagnostics_logging">Diagnostic logging</string>
     <string name="about_help_logging">Writes only sanitized technical events to private app storage.</string>
     <string name="about_export_diagnostics">Export diagnostics</string>
+    <string name="about_exporting_diagnostics">Exporting…</string>
     <string name="about_help_export_diagnostics">Creates a ZIP with vivicast-diagnostics.log and diagnostics-metadata.json.</string>
     <string name="settings_legal_privacy_title">Privacy Policy</string>
     <string name="settings_legal_terms_title">Terms of Use</string>

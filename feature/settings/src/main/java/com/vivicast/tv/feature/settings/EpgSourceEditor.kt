@@ -106,6 +106,7 @@ internal fun EpgSourceEditor(
     connectionSummary: EpgContentSummary? = null,
     connectionError: String? = null,
     onTestConnection: () -> Unit = {},
+    saving: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // Blank name reddens only after a save attempt (mirrors the playlist editor).
@@ -255,11 +256,13 @@ internal fun EpgSourceEditor(
                 ActionPill(
                     label = stringResource(R.string.common_cancel),
                     modifier = Modifier.width(132.dp),
+                    enabled = !saving,
                     onClick = onCancel,
                 )
                 ActionPill(
-                    label = stringResource(R.string.common_save),
+                    label = stringResource(if (saving) R.string.settings_provider_saving else R.string.common_save),
                     modifier = Modifier.width(150.dp),
+                    loading = saving,
                     onClick = {
                         // A blocked save reddens the offending field and jumps focus to it
                         // (name → URL), like the playlist editor.
@@ -278,7 +281,12 @@ internal fun EpgSourceEditor(
                     },
                 )
                 if (editor.isEditing) {
-                    ActionPill(label = stringResource(R.string.settings_delete), modifier = Modifier.width(140.dp), onClick = onDelete)
+                    ActionPill(
+                        label = stringResource(R.string.settings_delete),
+                        modifier = Modifier.width(140.dp),
+                        enabled = !saving,
+                        onClick = onDelete,
+                    )
                 }
             }
         }

@@ -582,6 +582,7 @@
     <string name="maintenance_cache_clear_confirm">Cache leeren?</string>
     <string name="maintenance_cache_clear_body">Der Bild-Cache der App (Logos, Poster, Vorschaubilder) wird geleert. Providerdaten, Verlauf, Favoriten, EPG und Zugangsdaten bleiben erhalten.</string>
     <string name="maintenance_cache_clear_label">Cache leeren</string>
+    <string name="maintenance_cache_clearing">Wird geleert…</string>
 
     <string name="maintenance_live_tv_title">Live-TV-Verlauf löschen</string>
     <string name="maintenance_live_tv_row_help">Löscht zuletzt gesehene Live-TV-Sender.</string>
@@ -621,6 +622,7 @@
     <string name="about_diagnostics_logging">Diagnoseprotokollierung</string>
     <string name="about_help_logging">Schreibt nur bereinigte technische Ereignisse in privaten App-Speicher.</string>
     <string name="about_export_diagnostics">Diagnoseprotokoll exportieren</string>
+    <string name="about_exporting_diagnostics">Wird exportiert…</string>
     <string name="about_help_export_diagnostics">Erstellt ein ZIP mit vivicast-diagnostics.log und diagnostics-metadata.json.</string>
     <string name="settings_legal_privacy_title">Datenschutzbestimmungen</string>
     <string name="settings_legal_terms_title">Nutzungsbedingungen</string>

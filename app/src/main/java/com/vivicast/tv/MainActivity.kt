@@ -259,6 +259,8 @@ private fun VivicastApp(
     }
     // Single in-app picker (SAF replacement). Set to open it; onPick fires with the chosen File.
     var filePickerRequest by remember { mutableStateOf<FilePickerRequest?>(null) }
+    // Drives the "Diagnoseprotokoll exportieren" row spinner while the export runs (after folder pick).
+    var diagnosticsExporting by remember { mutableStateOf(false) }
     // Backup export: the folder chosen in the picker, held while the passphrase dialog is shown.
     var pendingBackupExportDir by remember { mutableStateOf<File?>(null) }
     // True while the backup is being written — keeps the passphrase dialog open with a button spinner.
@@ -1033,28 +1035,34 @@ private fun VivicastApp(
                         startDir = preferences.diagnostics.lastExportDir?.let { File(it) },
                         onPick = { folder ->
                             scope.launch {
-                                val location = runCatching {
-                                    val about = context.diagnosticsAbout()
-                                    val settings = JSONObject(appContainer.standardBackupExporter.exportSupportSettingsJson(indentSpaces = 0))
-                                    val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-diagnostics", "zip")
-                                    withContext(Dispatchers.IO) {
-                                        writeToUserFolderOrFallback(context, folder, "Diagnostics", name, "application/zip") { output ->
-                                            appContainer.diagnosticsStore.exportZip(output = output, about = about, settings = settings)
+                                diagnosticsExporting = true
+                                try {
+                                    val location = runCatching {
+                                        val about = context.diagnosticsAbout()
+                                        val settings = JSONObject(appContainer.standardBackupExporter.exportSupportSettingsJson(indentSpaces = 0))
+                                        val name = timestampedBackupName(context.aboutAppState().appVersion, "vivicast-diagnostics", "zip")
+                                        withContext(Dispatchers.IO) {
+                                            writeToUserFolderOrFallback(context, folder, "Diagnostics", name, "application/zip") { output ->
+                                                appContainer.diagnosticsStore.exportZip(output = output, about = about, settings = settings)
+                                            }
                                         }
+                                    }.getOrNull()
+                                    if (location != null) {
+                                        appContainer.userPreferencesStore.updateDiagnostics(
+                                            preferences.diagnostics.copy(lastExportDir = folder.absolutePath),
+                                        )
+                                        savedFileInfo = "Diagnose exportiert" to location
+                                    } else {
+                                        Toast.makeText(context, "Diagnose-Export fehlgeschlagen.", Toast.LENGTH_SHORT).show()
                                     }
-                                }.getOrNull()
-                                if (location != null) {
-                                    appContainer.userPreferencesStore.updateDiagnostics(
-                                        preferences.diagnostics.copy(lastExportDir = folder.absolutePath),
-                                    )
-                                    savedFileInfo = "Diagnose exportiert" to location
-                                } else {
-                                    Toast.makeText(context, "Diagnose-Export fehlgeschlagen.", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    diagnosticsExporting = false
                                 }
                             }
                         },
                     )
                 },
+                diagnosticsExporting = diagnosticsExporting,
                 onSetPin = { pin ->
                     runCatching { PinSecurity.setPin(pin) }.fold(
                         onSuccess = { newState ->
@@ -1198,9 +1206,8 @@ private fun VivicastApp(
                     appContainer.refreshWorkScheduler.enqueueEpgRefresh(sourceId)
                 },
                 onClearHistory = { targets ->
-                    scope.launch {
-                        targets.forEach { appContainer.clearHistory(it) }
-                    }
+                    // Suspends until every category is cleared so the confirm dialog spinner covers the work.
+                    targets.forEach { appContainer.clearHistory(it) }
                 },
                 imageCacheSizeBytes = { appContainer.imageLoader.diskCache?.size ?: 0L },
                 clearImageCache = {

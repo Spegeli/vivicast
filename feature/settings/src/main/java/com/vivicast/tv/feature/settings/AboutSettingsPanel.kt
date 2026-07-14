@@ -98,6 +98,7 @@ internal fun AboutSettingsPanel(
     diagnosticsSettingsState: DiagnosticsSettingsState,
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
     onExportDiagnostics: () -> Unit,
+    exporting: Boolean = false,
     firstFocusModifier: Modifier = Modifier,
 ) {
     val toggleDiagnostics = {
@@ -163,9 +164,11 @@ internal fun AboutSettingsPanel(
             VivicastSettingsRow(
                 title = stringResource(R.string.about_export_diagnostics),
                 help = stringResource(R.string.about_help_export_diagnostics),
-                value = stringResource(R.string.common_export),
+                value = stringResource(if (exporting) R.string.about_exporting_diagnostics else R.string.common_export),
                 modifier = Modifier,
-                onClick = onExportDiagnostics,
+                valueLoading = exporting,
+                // Block a second tap (which would re-open the folder picker) while an export runs.
+                onClick = { if (!exporting) onExportDiagnostics() },
             )
         }
         item {

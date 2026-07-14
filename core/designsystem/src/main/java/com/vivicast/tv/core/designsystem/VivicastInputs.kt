@@ -321,6 +321,9 @@ fun VivicastSettingsRow(
     // Rows whose value happens to read "An"/"Aus" but are NOT on/off toggles (e.g. an interval set to
     // "off") set this to keep the value as plain text + chevron instead of rendering a switch.
     forceTextValue: Boolean = false,
+    // Shows a small spinner before the value while a row-triggered background action runs (e.g. an
+    // in-flight diagnostics export). The caller swaps [value] to a "Wird …" text in the same state.
+    valueLoading: Boolean = false,
     onClick: () -> Unit = {},
 ) {
     val disabledColor = VivicastColors.TextSecondary.copy(alpha = 0.55f)
@@ -353,6 +356,10 @@ fun VivicastSettingsRow(
             if (isToggle) {
                 VivicastToggle(isOn = isOn, enabled = enabled)
             } else {
+                if (valueLoading) {
+                    VivicastSpinner(size = 16.dp, color = VivicastColors.TextSecondary)
+                    Spacer(modifier = Modifier.width(VivicastSpacing.Space2))
+                }
                 Text(
                     text = value,
                     maxLines = 1,

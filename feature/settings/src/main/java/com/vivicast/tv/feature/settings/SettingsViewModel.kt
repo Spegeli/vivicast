@@ -157,14 +157,15 @@ internal class SettingsViewModel(
         }
     }
 
-    /** Clears both the prefetch file store and the Coil image cache, then reloads the stats. */
-    fun onClearCache() {
-        coroutineScope.launch {
-            mediaCacheStore.clear()
-            clearImageCache()
-            currentCache = loadCacheState()
-            recomposeState()
-        }
+    /**
+     * Clears both the prefetch file store and the Coil image cache, then reloads the stats. Suspends
+     * until done so the confirm dialog can show a spinner for the whole operation.
+     */
+    suspend fun onClearCache() {
+        mediaCacheStore.clear()
+        clearImageCache()
+        currentCache = loadCacheState()
+        recomposeState()
     }
 
     private suspend fun loadCacheState(): CacheSettingsState {

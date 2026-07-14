@@ -101,14 +101,17 @@ import java.util.Date
 @Composable
 internal fun MaintenanceSettingsPanel(
     cacheSettingsState: CacheSettingsState,
-    onClearCache: () -> Unit,
-    onClearHistory: (Set<HistoryClearTarget>) -> Unit,
+    onClearCache: suspend () -> Unit,
+    onClearHistory: suspend (Set<HistoryClearTarget>) -> Unit,
     onReloadCacheStats: () -> Unit,
     firstFocusModifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     var showCacheDialog by remember { mutableStateOf(false) }
+    var clearingCache by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var clearingHistory by remember { mutableStateOf(false) }
     // Move focus back onto the "Verlauf löschen" row after the history popup closes (cancel or delete),
     // matching the return-focus pattern used elsewhere (e.g. ProviderSettingsPanel).
     var restoreHistoryFocus by remember { mutableStateOf(false) }
@@ -173,26 +176,38 @@ internal fun MaintenanceSettingsPanel(
 
     if (showCacheDialog) {
         CacheClearConfirmDialog(
-            onCancel = { showCacheDialog = false },
+            clearing = clearingCache,
+            // Guarded so BACK / Cancel cannot dismiss the dialog mid-clear and hide the spinner.
+            onCancel = { if (!clearingCache) showCacheDialog = false },
             onConfirm = {
-                showCacheDialog = false
-                onClearCache()
-                message = strCacheCleared
+                scope.launch {
+                    clearingCache = true
+                    onClearCache()
+                    clearingCache = false
+                    showCacheDialog = false
+                    message = strCacheCleared
+                }
             },
         )
     }
 
     if (showHistoryDialog) {
         HistoryClearDialog(
+            clearing = clearingHistory,
             onCancel = {
-                showHistoryDialog = false
-                restoreHistoryFocus = true
+                if (!clearingHistory) {
+                    showHistoryDialog = false
+                    restoreHistoryFocus = true
+                }
             },
             onConfirm = { selection ->
-                showHistoryDialog = false
-                restoreHistoryFocus = true
-                if (selection.isNotEmpty()) {
+                if (selection.isEmpty()) return@HistoryClearDialog
+                scope.launch {
+                    clearingHistory = true
                     onClearHistory(selection)
+                    clearingHistory = false
+                    showHistoryDialog = false
+                    restoreHistoryFocus = true
                     message = strHistoryCleared
                 }
             },
@@ -202,6 +217,7 @@ internal fun MaintenanceSettingsPanel(
 
 @Composable
 private fun CacheClearConfirmDialog(
+    clearing: Boolean,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -219,8 +235,12 @@ private fun CacheClearConfirmDialog(
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastDialogActions(
-            primaryLabel = stringResource(R.string.maintenance_cache_clear_label),
+            primaryLabel = stringResource(
+                if (clearing) R.string.maintenance_cache_clearing else R.string.maintenance_cache_clear_label,
+            ),
             onPrimary = onConfirm,
+            primaryEnabled = !clearing,
+            primaryLoading = clearing,
             secondaryLabel = stringResource(R.string.common_cancel),
             onSecondary = onCancel,
             secondaryFocusRequester = cancelFocus,
@@ -238,6 +258,7 @@ private val HistoryCategories: List<Pair<HistoryClearTarget, Int>> = listOf(
 
 @Composable
 private fun HistoryClearDialog(
+    clearing: Boolean,
     onCancel: () -> Unit,
     onConfirm: (Set<HistoryClearTarget>) -> Unit,
 ) {
@@ -256,15 +277,18 @@ private fun HistoryClearDialog(
                 label = stringResource(labelRes),
                 checked = target in selected,
                 onToggle = {
-                    selected = if (target in selected) selected - target else selected + target
+                    if (!clearing) {
+                        selected = if (target in selected) selected - target else selected + target
+                    }
                 },
                 modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
             )
         }
         VivicastDialogActions(
-            primaryLabel = stringResource(R.string.common_delete),
+            primaryLabel = stringResource(if (clearing) R.string.settings_deleting else R.string.common_delete),
             onPrimary = { onConfirm(selected) },
-            primaryEnabled = selected.isNotEmpty(),
+            primaryEnabled = selected.isNotEmpty() && !clearing,
+            primaryLoading = clearing,
             secondaryLabel = stringResource(R.string.common_cancel),
             onSecondary = onCancel,
         )
