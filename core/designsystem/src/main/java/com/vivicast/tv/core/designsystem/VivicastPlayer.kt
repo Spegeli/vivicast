@@ -52,13 +52,18 @@ fun VivicastPlayerOverlay(
     actions: @Composable RowScope.() -> Unit,
     footer: @Composable () -> Unit,
 ) {
+    val scheme = LocalVivicastColors.current
+    // The transparency setting fades the controls-overlay fill so the video shows through, with a floor so
+    // it never becomes unreadable over bright video (spec: player overlays must stay legible). Border +
+    // content stay fully opaque.
+    val overlayOpacity = LocalSurfaceOpacity.current.coerceAtLeast(0.5f)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = VivicastCardSizes.PlayerOverlayHeight)
             .clip(VivicastShapes.PanelRadius)
-            .background(Color(0xE60A111D))
-            .border(VivicastBorders.Hairline, Color(0x8838BDF8), VivicastShapes.PanelRadius)
+            .background(scheme.surface(Color(0xE60A111D)).scaledAlpha(overlayOpacity))
+            .border(VivicastBorders.Hairline, scheme.accentize(Color(0x8838BDF8)), VivicastShapes.PanelRadius)
             .padding(horizontal = VivicastSpacing.Space6, vertical = VivicastSpacing.Space4),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
     ) {

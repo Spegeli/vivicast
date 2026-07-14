@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
@@ -249,7 +250,7 @@ private fun PickerRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = VivicastTypography.LabelMedium.copy(
-                    color = if (focused) VivicastColors.FocusRing else VivicastColors.TextPrimary,
+                    color = if (focused) LocalVivicastColors.current.focusRing else VivicastColors.TextPrimary,
                 ),
                 modifier = Modifier.weight(1f),
             )

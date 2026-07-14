@@ -58,6 +58,7 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
@@ -552,7 +553,7 @@ private fun EpgSourceOverviewCard(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                     StatusBadge("EPG")
-                    StatusBadge(stringResource(R.string.settings_epg_channel_count, source.lastChannelCount), tone = VivicastColors.Info)
+                    StatusBadge(stringResource(R.string.settings_epg_channel_count, source.lastChannelCount), tone = LocalVivicastColors.current.accent)
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {

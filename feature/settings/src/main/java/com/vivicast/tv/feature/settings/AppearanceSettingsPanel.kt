@@ -69,6 +69,7 @@ import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastPaletteColor
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourceRepository
@@ -97,23 +98,39 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-private fun SettingsThemeMode.label(): String = when (this) {
-    SettingsThemeMode.StandardDark -> stringResource(R.string.theme_dark)
-    SettingsThemeMode.HighContrastDark -> stringResource(R.string.theme_dark_contrast)
-    SettingsThemeMode.AmoledDark -> stringResource(R.string.theme_amoled)
-}
+private fun SettingsThemeMode.label(): String = stringResource(colorNameRes(name))
 
 @Composable
-private fun SettingsAccentColor.label(): String = when (this) {
-    SettingsAccentColor.Blue -> stringResource(R.string.accent_blue)
-}
+private fun SettingsAccentColor.label(): String = stringResource(colorNameRes(name))
 
 @Composable
-private fun SettingsTransparency.label(): String = when (this) {
-    SettingsTransparency.Percent0 -> "0 %"
-    SettingsTransparency.Percent25 -> "25 %"
-    SettingsTransparency.Percent50 -> "50 %"
+private fun SettingsTransparency.label(): String = "${ordinal * 10} %"
+
+// Shared colour-name resource for both the background + accent enums (identical case names).
+@StringRes
+private fun colorNameRes(caseName: String): Int = when (caseName) {
+    "Red" -> R.string.color_red
+    "Pink" -> R.string.color_pink
+    "Purple" -> R.string.color_purple
+    "Indigo" -> R.string.color_indigo
+    "Blue" -> R.string.color_blue
+    "Cyan" -> R.string.color_cyan
+    "Teal" -> R.string.color_teal
+    "Green" -> R.string.color_green
+    "Lime" -> R.string.color_lime
+    "Yellow" -> R.string.color_yellow
+    "Amber" -> R.string.color_amber
+    "Orange" -> R.string.color_orange
+    "Brown" -> R.string.color_brown
+    "Grey" -> R.string.color_grey
+    "BlueGrey" -> R.string.color_blue_grey
+    "DarkGrey" -> R.string.color_dark_grey
+    else -> R.string.color_black
 }
+
+private fun SettingsThemeMode.swatch(): Color = VivicastPaletteColor.valueOf(name).swatch
+
+private fun SettingsAccentColor.swatch(): Color = VivicastPaletteColor.valueOf(name).swatch
 
 @Composable
 private fun SettingsFontScale.label(): String = when (this) {
@@ -229,18 +246,20 @@ internal fun AppearanceSettingsPanel(
 
     val dismiss = { openPicker = null }
     when (openPicker) {
-        AppearancePicker.Theme -> SettingsChoiceDialog(
+        AppearancePicker.Theme -> SettingsColorChoiceDialog(
             title = stringResource(R.string.settings_theme),
             options = SettingsThemeMode.entries,
             selected = state.themeMode,
+            swatch = { it.swatch() },
             label = { it.label() },
             onSelect = { onAppearanceSettingsChanged(state.copy(themeMode = it)); dismiss() },
             onDismiss = dismiss,
         )
-        AppearancePicker.Accent -> SettingsChoiceDialog(
+        AppearancePicker.Accent -> SettingsColorChoiceDialog(
             title = stringResource(R.string.settings_accent_color),
             options = SettingsAccentColor.entries,
             selected = state.accentColor,
+            swatch = { it.swatch() },
             label = { it.label() },
             onSelect = { onAppearanceSettingsChanged(state.copy(accentColor = it)); dismiss() },
             onDismiss = dismiss,

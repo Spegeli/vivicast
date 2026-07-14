@@ -34,9 +34,9 @@ class DataStoreUserPreferencesStore(
                         ?: DEFAULT_GLOBAL_USER_AGENT,
                 ),
                 appearance = AppearancePreferences(
-                    backgroundColor = preferences.enumValue(Keys.BackgroundColor, ThemeColor.Dark),
+                    backgroundColor = preferences.enumValue(Keys.BackgroundColor, ThemeColor.Blue),
                     accentColor = preferences.enumValue(Keys.AccentColor, AccentColor.Blue),
-                    transparency = preferences.enumValue(Keys.Transparency, TransparencyLevel.Percent25),
+                    transparency = preferences.enumValue(Keys.Transparency, TransparencyLevel.Percent20),
                     fontScale = preferences.enumValue(Keys.FontScale, FontScalePreference.Medium),
                     language = preferences.enumValue(Keys.Language, LanguagePreference.System),
                     animationSpeed = preferences.enumValue(Keys.AnimationSpeed, AnimationSpeedPreference.Normal),

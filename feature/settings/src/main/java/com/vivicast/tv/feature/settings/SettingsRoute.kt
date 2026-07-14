@@ -68,6 +68,7 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastFocusSurface
 import com.vivicast.tv.core.designsystem.VivicastDialog
@@ -528,7 +529,7 @@ private fun SettingsPanelTitle(text: String) {
 
 @Composable
 private fun SettingsSectionIcon(section: String, selected: Boolean, modifier: Modifier = Modifier) {
-    val color = if (selected) VivicastColors.AccentSoft else VivicastColors.TextSecondary
+    val color = if (selected) LocalVivicastColors.current.accentSoft else VivicastColors.TextSecondary
     val sGeneral = stringResource(R.string.settings_section_general)
     val sPlaylists = stringResource(R.string.settings_section_playlists)
     val sEpg = stringResource(R.string.settings_section_epg)

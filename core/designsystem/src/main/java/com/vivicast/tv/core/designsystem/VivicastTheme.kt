@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,24 +22,29 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.darkColorScheme
 
 @Composable
-fun VivicastTheme(content: @Composable () -> Unit) {
-    TvMaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = VivicastColors.Accent,
-            onPrimary = VivicastColors.TextOnAccent,
-            secondary = VivicastColors.AccentSoft,
-            background = VivicastColors.Background,
-            onBackground = VivicastColors.TextPrimary,
-            surface = VivicastColors.Surface,
-            onSurface = VivicastColors.TextPrimary,
-            surfaceVariant = VivicastColors.SurfaceHigh,
-            onSurfaceVariant = VivicastColors.TextSecondary,
-            border = VivicastColors.FocusRing,
-            error = VivicastColors.Error,
-            onError = Color.White,
-        ),
-        content = content,
-    )
+fun VivicastTheme(
+    scheme: VivicastColorScheme = VivicastColorScheme.Default,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalVivicastColors provides scheme) {
+        TvMaterialTheme(
+            colorScheme = darkColorScheme(
+                primary = scheme.accent,
+                onPrimary = scheme.onAccent,
+                secondary = scheme.accentSoft,
+                background = scheme.surface(VivicastColors.Background),
+                onBackground = VivicastColors.TextPrimary,
+                surface = scheme.surface(VivicastColors.Surface),
+                onSurface = VivicastColors.TextPrimary,
+                surfaceVariant = scheme.surface(VivicastColors.SurfaceHigh),
+                onSurfaceVariant = VivicastColors.TextSecondary,
+                border = scheme.focusRing,
+                error = VivicastColors.Error,
+                onError = Color.White,
+            ),
+            content = content,
+        )
+    }
 }
 
 object VivicastColors {
@@ -205,7 +211,7 @@ object VivicastMotion {
     const val SlowMillis = 260
 }
 
-val LocalVivicastColors = staticCompositionLocalOf { VivicastColors }
+val LocalVivicastColors = staticCompositionLocalOf { VivicastColorScheme.Default }
 
 /**
  * Panel/overlay surface opacity multiplier from the "Transparenz" setting (App provides it at the

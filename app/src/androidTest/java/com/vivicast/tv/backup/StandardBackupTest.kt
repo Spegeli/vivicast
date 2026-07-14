@@ -397,7 +397,7 @@ class StandardBackupTest {
                     selectedProviderId = "should-not-be-restored",
                     general = GeneralPreferences(resumeLastChannelOnStart = true),
                     appearance = AppearancePreferences(
-                        backgroundColor = ThemeColor.AmoledDark,
+                        backgroundColor = ThemeColor.Green,
                         fontScale = FontScalePreference.Large,
                     ),
                     playback = PlaybackPreferences(
@@ -418,7 +418,7 @@ class StandardBackupTest {
 
             assertTrue(restorer.restore(backup) is StandardBackupRestoreValidation.Valid)
             // Audit #3: backed-up settings are re-applied on restore...
-            assertEquals(ThemeColor.AmoledDark, preferencesStore.appearance.backgroundColor)
+            assertEquals(ThemeColor.Green, preferencesStore.appearance.backgroundColor)
             assertEquals(FontScalePreference.Large, preferencesStore.appearance.fontScale)
             assertEquals(BufferSizePreference.ExtraLarge, preferencesStore.playback.bufferSize)
             assertTrue(preferencesStore.playback.afrEnabled)

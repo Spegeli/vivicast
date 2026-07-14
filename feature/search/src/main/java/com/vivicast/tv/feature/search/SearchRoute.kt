@@ -28,6 +28,7 @@ import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastContentRow
 import com.vivicast.tv.core.designsystem.VivicastScreen
@@ -208,7 +209,7 @@ private fun SearchField(
                 onValueChange = { onQueryChanged(it.take(100)) },
                 modifier = Modifier.fillMaxWidth().focusRequester(textFocusRequester).testTag(searchInputTag()),
                 singleLine = true,
-                cursorBrush = SolidColor(VivicastColors.FocusRing),
+                cursorBrush = SolidColor(LocalVivicastColors.current.focusRing),
                 textStyle = VivicastTypography.TitleLarge.copy(color = VivicastColors.TextPrimary),
                 decorationBox = { innerTextField ->
                     if (query.isBlank()) {

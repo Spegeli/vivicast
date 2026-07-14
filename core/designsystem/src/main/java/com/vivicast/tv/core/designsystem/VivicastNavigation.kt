@@ -136,6 +136,7 @@ fun VivicastTopNavItem(
 ) {
     var focused by remember { mutableStateOf(false) }
     val isActive = selected || focused
+    val scheme = LocalVivicastColors.current
     val strSearch = stringResource(R.string.nav_search_label)
     val strSettings = stringResource(R.string.nav_settings_label)
     val iconOnly = label == strSearch || label == strSettings
@@ -156,34 +157,34 @@ fun VivicastTopNavItem(
             pressedShape = VivicastShapes.CardRadius,
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color(0xFF0D273F) else Color.Transparent,
+            containerColor = if (selected) scheme.surface(Color(0xFF0D273F)) else Color.Transparent,
             contentColor = if (selected) Color.White else VivicastColors.TextSecondary,
-            focusedContainerColor = Color(0xFF0E2A43),
+            focusedContainerColor = scheme.surface(Color(0xFF0E2A43)),
             focusedContentColor = Color.White,
-            pressedContainerColor = VivicastColors.SurfacePressed,
+            pressedContainerColor = scheme.surface(VivicastColors.SurfacePressed),
             pressedContentColor = Color.White,
         ),
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 border = BorderStroke(
                     VivicastBorders.FocusWidth,
-                    if (selected) VivicastColors.AccentSoft else Color.Transparent,
+                    if (selected) scheme.accentSoft else Color.Transparent,
                 ),
                 shape = VivicastShapes.CardRadius,
             ),
             focusedBorder = Border(
-                border = BorderStroke(VivicastBorders.FocusWidth, VivicastColors.FocusRing),
+                border = BorderStroke(VivicastBorders.FocusWidth, scheme.focusRing),
                 inset = 0.dp,
                 shape = VivicastShapes.CardRadius,
             ),
             pressedBorder = Border(
-                border = BorderStroke(VivicastBorders.FocusWidth, VivicastColors.FocusRing),
+                border = BorderStroke(VivicastBorders.FocusWidth, scheme.focusRing),
                 shape = VivicastShapes.CardRadius,
             ),
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = VivicastFocusDefaults.ScaleSmall),
         glow = ClickableSurfaceDefaults.glow(
-            focusedGlow = Glow(elevation = VivicastFocusDefaults.GlowElevation, elevationColor = VivicastColors.FocusGlow),
+            focusedGlow = Glow(elevation = VivicastFocusDefaults.GlowElevation, elevationColor = scheme.focusGlow),
         ),
     ) {
         Box(
@@ -213,6 +214,7 @@ fun VivicastTopNavItem(
 
 @Composable
 private fun VivicastBrandMark(modifier: Modifier = Modifier) {
+    val scheme = LocalVivicastColors.current
     Canvas(modifier = modifier.size(26.dp)) {
         val outer = Path().apply {
             moveTo(size.width * 0.16f, size.height * 0.08f)
@@ -226,14 +228,14 @@ private fun VivicastBrandMark(modifier: Modifier = Modifier) {
             lineTo(size.width * 0.30f, size.height * 0.72f)
             close()
         }
-        drawPath(outer, Brush.linearGradient(listOf(Color(0xFF00C8FF), Color(0xFF2563EB))))
-        drawPath(inner, Color(0xAA050914))
+        drawPath(outer, Brush.linearGradient(listOf(scheme.accentize(Color(0xFF00C8FF)), scheme.accentize(Color(0xFF2563EB)))))
+        drawPath(inner, scheme.surface(Color(0xAA050914)))
     }
 }
 
 @Composable
 private fun TopNavIcon(label: String, selected: Boolean, modifier: Modifier = Modifier) {
-    val color = if (selected) VivicastColors.AccentSoft else VivicastColors.TextSecondary
+    val color = if (selected) LocalVivicastColors.current.accentSoft else VivicastColors.TextSecondary
     val strSearch = stringResource(R.string.nav_search_label)
     val strSettings = stringResource(R.string.nav_settings_label)
     val strMovies = stringResource(R.string.nav_movies_label)

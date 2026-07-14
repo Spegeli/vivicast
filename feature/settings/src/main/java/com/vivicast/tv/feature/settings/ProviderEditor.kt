@@ -63,6 +63,7 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
@@ -936,12 +937,12 @@ private fun ImportCheckboxRow(
                 modifier = Modifier
                     .size(24.dp)
                     .background(
-                        color = if (checked) VivicastColors.Accent else Color.Transparent,
+                        color = if (checked) LocalVivicastColors.current.accent else Color.Transparent,
                         shape = RoundedCornerShape(VivicastShapes.RadiusSmall),
                     )
                     .border(
                         width = if (checked) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                        color = if (checked) VivicastColors.Accent else VivicastColors.TextSecondary,
+                        color = if (checked) LocalVivicastColors.current.accent else VivicastColors.TextSecondary,
                         shape = RoundedCornerShape(VivicastShapes.RadiusSmall),
                     ),
                 contentAlignment = Alignment.Center,

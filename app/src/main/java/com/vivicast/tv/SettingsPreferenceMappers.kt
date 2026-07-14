@@ -56,6 +56,7 @@ import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
 import com.vivicast.tv.core.datastore.TransparencyLevel
 import com.vivicast.tv.core.datastore.UserPreferences
+import com.vivicast.tv.core.designsystem.VivicastPaletteColor
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
@@ -148,14 +149,15 @@ internal fun FontScalePreference.toFontScaleFactor(): Float =
     }
 
 /**
- * Transparency enum → panel/overlay surface-opacity multiplier (normative: 0%→1.0, 25%→0.75, 50%→0.5).
+ * Transparency enum → panel/overlay surface-opacity multiplier. 0..100 % in 10 % steps; opacity =
+ * (100 - percent)/100 (0 %→1.0 fully opaque … 100 %→0.0 fully transparent). ordinal = step index.
  */
-internal fun TransparencyLevel.toSurfaceOpacity(): Float =
-    when (this) {
-        TransparencyLevel.Percent0 -> 1.00f
-        TransparencyLevel.Percent25 -> 0.75f
-        TransparencyLevel.Percent50 -> 0.50f
-    }
+internal fun TransparencyLevel.toSurfaceOpacity(): Float = (100 - ordinal * 10) / 100f
+
+/** Background/accent datastore enum → designsystem palette hue (identical case names). */
+internal fun ThemeColor.toPaletteColor(): VivicastPaletteColor = VivicastPaletteColor.valueOf(name)
+
+internal fun AccentColor.toPaletteColor(): VivicastPaletteColor = VivicastPaletteColor.valueOf(name)
 
 internal fun SettingsLanguage.toLocaleKey(): String =
     when (this) {

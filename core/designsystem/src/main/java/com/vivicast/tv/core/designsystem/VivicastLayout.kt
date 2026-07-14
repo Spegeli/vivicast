@@ -52,11 +52,16 @@ fun VivicastContentCard(
     contentPadding: Dp = VivicastSpacing.CardPadding,
     content: @Composable () -> Unit,
 ) {
+    val scheme = LocalVivicastColors.current
     Box(
         modifier = modifier
             .clip(VivicastShapes.CardRadius)
-            .background(Brush.verticalGradient(listOf(Color(0xEF132034), Color(0xE20A1423))))
-            .border(VivicastBorders.Hairline, Color(0xFF273B52), VivicastShapes.CardRadius)
+            .background(
+                Brush.verticalGradient(
+                    listOf(scheme.surface(Color(0xEF132034)), scheme.surface(Color(0xE20A1423))),
+                ),
+            )
+            .border(VivicastBorders.Hairline, scheme.surface(Color(0xFF273B52)), VivicastShapes.CardRadius)
             .padding(contentPadding),
     ) {
         content()

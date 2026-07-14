@@ -64,7 +64,7 @@ class SettingsViewModelTest {
             UserPreferences(
                 general = GeneralPreferences(launchOnBoot = true, globalUserAgent = "UA/2"),
                 appearance = AppearancePreferences(
-                    backgroundColor = ThemeColor.AmoledDark,
+                    backgroundColor = ThemeColor.Green,
                     language = LanguagePreference.English,
                     fontScale = FontScalePreference.Large,
                 ),
@@ -77,7 +77,7 @@ class SettingsViewModelTest {
         assertEquals(true, state.general.launchOnBoot)
         assertEquals("UA/2", state.general.globalUserAgent)
         assertEquals(SettingsLanguage.English, state.general.appLanguage)
-        assertEquals(SettingsThemeMode.AmoledDark, state.appearance.themeMode)
+        assertEquals(SettingsThemeMode.Green, state.appearance.themeMode)
         assertEquals(SettingsFontScale.Large, state.appearance.fontScale)
         assertEquals(PlaybackBufferSizeMode.Large, state.playback.bufferSize)
         scope.cancel()
@@ -154,12 +154,12 @@ class SettingsViewModelTest {
 
         vm.onAppearanceSettingsChanged(
             AppearanceSettingsState(
-                themeMode = SettingsThemeMode.HighContrastDark,
+                themeMode = SettingsThemeMode.Cyan,
                 fontScale = SettingsFontScale.ExtraLarge,
             ),
         )
 
-        assertEquals(ThemeColor.HighContrastDark, store.flow.value.appearance.backgroundColor)
+        assertEquals(ThemeColor.Cyan, store.flow.value.appearance.backgroundColor)
         assertEquals(FontScalePreference.ExtraLarge, store.flow.value.appearance.fontScale)
         scope.cancel()
     }

@@ -71,6 +71,7 @@ import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.VivicastScreenBackground
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTheme
+import com.vivicast.tv.core.designsystem.vivicastColorScheme
 import com.vivicast.tv.core.designsystem.VivicastTopNavigation
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.InfoPanel
@@ -173,7 +174,11 @@ class MainActivity : ComponentActivity() {
             // Activity recreate (it recomposes live). dp/layout/focus geometry stay fixed.
             val preferences by appContainer.userPreferencesStore.values.collectAsState(initial = UserPreferences())
             val baseDensity = LocalDensity.current
-            VivicastTheme {
+            val colorScheme = vivicastColorScheme(
+                background = preferences.appearance.backgroundColor.toPaletteColor(),
+                accent = preferences.appearance.accentColor.toPaletteColor(),
+            )
+            VivicastTheme(scheme = colorScheme) {
                 CompositionLocalProvider(
                     LocalDensity provides Density(
                         density = baseDensity.density,

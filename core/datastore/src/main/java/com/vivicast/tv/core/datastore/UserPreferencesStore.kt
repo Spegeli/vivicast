@@ -42,9 +42,9 @@ data class GeneralPreferences(
 )
 
 data class AppearancePreferences(
-    val backgroundColor: ThemeColor = ThemeColor.Dark,
+    val backgroundColor: ThemeColor = ThemeColor.Blue,
     val accentColor: AccentColor = AccentColor.Blue,
-    val transparency: TransparencyLevel = TransparencyLevel.Percent25,
+    val transparency: TransparencyLevel = TransparencyLevel.Percent20,
     val fontScale: FontScalePreference = FontScalePreference.Medium,
     val language: LanguagePreference = LanguagePreference.System,
     val animationSpeed: AnimationSpeedPreference = AnimationSpeedPreference.Normal,
@@ -87,11 +87,26 @@ data class DiagnosticsPreferences(
     val lastExportDir: String? = null,
 )
 
-enum class ThemeColor { Dark, HighContrastDark, AmoledDark }
+// Background "colour" (dark-tinted). Order = picker display order. Persisted by .name with graceful
+// fallback, so reordering/adding is migration-free; old values (Dark/HighContrastDark/AmoledDark) fall
+// back to the default (Blue).
+enum class ThemeColor {
+    Red, Pink, Purple, Indigo, Blue, Cyan, Teal, Green, Lime, Yellow,
+    Amber, Orange, Brown, Grey, BlueGrey, DarkGrey, Black,
+}
 
-enum class AccentColor { Blue }
+// Accent = background list minus DarkGrey + Black (a near-black accent can't be a visible highlight on a
+// dark app, and would mislead against its black picker swatch).
+enum class AccentColor {
+    Red, Pink, Purple, Indigo, Blue, Cyan, Teal, Green, Lime, Yellow,
+    Amber, Orange, Brown, Grey, BlueGrey,
+}
 
-enum class TransparencyLevel { Percent0, Percent25, Percent50 }
+// 0..100 % in 10 % steps. Opacity = (100 - percent)/100.
+enum class TransparencyLevel {
+    Percent0, Percent10, Percent20, Percent30, Percent40, Percent50,
+    Percent60, Percent70, Percent80, Percent90, Percent100,
+}
 
 enum class FontScalePreference { Small, Medium, Large, ExtraLarge }
 

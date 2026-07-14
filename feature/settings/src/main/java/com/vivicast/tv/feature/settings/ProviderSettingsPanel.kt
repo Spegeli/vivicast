@@ -60,6 +60,7 @@ import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastButtonRow
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
@@ -633,9 +634,9 @@ private fun ProviderSourceCard(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                     StatusBadge(providerSourceLabel(provider.type, sourceMode))
-                    StatusBadge(stringResource(R.string.nav_live_tv), tone = if (provider.includeLiveTv) VivicastColors.Info else VivicastColors.SurfaceHigh)
-                    StatusBadge(stringResource(R.string.nav_movies_label), tone = if (provider.includeMovies) VivicastColors.Info else VivicastColors.SurfaceHigh)
-                    StatusBadge(stringResource(R.string.nav_series_label), tone = if (provider.includeSeries) VivicastColors.Info else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_live_tv), tone = if (provider.includeLiveTv) LocalVivicastColors.current.accent else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_movies_label), tone = if (provider.includeMovies) LocalVivicastColors.current.accent else VivicastColors.SurfaceHigh)
+                    StatusBadge(stringResource(R.string.nav_series_label), tone = if (provider.includeSeries) LocalVivicastColors.current.accent else VivicastColors.SurfaceHigh)
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {

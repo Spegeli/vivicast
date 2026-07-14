@@ -10,9 +10,9 @@ data class GeneralSettingsState(
 )
 
 data class AppearanceSettingsState(
-    val themeMode: SettingsThemeMode = SettingsThemeMode.StandardDark,
+    val themeMode: SettingsThemeMode = SettingsThemeMode.Blue,
     val accentColor: SettingsAccentColor = SettingsAccentColor.Blue,
-    val transparency: SettingsTransparency = SettingsTransparency.Percent25,
+    val transparency: SettingsTransparency = SettingsTransparency.Percent20,
     val fontScale: SettingsFontScale = SettingsFontScale.Medium,
     val animationSpeed: SettingsAnimationSpeed = SettingsAnimationSpeed.Normal,
 )
@@ -23,20 +23,22 @@ enum class SettingsLanguage {
     English,
 }
 
+// Background "colour" (dark-tinted). Order = picker display order. Mirrors datastore ThemeColor.
 enum class SettingsThemeMode {
-    StandardDark,
-    HighContrastDark,
-    AmoledDark,
+    Red, Pink, Purple, Indigo, Blue, Cyan, Teal, Green, Lime, Yellow,
+    Amber, Orange, Brown, Grey, BlueGrey, DarkGrey, Black,
 }
 
+// Accent = background list minus DarkGrey + Black. Mirrors datastore AccentColor.
 enum class SettingsAccentColor {
-    Blue,
+    Red, Pink, Purple, Indigo, Blue, Cyan, Teal, Green, Lime, Yellow,
+    Amber, Orange, Brown, Grey, BlueGrey,
 }
 
+// 0..100 % in 10 % steps.
 enum class SettingsTransparency {
-    Percent0,
-    Percent25,
-    Percent50,
+    Percent0, Percent10, Percent20, Percent30, Percent40, Percent50,
+    Percent60, Percent70, Percent80, Percent90, Percent100,
 }
 
 enum class SettingsFontScale {

@@ -69,7 +69,7 @@
     <string name="settings_epg_help_global_settings">Intervall, Aufbewahrung und automatische Aktualisierung.</string>
 
     <!-- Appearance settings -->
-    <string name="settings_theme">Hintergrundthema</string>
+    <string name="settings_theme">Hintergrundfarbe</string>
     <string name="settings_accent_color">Akzentfarbe</string>
     <string name="settings_transparency">Transparenz</string>
     <string name="settings_font_size">Schriftgröße</string>
@@ -193,13 +193,24 @@
     <string name="player_aspect_fill">Ausfüllen</string>
     <string name="player_aspect_fit">Anpassen</string>
 
-    <!-- Theme options -->
-    <string name="theme_dark">Standard dunkel</string>
-    <string name="theme_dark_contrast">Dunkel kontrastreich</string>
-    <string name="theme_amoled">AMOLED dunkel</string>
-
-    <!-- Accent colors -->
-    <string name="accent_blue">Vivicast Blau</string>
+    <!-- Colour names (shared by Hintergrundfarbe + Akzentfarbe pickers) -->
+    <string name="color_red">Rot</string>
+    <string name="color_pink">Pink</string>
+    <string name="color_purple">Lila</string>
+    <string name="color_indigo">Indigoblau</string>
+    <string name="color_blue">Blau</string>
+    <string name="color_cyan">Cyanblau</string>
+    <string name="color_teal">Blaugrün</string>
+    <string name="color_green">Grün</string>
+    <string name="color_lime">Limettengrün</string>
+    <string name="color_yellow">Gelb</string>
+    <string name="color_amber">Bernstein</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_brown">Braun</string>
+    <string name="color_grey">Grau</string>
+    <string name="color_blue_grey">Blaugrau</string>
+    <string name="color_dark_grey">Dunkelgrau</string>
+    <string name="color_black">Schwarz</string>
 
     <!-- Font scale -->
     <string name="font_small">Klein</string>
@@ -522,7 +533,7 @@
     <string name="settings_epg_badge_auto">Automatisch</string>
 
     <!-- Settings - Appearance help -->
-    <string name="settings_help_theme">TV-taugliche dunkle Darstellung.</string>
+    <string name="settings_help_theme">Dunkel getönte Grundfarbe der Oberfläche.</string>
     <string name="settings_help_accent">Fokus- und Warnkontrast bleiben verbindlich.</string>
     <string name="settings_help_transparency">Panel- und Overlay-Lesbarkeit bleibt begrenzt.</string>
     <string name="settings_help_font_scale">Textgröße ohne Layoutbruch.</string>

@@ -37,6 +37,8 @@ dependencies {
     implementation(libs.androidx.tv.material)
     implementation(libs.coil.compose)
 
+    testImplementation(libs.junit)
+
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)

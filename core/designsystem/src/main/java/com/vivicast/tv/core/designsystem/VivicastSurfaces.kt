@@ -46,14 +46,15 @@ fun VivicastScreenBackground(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    val scheme = LocalVivicastColors.current
     Box(
         modifier = modifier
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xFF02040A),
-                        VivicastColors.Background,
-                        Color(0xFF081525),
+                        scheme.surface(Color(0xFF02040A)),
+                        scheme.surface(VivicastColors.Background),
+                        scheme.surface(Color(0xFF081525)),
                     ),
                 ),
             ),
@@ -63,7 +64,11 @@ fun VivicastScreenBackground(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color(0x00111827), Color(0x55101C30), Color(0x00111827)),
+                        listOf(
+                            scheme.surface(Color(0x00111827)),
+                            scheme.surface(Color(0x55101C30)),
+                            scheme.surface(Color(0x00111827)),
+                        ),
                     ),
                 ),
         )
@@ -86,25 +91,26 @@ fun VivicastFocusSurface(
     content: @Composable (focused: Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val scheme = LocalVivicastColors.current
     val border = Border(
         border = BorderStroke(
             VivicastBorders.Hairline,
             when {
-                selected -> VivicastColors.AccentSoft
-                showIdleSurface -> Color(0xFF26384F)
+                selected -> scheme.accentSoft
+                showIdleSurface -> scheme.surface(Color(0xFF26384F))
                 else -> Color.Transparent
             },
         ),
         shape = shape,
     )
     val focusedBorder = Border(
-        border = BorderStroke(VivicastFocusDefaults.RingWidth, VivicastColors.FocusRing),
+        border = BorderStroke(VivicastFocusDefaults.RingWidth, scheme.focusRing),
         inset = 0.dp,
         shape = shape,
     )
     val glow = Glow(
         elevation = VivicastFocusDefaults.GlowElevation,
-        elevationColor = VivicastColors.FocusGlow,
+        elevationColor = scheme.focusGlow,
     )
 
     TvSurface(
@@ -123,13 +129,13 @@ fun VivicastFocusSurface(
             pressedBorder = focusedBorder,
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (showIdleSurface) VivicastColors.Surface else Color.Transparent,
+            containerColor = if (showIdleSurface) scheme.surface(VivicastColors.Surface) else Color.Transparent,
             contentColor = VivicastColors.TextPrimary,
-            focusedContainerColor = VivicastColors.SurfaceFocus,
+            focusedContainerColor = scheme.surface(VivicastColors.SurfaceFocus),
             focusedContentColor = Color.White,
-            pressedContainerColor = VivicastColors.SurfacePressed,
+            pressedContainerColor = scheme.surface(VivicastColors.SurfacePressed),
             pressedContentColor = Color.White,
-            disabledContainerColor = VivicastColors.SurfaceDisabled,
+            disabledContainerColor = scheme.surface(VivicastColors.SurfaceDisabled),
             disabledContentColor = VivicastColors.TextDisabled,
         ),
         glow = ClickableSurfaceDefaults.glow(
@@ -148,7 +154,7 @@ fun VivicastFocusSurface(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .background(focusSurfaceBrush(focused = focused, selected = selected, enabled = enabled, showIdleSurface = showIdleSurface))
+                .background(focusSurfaceBrush(scheme = scheme, focused = focused, selected = selected, enabled = enabled, showIdleSurface = showIdleSurface))
                 .padding(contentPadding),
         ) {
             content(focused)
@@ -214,31 +220,39 @@ fun VivicastGlassPanel(
 ) {
     // Fade only the fill by the user transparency; border + content stay opaque for readability.
     val opacity = LocalSurfaceOpacity.current
+    val scheme = LocalVivicastColors.current
     Box(
         modifier = modifier
             .clip(VivicastShapes.PanelRadius)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color(0xF0152438).scaledAlpha(opacity),
-                        Color(0xEA0B1626).scaledAlpha(opacity),
-                        Color(0xDC07101C).scaledAlpha(opacity),
+                        scheme.surface(Color(0xF0152438)).scaledAlpha(opacity),
+                        scheme.surface(Color(0xEA0B1626)).scaledAlpha(opacity),
+                        scheme.surface(Color(0xDC07101C)).scaledAlpha(opacity),
                     ),
                 ),
             )
-            .border(VivicastBorders.PanelWidth, Color(0xAA263D56), VivicastShapes.PanelRadius)
+            .border(VivicastBorders.PanelWidth, scheme.surface(Color(0xAA263D56)), VivicastShapes.PanelRadius)
             .padding(contentPadding),
     ) {
         content()
     }
 }
 
-private fun focusSurfaceBrush(focused: Boolean, selected: Boolean, enabled: Boolean, showIdleSurface: Boolean): Brush {
+private fun focusSurfaceBrush(
+    scheme: VivicastColorScheme,
+    focused: Boolean,
+    selected: Boolean,
+    enabled: Boolean,
+    showIdleSurface: Boolean,
+): Brush {
+    fun tint(stops: List<Color>) = Brush.verticalGradient(stops.map(scheme::surface))
     return when {
-        !enabled -> Brush.verticalGradient(listOf(VivicastColors.SurfaceDisabled, VivicastColors.SurfaceDisabled))
-        focused -> Brush.verticalGradient(listOf(Color(0xFF255077), Color(0xFF0E2A43), Color(0xFF081523)))
-        selected -> Brush.verticalGradient(listOf(Color(0xFF173F64), Color(0xFF0D273F), Color(0xFF081522)))
+        !enabled -> tint(listOf(VivicastColors.SurfaceDisabled, VivicastColors.SurfaceDisabled))
+        focused -> tint(listOf(Color(0xFF255077), Color(0xFF0E2A43), Color(0xFF081523)))
+        selected -> tint(listOf(Color(0xFF173F64), Color(0xFF0D273F), Color(0xFF081522)))
         !showIdleSurface -> Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        else -> Brush.verticalGradient(listOf(Color(0xEF152238), Color(0xE80B1423), Color(0xDE08111D)))
+        else -> tint(listOf(Color(0xEF152238), Color(0xE80B1423), Color(0xDE08111D)))
     }
 }

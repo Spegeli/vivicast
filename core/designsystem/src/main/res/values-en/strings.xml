@@ -69,7 +69,7 @@
     <string name="settings_epg_help_global_settings">Interval, retention and automatic refresh.</string>
 
     <!-- Appearance settings -->
-    <string name="settings_theme">Background theme</string>
+    <string name="settings_theme">Background colour</string>
     <string name="settings_accent_color">Accent color</string>
     <string name="settings_transparency">Transparency</string>
     <string name="settings_font_size">Font size</string>
@@ -193,13 +193,24 @@
     <string name="player_aspect_fill">Fill</string>
     <string name="player_aspect_fit">Fit</string>
 
-    <!-- Theme options -->
-    <string name="theme_dark">Standard dark</string>
-    <string name="theme_dark_contrast">Dark contrast</string>
-    <string name="theme_amoled">AMOLED dark</string>
-
-    <!-- Accent colors -->
-    <string name="accent_blue">Vivicast Blue</string>
+    <!-- Colour names (shared by background + accent pickers) -->
+    <string name="color_red">Red</string>
+    <string name="color_pink">Pink</string>
+    <string name="color_purple">Purple</string>
+    <string name="color_indigo">Indigo</string>
+    <string name="color_blue">Blue</string>
+    <string name="color_cyan">Cyan</string>
+    <string name="color_teal">Teal</string>
+    <string name="color_green">Green</string>
+    <string name="color_lime">Lime</string>
+    <string name="color_yellow">Yellow</string>
+    <string name="color_amber">Amber</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_brown">Brown</string>
+    <string name="color_grey">Grey</string>
+    <string name="color_blue_grey">Blue grey</string>
+    <string name="color_dark_grey">Dark grey</string>
+    <string name="color_black">Black</string>
 
     <!-- Font scale -->
     <string name="font_small">Small</string>
@@ -522,7 +533,7 @@
     <string name="settings_epg_badge_auto">Automatic</string>
 
     <!-- Settings - Appearance help -->
-    <string name="settings_help_theme">TV-optimized dark display.</string>
+    <string name="settings_help_theme">Dark-tinted base colour of the interface.</string>
     <string name="settings_help_accent">Focus and warning contrast remain enforced.</string>
     <string name="settings_help_transparency">Panel and overlay readability stays limited.</string>
     <string name="settings_help_font_scale">Text size without breaking layout.</string>

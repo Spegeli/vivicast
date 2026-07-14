@@ -37,43 +37,21 @@ internal fun SettingsLanguage.toDataStoreLanguagePreference(): LanguagePreferenc
         SettingsLanguage.English -> LanguagePreference.English
     }
 
-internal fun ThemeColor.toSettingsThemeMode(): SettingsThemeMode =
-    when (this) {
-        ThemeColor.Dark -> SettingsThemeMode.StandardDark
-        ThemeColor.HighContrastDark -> SettingsThemeMode.HighContrastDark
-        ThemeColor.AmoledDark -> SettingsThemeMode.AmoledDark
-    }
+// Background/accent/transparency UI <-> datastore enums share identical case names (Red..Black,
+// Percent0..Percent100), so map by name — no per-case when to keep in sync as the palette grows.
+internal fun ThemeColor.toSettingsThemeMode(): SettingsThemeMode = SettingsThemeMode.valueOf(name)
 
-internal fun SettingsThemeMode.toDataStoreThemeColor(): ThemeColor =
-    when (this) {
-        SettingsThemeMode.StandardDark -> ThemeColor.Dark
-        SettingsThemeMode.HighContrastDark -> ThemeColor.HighContrastDark
-        SettingsThemeMode.AmoledDark -> ThemeColor.AmoledDark
-    }
+internal fun SettingsThemeMode.toDataStoreThemeColor(): ThemeColor = ThemeColor.valueOf(name)
 
-internal fun AccentColor.toSettingsAccentColor(): SettingsAccentColor =
-    when (this) {
-        AccentColor.Blue -> SettingsAccentColor.Blue
-    }
+internal fun AccentColor.toSettingsAccentColor(): SettingsAccentColor = SettingsAccentColor.valueOf(name)
 
-internal fun SettingsAccentColor.toDataStoreAccentColor(): AccentColor =
-    when (this) {
-        SettingsAccentColor.Blue -> AccentColor.Blue
-    }
+internal fun SettingsAccentColor.toDataStoreAccentColor(): AccentColor = AccentColor.valueOf(name)
 
 internal fun TransparencyLevel.toSettingsTransparency(): SettingsTransparency =
-    when (this) {
-        TransparencyLevel.Percent0 -> SettingsTransparency.Percent0
-        TransparencyLevel.Percent25 -> SettingsTransparency.Percent25
-        TransparencyLevel.Percent50 -> SettingsTransparency.Percent50
-    }
+    SettingsTransparency.valueOf(name)
 
 internal fun SettingsTransparency.toDataStoreTransparencyLevel(): TransparencyLevel =
-    when (this) {
-        SettingsTransparency.Percent0 -> TransparencyLevel.Percent0
-        SettingsTransparency.Percent25 -> TransparencyLevel.Percent25
-        SettingsTransparency.Percent50 -> TransparencyLevel.Percent50
-    }
+    TransparencyLevel.valueOf(name)
 
 internal fun FontScalePreference.toSettingsFontScale(): SettingsFontScale =
     when (this) {

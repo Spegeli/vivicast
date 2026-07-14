@@ -98,7 +98,7 @@ fun ActionPill(
 fun VivicastSpinner(
     modifier: Modifier = Modifier,
     size: Dp = 18.dp,
-    color: Color = VivicastColors.FocusRing,
+    color: Color = LocalVivicastColors.current.focusRing,
     strokeWidth: Dp = 2.dp,
 ) {
     // Driven by the raw frame clock (not an animation spec) so it still spins when the device has
@@ -151,6 +151,7 @@ fun VivicastTextField(
 ) {
     var focused by remember { mutableStateOf(false) }
     var revealed by remember { mutableStateOf(false) }
+    val scheme = LocalVivicastColors.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         if (label != null) {
             BasicText(
@@ -176,13 +177,13 @@ fun VivicastTextField(
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                     .onFocusChanged { focused = it.isFocused }
                     .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
-                    .background(if (focused) VivicastColors.SurfaceSelected else VivicastColors.Surface)
+                    .background(if (focused) scheme.surface(VivicastColors.SurfaceSelected) else scheme.surface(VivicastColors.Surface))
                     .border(
                         width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
                         color = when {
                             isError -> VivicastColors.Error
-                            focused -> VivicastColors.FocusRing
-                            else -> Color(0x66344A62)
+                            focused -> scheme.focusRing
+                            else -> scheme.surface(Color(0x66344A62))
                         },
                         shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
                     )
@@ -326,6 +327,7 @@ fun VivicastSettingsRow(
     valueLoading: Boolean = false,
     onClick: () -> Unit = {},
 ) {
+    val scheme = LocalVivicastColors.current
     val disabledColor = VivicastColors.TextSecondary.copy(alpha = 0.55f)
     val titleColor = if (enabled) VivicastColors.TextPrimary else disabledColor
     val secondaryColor = if (enabled) VivicastColors.TextSecondary else disabledColor
@@ -367,7 +369,7 @@ fun VivicastSettingsRow(
                     style = VivicastTypography.LabelSmall.copy(
                         color = when {
                             !enabled -> disabledColor
-                            focused -> VivicastColors.FocusRing
+                            focused -> scheme.focusRing
                             else -> VivicastColors.TextSecondary
                         },
                     ),
@@ -390,7 +392,7 @@ fun VivicastSettingsRow(
                 .fillMaxWidth()
                 .height(VivicastCardSizes.CompactSettingsRowHeight)
                 .clip(VivicastShapes.CardRadius)
-                .background(VivicastColors.SurfaceDisabled),
+                .background(scheme.surface(VivicastColors.SurfaceDisabled)),
             contentAlignment = Alignment.CenterStart,
         ) {
             RowContent(focused = false)
@@ -414,12 +416,13 @@ fun VivicastSettingsRow(
  */
 @Composable
 fun VivicastCheckbox(checked: Boolean, enabled: Boolean = true, modifier: Modifier = Modifier) {
+    val scheme = LocalVivicastColors.current
     val boxColor = when {
-        !enabled -> VivicastColors.SurfaceHigh
-        checked -> VivicastColors.Accent
-        else -> VivicastColors.Surface
+        !enabled -> scheme.surface(VivicastColors.SurfaceHigh)
+        checked -> scheme.accent
+        else -> scheme.surface(VivicastColors.Surface)
     }
-    val borderColor = if (checked && enabled) VivicastColors.Accent else Color(0x66344A62)
+    val borderColor = if (checked && enabled) scheme.accent else scheme.surface(Color(0x66344A62))
     Box(
         modifier = modifier
             .size(24.dp)
@@ -454,10 +457,11 @@ fun VivicastCheckbox(checked: Boolean, enabled: Boolean = true, modifier: Modifi
 
 @Composable
 fun VivicastToggle(isOn: Boolean, enabled: Boolean = true, modifier: Modifier = Modifier) {
+    val scheme = LocalVivicastColors.current
     val trackColor = when {
-        !enabled -> VivicastColors.SurfaceHigh
-        isOn -> VivicastColors.Accent
-        else -> VivicastColors.SurfaceHigh
+        !enabled -> scheme.surface(VivicastColors.SurfaceHigh)
+        isOn -> scheme.accent
+        else -> scheme.surface(VivicastColors.SurfaceHigh)
     }
     val thumbColor = if (enabled) Color.White else VivicastColors.TextDisabled
     Box(
