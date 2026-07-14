@@ -668,7 +668,6 @@
     <string name="settings_provider_xtream_stable">Type and ID remain stable.</string>
     <string name="settings_provider_xtream_credentials">Credentials are stored securely. No custom User-Agent.</string>
     <string name="settings_provider_title_playlist">Playlist</string>
-    <string name="settings_provider_file_no_auto">File and clipboard sources can only be updated by replacement. Automatic refresh is disabled.</string>
     <string name="settings_provider_help_refresh_all">Starts a manual refresh for active sources.</string>
     <string name="settings_provider_msg_name_check">Name already exists.</string>
     <string name="settings_provider_body_refresh">Controls automatic updates; manual refresh remains available.</string>
@@ -700,7 +699,6 @@
     <string name="settings_provider_password_label">Password</string>
     <string name="settings_provider_content_section">Content</string>
     <string name="settings_provider_interval_label">Interval</string>
-    <string name="settings_provider_update_title">Update</string>
     <string name="settings_provider_update_interval">Update interval</string>
     <string name="settings_epg_global_interval">Global refresh interval</string>
     <string name="settings_provider_refresh_on_start">Refresh on app start</string>
@@ -731,6 +729,7 @@
     <string name="settings_provider_toggle_enabled">Enable/Disable</string>
     <string name="settings_provider_active_label">Enable</string>
     <string name="settings_provider_saving">Saving…</string>
+    <string name="settings_deleting">Deleting…</string>
     <string name="settings_provider_conn_failed_title">Warning</string>
     <string name="settings_provider_conn_failed_body">Could not connect to the playlist.</string>
     <string name="settings_provider_correct">Fix</string>

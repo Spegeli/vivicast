@@ -15,6 +15,7 @@ import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
+import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -24,6 +25,7 @@ class StandardBackupRestorer(
     private val userPreferencesStore: UserPreferencesStore,
     private val secureValueStore: SecureValueStore,
     private val pinSecurityStateStore: PinSecurityStateStore,
+    private val m3uFileSourceStore: DiskM3uFileSourceStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     suspend fun restore(jsonText: String): StandardBackupRestoreValidation {
@@ -132,9 +134,11 @@ class StandardBackupRestorer(
     ) {
         providers.forEach { provider ->
             secureValueStore.delete(SecureKey("${provider.sourceConfigKey}:$FIELD_M3U_URL"))
+            secureValueStore.delete(SecureKey("${provider.sourceConfigKey}:$FIELD_M3U_SOURCE_MODE"))
             secureValueStore.delete(SecureKey("${provider.sourceConfigKey}:$FIELD_XTREAM_SERVER_URL"))
             secureValueStore.delete(SecureKey("${provider.sourceConfigKey}:$FIELD_XTREAM_USERNAME"))
             secureValueStore.delete(SecureKey("${provider.sourceConfigKey}:$FIELD_XTREAM_PASSWORD"))
+            m3uFileSourceStore.delete(provider.id)
         }
         epgSources.forEach { source -> secureValueStore.delete(SecureKey(source.sourceConfigKey)) }
     }
@@ -145,6 +149,12 @@ class StandardBackupRestorer(
             val source = provider.optJSONObject("source") ?: return@forEachObject
             val sourceConfigKey = sourceConfigKeyFor(stableKey)
             source.nullableString("m3uUrl")?.let { secureValueStore.write(SecureKey("$sourceConfigKey:$FIELD_M3U_URL"), it) }
+            // File-mode M3U: restore the raw content to disk and flag the source mode so getCredentials
+            // takes the File branch (URL-mode leaves the mode secret absent → defaults to Url).
+            source.nullableString("m3uInlineContent")?.let {
+                m3uFileSourceStore.write(stableKey, it)
+                secureValueStore.write(SecureKey("$sourceConfigKey:$FIELD_M3U_SOURCE_MODE"), M3U_SOURCE_MODE_FILE)
+            }
             source.nullableString("xtreamServerUrl")?.let {
                 secureValueStore.write(SecureKey("$sourceConfigKey:$FIELD_XTREAM_SERVER_URL"), it)
             }
@@ -168,7 +178,8 @@ private fun JSONArray.toProviderEntities(now: Long): List<ProviderEntity> =
         val type = provider.optString("type").toStorageProviderType()
         val source = provider.optJSONObject("source")
         val hasRestorableSource = when (type) {
-            PROVIDER_TYPE_M3U -> !source?.nullableString("m3uUrl").isNullOrBlank()
+            PROVIDER_TYPE_M3U -> !source?.nullableString("m3uUrl").isNullOrBlank() ||
+                !source?.nullableString("m3uInlineContent").isNullOrBlank()
             PROVIDER_TYPE_XTREAM -> source != null &&
                 !source.nullableString("xtreamServerUrl").isNullOrBlank() &&
                 !source.nullableString("xtreamUsername").isNullOrBlank() &&
@@ -392,6 +403,8 @@ private const val PROVIDER_STATUS_ACTIVE = "ACTIVE"
 private const val PROVIDER_STATUS_CREDENTIALS_REQUIRED = "CREDENTIALS_REQUIRED"
 private const val CATEGORY_TYPE_LIVE = "LIVE"
 private const val FIELD_M3U_URL = "m3u_url"
+private const val FIELD_M3U_SOURCE_MODE = "m3u_source_mode"
+private const val M3U_SOURCE_MODE_FILE = "File"
 private const val FIELD_XTREAM_SERVER_URL = "xtream_server_url"
 private const val FIELD_XTREAM_USERNAME = "xtream_username"
 private const val FIELD_XTREAM_PASSWORD = "xtream_password"

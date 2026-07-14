@@ -103,6 +103,9 @@ fun DeleteProviderDialog(
     onDelete: () -> Unit,
 ) {
     val cancelFocusRequester = remember { FocusRequester() }
+    // Deletion runs async and the dialog only closes when it completes — show a spinner meanwhile so
+    // the user has feedback that work is happening.
+    var deleting by remember { mutableStateOf(false) }
 
     VivicastDialog(
         onDismiss = onCancel,
@@ -117,10 +120,15 @@ fun DeleteProviderDialog(
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastDialogActions(
-            primaryLabel = stringResource(R.string.settings_delete),
-            onPrimary = onDelete,
+            primaryLabel = stringResource(if (deleting) R.string.settings_deleting else R.string.settings_delete),
+            onPrimary = {
+                deleting = true
+                onDelete()
+            },
             secondaryLabel = stringResource(R.string.common_cancel),
             onSecondary = onCancel,
+            primaryEnabled = !deleting,
+            primaryLoading = deleting,
             primaryTestTag = deleteProviderConfirmTag(provider.id),
             secondaryTestTag = deleteProviderCancelTag(provider.id),
             secondaryFocusRequester = cancelFocusRequester,

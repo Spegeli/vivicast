@@ -90,6 +90,9 @@ class SystemIntegrationProviderRepository(
     override suspend fun getCredentials(providerId: String): ProviderCredentials? =
         delegate.getCredentials(providerId)
 
+    override suspend fun getProviderM3uInlineContent(providerId: String): String? =
+        delegate.getProviderM3uInlineContent(providerId)
+
     override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult =
         delegate.createProvider(request).also { syncWatchNextSafely() }
 

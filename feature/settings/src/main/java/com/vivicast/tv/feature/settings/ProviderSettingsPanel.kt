@@ -104,6 +104,7 @@ import java.util.Date
 internal fun ProviderSettingsPanel(
     providers: List<Provider>,
     onGetProviderCredentials: suspend (String) -> ProviderCredentials?,
+    onGetProviderM3uContent: suspend (String) -> String? = { null },
     onCreateProvider: suspend (ProviderCreateRequest) -> Result<ProviderSaveResult>,
     onUpdateProvider: suspend (ProviderUpdateRequest) -> Result<ProviderSaveResult>,
     onSetProviderEnabled: suspend (String, Boolean) -> Result<Unit>,
@@ -324,8 +325,10 @@ internal fun ProviderSettingsPanel(
                     } else {
                         message = null
                         connectionTestStatus = ConnectionTestStatus.Testing
+                        val editorSnapshot = editor
                         scope.launch {
-                            val result = onTestProviderConnection(editor.toConnectionTestRequest())
+                            val request = editorSnapshot.resolveTestRequest(onGetProviderM3uContent)
+                            val result = onTestProviderConnection(request)
                             if (result.errorMessage == null) {
                                 connectionTestStatus = ConnectionTestStatus.Passed
                                 connectionSummary = result.summary

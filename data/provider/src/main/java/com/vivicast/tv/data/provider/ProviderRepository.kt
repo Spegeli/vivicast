@@ -11,6 +11,12 @@ interface ProviderRepository {
 
     suspend fun getCredentials(providerId: String): ProviderCredentials?
 
+    /**
+     * Raw content of a File-mode M3U playlist, read from disk on demand; null for URL-mode / not stored.
+     * Kept off [getCredentials] so opening the provider editor doesn't load a large playlist into memory.
+     */
+    suspend fun getProviderM3uInlineContent(providerId: String): String? = null
+
     suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult
 
     suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult

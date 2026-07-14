@@ -260,7 +260,6 @@ internal fun EpgSourceEditor(
                 ActionPill(
                     label = stringResource(R.string.common_save),
                     modifier = Modifier.width(150.dp),
-                    selected = true,
                     onClick = {
                         // A blocked save reddens the offending field and jumps focus to it
                         // (name → URL), like the playlist editor.
@@ -317,6 +316,8 @@ fun DeleteEpgSourceDialog(
     onDelete: () -> Unit,
 ) {
     val cancelFocusRequester = remember { FocusRequester() }
+    // Deletion runs async and the dialog only closes when it completes — show a spinner meanwhile.
+    var deleting by remember { mutableStateOf(false) }
 
     VivicastDialog(
         onDismiss = onCancel,
@@ -331,10 +332,15 @@ fun DeleteEpgSourceDialog(
             modifier = Modifier.fillMaxWidth(),
         )
         VivicastDialogActions(
-            primaryLabel = stringResource(R.string.settings_delete),
-            onPrimary = onDelete,
+            primaryLabel = stringResource(if (deleting) R.string.settings_deleting else R.string.settings_delete),
+            onPrimary = {
+                deleting = true
+                onDelete()
+            },
             secondaryLabel = stringResource(R.string.common_cancel),
             onSecondary = onCancel,
+            primaryEnabled = !deleting,
+            primaryLoading = deleting,
             primaryTestTag = deleteEpgSourceConfirmTag(source.id),
             secondaryTestTag = deleteEpgSourceCancelTag(source.id),
             secondaryFocusRequester = cancelFocusRequester,

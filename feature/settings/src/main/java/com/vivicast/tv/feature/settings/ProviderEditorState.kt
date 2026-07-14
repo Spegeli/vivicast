@@ -89,7 +89,13 @@ internal data class ProviderEditorState(
         msgM3uFile: String,
     ): String? =
         when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = false, msgM3uUrl, msgM3uFile)
+            // A File playlist being edited keeps its stored source; its content is resolved from disk for
+            // the test, so a blank editor field is allowed. URL still needs the (pre-filled) URL present.
+            ProviderType.M3u -> m3uSourceValidationMessage(
+                allowExistingSource = m3uSourceMode == M3uSourceMode.File && isEditing && m3uHasExistingSource,
+                msgM3uUrl,
+                msgM3uFile,
+            )
             ProviderType.Xtream -> when {
                 xtreamServerUrl.isBlank() -> msgXtreamServer
                 xtreamUsername.isBlank() -> msgXtreamUser
@@ -189,15 +195,23 @@ internal data class ProviderEditorState(
 
         fun from(provider: Provider, credentials: ProviderCredentials? = null): ProviderEditorState {
             // Pre-fill the editor with the stored credentials so editing shows the current values.
+            // File-mode content is NOT loaded into the editor (it can be large); we show the stored
+            // file name (<providerId>.m3u) and resolve the content on demand for the Test button.
             val m3u = credentials as? ProviderCredentials.M3u
             val xtream = credentials as? ProviderCredentials.Xtream
+            val sourceMode = m3u?.sourceMode ?: M3uSourceMode.Url
             return ProviderEditorState(
                 providerId = provider.id,
                 type = provider.type,
                 name = provider.name,
-                m3uSourceMode = m3u?.sourceMode ?: M3uSourceMode.Url,
+                m3uSourceMode = sourceMode,
                 m3uUrl = m3u?.url.orEmpty(),
-                m3uContent = m3u?.inlineContent.orEmpty(),
+                m3uContent = "",
+                m3uFileName = if (provider.type == ProviderType.M3u && sourceMode == M3uSourceMode.File) {
+                    "${provider.id}.m3u"
+                } else {
+                    ""
+                },
                 // Tied to the provider type, not the loaded credentials: an M3U provider still HAS a stored
                 // source even if the (async, secure) credential load failed — so a blank field means "keep
                 // the stored source", not "source missing", and Save isn't blocked on a transient read error.
@@ -217,6 +231,21 @@ internal data class ProviderEditorState(
             ).let { it.copy(pristineSource = it.sourceSignature()) }
         }
     }
+}
+
+/**
+ * The connection-test request for this editor. For a File playlist being edited without a freshly picked
+ * file (blank content field), the stored content is resolved on demand so the test checks the linked file.
+ */
+internal suspend fun ProviderEditorState.resolveTestRequest(
+    getStoredM3uContent: suspend (String) -> String?,
+): ProviderCreateRequest {
+    val base = toConnectionTestRequest()
+    val needsStoredContent = type == ProviderType.M3u &&
+        m3uSourceMode == M3uSourceMode.File &&
+        m3uContent.isBlank() &&
+        providerId != null
+    return if (needsStoredContent) base.copy(m3uContent = getStoredM3uContent(providerId)) else base
 }
 
 @get:StringRes

@@ -19,6 +19,7 @@ import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -33,6 +34,8 @@ import org.junit.runner.RunWith
 class RoomProviderRepositoryTest {
     private lateinit var database: VivicastDatabase
     private lateinit var secureValueStore: FakeSecureValueStore
+    private lateinit var m3uSourceDir: File
+    private lateinit var m3uFileSourceStore: DiskM3uFileSourceStore
     private lateinit var repository: RoomProviderRepository
     private var now = 1_000L
 
@@ -43,12 +46,15 @@ class RoomProviderRepositoryTest {
             .allowMainThreadQueries()
             .build()
         secureValueStore = FakeSecureValueStore()
-        repository = RoomProviderRepository(database, secureValueStore) { now }
+        m3uSourceDir = File(context.cacheDir, "m3u_sources_test").also { it.deleteRecursively() }
+        m3uFileSourceStore = DiskM3uFileSourceStore(m3uSourceDir)
+        repository = RoomProviderRepository(database, secureValueStore, m3uFileSourceStore) { now }
     }
 
     @After
     fun tearDown() {
         database.close()
+        m3uSourceDir.deleteRecursively()
     }
 
     @Test
@@ -77,7 +83,7 @@ class RoomProviderRepositoryTest {
     }
 
     @Test
-    fun createM3uFileProviderKeepsInlineContentTransientOnly() = runBlocking {
+    fun createM3uFileProviderPersistsInlineContentToDisk() = runBlocking {
         val content = """
             #EXTM3U
             #EXTINF:-1,ARD
@@ -99,19 +105,96 @@ class RoomProviderRepositoryTest {
 
         val provider = requireNotNull(database.providerDao().getProvider(result.provider.id))
 
+        // getCredentials stays light — the content is read on demand, not returned here.
         assertEquals(
-            ProviderCredentials.M3u(sourceMode = M3uSourceMode.File, inlineContent = content),
+            ProviderCredentials.M3u(sourceMode = M3uSourceMode.File),
             repository.getCredentials(result.provider.id),
         )
+        assertEquals(content, repository.getProviderM3uInlineContent(result.provider.id))
         assertFalse(provider.name.contains("stream.example"))
         assertFalse(provider.sourceConfigKey.contains("stream.example"))
         assertFalse(secureValueStore.values.values.contains(content))
 
-        TransientM3uSourceStore.clear(result.provider.id)
+        // Durable: a fresh repository over the same on-disk store still resolves the content, so a
+        // File-mode playlist survives a process restart (unlike the old RAM-only holder).
+        assertEquals(content, m3uFileSourceStore.read(result.provider.id))
+        val reopened = RoomProviderRepository(database, secureValueStore, DiskM3uFileSourceStore(m3uSourceDir)) { now }
+        assertEquals(content, reopened.getProviderM3uInlineContent(result.provider.id))
 
+        repository.deleteProvider(result.provider.id)
+        assertNull(m3uFileSourceStore.read(result.provider.id))
+    }
+
+    @Test
+    fun fileModeM3uProviderIsNeverScheduledForAutoRefresh() = runBlocking {
+        val created = repository.createProvider(
+            ProviderCreateRequest(
+                name = "No Auto",
+                type = ProviderType.M3u,
+                m3uSourceMode = M3uSourceMode.File,
+                m3uContent = "#EXTM3U\n#EXTINF:-1,A\nhttps://a.example/a.m3u8",
+                refreshIntervalHours = 24,
+                refreshOnAppStartEnabled = true,
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+        val afterCreate = requireNotNull(database.providerDao().getProvider(created.provider.id))
+        assertEquals(0, afterCreate.refreshIntervalHours)
+        assertFalse(afterCreate.refreshOnAppStartEnabled)
+
+        // Metadata-only edit (m3uSourceMode null) still resolves File from the stored mode and keeps it off.
+        repository.updateProvider(
+            ProviderUpdateRequest(
+                providerId = created.provider.id,
+                name = "No Auto Renamed",
+                refreshIntervalHours = 24,
+                refreshOnAppStartEnabled = true,
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+        val afterUpdate = requireNotNull(database.providerDao().getProvider(created.provider.id))
+        assertEquals(0, afterUpdate.refreshIntervalHours)
+        assertFalse(afterUpdate.refreshOnAppStartEnabled)
+    }
+
+    @Test
+    fun switchingM3uFileProviderToUrlRemovesStoredFile() = runBlocking {
+        val content = "#EXTM3U\n#EXTINF:-1,X\nhttps://x.example/x.m3u8"
+        val created = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Switch Me",
+                type = ProviderType.M3u,
+                m3uSourceMode = M3uSourceMode.File,
+                m3uContent = content,
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+                refreshIntervalHours = 12,
+            ),
+        )
+        assertEquals(content, m3uFileSourceStore.read(created.provider.id))
+
+        repository.updateProvider(
+            ProviderUpdateRequest(
+                providerId = created.provider.id,
+                name = "Switch Me",
+                m3uSourceMode = M3uSourceMode.Url,
+                m3uUrl = "https://list.example/list.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+                refreshIntervalHours = 12,
+            ),
+        )
+
+        assertNull(m3uFileSourceStore.read(created.provider.id))
         assertEquals(
-            ProviderCredentials.M3u(sourceMode = M3uSourceMode.File, inlineContent = null),
-            repository.getCredentials(result.provider.id),
+            ProviderCredentials.M3u(url = "https://list.example/list.m3u", sourceMode = M3uSourceMode.Url),
+            repository.getCredentials(created.provider.id),
         )
     }
 

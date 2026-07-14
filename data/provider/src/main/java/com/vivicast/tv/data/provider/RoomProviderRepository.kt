@@ -15,6 +15,7 @@ import java.util.UUID
 class RoomProviderRepository(
     private val database: VivicastDatabase,
     private val secureValueStore: SecureValueStore,
+    private val m3uFileSourceStore: DiskM3uFileSourceStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : ProviderRepository {
     private val providerDao = database.providerDao()
@@ -40,12 +41,8 @@ class RoomProviderRepository(
                         val url = secureValueStore.read(provider.secureKey(FIELD_M3U_URL)) ?: return null
                         ProviderCredentials.M3u(url = url, sourceMode = sourceMode)
                     }
-                    M3uSourceMode.File -> {
-                        ProviderCredentials.M3u(
-                            sourceMode = sourceMode,
-                            inlineContent = TransientM3uSourceStore.read(provider.id),
-                        )
-                    }
+                    // Content is read on demand via getProviderM3uInlineContent, not here.
+                    M3uSourceMode.File -> ProviderCredentials.M3u(sourceMode = sourceMode)
                 }
             }
 
@@ -62,6 +59,9 @@ class RoomProviderRepository(
         }
     }
 
+    override suspend fun getProviderM3uInlineContent(providerId: String): String? =
+        m3uFileSourceStore.read(providerId)
+
     override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult {
         validateProviderOptions(request.includeLiveTv, request.includeMovies, request.includeSeries)
         val providerId = UUID.randomUUID().toString()
@@ -71,8 +71,13 @@ class RoomProviderRepository(
         require(name.isNotEmpty()) { "Provider name must not be blank." }
         require(!hasDuplicateName(name = name, excludeProviderId = null)) { "Provider name must be unique." }
 
-        writeCredentialsForCreate(sourceConfigKey, request)
+        writeCredentialsForCreate(providerId, sourceConfigKey, request)
 
+        // A File playlist has no fetchable source, so it must never be auto-refreshed: force the interval
+        // OFF and app-start refresh off (the editor hides both for File, so they'd otherwise keep defaults
+        // and the scheduler — which only checks interval>0 / refreshOnAppStartEnabled — would re-import the
+        // unchanged file on every start/interval). Manual save/replace still re-imports directly.
+        val fileModeM3u = isFileModeM3u(request.type, sourceConfigKey, request.m3uSourceMode)
         val provider = Provider(
             id = providerId,
             stableKey = providerId,
@@ -84,20 +89,21 @@ class RoomProviderRepository(
             includeLiveTv = request.includeLiveTv,
             includeMovies = request.includeMovies,
             includeSeries = request.includeSeries,
-            refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
+            refreshIntervalHours = if (fileModeM3u) {
+                REFRESH_INTERVAL_OFF
+            } else {
+                request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS)
+            },
             logoPriority = normalizeLogoPriority(request.logoPriority),
             xtreamOutputFormat = normalizeXtreamOutputFormat(request.xtreamOutputFormat),
             createdAt = now,
             updatedAt = now,
             userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
-            refreshOnAppStartEnabled = request.refreshOnAppStartEnabled,
+            refreshOnAppStartEnabled = !fileModeM3u && request.refreshOnAppStartEnabled,
         )
         database.withTransaction {
             providerDao.upsertProvider(provider.toEntity())
             androidTvSearchDao.rebuildEntries()
-        }
-        if (request.type == ProviderType.M3u && !request.m3uSourceMode.isAutomaticallyRefreshable) {
-            request.m3uContent?.takeIf { it.isNotBlank() }?.let { TransientM3uSourceStore.put(providerId, it) }
         }
         return ProviderSaveResult(provider = provider, hasDuplicateName = false)
     }
@@ -110,26 +116,30 @@ class RoomProviderRepository(
         require(name.isNotEmpty()) { "Provider name must not be blank." }
         require(!hasDuplicateName(name = name, excludeProviderId = existing.id)) { "Provider name must be unique." }
 
-        writeCredentialsForUpdate(existing.sourceConfigKey, existing.type, request)
+        writeCredentialsForUpdate(existing.id, existing.sourceConfigKey, existing.type, request)
 
+        // See createProvider: a File playlist is never auto-refreshed. Read the effective mode after the
+        // credential write (a File↔URL switch has already been persisted at this point).
+        val fileModeM3u = isFileModeM3u(existing.type, existing.sourceConfigKey, request.m3uSourceMode)
         val updated = existing.copy(
             name = name,
             includeLiveTv = request.includeLiveTv,
             includeMovies = request.includeMovies,
             includeSeries = request.includeSeries,
-            refreshIntervalHours = request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS),
+            refreshIntervalHours = if (fileModeM3u) {
+                REFRESH_INTERVAL_OFF
+            } else {
+                request.refreshIntervalHours.coerceIn(MIN_REFRESH_INTERVAL_HOURS, MAX_REFRESH_INTERVAL_HOURS)
+            },
             logoPriority = normalizeLogoPriority(request.logoPriority),
             xtreamOutputFormat = normalizeXtreamOutputFormat(request.xtreamOutputFormat),
             updatedAt = clock(),
             userAgent = request.userAgent?.trim()?.takeIf { it.isNotEmpty() },
-            refreshOnAppStartEnabled = request.refreshOnAppStartEnabled,
+            refreshOnAppStartEnabled = !fileModeM3u && request.refreshOnAppStartEnabled,
         )
         database.withTransaction {
             providerDao.upsertProvider(updated.toEntity())
             androidTvSearchDao.rebuildEntries()
-        }
-        if (existing.type == ProviderType.M3u && request.m3uSourceMode != null && !request.m3uSourceMode.isAutomaticallyRefreshable) {
-            request.m3uContent?.takeIf { it.isNotBlank() }?.let { TransientM3uSourceStore.put(existing.id, it) }
         }
         return ProviderSaveResult(provider = updated, hasDuplicateName = false)
     }
@@ -194,6 +204,7 @@ class RoomProviderRepository(
             androidTvSearchDao.rebuildEntries()
         }
         existing?.sourceConfigKey?.let { deleteCredentials(it) }
+        m3uFileSourceStore.delete(providerId)
     }
 
     private suspend fun hasDuplicateName(name: String, excludeProviderId: String?): Boolean =
@@ -201,10 +212,14 @@ class RoomProviderRepository(
             provider.id != excludeProviderId && provider.name.equals(name, ignoreCase = true)
         }
 
-    private suspend fun writeCredentialsForCreate(sourceConfigKey: String, request: ProviderCreateRequest) {
+    private suspend fun writeCredentialsForCreate(
+        providerId: String,
+        sourceConfigKey: String,
+        request: ProviderCreateRequest,
+    ) {
         when (request.type) {
             ProviderType.M3u -> {
-                writeM3uCredentials(sourceConfigKey, request.m3uSourceMode, request.m3uUrl, request.m3uContent)
+                writeM3uCredentials(providerId, sourceConfigKey, request.m3uSourceMode, request.m3uUrl, request.m3uContent)
                 deleteXtreamCredentials(sourceConfigKey)
             }
 
@@ -213,11 +228,13 @@ class RoomProviderRepository(
                 secureValueStore.write(sourceConfigKey.secureKey(FIELD_XTREAM_USERNAME), request.xtreamUsername.requireSecret("Xtream username"))
                 secureValueStore.write(sourceConfigKey.secureKey(FIELD_XTREAM_PASSWORD), request.xtreamPassword.requireSecret("Xtream password"))
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
+                m3uFileSourceStore.delete(providerId)
             }
         }
     }
 
     private suspend fun writeCredentialsForUpdate(
+        providerId: String,
         sourceConfigKey: String,
         type: ProviderType,
         request: ProviderUpdateRequest,
@@ -226,7 +243,7 @@ class RoomProviderRepository(
             ProviderType.M3u -> {
                 val sourceMode = request.m3uSourceMode ?: sourceConfigKey.readM3uSourceMode()
                 if (request.m3uSourceMode != null || !request.m3uUrl.isNullOrBlank() || !request.m3uContent.isNullOrBlank()) {
-                    writeM3uCredentials(sourceConfigKey, sourceMode, request.m3uUrl, request.m3uContent)
+                    writeM3uCredentials(providerId, sourceConfigKey, sourceMode, request.m3uUrl, request.m3uContent)
                 }
             }
 
@@ -244,6 +261,7 @@ class RoomProviderRepository(
     }
 
     private suspend fun writeM3uCredentials(
+        providerId: String,
         sourceConfigKey: String,
         sourceMode: M3uSourceMode,
         m3uUrl: String?,
@@ -254,10 +272,13 @@ class RoomProviderRepository(
             M3uSourceMode.Url -> {
                 secureValueStore.write(sourceConfigKey.secureKey(FIELD_M3U_URL), m3uUrl.requireSecret("M3U URL"))
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
+                // Switching a File playlist to URL: the stored file is no longer used.
+                m3uFileSourceStore.delete(providerId)
             }
             M3uSourceMode.File -> {
                 val content = m3uContent.requireSecret("M3U content")
                 require(content.length <= MAX_M3U_INLINE_SOURCE_CHARS) { "M3U content is too large." }
+                m3uFileSourceStore.write(providerId, content)
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_INLINE_CONTENT))
                 secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))
             }
@@ -270,6 +291,14 @@ class RoomProviderRepository(
             "File", "Clipboard" -> M3uSourceMode.File
             else -> M3uSourceMode.Url
         }
+
+    /** True for a File-mode M3U playlist (no fetchable source ⇒ never auto-refreshed). */
+    private suspend fun isFileModeM3u(
+        type: ProviderType,
+        sourceConfigKey: String,
+        requestedMode: M3uSourceMode?,
+    ): Boolean =
+        type == ProviderType.M3u && (requestedMode ?: sourceConfigKey.readM3uSourceMode()) == M3uSourceMode.File
 
     private suspend fun deleteCredentials(sourceConfigKey: String) {
         secureValueStore.delete(sourceConfigKey.secureKey(FIELD_M3U_URL))

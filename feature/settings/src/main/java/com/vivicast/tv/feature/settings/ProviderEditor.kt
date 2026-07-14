@@ -500,6 +500,7 @@ private fun LazyListScope.providerM3uCredentialItems(
                                         m3uSourceMode = mode,
                                         m3uUrl = "",
                                         m3uContent = "",
+                                        m3uFileName = "",
                                         m3uHasExistingSource = false,
                                     ),
                                 )
@@ -745,15 +746,6 @@ private fun LazyListScope.providerEditControlItems(
                 help = "",
                 value = if (editor.refreshOnAppStartEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
                 onClick = { onEditorChange(editor.copy(refreshOnAppStartEnabled = !editor.refreshOnAppStartEnabled)) },
-            )
-        }
-    } else {
-        item(key = "refresh-none") {
-            InfoPanel(
-                title = stringResource(R.string.settings_provider_update_title),
-                body = stringResource(R.string.settings_provider_file_no_auto),
-                badge = stringResource(R.string.settings_epg_badge_manual),
-                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

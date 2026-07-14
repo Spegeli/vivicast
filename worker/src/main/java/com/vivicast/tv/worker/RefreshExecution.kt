@@ -12,7 +12,6 @@ import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.XtreamCatalog
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
-import com.vivicast.tv.data.provider.TransientM3uSourceStore
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
@@ -229,16 +228,14 @@ class DefaultPlaylistRefresher(
                 userAgent = provider.userAgent,
             )
         } else {
-            credentials.inlineContent ?: throw RefreshAuthenticationException("M3U content is missing.")
+            providerRepository.getProviderM3uInlineContent(provider.id)
+                ?: throw RefreshAuthenticationException("M3U content is missing.")
         }
         val playlist = m3uParser.parse(source)
         if (playlist.channels.isEmpty()) {
             throw RefreshImportException("M3U playlist contains no importable entries.")
         }
         val result = catalogImportRepository.importM3uCatalog(provider.id, playlist)
-        if (!credentials.sourceMode.isAutomaticallyRefreshable) {
-            TransientM3uSourceStore.clear(provider.id)
-        }
         return PlaylistImportSummary(
             status = if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active,
             channels = result.channelsAdded + result.channelsUpdated,

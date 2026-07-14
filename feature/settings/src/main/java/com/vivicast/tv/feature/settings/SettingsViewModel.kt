@@ -218,6 +218,9 @@ internal class SettingsViewModel(
     suspend fun getProviderCredentials(providerId: String): ProviderCredentials? =
         providerRepository.getCredentials(providerId)
 
+    suspend fun getProviderM3uInlineContent(providerId: String): String? =
+        providerRepository.getProviderM3uInlineContent(providerId)
+
     suspend fun createProvider(request: ProviderCreateRequest): Result<ProviderSaveResult> =
         runCatching { providerRepository.createProvider(request) }
 

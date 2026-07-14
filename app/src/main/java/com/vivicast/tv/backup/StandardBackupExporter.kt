@@ -13,6 +13,7 @@ import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
+import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,6 +23,7 @@ class StandardBackupExporter(
     private val userPreferencesStore: UserPreferencesStore,
     private val secureValueStore: SecureValueStore,
     private val pinSecurityStateStore: PinSecurityStateStore,
+    private val m3uFileSourceStore: DiskM3uFileSourceStore,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     suspend fun buildDocument(): StandardBackupDocument =
@@ -147,9 +149,14 @@ class StandardBackupExporter(
 
     private suspend fun ProviderEntity.toFullBackupSourceJson(): JSONObject? =
         when (type) {
+            // URL-mode M3U keeps its fetchable URL; File-mode M3U has no URL, so embed the raw playlist
+            // content (persisted on disk) — the only way restore can rebuild the catalog.
             PROVIDER_TYPE_M3U -> secureValueStore.read(SecureKey("$sourceConfigKey:$FIELD_M3U_URL"))
                 ?.takeIf { it.isNotBlank() }
                 ?.let { JSONObject().put("m3uUrl", it) }
+                ?: m3uFileSourceStore.read(id)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { JSONObject().put("m3uInlineContent", it) }
 
             PROVIDER_TYPE_XTREAM -> JSONObject()
                 .putIfPresent("xtreamServerUrl", secureValueStore.read(SecureKey("$sourceConfigKey:$FIELD_XTREAM_SERVER_URL")))

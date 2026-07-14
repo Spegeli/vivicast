@@ -668,7 +668,6 @@
     <string name="settings_provider_xtream_stable">Typ und ID bleiben stabil.</string>
     <string name="settings_provider_xtream_credentials">Zugangsdaten werden geschützt gespeichert. Kein eigener User-Agent.</string>
     <string name="settings_provider_title_playlist">Wiedergabeliste</string>
-    <string name="settings_provider_file_no_auto">Datei und Zwischenablage werden nur durch Ersetzen aktualisiert. Automatischer Refresh ist deaktiviert.</string>
     <string name="settings_provider_help_refresh_all">Startet eine manuelle Aktualisierung für aktive Quellen.</string>
     <string name="settings_provider_msg_name_check">Name existiert bereits.</string>
     <string name="settings_provider_body_refresh">Steuert automatische Aktualisierungen; manuelle Aktualisierung bleibt möglich.</string>
@@ -700,7 +699,6 @@
     <string name="settings_provider_password_label">Passwort</string>
     <string name="settings_provider_content_section">Inhalte</string>
     <string name="settings_provider_interval_label">Intervall</string>
-    <string name="settings_provider_update_title">Aktualisierung</string>
     <string name="settings_provider_update_interval">Update Intervall</string>
     <string name="settings_epg_global_interval">Globales Aktualisierungsintervall</string>
     <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
@@ -731,6 +729,7 @@
     <string name="settings_provider_toggle_enabled">Aktiv/Aus</string>
     <string name="settings_provider_active_label">Aktivieren</string>
     <string name="settings_provider_saving">Wird gespeichert…</string>
+    <string name="settings_deleting">Wird gelöscht…</string>
     <string name="settings_provider_conn_failed_title">Achtung</string>
     <string name="settings_provider_conn_failed_body">Es konnte keine Verbindung zur Playlist hergestellt werden.</string>
     <string name="settings_provider_correct">Korrigieren</string>

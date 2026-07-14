@@ -166,14 +166,14 @@ class RefreshExecutionTest {
         val providerRepository = FakeProviderRepository(
             providers = listOf(provider),
             credentials = mapOf(
-                provider.id to ProviderCredentials.M3u(
-                    sourceMode = M3uSourceMode.File,
-                    inlineContent = """
-                        #EXTM3U
-                        #EXTINF:-1 tvg-name="ARD",ARD
-                        https://stream.example/ard.m3u8
-                    """.trimIndent(),
-                ),
+                provider.id to ProviderCredentials.M3u(sourceMode = M3uSourceMode.File),
+            ),
+            m3uInlineContent = mapOf(
+                provider.id to """
+                    #EXTM3U
+                    #EXTINF:-1 tvg-name="ARD",ARD
+                    https://stream.example/ard.m3u8
+                """.trimIndent(),
             ),
         )
         val catalogRepository = FakeCatalogImportRepository()
@@ -449,6 +449,7 @@ class RefreshExecutionTest {
 private class FakeProviderRepository(
     providers: List<Provider>,
     private val credentials: Map<String, ProviderCredentials> = emptyMap(),
+    private val m3uInlineContent: Map<String, String> = emptyMap(),
 ) : ProviderRepository {
     private val providersById = providers.associateBy { it.id }
     val statuses = mutableListOf<ProviderStatus>()
@@ -458,6 +459,8 @@ private class FakeProviderRepository(
     override suspend fun getProvider(providerId: String): Provider? = providersById[providerId]
 
     override suspend fun getCredentials(providerId: String): ProviderCredentials? = credentials[providerId]
+
+    override suspend fun getProviderM3uInlineContent(providerId: String): String? = m3uInlineContent[providerId]
 
     override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult =
         error("Not used.")

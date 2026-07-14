@@ -27,12 +27,14 @@ import com.vivicast.tv.core.security.PinSecurityState
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
+import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -43,6 +45,12 @@ import org.junit.Test
 import kotlin.system.measureTimeMillis
 
 class StandardBackupTest {
+    // Non-File-mode tests never write to this store (reads return null), so a shared dir is harmless.
+    private fun backupM3uStore(): DiskM3uFileSourceStore =
+        DiskM3uFileSourceStore(
+            File(ApplicationProvider.getApplicationContext<Context>().cacheDir, "m3u_backup_test"),
+        )
+
     @Test
     fun exportsSafeProviderSourcesOnly() {
         assertEquals(
@@ -114,6 +122,7 @@ class StandardBackupTest {
             secureStore.write(SecureKey("provider:one:credentials:m3u_url"), "https://example.org/public.m3u")
 
             val document = StandardBackupExporter(
+                m3uFileSourceStore = backupM3uStore(),
                 database = database,
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = secureStore,
@@ -166,6 +175,7 @@ class StandardBackupTest {
             secureStore.write(SecureKey("epg:one:url"), "https://example.org/epg.xml?token=fixture-token")
 
             val exporter = StandardBackupExporter(
+                m3uFileSourceStore = backupM3uStore(),
                 database = database,
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = secureStore,
@@ -213,6 +223,7 @@ class StandardBackupTest {
             secureStore.write(SecureKey("provider:one:credentials:m3u_url"), "https://example.org/public.m3u")
 
             val json = StandardBackupExporter(
+                m3uFileSourceStore = backupM3uStore(),
                 database = database,
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = secureStore,
@@ -312,6 +323,7 @@ class StandardBackupTest {
                 userPreferencesStore = preferencesStore,
                 secureValueStore = secureStore,
                 pinSecurityStateStore = pinStore,
+                m3uFileSourceStore = backupM3uStore(),
                 clock = { 1_000L },
             )
 
@@ -401,6 +413,7 @@ class StandardBackupTest {
                 userPreferencesStore = preferencesStore,
                 secureValueStore = secureStore,
                 pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
+                m3uFileSourceStore = backupM3uStore(),
             )
 
             assertTrue(restorer.restore(backup) is StandardBackupRestoreValidation.Valid)
@@ -445,6 +458,7 @@ class StandardBackupTest {
             sourceSecureStore.write(SecureKey("provider:xtream:credentials:xtream_password"), "fixture-password")
             sourceSecureStore.write(SecureKey("epg:one:url"), "https://example.org/epg.xml?token=fixture-token")
             val encrypted = StandardBackupExporter(
+                m3uFileSourceStore = backupM3uStore(),
                 database = sourceDatabase,
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = sourceSecureStore,
@@ -461,6 +475,7 @@ class StandardBackupTest {
                 userPreferencesStore = FakePreferencesStore(UserPreferences()),
                 secureValueStore = targetSecureStore,
                 pinSecurityStateStore = targetPinStore,
+                m3uFileSourceStore = backupM3uStore(),
                 clock = { 1_000L },
             )
 
@@ -497,6 +512,72 @@ class StandardBackupTest {
     }
 
     @Test
+    fun fileModeM3uProviderContentSurvivesEncryptedBackupRoundtrip() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceDatabase = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
+        val targetDatabase = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
+        val sourceSecureStore = FakeSecureValueStore()
+        val targetSecureStore = FakeSecureValueStore()
+        val sourceDir = File(context.cacheDir, "m3u_roundtrip_source").also { it.deleteRecursively() }
+        val targetDir = File(context.cacheDir, "m3u_roundtrip_target").also { it.deleteRecursively() }
+        val sourceStore = DiskM3uFileSourceStore(sourceDir)
+        val targetStore = DiskM3uFileSourceStore(targetDir)
+        val content = "#EXTM3U\n#EXTINF:-1,ARD\nhttps://stream.example/ard.m3u8"
+        try {
+            // File-mode provider: no m3u_url secret, raw content lives only on disk.
+            sourceDatabase.providerDao().upsertProvider(
+                providerEntity().copy(
+                    id = "file-provider",
+                    stableKey = "file-stable",
+                    type = "M3U",
+                    sourceConfigKey = "provider:file:credentials",
+                ),
+            )
+            sourceStore.write("file-provider", content)
+
+            val encrypted = StandardBackupExporter(
+                database = sourceDatabase,
+                userPreferencesStore = FakePreferencesStore(UserPreferences()),
+                secureValueStore = sourceSecureStore,
+                pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
+                m3uFileSourceStore = sourceStore,
+                clock = { 123L },
+            ).exportBackup(passphrase = "roundtrip-pass".toCharArray())
+
+            // Content is only inside the encrypted container, never in the raw bytes.
+            assertFalse(String(encrypted, Charsets.ISO_8859_1).contains("stream.example"))
+
+            val restorer = StandardBackupRestorer(
+                database = targetDatabase,
+                userPreferencesStore = FakePreferencesStore(UserPreferences()),
+                secureValueStore = targetSecureStore,
+                pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
+                m3uFileSourceStore = targetStore,
+                clock = { 1_000L },
+            )
+            assertTrue(
+                restorer.restoreBackup(encrypted, "roundtrip-pass".toCharArray())
+                    is StandardBackupRestoreValidation.Valid,
+            )
+
+            val restored = targetDatabase.providerDao().getProviders().single()
+            assertEquals("file-stable", restored.stableKey)
+            assertEquals("ACTIVE", restored.status)
+            // Restored content lands on disk (keyed by the restored stable key) so a refresh can rebuild.
+            assertEquals(content, targetStore.read("file-stable"))
+            assertEquals(
+                "File",
+                targetSecureStore.read(SecureKey("provider:file-stable:credentials:m3u_source_mode")),
+            )
+        } finally {
+            sourceDatabase.close()
+            targetDatabase.close()
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun restorerHandlesLargeUserDataFixture() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
@@ -513,6 +594,7 @@ class StandardBackupTest {
                 userPreferencesStore = preferencesStore,
                 secureValueStore = secureStore,
                 pinSecurityStateStore = pinStore,
+                m3uFileSourceStore = backupM3uStore(),
                 clock = { 1_000L },
             )
             val backup = largeUserDataBackupDocument().toJsonString(indentSpaces = 0)

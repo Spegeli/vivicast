@@ -375,6 +375,7 @@ fun SettingsRoute(
                         sectionPlaylists -> ProviderSettingsPanel(
                             providers = settingsUiState.providers,
                             onGetProviderCredentials = viewModel::getProviderCredentials,
+                            onGetProviderM3uContent = viewModel::getProviderM3uInlineContent,
                             onCreateProvider = viewModel::createProvider,
                             onUpdateProvider = viewModel::updateProvider,
                             onSetProviderEnabled = viewModel::setProviderEnabled,

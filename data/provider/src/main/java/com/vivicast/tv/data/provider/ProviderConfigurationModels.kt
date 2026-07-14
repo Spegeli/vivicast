@@ -2,7 +2,6 @@ package com.vivicast.tv.data.provider
 
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderType
-import java.util.concurrent.ConcurrentHashMap
 
 data class ProviderCreateRequest(
     val name: String,
@@ -57,10 +56,11 @@ data class ProviderConnectionTestResult(
 )
 
 sealed interface ProviderCredentials {
+    // File-mode M3U carries no content here — it is large and read on demand via
+    // ProviderRepository.getProviderM3uInlineContent, so opening the editor stays cheap.
     data class M3u(
         val url: String? = null,
         val sourceMode: M3uSourceMode = M3uSourceMode.Url,
-        val inlineContent: String? = null,
     ) : ProviderCredentials
     data class Xtream(
         val serverUrl: String,
@@ -112,18 +112,3 @@ const val XTREAM_OUTPUT_TS = "ts"
 
 fun normalizeXtreamOutputFormat(value: String?): String =
     if (value == XTREAM_OUTPUT_TS) XTREAM_OUTPUT_TS else XTREAM_OUTPUT_HLS
-
-object TransientM3uSourceStore {
-    private val sources = ConcurrentHashMap<String, String>()
-
-    fun put(providerId: String, content: String) {
-        sources[providerId] = content
-    }
-
-    fun read(providerId: String): String? =
-        sources[providerId]
-
-    fun clear(providerId: String) {
-        sources.remove(providerId)
-    }
-}
