@@ -340,6 +340,7 @@ private fun ProviderEditorDialogs(
     if (dialogs.showInterval) {
         ProviderIntervalDialog(
             current = editor.refreshIntervalHours,
+            title = stringResource(R.string.settings_provider_update_interval),
             onSelect = { hours ->
                 if (hours != editor.refreshIntervalHours) onEditorChange(editor.copy(refreshIntervalHours = hours))
                 dialogs.showInterval = false
@@ -786,22 +787,24 @@ internal fun intervalLabel(hours: Int): String =
 @Composable
 internal fun ProviderIntervalDialog(
     current: Int,
+    title: String,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val currentIndex = REFRESH_INTERVAL_OPTIONS_HOURS.indexOf(current).coerceAtLeast(0)
-    val listState = rememberLazyListState()
+    // Open already scrolled so the current value is visible (it can be far down the list) — one row above
+    // it for context. initialFirstVisibleItemIndex is applied at first layout (robust), unlike a post-hoc
+    // scrollToItem which raced and could leave the list stuck at the top.
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (currentIndex - 1).coerceAtLeast(0))
     val selectedFocusRequester = remember { FocusRequester() }
-    // Bring the current value into view (it may be far down the list) before focusing it.
     LaunchedEffect(Unit) {
-        listState.scrollToItem(currentIndex)
         awaitFrame()
         runCatching { selectedFocusRequester.requestFocus() }
     }
     VivicastDialog(
         onDismiss = onDismiss,
         width = VivicastDialogWidth.Compact,
-        title = stringResource(R.string.settings_provider_update_interval),
+        title = title,
     ) {
         LazyColumn(
             state = listState,

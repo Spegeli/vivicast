@@ -155,6 +155,7 @@ internal fun EpgGlobalSettings(
     if (showInterval) {
         ProviderIntervalDialog(
             current = preferences.refreshIntervalHours,
+            title = stringResource(R.string.settings_epg_global_interval),
             onSelect = { hours ->
                 if (hours != preferences.refreshIntervalHours) {
                     onEpgPreferencesChanged(preferences.copy(refreshIntervalHours = hours))

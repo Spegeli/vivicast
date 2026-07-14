@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -134,7 +135,12 @@ internal fun AboutSettingsPanel(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+        // Hidden (but kept composed, so the focused legal row survives) while a legal page is open — the
+        // legal overlay renders transparently over it on the host GlassPanel background.
+        LazyColumn(
+            modifier = Modifier.alpha(if (activeLegalPage != null) 0f else 1f),
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+        ) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_app_version_title),
@@ -229,10 +235,11 @@ private fun AboutLegalOverlay(
     // No visible back button: the system Back/Return key closes the overlay (BackHandler).
     BackHandler(onBack = onClose)
     LaunchedEffect(title) { runCatching { backFocus.requestFocus() } }
+    // No own background: the About list underneath is hidden via alpha(0) (kept composed so the focused row
+    // survives), so the legal text renders directly on the host GlassPanel — same fill + transparency, no
+    // colour seam, and the panel's normal padding/border instead of a mismatched inner rectangle + stripes.
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A1423)),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         item { SectionTitle(text = title) }
