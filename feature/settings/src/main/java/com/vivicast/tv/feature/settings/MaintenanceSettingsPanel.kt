@@ -113,9 +113,12 @@ internal fun MaintenanceSettingsPanel(
     // matching the return-focus pattern used elsewhere (e.g. ProviderSettingsPanel).
     var restoreHistoryFocus by remember { mutableStateOf(false) }
     val historyRowFocus = remember { FocusRequester() }
-    val strCacheRefreshed = stringResource(R.string.settings_cache_refreshed)
     val strCacheCleared = stringResource(R.string.settings_cache_cleared)
     val strHistoryCleared = stringResource(R.string.settings_history_cleared)
+
+    // Re-measure the cache each time this panel is shown (the storage section is opened), so the size /
+    // file count is current — it only otherwise reloads on Settings open or a manual tap.
+    LaunchedEffect(Unit) { onReloadCacheStats() }
 
     LaunchedEffect(restoreHistoryFocus) {
         if (restoreHistoryFocus) {
@@ -133,10 +136,8 @@ internal fun MaintenanceSettingsPanel(
                 help = stringResource(R.string.settings_cache_info_help, cacheSettingsState.fileCount),
                 value = formatCacheSize(cacheSettingsState.totalSizeBytes),
                 modifier = firstFocusModifier,
-                onClick = {
-                    onReloadCacheStats()
-                    message = strCacheRefreshed
-                },
+                // Reloads the size/file-count in place; the updated value is feedback enough (no note).
+                onClick = { onReloadCacheStats() },
             )
         }
 

@@ -176,6 +176,7 @@ class AppContainer(
             database = database,
             secureValueStore = secureValueStore,
             m3uFileSourceStore = m3uFileSourceStore,
+            m3uStreamReferenceStore = m3uStreamReferenceStore,
         )
     }
 

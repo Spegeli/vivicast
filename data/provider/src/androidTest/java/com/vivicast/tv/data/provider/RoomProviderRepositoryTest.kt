@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.vivicast.tv.core.cache.M3uStreamReference
+import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
@@ -36,6 +38,7 @@ class RoomProviderRepositoryTest {
     private lateinit var secureValueStore: FakeSecureValueStore
     private lateinit var m3uSourceDir: File
     private lateinit var m3uFileSourceStore: DiskM3uFileSourceStore
+    private lateinit var m3uStreamReferenceStore: FakeM3uStreamReferenceStore
     private lateinit var repository: RoomProviderRepository
     private var now = 1_000L
 
@@ -48,7 +51,8 @@ class RoomProviderRepositoryTest {
         secureValueStore = FakeSecureValueStore()
         m3uSourceDir = File(context.cacheDir, "m3u_sources_test").also { it.deleteRecursively() }
         m3uFileSourceStore = DiskM3uFileSourceStore(m3uSourceDir)
-        repository = RoomProviderRepository(database, secureValueStore, m3uFileSourceStore) { now }
+        m3uStreamReferenceStore = FakeM3uStreamReferenceStore()
+        repository = RoomProviderRepository(database, secureValueStore, m3uFileSourceStore, m3uStreamReferenceStore) { now }
     }
 
     @After
@@ -118,7 +122,12 @@ class RoomProviderRepositoryTest {
         // Durable: a fresh repository over the same on-disk store still resolves the content, so a
         // File-mode playlist survives a process restart (unlike the old RAM-only holder).
         assertEquals(content, m3uFileSourceStore.read(result.provider.id))
-        val reopened = RoomProviderRepository(database, secureValueStore, DiskM3uFileSourceStore(m3uSourceDir)) { now }
+        val reopened = RoomProviderRepository(
+            database,
+            secureValueStore,
+            DiskM3uFileSourceStore(m3uSourceDir),
+            FakeM3uStreamReferenceStore(),
+        ) { now }
         assertEquals(content, reopened.getProviderM3uInlineContent(result.provider.id))
 
         repository.deleteProvider(result.provider.id)
@@ -149,6 +158,7 @@ class RoomProviderRepositoryTest {
             ProviderUpdateRequest(
                 providerId = created.provider.id,
                 name = "No Auto Renamed",
+                type = ProviderType.M3u,
                 refreshIntervalHours = 24,
                 refreshOnAppStartEnabled = true,
                 includeLiveTv = true,
@@ -182,6 +192,7 @@ class RoomProviderRepositoryTest {
             ProviderUpdateRequest(
                 providerId = created.provider.id,
                 name = "Switch Me",
+                type = ProviderType.M3u,
                 m3uSourceMode = M3uSourceMode.Url,
                 m3uUrl = "https://list.example/list.m3u",
                 includeLiveTv = true,
@@ -196,6 +207,91 @@ class RoomProviderRepositoryTest {
             ProviderCredentials.M3u(url = "https://list.example/list.m3u", sourceMode = M3uSourceMode.Url),
             repository.getCredentials(created.provider.id),
         )
+    }
+
+    @Test
+    fun switchingProviderTypeWipesOldSourceAndResetsState() = runBlocking {
+        val created = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Switcher",
+                type = ProviderType.Xtream,
+                xtreamServerUrl = "https://s.example",
+                xtreamUsername = "user",
+                xtreamPassword = "secret-pass",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+        val id = created.provider.id
+        repository.updateXtreamAccountInfo(id, expiresAtMillis = 123L, maxConnections = 2)
+        m3uStreamReferenceStore.replaceProviderReferences(id, mapOf("c1" to M3uStreamReference("http://x")))
+
+        val updated = repository.updateProvider(
+            ProviderUpdateRequest(
+                providerId = id,
+                name = "Switcher",
+                type = ProviderType.M3u,
+                m3uSourceMode = M3uSourceMode.Url,
+                m3uUrl = "https://list.example/list.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+
+        assertEquals(ProviderType.M3u, updated.provider.type)
+        assertEquals(ProviderType.Xtream, updated.switchedFromType)
+        // Old Xtream secrets (incl. the password) are wiped, not left behind.
+        assertFalse(secureValueStore.values.values.contains("secret-pass"))
+        assertNull(secureValueStore.read(SecureKey("${created.provider.sourceConfigKey}:xtream_password")))
+        assertEquals(
+            ProviderCredentials.M3u(url = "https://list.example/list.m3u", sourceMode = M3uSourceMode.Url),
+            repository.getCredentials(id),
+        )
+        // Xtream account snapshot cleared, and the M3U stream references dropped.
+        val entity = requireNotNull(database.providerDao().getProvider(id))
+        assertNull(entity.xtreamExpiresAtMillis)
+        assertNull(entity.xtreamMaxConnections)
+        assertTrue(m3uStreamReferenceStore.cleared.contains(id))
+    }
+
+    @Test
+    fun switchingToXtreamWithBlankCredentialsFailsAndKeepsOldSource() = runBlocking {
+        val created = repository.createProvider(
+            ProviderCreateRequest(
+                name = "Keeper",
+                type = ProviderType.M3u,
+                m3uUrl = "https://list.example/keep.m3u",
+                includeLiveTv = true,
+                includeMovies = false,
+                includeSeries = false,
+            ),
+        )
+
+        val result = runCatching {
+            repository.updateProvider(
+                ProviderUpdateRequest(
+                    providerId = created.provider.id,
+                    name = "Keeper",
+                    type = ProviderType.Xtream,
+                    xtreamServerUrl = "https://s.example",
+                    xtreamUsername = "user",
+                    xtreamPassword = "",
+                    includeLiveTv = true,
+                    includeMovies = false,
+                    includeSeries = false,
+                ),
+            )
+        }
+
+        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+        // The failed switch must NOT wipe the old M3U source (write is attempted before any deletion).
+        assertEquals(
+            ProviderCredentials.M3u(url = "https://list.example/keep.m3u", sourceMode = M3uSourceMode.Url),
+            repository.getCredentials(created.provider.id),
+        )
+        assertEquals(ProviderType.M3u, requireNotNull(repository.getProvider(created.provider.id)).type)
     }
 
     @Test
@@ -257,6 +353,7 @@ class RoomProviderRepositoryTest {
                 ProviderUpdateRequest(
                     providerId = second.id,
                     name = "provider a",
+                    type = ProviderType.M3u,
                     m3uUrl = "https://example.invalid/changed.m3u",
                     includeLiveTv = true,
                     includeMovies = false,
@@ -290,6 +387,7 @@ class RoomProviderRepositoryTest {
             ProviderUpdateRequest(
                 providerId = created.id,
                 name = "Renamed Provider",
+                type = ProviderType.M3u,
                 m3uUrl = "https://example.invalid/new.m3u",
                 includeLiveTv = true,
                 includeMovies = false,
@@ -479,6 +577,23 @@ class RoomProviderRepositoryTest {
 
         override suspend fun delete(key: SecureKey) {
             values.remove(key.value)
+        }
+    }
+
+    private class FakeM3uStreamReferenceStore : M3uStreamReferenceStore {
+        private val refs = mutableMapOf<String, Map<String, M3uStreamReference>>()
+        val cleared = mutableListOf<String>()
+
+        override suspend fun replaceProviderReferences(providerId: String, references: Map<String, M3uStreamReference>) {
+            refs[providerId] = references
+        }
+
+        override suspend fun getReference(providerId: String, remoteId: String): M3uStreamReference? =
+            refs[providerId]?.get(remoteId)
+
+        override suspend fun deleteProviderReferences(providerId: String) {
+            refs.remove(providerId)
+            cleared += providerId
         }
     }
 }

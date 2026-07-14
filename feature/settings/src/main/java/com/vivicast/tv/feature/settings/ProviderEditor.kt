@@ -438,33 +438,31 @@ private fun LazyListScope.providerActiveToggleItem(
     }
 }
 
-/** Add mode only: the single-choice source-type row (M3U URL | M3U File | Xtream Codes). */
+/** Source-type row (M3U URL | M3U File | Xtream Codes), shown in add AND edit mode. Editing may switch
+ * type/mode freely; selectSource preserves every draft (fields stay filled across toggles) and the actual
+ * switch is confirmed at Save. */
 private fun LazyListScope.providerSourceChoiceItem(
     editor: ProviderEditorState,
     onEditorChange: (ProviderEditorState) -> Unit,
 ) {
-    if (editor.isEditing) return
     item(key = "source-choice") {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             BodyText(stringResource(R.string.settings_provider_source_section), maxLines = 1)
             VivicastButtonRow {
-                // Variant C: switching source type keeps the name and every other draft; only type /
-                // source-mode change. Save persists exactly the active type (the repository writes
-                // credentials by request.type + m3uSourceMode), so inactive drafts never persist.
                 ProviderChoiceButton(
                     label = "M3U " + stringResource(R.string.m3u_source_url),
                     selected = editor.type == ProviderType.M3u && editor.m3uSourceMode == M3uSourceMode.Url,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.Url)) },
+                    onClick = { onEditorChange(editor.selectSource(ProviderType.M3u, M3uSourceMode.Url)) },
                 )
                 ProviderChoiceButton(
                     label = "M3U " + stringResource(R.string.m3u_source_file),
                     selected = editor.type == ProviderType.M3u && editor.m3uSourceMode == M3uSourceMode.File,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.M3u, m3uSourceMode = M3uSourceMode.File)) },
+                    onClick = { onEditorChange(editor.selectSource(ProviderType.M3u, M3uSourceMode.File)) },
                 )
                 ProviderChoiceButton(
                     label = "Xtream Codes",
                     selected = editor.type == ProviderType.Xtream,
-                    onClick = { onEditorChange(editor.copy(type = ProviderType.Xtream)) },
+                    onClick = { onEditorChange(editor.selectSource(ProviderType.Xtream)) },
                 )
             }
         }
@@ -483,34 +481,7 @@ private fun LazyListScope.providerM3uCredentialItems(
     onEditorChange: (ProviderEditorState) -> Unit,
     onPickM3uFile: ((String, String) -> Unit) -> Unit,
 ) {
-    // Add mode picks URL vs File via the 3-way source choice above; edit mode keeps the URL/File
-    // toggle here so an existing playlist can switch its source (clearing the old one).
-    if (editor.isEditing) {
-        item(key = "m3u-source-mode") {
-            Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                BodyText(stringResource(R.string.settings_provider_source_section), maxLines = 1)
-                VivicastButtonRow {
-                    M3uSourceMode.entries.forEach { mode ->
-                        ActionPill(
-                            label = stringResource(mode.labelRes),
-                            selected = editor.m3uSourceMode == mode,
-                            onClick = {
-                                onEditorChange(
-                                    editor.copy(
-                                        m3uSourceMode = mode,
-                                        m3uUrl = "",
-                                        m3uContent = "",
-                                        m3uFileName = "",
-                                        m3uHasExistingSource = false,
-                                    ),
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
+    // URL vs File is chosen via the 3-way source-choice row above (add and edit alike).
     item(key = "m3u-field") {
         when (editor.m3uSourceMode) {
             M3uSourceMode.Url -> Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {

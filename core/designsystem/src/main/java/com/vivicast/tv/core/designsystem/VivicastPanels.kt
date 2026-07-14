@@ -32,8 +32,9 @@ fun InfoPanel(
     body: String,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    bodyMaxLines: Int = 3,
 ) {
-    VivicastDetailsPanel(title = title, body = body, modifier = modifier, badge = badge)
+    VivicastDetailsPanel(title = title, body = body, modifier = modifier, badge = badge, bodyMaxLines = bodyMaxLines)
 }
 
 @Composable
@@ -42,6 +43,7 @@ fun VivicastDetailsPanel(
     body: String,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    bodyMaxLines: Int = 3,
 ) {
     val opacity = LocalSurfaceOpacity.current
     Column(
@@ -69,7 +71,7 @@ fun VivicastDetailsPanel(
                 StatusBadge(badge)
             }
         }
-        BodyText(body, maxLines = 3)
+        BodyText(body, maxLines = bodyMaxLines)
     }
 }
 

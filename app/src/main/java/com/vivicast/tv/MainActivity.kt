@@ -993,6 +993,16 @@ private fun VivicastApp(
                     // possibly just-changed interval — is (re)applied when the app next goes to background.
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
                 },
+                onLogProviderSaved = { descriptor, switchedFrom ->
+                    appContainer.diagnosticsStore.log(
+                        "provider",
+                        "saved",
+                        buildMap {
+                            put("source", descriptor)
+                            switchedFrom?.let { put("switchedFrom", it) }
+                        },
+                    )
+                },
                 onBackgroundRefreshChanged = { enabled ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.
                     scope.launch {

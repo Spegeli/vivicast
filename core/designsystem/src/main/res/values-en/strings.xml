@@ -564,7 +564,6 @@
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d files in local media cache.</string>
-    <string name="settings_cache_refreshed">Media cache updated.</string>
     <string name="settings_cache_cleared">Cache cleared.</string>
     <string name="settings_history_cleared">History deleted.</string>
     <string name="settings_maintenance_confirm_badge">Confirmation</string>
@@ -735,6 +734,11 @@
     <string name="settings_provider_correct">Fix</string>
     <string name="settings_provider_save_anyway">Save anyway</string>
     <string name="settings_provider_save_and_disable">Save &amp; disable</string>
+    <string name="settings_provider_save_confirm_title">Save</string>
+    <string name="settings_provider_save_confirm_body">This playlist will be saved as %1$s.</string>
+    <string name="settings_provider_switch_title">Change source?</string>
+    <string name="settings_provider_switch_body">%1$s will be switched to %2$s.\n\nYour current source (%1$s) will be deleted and no longer stored. Favorites, history and playback progress for this playlist will be lost.</string>
+    <string name="settings_provider_switch_confirm">Change</string>
     <string name="settings_provider_no_content">No content selected</string>
 
     <!-- Settings - M3U source mode labels -->

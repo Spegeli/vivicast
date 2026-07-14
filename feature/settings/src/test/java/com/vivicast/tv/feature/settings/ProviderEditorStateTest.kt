@@ -1,5 +1,6 @@
 package com.vivicast.tv.feature.settings
 
+import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.domain.model.Provider
@@ -92,6 +93,26 @@ class ProviderEditorStateTest {
         )
 
         assertEquals("content", state.validate())
+    }
+
+    @Test
+    fun switchingFilePlaylistToUrl_restoresRefreshDefaults() {
+        val fileProvider = providerFixture(ProviderType.M3u)
+            .copy(refreshIntervalHours = 0, refreshOnAppStartEnabled = false)
+        val state = ProviderEditorState.from(fileProvider, ProviderCredentials.M3u(sourceMode = M3uSourceMode.File))
+        assertEquals(0, state.refreshIntervalHours)
+        assertFalse(state.refreshOnAppStartEnabled)
+
+        val switched = state.selectSource(ProviderType.M3u, M3uSourceMode.Url)
+        assertEquals(DEFAULT_REFRESH_INTERVAL_HOURS, switched.refreshIntervalHours)
+        assertTrue(switched.refreshOnAppStartEnabled)
+
+        // A same-refreshability switch (URL → Xtream) keeps the user's values instead of forcing defaults.
+        val urlOff = state.selectSource(ProviderType.M3u, M3uSourceMode.Url)
+            .copy(refreshIntervalHours = 0, refreshOnAppStartEnabled = false)
+        val toXtream = urlOff.selectSource(ProviderType.Xtream)
+        assertEquals(0, toXtream.refreshIntervalHours)
+        assertFalse(toXtream.refreshOnAppStartEnabled)
     }
 
     private fun providerFixture(type: ProviderType) = Provider(

@@ -523,7 +523,7 @@ class SettingsViewModelTest {
         val providerRepo = FakeProviderRepository()
         val vm = newViewModel(scope, FakeUserPreferencesStore(), providerRepo = providerRepo)
 
-        val result = vm.updateProvider(ProviderUpdateRequest(providerId = "p1", name = "Renamed"))
+        val result = vm.updateProvider(ProviderUpdateRequest(providerId = "p1", name = "Renamed", type = ProviderType.M3u))
 
         assertTrue(result.isSuccess)
         assertEquals("p1", providerRepo.updateRequest?.providerId)

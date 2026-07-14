@@ -25,6 +25,9 @@ data class ProviderCreateRequest(
 data class ProviderUpdateRequest(
     val providerId: String,
     val name: String,
+    // The (possibly changed) provider type. Editing may switch between M3U and Xtream; the repository
+    // wipes the old source and rewrites for this type.
+    val type: ProviderType,
     val m3uSourceMode: M3uSourceMode? = null,
     val m3uUrl: String? = null,
     val m3uContent: String? = null,
@@ -44,6 +47,9 @@ data class ProviderUpdateRequest(
 data class ProviderSaveResult(
     val provider: Provider,
     val hasDuplicateName: Boolean,
+    // Set to the previous type when an edit switched the provider type (M3U↔Xtream); null otherwise.
+    // Purely informational for App-side diagnostics logging.
+    val switchedFromType: ProviderType? = null,
 )
 
 /**

@@ -1,10 +1,9 @@
 package com.vivicast.tv.feature.settings
 
-import androidx.annotation.StringRes
 import androidx.compose.ui.focus.FocusRequester
-import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
 import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
+import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -40,10 +39,49 @@ internal data class ProviderEditorState(
     // Signature of the source (URL/file/Xtream creds) as loaded when editing; blank for a new provider.
     // Lets Save skip the connection test when the source didn't change (see isSourceUnchanged).
     val pristineSource: String = "",
+    // The type/mode the provider was loaded with (null in add mode). Editing may switch to another
+    // type/mode; comparing against these detects a switch (confirm + wipe) and whether the stored source
+    // is back in view.
+    val originalType: ProviderType? = null,
+    val originalSourceMode: M3uSourceMode? = null,
 ) {
     val isEditing: Boolean get() = providerId != null
     val isAutomaticallyRefreshable: Boolean
         get() = type == ProviderType.Xtream || (type == ProviderType.M3u && m3uSourceMode.isAutomaticallyRefreshable)
+
+    /** Editing and the chosen source type/mode differs from what was loaded → save must confirm and the
+     * repository wipes the old source. */
+    val sourceSwitched: Boolean
+        get() = isEditing && originalType != null &&
+            (type != originalType || (type == ProviderType.M3u && m3uSourceMode != originalSourceMode))
+
+    /** A blank source field means "keep the stored source" only when editing the SAME type/mode. */
+    private val keepExistingSource: Boolean get() = isEditing && !sourceSwitched
+
+    /**
+     * Switch the editor to a source type (and M3U mode), preserving all drafts (URL/file/Xtream stay
+     * filled across toggles). Recomputes whether the ORIGINAL stored source is back in view — only then
+     * does a blank field mean "keep it".
+     */
+    fun selectSource(newType: ProviderType, newMode: M3uSourceMode = m3uSourceMode): ProviderEditorState {
+        val base = copy(
+            type = newType,
+            m3uSourceMode = if (newType == ProviderType.M3u) newMode else m3uSourceMode,
+            m3uHasExistingSource = newType == ProviderType.M3u &&
+                originalType == ProviderType.M3u &&
+                newMode == originalSourceMode,
+        )
+        // Switching a File source (auto-refresh forced OFF) to a fetchable one re-reveals the interval /
+        // app-start options; restore sensible defaults so the user doesn't have to re-enable them. A
+        // same-refreshability switch keeps the current values (respects a deliberate "Off").
+        return if (!isAutomaticallyRefreshable && base.isAutomaticallyRefreshable &&
+            base.refreshIntervalHours <= REFRESH_INTERVAL_OFF
+        ) {
+            base.copy(refreshIntervalHours = DEFAULT_REFRESH_INTERVAL_HOURS, refreshOnAppStartEnabled = true)
+        } else {
+            base
+        }
+    }
 
     /** A stable signature of the current source fields, compared against [pristineSource]. */
     fun sourceSignature(): String = when (type) {
@@ -69,8 +107,9 @@ internal data class ProviderEditorState(
         // requires at least one type for all providers — surface that in the UI up front.
         if (!includeLiveTv && !includeMovies && !includeSeries) return msgContentType
         when (type) {
-            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = isEditing, msgM3uUrl, msgM3uFile)?.let { return it }
-            ProviderType.Xtream -> if (!isEditing) {
+            // "Keep existing" only for a same-type/mode edit; a switch requires the new source's fields.
+            ProviderType.M3u -> m3uSourceValidationMessage(allowExistingSource = keepExistingSource, msgM3uUrl, msgM3uFile)?.let { return it }
+            ProviderType.Xtream -> if (!keepExistingSource) {
                 if (xtreamServerUrl.isBlank()) return msgXtreamServer
                 if (xtreamUsername.isBlank()) return msgXtreamUser
                 if (xtreamPassword.isBlank()) return msgXtreamPass
@@ -147,6 +186,7 @@ internal data class ProviderEditorState(
         ProviderUpdateRequest(
             providerId = requireNotNull(providerId),
             name = name,
+            type = type,
             m3uSourceMode = if (type == ProviderType.M3u && shouldReplaceM3uSource) m3uSourceMode else null,
             m3uUrl = m3uUrl.ifBlank { null },
             m3uContent = m3uContent.ifBlank { null },
@@ -228,6 +268,8 @@ internal data class ProviderEditorState(
                 refreshOnAppStartEnabled = provider.refreshOnAppStartEnabled,
                 logoPriority = normalizeLogoPriority(provider.logoPriority),
                 xtreamOutputFormat = normalizeXtreamOutputFormat(provider.xtreamOutputFormat),
+                originalType = provider.type,
+                originalSourceMode = if (provider.type == ProviderType.M3u) sourceMode else null,
             ).let { it.copy(pristineSource = it.sourceSignature()) }
         }
     }
@@ -247,13 +289,6 @@ internal suspend fun ProviderEditorState.resolveTestRequest(
         providerId != null
     return if (needsStoredContent) base.copy(m3uContent = getStoredM3uContent(providerId)) else base
 }
-
-@get:StringRes
-internal val M3uSourceMode.labelRes: Int
-    get() = when (this) {
-        M3uSourceMode.Url -> R.string.m3u_source_url
-        M3uSourceMode.File -> R.string.m3u_source_file
-    }
 
 internal enum class ConnectionTestStatus { Idle, Testing, Passed, Failed }
 
@@ -284,8 +319,9 @@ internal fun firstSaveError(
     userBlank: Boolean,
     passBlank: Boolean,
 ): ProviderEditorErrorFocus? {
-    // Xtream credentials are required only when creating; an edit keeps its stored credentials.
-    val xtreamRequired = !editor.isEditing
+    // Xtream credentials are required when creating OR when switching an existing provider to Xtream;
+    // a same-type Xtream edit keeps its stored credentials.
+    val xtreamRequired = !editor.isEditing || editor.sourceSwitched
     return when {
         duplicateName || nameBlank -> ProviderEditorErrorFocus.Name
         duplicateUrlName != null || urlBlank -> ProviderEditorErrorFocus.Url

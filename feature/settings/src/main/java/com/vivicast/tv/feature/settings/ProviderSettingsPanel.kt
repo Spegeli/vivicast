@@ -113,6 +113,9 @@ internal fun ProviderSettingsPanel(
     localLogosConfigured: Boolean = false,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
+    // Sanitized diagnostics on save: source descriptor ("M3U_URL"/"M3U_FILE"/"XTREAM") + the previous type
+    // name if the edit switched type (null otherwise). No secrets/URLs.
+    onLogProviderSaved: (descriptor: String, switchedFromType: String?) -> Unit = { _, _ -> },
     epgSources: List<EpgSource> = emptyList(),
     providerEpgLinks: List<ProviderEpgSource> = emptyList(),
     onSelectEpgProvider: (String) -> Unit = {},
@@ -135,6 +138,8 @@ internal fun ProviderSettingsPanel(
     var pendingOverviewFocus by remember { mutableStateOf<OverviewFocusTarget?>(null) }
     // Save-time test failure → confirm dialog ("Korrigieren" / force-save). Only on Save, never a note.
     var pendingSaveTestFailure by remember { mutableStateOf(false) }
+    // Source confirmation on Save: add mode ("saved as X") or an edit that switches type/mode.
+    var pendingSourceConfirm by remember { mutableStateOf(false) }
     // Bumped to make ProviderEditor jump focus to the source field (manual-test fail / "Korrigieren").
     var focusSourceSignal by remember { mutableStateOf(0) }
     // Save in progress (test + write): drives the Save-button spinner; the test button stays idle.
@@ -171,9 +176,12 @@ internal fun ProviderSettingsPanel(
     val duplicateName = isDuplicateNameOf(editor.name, editor.providerId, providers, { it.id }, { it.name })
 
     var existingM3uUrls by remember { mutableStateOf<List<ProviderUrlEntry>>(emptyList()) }
+    // Per-provider M3U source mode, for the overview badge ("M3U URL" vs "M3U Datei"). Loaded from the
+    // (now cheap) credentials in the same pass as the duplicate-URL index.
+    var providerSourceModes by remember { mutableStateOf<Map<String, M3uSourceMode>>(emptyMap()) }
     LaunchedEffect(providers) {
-        existingM3uUrls = providers.mapNotNull { provider ->
-            val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
+        val credentialsById = providers.associateWith { runCatching { onGetProviderCredentials(it.id) }.getOrNull() }
+        existingM3uUrls = credentialsById.mapNotNull { (provider, credentials) ->
             (credentials as? ProviderCredentials.M3u)
                 ?.takeIf { it.sourceMode == M3uSourceMode.Url }
                 ?.url
@@ -181,6 +189,9 @@ internal fun ProviderSettingsPanel(
                 ?.takeIf { it.isNotBlank() }
                 ?.let { ProviderUrlEntry(provider.id, normalizeSourceUrl(it), provider.name) }
         }
+        providerSourceModes = credentialsById.mapNotNull { (provider, credentials) ->
+            (credentials as? ProviderCredentials.M3u)?.let { provider.id to it.sourceMode }
+        }.toMap()
     }
     val duplicateUrlName = if (editor.type == ProviderType.M3u &&
         editor.m3uSourceMode == M3uSourceMode.Url && editor.m3uUrl.isNotBlank()
@@ -194,6 +205,7 @@ internal fun ProviderSettingsPanel(
     if (!showEditor) Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
         ProviderOverviewPanel(
             providers = providers,
+            providerSourceModes = providerSourceModes,
             message = message,
             firstFocusModifier = firstFocusModifier,
             onAddProvider = {
@@ -215,13 +227,10 @@ internal fun ProviderSettingsPanel(
                     // No "any refreshing → skip" guard: enqueuePlaylistRefresh uses KEEP, so a genuinely
                     // in-flight provider coalesces (no-op) while a stuck/idle one still starts. A single
                     // stuck-"Refreshing" provider must not block refreshing everything else.
+                    // Every active provider with resolvable credentials — including File playlists, which
+                    // re-import their stored content (rebuilds catalog + EPG mappings).
                     val refreshableProviders = providers.filter { provider ->
-                        provider.isActive &&
-                            when (val credentials = onGetProviderCredentials(provider.id)) {
-                                is ProviderCredentials.M3u -> credentials.sourceMode.isAutomaticallyRefreshable
-                                is ProviderCredentials.Xtream -> true
-                                null -> false
-                            }
+                        provider.isActive && onGetProviderCredentials(provider.id) != null
                     }
                     refreshableProviders.forEach { provider -> onProviderSaved(provider.id) }
                 }
@@ -270,6 +279,8 @@ internal fun ProviderSettingsPanel(
     // Writes the editor (update/create), applies the active toggle, closes. Shared by the passed-test
     // save path and the "trotzdem speichern" force-save; assumes the source is already decided.
     suspend fun persistEditor() {
+        // Capture the chosen mode before onSuccess resets the editor (for the diagnostics descriptor).
+        val savedMode = editor.m3uSourceMode
         val saveResult = if (editor.isEditing) {
             onUpdateProvider(editor.toUpdateRequest())
         } else {
@@ -277,6 +288,11 @@ internal fun ProviderSettingsPanel(
         }
         saveResult
             .onSuccess { saved ->
+                val descriptor = when (saved.provider.type) {
+                    ProviderType.Xtream -> "XTREAM"
+                    ProviderType.M3u -> if (savedMode == M3uSourceMode.File) "M3U_FILE" else "M3U_URL"
+                }
+                onLogProviderSaved(descriptor, saved.switchedFromType?.name)
                 // Apply the deferred active toggle only if it changed.
                 if (editor.isActive != saved.provider.isActive) {
                     onSetProviderEnabled(saved.provider.id, editor.isActive)
@@ -293,6 +309,36 @@ internal fun ProviderSettingsPanel(
             .onFailure { error ->
                 message = strProviderSaveFailed.format(error.message ?: "?")
             }
+    }
+
+    // Runs after validation (+ any source confirmation): a same-source edit persists directly, otherwise
+    // the source is tested first and only a passing test persists; a failing test opens the fix/force dialog.
+    fun proceedSave() {
+        if (editor.isSourceUnchanged) {
+            scope.launch {
+                message = null
+                saving = true
+                persistEditor()
+                saving = false
+            }
+        } else {
+            scope.launch {
+                message = null
+                saving = true
+                val result = onTestProviderConnection(editor.resolveTestRequest(onGetProviderM3uContent))
+                if (result.errorMessage == null) {
+                    connectionSummary = result.summary
+                    connectionError = null
+                    persistEditor()
+                } else {
+                    connectionTestStatus = ConnectionTestStatus.Failed
+                    connectionSummary = null
+                    connectionError = result.errorMessage
+                    pendingSaveTestFailure = true
+                }
+                saving = false
+            }
+        }
     }
 
     if (showEditor) {
@@ -347,40 +393,20 @@ internal fun ProviderSettingsPanel(
                 }
             },
             onSave = {
-                // Duplicates are guarded in ProviderEditor. Save tests the source; on failure a confirm
-                // dialog offers "Korrigieren" or force-save (which deactivates). A metadata-only edit
-                // (source unchanged) skips the test entirely, so an offline blip can't force-deactivate a
-                // working playlist. Ignore while testing.
+                // Duplicates are guarded in ProviderEditor. After validation, a confirmation is shown when
+                // adding (informational "saved as X") or when an edit switches the source type/mode
+                // (destructive warning). Same-type/mode edits skip straight to proceedSave. Ignore while testing.
                 when {
                     saving || connectionTestStatus == ConnectionTestStatus.Testing -> Unit
                     else -> {
                         val validationMessage = editor.validationMessageResolved()
-                        if (validationMessage != null) {
-                            message = validationMessage
-                        } else if (editor.isSourceUnchanged) {
-                            scope.launch {
+                        when {
+                            validationMessage != null -> message = validationMessage
+                            !editor.isEditing || editor.sourceSwitched -> {
                                 message = null
-                                saving = true
-                                persistEditor()
-                                saving = false
+                                pendingSourceConfirm = true
                             }
-                        } else {
-                            scope.launch {
-                                message = null
-                                saving = true
-                                val result = onTestProviderConnection(editor.toConnectionTestRequest())
-                                if (result.errorMessage == null) {
-                                    connectionSummary = result.summary
-                                    connectionError = null
-                                    persistEditor()
-                                } else {
-                                    connectionTestStatus = ConnectionTestStatus.Failed
-                                    connectionSummary = null
-                                    connectionError = result.errorMessage
-                                    pendingSaveTestFailure = true
-                                }
-                                saving = false
-                            }
+                            else -> proceedSave()
                         }
                     }
                 }
@@ -438,6 +464,21 @@ internal fun ProviderSettingsPanel(
         )
     }
 
+    if (pendingSourceConfirm) {
+        ProviderSourceConfirmDialog(
+            isSwitch = editor.sourceSwitched,
+            targetLabel = providerSourceLabel(editor.type, editor.m3uSourceMode),
+            originalLabel = editor.originalType?.let {
+                providerSourceLabel(it, editor.originalSourceMode ?: M3uSourceMode.Url)
+            },
+            onConfirm = {
+                pendingSourceConfirm = false
+                proceedSave()
+            },
+            onCancel = { pendingSourceConfirm = false },
+        )
+    }
+
     if (pendingSaveTestFailure) {
         ProviderConnectionFailedDialog(
             reason = connectionError,
@@ -463,6 +504,7 @@ internal fun ProviderSettingsPanel(
 @Composable
 private fun ProviderOverviewPanel(
     providers: List<Provider>,
+    providerSourceModes: Map<String, M3uSourceMode>,
     message: String?,
     firstFocusModifier: Modifier,
     onAddProvider: () -> Unit,
@@ -533,6 +575,7 @@ private fun ProviderOverviewPanel(
             items(providers, key = { it.id }) { provider ->
                 ProviderSourceCard(
                     provider = provider,
+                    sourceMode = providerSourceModes[provider.id] ?: M3uSourceMode.Url,
                     onClick = { onOpenProvider(provider) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -546,6 +589,7 @@ private fun ProviderOverviewPanel(
 @Composable
 private fun ProviderSourceCard(
     provider: Provider,
+    sourceMode: M3uSourceMode,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -571,7 +615,7 @@ private fun ProviderSourceCard(
                     StatusBadge(provider.status.localizedLabel(), tone = provider.status.tone)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-                    StatusBadge(provider.type.label)
+                    StatusBadge(providerSourceLabel(provider.type, sourceMode))
                     StatusBadge(stringResource(R.string.nav_live_tv), tone = if (provider.includeLiveTv) VivicastColors.Info else VivicastColors.SurfaceHigh)
                     StatusBadge(stringResource(R.string.nav_movies_label), tone = if (provider.includeMovies) VivicastColors.Info else VivicastColors.SurfaceHigh)
                     StatusBadge(stringResource(R.string.nav_series_label), tone = if (provider.includeSeries) VivicastColors.Info else VivicastColors.SurfaceHigh)

@@ -172,6 +172,61 @@ fun ProviderConnectionFailedDialog(
     }
 }
 
+/** Human label for a source type/mode: "M3U URL" / "M3U Datei" / "Xtream". Shared by the overview badge
+ * and the save/switch confirmation dialog. */
+@Composable
+internal fun providerSourceLabel(type: ProviderType, mode: M3uSourceMode): String =
+    when (type) {
+        ProviderType.M3u ->
+            "M3U " + stringResource(if (mode == M3uSourceMode.File) R.string.m3u_source_file else R.string.m3u_source_url)
+        ProviderType.Xtream -> "Xtream"
+    }
+
+/**
+ * Save confirmation. In add mode it's informational ("saved as X"); on an edit that switches the source
+ * type/mode it warns that the old source's data (credentials/URL) plus favorites/history/progress are lost.
+ */
+@Composable
+fun ProviderSourceConfirmDialog(
+    isSwitch: Boolean,
+    targetLabel: String,
+    originalLabel: String?,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        initialFocus = focusRequester,
+    ) {
+        InfoPanel(
+            title = stringResource(
+                if (isSwitch) R.string.settings_provider_switch_title else R.string.settings_provider_save_confirm_title,
+            ),
+            body = if (isSwitch) {
+                stringResource(R.string.settings_provider_switch_body, originalLabel.orEmpty(), targetLabel)
+            } else {
+                stringResource(R.string.settings_provider_save_confirm_body, targetLabel)
+            },
+            // The switch warning is several lines (source deletion + data loss); don't truncate it.
+            bodyMaxLines = if (isSwitch) 8 else 3,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        VivicastDialogActions(
+            primaryLabel = stringResource(
+                if (isSwitch) R.string.settings_provider_switch_confirm else R.string.common_save,
+            ),
+            onPrimary = onConfirm,
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+            // Destructive switch defaults focus to Cancel; the informational add-confirm to Save.
+            primaryFocusRequester = if (isSwitch) null else focusRequester,
+            secondaryFocusRequester = if (isSwitch) focusRequester else null,
+        )
+    }
+}
+
 fun deleteProviderDialogTag(providerId: String): String = "settings-delete-provider-dialog-$providerId"
 fun deleteProviderCancelTag(providerId: String): String = "settings-delete-provider-cancel-$providerId"
 fun deleteProviderConfirmTag(providerId: String): String = "settings-delete-provider-confirm-$providerId"

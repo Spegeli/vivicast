@@ -564,7 +564,6 @@
 
     <!-- Settings - Cache / Maintenance -->
     <string name="settings_cache_info_help">%d Dateien im lokalen Mediencache.</string>
-    <string name="settings_cache_refreshed">Medien-Cache wurde aktualisiert.</string>
     <string name="settings_cache_cleared">Cache wurde geleert.</string>
     <string name="settings_history_cleared">Verlauf wurde gelöscht.</string>
     <string name="settings_maintenance_confirm_badge">Bestätigung</string>
@@ -735,6 +734,11 @@
     <string name="settings_provider_correct">Korrigieren</string>
     <string name="settings_provider_save_anyway">Trotzdem speichern</string>
     <string name="settings_provider_save_and_disable">Speichern &amp; Deaktivieren</string>
+    <string name="settings_provider_save_confirm_title">Speichern</string>
+    <string name="settings_provider_save_confirm_body">Diese Wiedergabeliste wird als %1$s gespeichert.</string>
+    <string name="settings_provider_switch_title">Quelle ändern?</string>
+    <string name="settings_provider_switch_body">%1$s wird auf %2$s umgestellt.\n\nDeine bisherige Quelle (%1$s) wird gelöscht und ist danach nicht mehr gespeichert. Favoriten, Verlauf und Wiedergabefortschritt dieser Playlist gehen dabei verloren.</string>
+    <string name="settings_provider_switch_confirm">Umstellen</string>
     <string name="settings_provider_no_content">Keine Inhalte ausgewählt</string>
 
     <!-- Settings - M3U source mode labels -->
