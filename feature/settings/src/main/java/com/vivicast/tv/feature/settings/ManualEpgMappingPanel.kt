@@ -111,6 +111,9 @@ internal fun ManualEpgMappingPanel(
     onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
     onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
     onMessage: (String?) -> Unit,
+    // Attached to the first provider row so the section rail's RIGHT can re-enter this sub-panel. See
+    // SettingsRoute.detailFirstFocusModifier.
+    firstFocusModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     var selectedSourceId by remember(selectedProviderId) { mutableStateOf<String?>(null) }
@@ -157,6 +160,7 @@ internal fun ManualEpgMappingPanel(
                 onSelectProvider(it)
                 onMessage(null)
             },
+            firstFocusModifier = firstFocusModifier,
             modifier = Modifier.weight(0.28f).fillMaxHeight(),
         )
 
@@ -238,6 +242,7 @@ private fun ManualMappingProviderList(
     providers: List<Provider>,
     selectedProviderId: String?,
     onSelectProvider: (String) -> Unit,
+    firstFocusModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     if (providers.isEmpty()) {
@@ -249,13 +254,17 @@ private fun ManualMappingProviderList(
         return
     }
 
+    val firstProviderId = providers.first().id
     LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         items(providers, key = { it.id }) { provider ->
             FocusPanel(
                 selected = provider.id == selectedProviderId,
                 onClick = { onSelectProvider(provider.id) },
                 onFocused = { onSelectProvider(provider.id) },
-                modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.SettingsRowHeight),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(VivicastCardSizes.SettingsRowHeight)
+                    .then(if (provider.id == firstProviderId) firstFocusModifier else Modifier),
                 contentPadding = VivicastSpacing.Space4,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {

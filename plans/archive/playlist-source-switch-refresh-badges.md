@@ -1,6 +1,6 @@
 # Plan: Playlist-Editor Source-Switch + Refresh-All + Source-Badges
 
-Status: ENTSCHIEDEN — wartet auf GO zur Umsetzung, kein Code
+Status: ABGESCHLOSSEN (2026-07-14) — #1–#8 umgesetzt + committet (66b7944), Verifikations-Durchgang ohne Restbefund (siehe „## Status" unten).
 Erstellt: 2026-07-14
 
 ## Entscheidungen (User)

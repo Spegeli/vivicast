@@ -100,6 +100,9 @@ internal fun AboutSettingsPanel(
     onExportDiagnostics: () -> Unit,
     exporting: Boolean = false,
     firstFocusModifier: Modifier = Modifier,
+    // Bumped when OK is pressed on the already-selected rail section: collapse the open legal page back
+    // to the About overview. Focus stays on the rail (which holds it), so no row-refocus is needed.
+    collapseSubViewSignal: Int = 0,
 ) {
     val toggleDiagnostics = {
         onDiagnosticsSettingsChanged(
@@ -121,6 +124,13 @@ internal fun AboutSettingsPanel(
         val target = if (legalPage == AboutLegalPage.Terms) legalTermsRowFocus else legalRowFocus
         runCatching { target.requestFocus() }
         legalPage = null
+    }
+    // OK on the rail section collapses the open legal page to the overview. Focus is on the rail (not the
+    // overlay), so unlike closeLegal this just drops the page without a row-refocus. No-op if none open.
+    LaunchedEffect(collapseSubViewSignal) {
+        if (legalPage != null) {
+            legalPage = null
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

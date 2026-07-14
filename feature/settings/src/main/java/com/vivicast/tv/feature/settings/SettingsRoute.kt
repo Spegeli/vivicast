@@ -121,13 +121,25 @@ private fun settingsSectionsList() = listOf(
     stringResource(R.string.settings_section_about),
 )
 
-// Right detail panel focus bounds: LEFT (at the left edge) returns to the current section; UP/DOWN
-// stop at the ends. Only fires when there's no focus target left inside the group, so internal
-// navigation (rows, button groups) is unaffected.
+// Rail item OK: re-selecting the current section collapses its open sub-view; a different section
+// switches. Kept top-level so the branch doesn't count toward SettingsRoute's complexity gate.
+private fun railSectionActivate(
+    section: String,
+    selectedSection: String,
+    onCollapse: () -> Unit,
+    onSwitch: (String) -> Unit,
+) {
+    if (section == selectedSection) onCollapse() else onSwitch(section)
+}
+
+// Right detail panel focus bounds: LEFT (at the left edge) returns to the current section; UP/DOWN and
+// RIGHT stop at the ends (the detail panel is the rightmost pane, so RIGHT must not escape upward to the
+// top-nav gear). Only fires when there's no focus target left inside the group, so internal navigation
+// (rows, button groups) is unaffected.
 private fun FocusEnterExitScope.exitDetailPanel(section: FocusRequester) {
     when (requestedFocusDirection) {
         FocusDirection.Left -> section.requestFocus()
-        FocusDirection.Up, FocusDirection.Down -> cancelFocusChange()
+        FocusDirection.Up, FocusDirection.Down, FocusDirection.Right -> cancelFocusChange()
         else -> {}
     }
 }
@@ -207,6 +219,10 @@ fun SettingsRoute(
     }
     val detailFocusRequester = remember { FocusRequester() }
     var pendingDetailFocus by remember { mutableStateOf(false) }
+    // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse
+    // any open sub-view (editor / global settings / legal page) back to its overview. Focus stays on
+    // the rail (the collapse touches only the right pane). See settings-ok-collapses-subview plan.
+    var collapseSubViewSignal by remember { mutableStateOf(0) }
     // True while focus is inside the right detail panel — gates the settings-scoped BACK (detail → rail).
     var detailFocused by remember { mutableStateOf(false) }
     val sectionFocusRequesters = remember(settingsSections) {
@@ -220,6 +236,17 @@ fun SettingsRoute(
     val selectSection: (String) -> Unit = { section ->
         // Section selection is local UI state only; Settings always reopens on Allgemein.
         selectedSection = section
+    }
+    // OK on a rail section: re-selecting the current one collapses its open sub-view (focus stays on the
+    // rail); a different one switches and moves focus into the detail. Shared by every rail item. The
+    // branch lives in the top-level railSectionActivate to keep SettingsRoute under the complexity gate.
+    val activateSection: (String) -> Unit = { section ->
+        railSectionActivate(
+            section = section,
+            selectedSection = selectedSection,
+            onCollapse = { collapseSubViewSignal++ },
+            onSwitch = { selectSection(it); pendingDetailFocus = true },
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -277,10 +304,7 @@ fun SettingsRoute(
                         items(mainSections) { section ->
                             FocusPanel(
                                 selected = section == selectedSection,
-                                onClick = {
-                                    selectSection(section)
-                                    pendingDetailFocus = true
-                                },
+                                onClick = { activateSection(section) },
                                 onFocused = { selectSection(section) },
                                 modifier = Modifier
                                     .focusRequester(sectionFocusRequesters.getValue(section))
@@ -311,10 +335,7 @@ fun SettingsRoute(
                     }
                     FocusPanel(
                         selected = sectionAbout == selectedSection,
-                        onClick = {
-                            selectSection(sectionAbout)
-                            pendingDetailFocus = true
-                        },
+                        onClick = { activateSection(sectionAbout) },
                         onFocused = { selectSection(sectionAbout) },
                         modifier = Modifier
                             .focusRequester(sectionFocusRequesters.getValue(sectionAbout))
@@ -406,6 +427,7 @@ fun SettingsRoute(
                             onParkFocusBeforeEditor = {
                                 runCatching { sectionFocusRequesters.getValue(sectionPlaylists).requestFocus() }
                             },
+                            collapseSubViewSignal = collapseSubViewSignal,
                         )
                         sectionEpg -> EpgSettingsPanel(
                             state = settingsUiState.epg,
@@ -433,6 +455,7 @@ fun SettingsRoute(
                             onParkFocusBeforeEditor = {
                                 runCatching { sectionFocusRequesters.getValue(sectionEpg).requestFocus() }
                             },
+                            collapseSubViewSignal = collapseSubViewSignal,
                         )
                         sectionAppearance -> AppearanceSettingsPanel(
                             state = settingsUiState.appearance,
@@ -478,6 +501,7 @@ fun SettingsRoute(
                             onExportDiagnostics = onExportDiagnostics,
                             exporting = diagnosticsExporting,
                             firstFocusModifier = detailFirstFocusModifier,
+                            collapseSubViewSignal = collapseSubViewSignal,
                         )
                         else -> InfoPanel(
                             title = selectedSection,

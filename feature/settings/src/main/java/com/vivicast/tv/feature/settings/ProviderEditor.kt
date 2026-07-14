@@ -125,6 +125,9 @@ internal fun ProviderEditor(
     actions: ProviderEditorActions,
     epgLinks: ProviderEpgLinkInfo = ProviderEpgLinkInfo(),
     localLogosConfigured: Boolean = false,
+    // Carries the detail panel's entry FocusRequester so the section rail's RIGHT can re-enter the
+    // editor (attached to the always-present name field). See SettingsRoute.detailFirstFocusModifier.
+    entryFocusModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val dialogs = remember { ProviderEditorDialogState() }
@@ -211,6 +214,7 @@ internal fun ProviderEditor(
                 isError = duplicates.name || (showNameBlankError && nameBlank),
                 duplicateMessage = if (duplicates.name) stringResource(R.string.settings_provider_name_exists_body) else null,
                 focusRequester = firstFocus,
+                modifier = entryFocusModifier,
                 onNameChange = { onEditorChange(editor.copy(name = it)) },
                 onOpenNameDialog = { dialogs.showName = true },
             )

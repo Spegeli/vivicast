@@ -122,6 +122,9 @@ internal fun ProviderSettingsPanel(
     onToggleEpgLink: (providerId: String, sourceId: String, link: Boolean) -> Unit = { _, _, _ -> },
     firstFocusModifier: Modifier = Modifier,
     onParkFocusBeforeEditor: () -> Unit = {},
+    // Bumped when OK is pressed on the already-selected rail section: collapse the open editor back to
+    // the overview. Focus stays on the rail (no park / overview-focus); the draft is discarded.
+    collapseSubViewSignal: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     var selectedProviderId by remember { mutableStateOf<String?>(null) }
@@ -264,6 +267,19 @@ internal fun ProviderSettingsPanel(
         )
     }
 
+    // OK on the rail section collapses the editor to the overview. Focus stays on the rail (the user is
+    // focused there), so unlike dismissEditor this does NOT park / set an overview-focus target. The
+    // draft is discarded, matching Cancel/BACK. Initial fire (showEditor == false) is a no-op.
+    LaunchedEffect(collapseSubViewSignal) {
+        if (showEditor) {
+            selectedProviderId = null
+            editor = ProviderEditorState.newProvider(ProviderType.M3u)
+            showEditor = false
+            message = null
+            connectionTestStatus = ConnectionTestStatus.Idle
+        }
+    }
+
     val dismissEditor: () -> Unit = {
         // Park focus before the inline editor is removed, else focus escapes to the top nav bar.
         onParkFocusBeforeEditor()
@@ -354,6 +370,7 @@ internal fun ProviderSettingsPanel(
             connectionSummary = connectionSummary,
             connectionError = connectionError.takeIf { connectionTestStatus == ConnectionTestStatus.Failed },
             signals = ProviderEditorSignals(focusSource = focusSourceSignal, saving = saving),
+            entryFocusModifier = firstFocusModifier,
             actions = ProviderEditorActions(
             onEditorChange = {
                 editor = it

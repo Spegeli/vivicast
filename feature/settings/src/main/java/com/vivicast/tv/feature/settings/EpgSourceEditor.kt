@@ -107,6 +107,9 @@ internal fun EpgSourceEditor(
     connectionError: String? = null,
     onTestConnection: () -> Unit = {},
     saving: Boolean = false,
+    // Carries the detail panel's entry FocusRequester so the section rail's RIGHT can re-enter the
+    // editor (attached to the always-present name field). See SettingsRoute.detailFirstFocusModifier.
+    entryFocusModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     // Blank name reddens only after a save attempt (mirrors the playlist editor).
@@ -162,6 +165,7 @@ internal fun EpgSourceEditor(
                 isError = duplicateName || (showNameBlankError && nameBlank),
                 duplicateMessage = if (duplicateName) stringResource(R.string.settings_epg_name_exists_body) else null,
                 focusRequester = firstFocus,
+                modifier = entryFocusModifier,
                 onNameChange = { onEditorChange(editor.copy(name = it)) },
                 onOpenNameDialog = { showNameDialog = true },
             )

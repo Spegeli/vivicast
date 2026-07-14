@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.BodyText
@@ -43,6 +44,9 @@ internal fun EditorNameField(
     focusRequester: FocusRequester,
     onNameChange: (String) -> Unit,
     onOpenNameDialog: () -> Unit,
+    // Attached to the focusable name node so the section rail's RIGHT can re-enter the editor (the name
+    // field is present in both add and edit, so it is the stable entry target). See SettingsRoute.
+    modifier: Modifier = Modifier,
 ) {
     if (isEditing) {
         VivicastSettingsRow(
@@ -51,6 +55,7 @@ internal fun EditorNameField(
             value = name,
             // Force text so a name of "An"/"Aus" is not mistaken for a toggle value.
             forceTextValue = true,
+            modifier = modifier,
             onClick = onOpenNameDialog,
         )
     } else {
@@ -63,6 +68,7 @@ internal fun EditorNameField(
                 focusRequester = focusRequester,
                 isError = isError,
                 maxLength = 25,
+                modifier = modifier,
             )
             VivicastDialogError(duplicateMessage)
         }

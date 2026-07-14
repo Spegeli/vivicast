@@ -120,6 +120,10 @@ internal fun EpgSettingsPanel(
     onTestEpgConnection: suspend (String) -> EpgConnectionTestResult = { EpgConnectionTestResult(null, null) },
     firstFocusModifier: Modifier = Modifier,
     onParkFocusBeforeEditor: () -> Unit = {},
+    // Bumped when OK is pressed on the already-selected rail section: collapse any open sub-view (source
+    // editor / manual mapping / global settings) back to the overview. Focus stays on the rail; drafts
+    // are discarded (matches Cancel/BACK).
+    collapseSubViewSignal: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     var selectedSourceId by remember { mutableStateOf<String?>(null) }
@@ -192,6 +196,20 @@ internal fun EpgSettingsPanel(
         showManualMapping = false
         message = null
     }
+    // OK on the rail section collapses any open sub-view to the overview. Focus stays on the rail (the
+    // user is focused there), so unlike the dismiss* helpers this does NOT park / set an overview-focus
+    // target. Drafts are discarded, matching Cancel/BACK. Initial fire (nothing open) is a no-op.
+    LaunchedEffect(collapseSubViewSignal) {
+        if (showEditor || showManualMapping || showGlobalSettings) {
+            selectedSourceId = null
+            editor = EpgSourceEditorState.newSource()
+            showEditor = false
+            showManualMapping = false
+            showGlobalSettings = false
+            message = null
+        }
+    }
+
     val dismissGlobalSettings: () -> Unit = {
         onParkFocusBeforeEditor()
         pendingOverviewFocus = EpgOverviewFocusTarget.GlobalSettingsButton
@@ -301,6 +319,7 @@ internal fun EpgSettingsPanel(
                     }
                 },
                 saving = epgSaving,
+                entryFocusModifier = firstFocusModifier,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -321,6 +340,7 @@ internal fun EpgSettingsPanel(
                 onSetManualMapping = onSetManualMapping,
                 onClearManualMapping = onClearManualMapping,
                 onMessage = { message = it },
+                firstFocusModifier = firstFocusModifier,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -341,7 +361,9 @@ internal fun EpgSettingsPanel(
                     EpgGlobalSettings(
                         preferences = state,
                         onEpgPreferencesChanged = onEpgPreferencesChanged,
-                        firstFocusModifier = Modifier.focusRequester(globalFirstFocus),
+                        // Carry detailFocusRequester (from firstFocusModifier) onto the sub-panel's first
+                        // row too, so RIGHT from the section rail re-enters it (not only the overview).
+                        firstFocusModifier = firstFocusModifier.focusRequester(globalFirstFocus),
                     )
                 }
             }
