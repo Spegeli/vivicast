@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,10 +36,13 @@ fun VivicastScreen(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    VivicastScreenBackground(
-        modifier = modifier,
-        content = content,
-    )
+    // The app shell (MainActivity) already paints the single full-screen backdrop behind the top nav AND
+    // the route area. A route must NOT paint a second backdrop: a nested VivicastScreenBackground restarts
+    // the vertical gradient at the route's own top, so its top is darker than the shell backdrop just above
+    // it — a visible colour seam that converges further down. Just lay content over the shell backdrop.
+    Box(modifier = modifier) {
+        content()
+    }
 }
 
 @Composable
@@ -224,15 +228,8 @@ fun VivicastGlassPanel(
     Box(
         modifier = modifier
             .clip(VivicastShapes.PanelRadius)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        scheme.surface(Color(0xF0152438)).scaledAlpha(opacity),
-                        scheme.surface(Color(0xEA0B1626)).scaledAlpha(opacity),
-                        scheme.surface(Color(0xDC07101C)).scaledAlpha(opacity),
-                    ),
-                ),
-            )
+            // Material-3 tonal surface: solid tinted fill (elevation by tone step), not a gradient.
+            .background(scheme.surface(Color(0xEA0B1626)).scaledAlpha(opacity))
             .border(VivicastBorders.PanelWidth, scheme.surface(Color(0xAA263D56)), VivicastShapes.PanelRadius)
             .padding(contentPadding),
     ) {
@@ -247,12 +244,13 @@ private fun focusSurfaceBrush(
     enabled: Boolean,
     showIdleSurface: Boolean,
 ): Brush {
-    fun tint(stops: List<Color>) = Brush.verticalGradient(stops.map(scheme::surface))
+    // Material-3 tonal surface: one solid tinted tone per state (elevation by tone, not a gradient).
+    fun solid(color: Color) = SolidColor(scheme.surface(color))
     return when {
-        !enabled -> tint(listOf(VivicastColors.SurfaceDisabled, VivicastColors.SurfaceDisabled))
-        focused -> tint(listOf(Color(0xFF255077), Color(0xFF0E2A43), Color(0xFF081523)))
-        selected -> tint(listOf(Color(0xFF173F64), Color(0xFF0D273F), Color(0xFF081522)))
-        !showIdleSurface -> Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
-        else -> tint(listOf(Color(0xEF152238), Color(0xE80B1423), Color(0xDE08111D)))
+        !enabled -> solid(VivicastColors.SurfaceDisabled)
+        focused -> solid(Color(0xFF0E2A43))
+        selected -> solid(Color(0xFF0D273F))
+        !showIdleSurface -> SolidColor(Color.Transparent)
+        else -> solid(Color(0xE80B1423))
     }
 }

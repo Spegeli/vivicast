@@ -1,8 +1,9 @@
 # D17 — Appearance colours: background + accent + transparency (audit O-2 / O-4)
 
-Status: **BUILT (2026-07-14) — awaiting on-device review + fine-tune.** All gates green
-(`:core:designsystem` unit test, detekt, `assembleDebug`, `test` 1009 tasks). Owner said the scheme will be
-re-worked after the first on-device pass. Split out of the former combined
+Status: **COMPLETED (2026-07-14).** Owner-reviewed on device across all 17 background hues, accent colours,
+transparency (panels + player overlay), swatch pickers, tonal-flat panels, and the backdrop-seam fix. Final
+verification pass found no regressions/contradictions; all gates green (`test` 1011 tasks, detekt,
+`assembleDebug`, strings-only-in-designsystem). Split out of the former combined
 `d10-group-management-d17-accent-colors.md` (D10 stays in its own file). Source of the feature:
 `docs/archive/SETTINGS-DOCS-CODE-AUDIT.md` (O-2/O-4).
 
@@ -231,9 +232,50 @@ rewrite (doc already names Player-Overlays). **BUILT 2026-07-14** — `VivicastP
 2026-07-14 — with a live channel (ZDFneo HD) at 50 % transparency the video visibly shows through the
 controls-overlay fill while title/timeline/buttons stay fully legible.
 
-**Decision B — panel style flatten = DEFERRED (owner).** Move panels/cards from the subtle per-panel
-vertical "glass" gradient to **flat single-colour** fills (the modern norm the peer apps use), keeping
-gradients only for hero + player scrim. Bigger visual change → its own separate step, **not now**.
+**Decision B — panel style = Material-3 tonal-flat (owner, 2026-07-14, after web research).** Web research
+(m3.material.io, Android TV design, M3 Expressive 2025, Netflix/Disney/Prime, Apple Liquid Glass) → the
+modern Google/Android norm is **tone-based surfaces**: *solid* tinted surfaces whose elevation is shown by a
+**tone step** (`surface` → `surfaceContainerLow/High/Highest`), NOT gradients ("prefer tonal elevation, add
+shadow only for separation"). Streaming apps use solid cards + gradients only for hero/text-scrims. Apple's
+Liquid Glass is the counter-trend but needs blur + content-behind (little payoff on a static TV backdrop).
+
+So: replace the per-panel **vertical gradient** with a **solid tonal fill** (elevation by lightness step:
+backdrop < panel < card). Reuses the D17 re-hue band (each surface already maps to a tone of the hue — just
+render it solid instead of a 2-3-stop gradient). Keep gradients ONLY for hero/featured panel, poster
+placeholder scrims, and the player controls scrim/overlay.
+
+**Concrete plan (awaiting GO):**
+- Collapse each panel/card/row painter's gradient to a solid tone (pick the mid stop): `VivicastGlassPanel`
+  (`VivicastSurfaces` 223-225), `VivicastDetailsPanel` (`VivicastPanels` 54), `VivicastContentCard`
+  (`VivicastLayout` 58), `focusSurfaceBrush` idle/focus/selected (`VivicastSurfaces` 239-242).
+- Tune the tone ladder so panel vs backdrop vs card are clearly separated when solid (nudge the surface
+  literals / add explicit `surfaceContainer` levels if the current tones overlap too much).
+- **Keep gradients (verified full inventory):** `VivicastHeroPanel` featured + scrims (`VivicastPanels`
+  120/146/154), poster placeholders + artwork scrims (`VivicastCards` 139/141/155/167/259/273/285),
+  `MiniLogo` channel-logo tile (`VivicastCards` 362/364 — media placeholder behind the logo image), brand
+  logo (`VivicastNavigation` 231), player overlay (`VivicastPlayer`), and the **backdrop**
+  `VivicastScreenBackground` (53/66) — **kept** as the subtle base-layer gradient (it's the wallpaper, not a
+  panel; flattening it adds risk for no gain).
+- Glassmorphism/Liquid-Glass = possible future opt-in "glass theme", not now.
+- Gates + emulator visual check (panels should read as clean solid tonal surfaces, clear elevation).
+
+**BUILT + verified 2026-07-14.** Flattened `VivicastGlassPanel` (`VivicastSurfaces`), `focusSurfaceBrush`
+(idle/focus/selected → `SolidColor`), `VivicastDetailsPanel` (`VivicastPanels`), `VivicastContentCard`
+(`VivicastLayout`) to solid tonal fills; removed now-unused `Brush` import in `VivicastLayout`. Gates green
+(detekt + assembleDebug). Emulator: Settings rail + detail panels render as clean solid tonal surfaces (no
+gradient sheen); hero + media/logo + player gradients preserved. Tone step vs backdrop is subtle (border
+does most of the delineation) — nudge the panel tone if more elevation contrast is wanted. Uncommitted.
+
+## Backdrop double-paint seam — fix (2026-07-14, pre-existing bug found during Decision B review)
+
+Symptom: on every route, the top of the content area was a **darker band** than the shell backdrop above it
+(a colour seam, most visible on saturated backgrounds, converging further down). Root cause: `VivicastScreen`
+(used by all 6 routes) internally painted `VivicastScreenBackground`, but `MainActivity` **already** paints
+one full-screen `VivicastScreenBackground` behind the top nav + routes. The nested backdrop restarts the
+vertical gradient (darkest stop `0xFF02040A`) at the route's own top, so it's darker than the continuous
+shell gradient at that y. Fix: `VivicastScreen` is now a plain layout `Box` (no backdrop) — the single shell
+backdrop shows through continuously. **Verified on emulator** (Search screen, red bg) — backdrop now uniform,
+no seam. Not caused by Decision B; app-wide.
 
 ## Not in scope (v1)
 - Tinting is derived from **one base per hue**; hand-tuning individual surface tones per hue is a later knob.

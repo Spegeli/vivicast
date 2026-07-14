@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -56,11 +55,8 @@ fun VivicastContentCard(
     Box(
         modifier = modifier
             .clip(VivicastShapes.CardRadius)
-            .background(
-                Brush.verticalGradient(
-                    listOf(scheme.surface(Color(0xEF132034)), scheme.surface(Color(0xE20A1423))),
-                ),
-            )
+            // Material-3 tonal surface: solid tinted fill (elevation by tone step), not a gradient.
+            .background(scheme.surface(Color(0xEF132034)))
             .border(VivicastBorders.Hairline, scheme.surface(Color(0xFF273B52)), VivicastShapes.CardRadius)
             .padding(contentPadding),
     ) {

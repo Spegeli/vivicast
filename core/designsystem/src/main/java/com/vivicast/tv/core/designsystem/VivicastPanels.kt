@@ -50,14 +50,8 @@ fun VivicastDetailsPanel(
     Column(
         modifier = modifier
             .clip(VivicastShapes.CardRadius)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        scheme.surface(Color(0xE6162335)).scaledAlpha(opacity),
-                        scheme.surface(Color(0xD90B1320)).scaledAlpha(opacity),
-                    ),
-                ),
-            )
+            // Material-3 tonal surface: solid tinted fill (elevation by tone step), not a gradient.
+            .background(scheme.surface(Color(0xE6162335)).scaledAlpha(opacity))
             .border(VivicastBorders.Hairline, scheme.surface(Color(0xFF263C55)), VivicastShapes.CardRadius)
             .padding(VivicastSpacing.Space4),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
