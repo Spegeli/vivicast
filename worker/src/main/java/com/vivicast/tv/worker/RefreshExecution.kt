@@ -13,9 +13,11 @@ import com.vivicast.tv.data.media.XtreamCatalog
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
+import com.vivicast.tv.domain.model.LogoSource
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
+import com.vivicast.tv.domain.model.parseLogoPriorityOrder
 import com.vivicast.tv.iptv.m3u.M3uParser
 import com.vivicast.tv.iptv.xmltv.XmltvChannel
 import com.vivicast.tv.iptv.xmltv.XmltvDocument
@@ -617,7 +619,16 @@ class RoomMediaImageRefreshSource(
         val catalogDao = database.catalogDao()
         return buildList {
             catalogDao.getChannelsWithLogoUrls().forEach { row ->
-                addImageTarget(MediaCacheType.ChannelLogo, row.channel.id, row.effectiveLogoUrl)
+                // Prefetch the order-winning REMOTE logo (local files aren't cached). Mirrors the App
+                // resolver's walk so the warmed file matches what will display.
+                val winner = parseLogoPriorityOrder(row.providerLogoPriority).firstNotNullOfOrNull { source ->
+                    when (source) {
+                        LogoSource.Playlist -> row.playlistLogoUrl?.takeIf { it.isNotBlank() }
+                        LogoSource.Epg -> row.epgIconUrl?.takeIf { it.isNotBlank() }
+                        LogoSource.Local -> null
+                    }
+                }
+                addImageTarget(MediaCacheType.ChannelLogo, row.channelId, winner)
             }
             catalogDao.getMoviesWithImageUrls().forEach { movie ->
                 addImageTarget(MediaCacheType.MoviePoster, movie.id, movie.posterUrl)

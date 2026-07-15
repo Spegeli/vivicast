@@ -69,6 +69,8 @@ import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogError
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
+import com.vivicast.tv.core.designsystem.VivicastReorderItem
+import com.vivicast.tv.core.designsystem.VivicastReorderList
 import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
@@ -81,10 +83,8 @@ import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
+import com.vivicast.tv.domain.model.LogoSource
 import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
-import com.vivicast.tv.data.provider.LOGO_PRIORITY_EPG
-import com.vivicast.tv.data.provider.LOGO_PRIORITY_LOCAL
-import com.vivicast.tv.data.provider.LOGO_PRIORITY_PLAYLIST
 import com.vivicast.tv.data.provider.XTREAM_OUTPUT_HLS
 import com.vivicast.tv.data.provider.XTREAM_OUTPUT_TS
 import com.vivicast.tv.data.provider.REFRESH_INTERVAL_OFF
@@ -103,6 +103,7 @@ import com.vivicast.tv.domain.model.ProviderEpgSource
 import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.EpgSource
+import com.vivicast.tv.domain.model.parseLogoPriorityOrder
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
@@ -125,7 +126,6 @@ internal fun ProviderEditor(
     signals: ProviderEditorSignals,
     actions: ProviderEditorActions,
     epgLinks: ProviderEpgLinkInfo = ProviderEpgLinkInfo(),
-    localLogosConfigured: Boolean = false,
     // Carries the detail panel's entry FocusRequester so the section rail's RIGHT can re-enter the
     // editor (attached to the always-present name field). See SettingsRoute.detailFirstFocusModifier.
     entryFocusModifier: Modifier = Modifier,
@@ -302,7 +302,7 @@ internal fun ProviderEditor(
         }
     }
 
-    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink, localLogosConfigured)
+    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink)
 }
 
 /** Open/closed flags for the editor's popups (name / interval / User-Agent / EPG sources). */
@@ -323,7 +323,6 @@ private fun ProviderEditorDialogs(
     isDuplicateName: (String) -> Boolean,
     onEditorChange: (ProviderEditorState) -> Unit,
     onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit,
-    localLogosConfigured: Boolean,
 ) {
     if (dialogs.showName) {
         NameEditDialog(
@@ -367,19 +366,9 @@ private fun ProviderEditorDialogs(
         )
     }
     if (dialogs.showLogoPriority) {
-        SettingsChoiceDialog(
-            title = stringResource(R.string.settings_provider_logo_priority),
-            options = buildList {
-                add(LOGO_PRIORITY_PLAYLIST)
-                add(LOGO_PRIORITY_EPG)
-                if (localLogosConfigured) add(LOGO_PRIORITY_LOCAL)
-            },
-            selected = editor.logoPriority,
-            label = { logoPriorityLabel(it) },
-            onSelect = { value ->
-                if (value != editor.logoPriority) onEditorChange(editor.copy(logoPriority = value))
-                dialogs.showLogoPriority = false
-            },
+        LogoPriorityDialog(
+            priority = editor.logoPriority,
+            onReorder = { onEditorChange(editor.copy(logoPriority = it)) },
             onDismiss = { dialogs.showLogoPriority = false },
         )
     }
@@ -832,12 +821,44 @@ internal fun ProviderIntervalDialog(
 private val INTERVAL_DIALOG_MAX_HEIGHT = 340.dp
 
 @Composable
-internal fun logoPriorityLabel(priority: String): String =
-    when (priority) {
-        LOGO_PRIORITY_EPG -> stringResource(R.string.settings_provider_logo_priority_epg)
-        LOGO_PRIORITY_LOCAL -> stringResource(R.string.settings_provider_logo_priority_local)
-        else -> stringResource(R.string.settings_provider_logo_priority_playlist)
+private fun logoSourceLabels(): Map<LogoSource, String> = mapOf(
+    LogoSource.Playlist to stringResource(R.string.settings_provider_logo_priority_playlist),
+    LogoSource.Epg to stringResource(R.string.settings_provider_logo_priority_epg),
+    LogoSource.Local to stringResource(R.string.settings_provider_logo_priority_local),
+)
+
+/** Settings-row value: the source order as a summary, e.g. "Playlist › EPG › Lokaler Ordner". */
+@Composable
+internal fun logoPriorityLabel(priority: String): String {
+    val labels = logoSourceLabels()
+    return parseLogoPriorityOrder(priority).joinToString(" › ") { labels.getValue(it) }
+}
+
+/**
+ * Logo-priority popup: the three logo sources as a D-Pad reorderable list (grab-and-move). Local is always
+ * offered; an unconfigured/unmatched local folder is simply skipped at resolve time. A drop writes the new
+ * CSV order straight back to the editor; Back closes the dialog.
+ */
+@Composable
+private fun LogoPriorityDialog(
+    priority: String,
+    onReorder: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val labels = logoSourceLabels()
+    val items = parseLogoPriorityOrder(priority).map { VivicastReorderItem(it.token, labels.getValue(it)) }
+    VivicastDialog(
+        onDismiss = onDismiss,
+        width = VivicastDialogWidth.Standard,
+        title = stringResource(R.string.settings_provider_logo_priority),
+    ) {
+        VivicastReorderList(
+            items = items,
+            onReorder = { ids -> onReorder(ids.joinToString(",")) },
+            modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+        )
     }
+}
 
 /** Per-playlist User-Agent editor — mirrors the global one; empty saves as "use the global UA". */
 @Composable

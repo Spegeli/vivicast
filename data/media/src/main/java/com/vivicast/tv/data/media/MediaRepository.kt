@@ -20,6 +20,12 @@ data class AndroidTvSearchSuggestion(
     val deepLink: String,
 )
 
+/** Raw remote logo candidates for a channel (playlist logo + mapped EPG icon), for App-side ordering. */
+data class ChannelLogoCandidates(
+    val playlistLogoUrl: String?,
+    val epgIconUrl: String?,
+)
+
 interface MediaRepository {
     fun observeCategories(providerId: String, type: CategoryType): Flow<List<Category>>
 
@@ -64,6 +70,9 @@ interface MediaRepository {
     fun observeEpisodes(providerId: String, seasonId: String): Flow<List<Episode>>
 
     suspend fun getChannel(providerId: String, channelId: String): Channel?
+
+    /** The channel's raw remote logo candidates (playlist + mapped EPG icon), or null if unknown. */
+    suspend fun getChannelLogoCandidates(channelId: String): ChannelLogoCandidates? = null
 
     suspend fun getChannelByStableKeys(providerStableKey: String, channelStableKey: String): Channel? = null
 

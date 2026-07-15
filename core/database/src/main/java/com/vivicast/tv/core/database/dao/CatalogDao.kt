@@ -72,8 +72,11 @@ interface CatalogDao {
         channelStableKey: String,
     ): ChannelEntity?
 
+    // Raw logo candidates + the owning provider's order string, for the worker to pick the order-winning
+    // remote URL to prefetch (local files aren't prefetched). Only channels that have some remote logo.
     @Query(
-        "SELECT c.*, " + EFFECTIVE_LOGO_COLUMN + " AS effectiveLogoUrl " +
+        "SELECT c.id AS channelId, p.logoPriority AS providerLogoPriority, " +
+            "NULLIF(TRIM(c.logoUrl), '') AS playlistLogoUrl, " + EPG_ICON_SUBQUERY + " AS epgIconUrl " +
             "FROM channels c LEFT JOIN providers p ON p.id = c.providerId " +
             "WHERE (c.logoUrl IS NOT NULL AND TRIM(c.logoUrl) != '') " +
             "OR EXISTS (SELECT 1 FROM epg_channel_mappings m " +
@@ -81,7 +84,14 @@ interface CatalogDao {
             "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '') " +
             "ORDER BY c.providerId, c.name COLLATE NOCASE",
     )
-    suspend fun getChannelsWithLogoUrls(): List<ChannelWithLogo>
+    suspend fun getChannelsWithLogoUrls(): List<ChannelLogoCandidatesRow>
+
+    // The two remote logo candidates for one channel, for the App resolver to walk the provider's order.
+    @Query(
+        "SELECT NULLIF(TRIM(c.logoUrl), '') AS playlistLogoUrl, " + EPG_ICON_SUBQUERY + " AS epgIconUrl " +
+            "FROM channels c WHERE c.id = :channelId",
+    )
+    suspend fun getLogoCandidates(channelId: String): LogoCandidates?
 
     @Query(
         """
@@ -391,19 +401,31 @@ data class ChannelWithLogo(
     val effectiveLogoUrl: String?,
 )
 
-// Resolves the effective channel logo per the owning provider's `logoPriority`:
-//   'epg'  -> mapped EPG <icon> first, playlist logo as fallback
-//   else   -> playlist logo first (default), mapped EPG <icon> as fallback
-// Assumes the query aliases channels AS c and providers AS p. Correlated subquery picks a manual mapping
-// over an automatic one. Kept as a concatenated constant so the three channel-read queries stay identical.
+/** The two raw remote logo candidates for a channel (local files are resolved App-side, not here). */
+data class LogoCandidates(
+    val playlistLogoUrl: String?,
+    val epgIconUrl: String?,
+)
+
+/** A channel's raw remote logo candidates plus its provider's `logoPriority` order string. */
+data class ChannelLogoCandidatesRow(
+    val channelId: String,
+    val providerLogoPriority: String?,
+    val playlistLogoUrl: String?,
+    val epgIconUrl: String?,
+)
+
+// The mapped EPG <icon> for channel `c` (a manual mapping preferred over an automatic one), or NULL.
+// Assumes the enclosing query aliases channels AS c. Factored out so every logo query shares one definition.
+private const val EPG_ICON_SUBQUERY =
+    "(SELECT ec.iconUrl FROM epg_channel_mappings m " +
+        "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
+        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
+        "ORDER BY m.isManual DESC LIMIT 1)"
+
+// "Any remote logo" for channel `c`: the playlist's own logo, else the mapped EPG <icon>. Order-AGNOSTIC
+// on purpose — it feeds only the display produceState key + the logoMissing heuristic. The user-ordered
+// choice across playlist/EPG/local is resolved in Kotlin (App resolveChannelLogoModel + the worker
+// prefetch) from the raw candidates (getLogoCandidates / getChannelsWithLogoUrls). Assumes channels AS c.
 private const val EFFECTIVE_LOGO_COLUMN =
-    "CASE WHEN p.logoPriority = 'epg' THEN " +
-        "COALESCE((SELECT ec.iconUrl FROM epg_channel_mappings m " +
-        "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
-        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
-        "ORDER BY m.isManual DESC LIMIT 1), NULLIF(TRIM(c.logoUrl), '')) " +
-        "ELSE COALESCE(NULLIF(TRIM(c.logoUrl), ''), " +
-        "(SELECT ec.iconUrl FROM epg_channel_mappings m " +
-        "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
-        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
-        "ORDER BY m.isManual DESC LIMIT 1)) END"
+    "COALESCE(NULLIF(TRIM(c.logoUrl), ''), " + EPG_ICON_SUBQUERY + ")"

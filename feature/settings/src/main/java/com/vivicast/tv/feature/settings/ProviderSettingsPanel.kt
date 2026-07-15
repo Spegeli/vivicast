@@ -111,7 +111,6 @@ internal fun ProviderSettingsPanel(
     onSetProviderEnabled: suspend (String, Boolean) -> Result<Unit>,
     onDeleteProvider: suspend (String) -> Result<Unit>,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
-    localLogosConfigured: Boolean = false,
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     // Sanitized diagnostics on save: source descriptor ("M3U_URL"/"M3U_FILE"/"XTREAM") + the previous type
@@ -446,7 +445,6 @@ internal fun ProviderSettingsPanel(
                 sources = epgSources,
                 linkedIds = providerEpgLinks.mapTo(mutableSetOf()) { it.epgSourceId },
             ),
-            localLogosConfigured = localLogosConfigured,
             modifier = Modifier.fillMaxSize(),
         )
     }

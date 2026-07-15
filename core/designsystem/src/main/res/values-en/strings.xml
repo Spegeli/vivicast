@@ -38,7 +38,7 @@
     <string name="start_series">Series</string>
 
     <!-- Language options -->
-    <string name="language_system">System default</string>
+    <string name="language_system">System</string>
     <string name="language_german">German</string>
     <string name="language_english">English</string>
 
@@ -718,9 +718,11 @@
     <string name="settings_provider_output_format">Output format</string>
     <string name="settings_provider_output_hls">HLS</string>
     <string name="settings_provider_output_ts">MPEG-TS</string>
-    <string name="settings_provider_logo_priority_playlist">Prefer logos from playlist</string>
-    <string name="settings_provider_logo_priority_epg">Prefer logos from EPG</string>
-    <string name="settings_provider_logo_priority_local">Prefer logos from local folder</string>
+    <string name="settings_provider_logo_priority_playlist">Playlist</string>
+    <string name="settings_provider_logo_priority_epg">EPG</string>
+    <string name="settings_provider_logo_priority_local">Local folder</string>
+    <string name="reorder_hint_idle">OK: pick up</string>
+    <string name="reorder_hint_active">▲▼ Move · OK: Drop · Back: Cancel</string>
     <string name="settings_logos_folder">Logos folder</string>
     <string name="settings_help_logos_folder">Local folder with channel logos. Filename = tvg-id or channel name; subfolders are included.</string>
     <string name="settings_value_not_set">Not set</string>
@@ -731,6 +733,7 @@
     <string name="settings_logos_remove_value">Remove</string>
     <string name="main_logos_folder_removed">Logos folder removed.</string>
     <string name="settings_logos_rescan_value">Run</string>
+    <string name="settings_logos_rescanning">Scanning…</string>
     <string name="main_logos_rescanned">Logos rescanned.</string>
     <string name="settings_provider_ua_hint">Leave empty to use the global User-Agent.</string>
     <string name="settings_provider_epg_none">No EPG sources created yet.</string>

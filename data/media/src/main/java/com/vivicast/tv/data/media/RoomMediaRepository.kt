@@ -109,6 +109,9 @@ class RoomMediaRepository(
     override suspend fun getChannel(providerId: String, channelId: String): Channel? =
         catalogDao.getChannel(providerId, channelId)?.toDomain()
 
+    override suspend fun getChannelLogoCandidates(channelId: String): ChannelLogoCandidates? =
+        catalogDao.getLogoCandidates(channelId)?.let { ChannelLogoCandidates(it.playlistLogoUrl, it.epgIconUrl) }
+
     override suspend fun getChannelByStableKeys(providerStableKey: String, channelStableKey: String): Channel? =
         catalogDao.getChannelByStableKeys(providerStableKey, channelStableKey)?.toDomain()
 

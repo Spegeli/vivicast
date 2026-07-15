@@ -74,7 +74,6 @@ import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState
-import com.vivicast.tv.data.provider.LOGO_PRIORITY_LOCAL
 import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
 import com.vivicast.tv.core.security.PinVerificationResult
 import com.vivicast.tv.backup.StandardBackupRestorePreview
@@ -113,8 +112,10 @@ import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.EpgProgram
+import com.vivicast.tv.domain.model.LogoSource
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.Series
+import com.vivicast.tv.domain.model.parseLogoPriorityOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -125,28 +126,32 @@ import java.util.Locale
 import java.util.TimeZone
 
 internal suspend fun AppContainer.resolveChannelLogoModel(channel: Channel): Any? {
-    // ponytail: per-channel getProvider read (cheap single-row); memoize per provider if it ever profiles hot.
-    val logoPriority = providerRepository.getProvider(channel.providerId)?.logoPriority
+    // ponytail: per-channel getProvider + getChannelLogoCandidates reads (cheap single rows); memoize per
+    // provider if it ever profiles hot on a long channel list.
+    val order = parseLogoPriorityOrder(providerRepository.getProvider(channel.providerId)?.logoPriority)
+    val candidates = mediaRepository.getChannelLogoCandidates(channel.id)
     // A matching local file that still exists on disk. The index is empty unless a folder is configured, and
-    // the exists() check makes a folder/file deleted outside the app (path still stored) skip silently and
-    // fall through to the playlist/EPG logo — no error, no dead image.
+    // the exists() check makes a folder/file deleted outside the app (path still stored) skip silently.
     suspend fun localLogo(): File? = withContext(Dispatchers.IO) {
         localLogoIndex.lookup(channel.epgChannelId, channel.name)?.takeIf { it.exists() }
     }
-    // LOCAL priority: a local file wins outright (chain: Local → Playlist → EPG).
-    if (logoPriority == LOGO_PRIORITY_LOCAL) localLogo()?.let { return it }
-    // Playlist vs EPG order is resolved in SQL (effectiveLogoUrl → channel.logoUrl). When it yields nothing
-    // (no playlist logo, no linked/mapped EPG icon), the local folder is the final fallback for every
-    // priority: Playlist → EPG → Local, EPG → Playlist → Local, Local → Playlist → EPG.
-    val logoUrl = channel.logoUrl?.takeIf { it.isNotBlank() } ?: return localLogo()
-    // Prefetched file if the refresh worker warmed it; otherwise the URL itself, which Coil loads directly.
-    return mediaCacheStore.getEntry(
-        MediaCacheKey(
-            type = MediaCacheType.ChannelLogo,
-            ownerId = channel.id,
-            sourceUrl = logoUrl,
-        ),
-    )?.file ?: logoUrl
+    // A remote URL → its prefetched cache file if the refresh worker warmed it, else the URL itself (Coil
+    // loads it directly). Blank/absent candidate → null so the source is skipped.
+    suspend fun remote(url: String?): Any? = url?.takeIf { it.isNotBlank() }?.let {
+        mediaCacheStore.getEntry(MediaCacheKey(MediaCacheType.ChannelLogo, channel.id, it))?.file ?: it
+    }
+    // Walk the playlist's user-defined source order; take the first source that yields something. A source
+    // with no logo (no playlist URL / no mapped EPG icon / no local match) is skipped — e.g. the order
+    // [Playlist, Local, EPG] with no local match resolves Playlist, then EPG.
+    for (source in order) {
+        val model = when (source) {
+            LogoSource.Playlist -> remote(candidates?.playlistLogoUrl)
+            LogoSource.Epg -> remote(candidates?.epgIconUrl)
+            LogoSource.Local -> localLogo()
+        }
+        if (model != null) return model
+    }
+    return null
 }
 
 internal suspend fun AppContainer.resolveMovieImageModel(movie: Movie, type: MediaCacheType): Any? {

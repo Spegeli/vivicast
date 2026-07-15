@@ -2,6 +2,8 @@ package com.vivicast.tv.data.provider
 
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderType
+import com.vivicast.tv.domain.model.parseLogoPriorityOrder
+import com.vivicast.tv.domain.model.serializeLogoPriorityOrder
 
 data class ProviderCreateRequest(
     val name: String,
@@ -94,21 +96,17 @@ const val REFRESH_INTERVAL_OFF = 0
 // Selectable auto-refresh intervals in the editor popup ("Aus" = REFRESH_INTERVAL_OFF, then hours).
 val REFRESH_INTERVAL_OPTIONS_HOURS = listOf(REFRESH_INTERVAL_OFF, 2, 4, 8, 16, 24, 48, 72, 96, 120, 144, 168)
 
-// Per-provider logo source preference. PLAYLIST (default) prefers the playlist's own channel logo and
-// falls back to a mapped EPG source's <icon>; EPG reverses that order (both resolved in the CatalogDao
-// effective-logo projection). LOCAL prefers a matching file from the user's local logos folder (resolved
-// App-side in resolveChannelLogoModel), falling back to the playlist order on no match.
+// Per-provider logo source order. Stored as a CSV of source tokens ("playlist,epg,local"); the user
+// orders the three sources freely per playlist. The order is owned in Kotlin (domain [parseLogoPriorityOrder]);
+// the logo resolver walks it and takes the first source that yields something. These token constants mirror
+// LogoSource.token (stable storage strings) and stay for existing single-token references / defaults.
 const val LOGO_PRIORITY_PLAYLIST = "playlist"
 const val LOGO_PRIORITY_EPG = "epg"
 const val LOGO_PRIORITY_LOCAL = "local"
 
-/** Normalizes any stored value (including the legacy "provider") to the supported priorities. */
+/** Normalizes any stored/legacy value to the canonical CSV source order (see [parseLogoPriorityOrder]). */
 fun normalizeLogoPriority(value: String?): String =
-    when (value) {
-        LOGO_PRIORITY_EPG -> LOGO_PRIORITY_EPG
-        LOGO_PRIORITY_LOCAL -> LOGO_PRIORITY_LOCAL
-        else -> LOGO_PRIORITY_PLAYLIST
-    }
+    serializeLogoPriorityOrder(parseLogoPriorityOrder(value))
 
 // Per-Xtream-provider live output format (mirrors TVMate's per-playlist switch). HLS (default) requests
 // `…/live/…/id.m3u8` → a server DVR window ExoPlayer can seek natively where the panel provides one; MPEG-TS

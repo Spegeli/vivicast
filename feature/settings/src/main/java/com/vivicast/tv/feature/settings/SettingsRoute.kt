@@ -166,6 +166,7 @@ fun SettingsRoute(
     localLogoFolder: String? = null,
     onPickLogoFolder: () -> Unit = {},
     onRescanLogos: () -> Unit = {},
+    rescanningLogos: Boolean = false,
     onRemoveLogoFolder: () -> Unit = {},
     topNavFocusRequester: FocusRequester,
     initialSelectedSection: String? = null,
@@ -405,7 +406,6 @@ fun SettingsRoute(
                             onSetProviderEnabled = viewModel::setProviderEnabled,
                             onDeleteProvider = viewModel::deleteProvider,
                             onTestProviderConnection = onTestProviderConnection,
-                            localLogosConfigured = localLogoFolder != null,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
                             onLogProviderSaved = onLogProviderSaved,
@@ -464,6 +464,7 @@ fun SettingsRoute(
                             localLogoFolder = localLogoFolder,
                             onPickLogoFolder = onPickLogoFolder,
                             onRescanLogos = onRescanLogos,
+                            rescanningLogos = rescanningLogos,
                             onRemoveLogoFolder = onRemoveLogoFolder,
                             firstFocusModifier = detailFirstFocusModifier,
                         )

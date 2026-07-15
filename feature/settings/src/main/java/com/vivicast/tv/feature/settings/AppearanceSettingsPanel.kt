@@ -156,6 +156,7 @@ internal fun AppearanceSettingsPanel(
     localLogoFolder: String? = null,
     onPickLogoFolder: () -> Unit = {},
     onRescanLogos: () -> Unit = {},
+    rescanningLogos: Boolean = false,
     onRemoveLogoFolder: () -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
@@ -226,9 +227,13 @@ internal fun AppearanceSettingsPanel(
                 VivicastSettingsRow(
                     title = stringResource(R.string.settings_logos_rescan),
                     help = stringResource(R.string.settings_help_logos_rescan),
-                    value = stringResource(R.string.settings_logos_rescan_value),
+                    value = stringResource(
+                        if (rescanningLogos) R.string.settings_logos_rescanning else R.string.settings_logos_rescan_value,
+                    ),
                     forceTextValue = true,
-                    onClick = onRescanLogos,
+                    valueLoading = rescanningLogos,
+                    // Block a second tap while a rescan runs (mirrors the diagnostics-export row).
+                    onClick = { if (!rescanningLogos) onRescanLogos() },
                 )
             }
             item {

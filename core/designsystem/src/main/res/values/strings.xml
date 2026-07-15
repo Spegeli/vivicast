@@ -38,7 +38,7 @@
     <string name="start_series">Serien</string>
 
     <!-- Language options -->
-    <string name="language_system">Systemstandard</string>
+    <string name="language_system">System</string>
     <string name="language_german">Deutsch</string>
     <string name="language_english">Englisch</string>
 
@@ -718,9 +718,11 @@
     <string name="settings_provider_output_format">Ausgabeformat</string>
     <string name="settings_provider_output_hls">HLS</string>
     <string name="settings_provider_output_ts">MPEG-TS</string>
-    <string name="settings_provider_logo_priority_playlist">Logos aus der Playlist bevorzugen</string>
-    <string name="settings_provider_logo_priority_epg">Logos aus EPG bevorzugen</string>
-    <string name="settings_provider_logo_priority_local">Logos aus lokalem Ordner bevorzugen</string>
+    <string name="settings_provider_logo_priority_playlist">Playlist</string>
+    <string name="settings_provider_logo_priority_epg">EPG</string>
+    <string name="settings_provider_logo_priority_local">Lokaler Ordner</string>
+    <string name="reorder_hint_idle">OK: Aufnehmen</string>
+    <string name="reorder_hint_active">▲▼ Verschieben · OK: Ablegen · Zurück: Abbrechen</string>
     <string name="settings_logos_folder">Logos-Ordner</string>
     <string name="settings_help_logos_folder">Lokaler Ordner mit Sender-Logos. Dateiname = tvg-id oder Sendername; Unterordner werden mitgelesen.</string>
     <string name="settings_value_not_set">Nicht gesetzt</string>
@@ -731,6 +733,7 @@
     <string name="settings_logos_remove_value">Entfernen</string>
     <string name="main_logos_folder_removed">Logos-Ordner entfernt.</string>
     <string name="settings_logos_rescan_value">Ausführen</string>
+    <string name="settings_logos_rescanning">Wird eingelesen…</string>
     <string name="main_logos_rescanned">Logos neu eingelesen.</string>
     <string name="settings_provider_ua_hint">Leer lassen für den globalen User-Agent.</string>
     <string name="settings_provider_epg_none">Noch keine EPG-Quellen angelegt.</string>

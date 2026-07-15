@@ -344,17 +344,19 @@ class RoomMediaRepositoryTest {
             ),
         )
 
-        // Playlist-first (default): a channel with a playlist logo keeps it; a logo-less channel falls back to EPG.
-        setProviderLogoPriority("playlist")
-        val playlistFirst = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
-        assertEquals("https://logos.example/ard.png", playlistFirst.getValue("ARD HD").logoUrl)
-        assertEquals("https://epg.example/dune.png", playlistFirst.getValue("Dune TV").logoUrl)
+        // effectiveLogoUrl is now order-AGNOSTIC: the playlist logo if present, else the mapped EPG icon.
+        // It feeds only the display key + logoMissing heuristic; the user-ordered choice across
+        // playlist/EPG/local moved to the App resolver. So logoPriority no longer changes this projection.
+        setProviderLogoPriority("playlist,epg,local")
+        val anyRemote = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
+        assertEquals("https://logos.example/ard.png", anyRemote.getValue("ARD HD").logoUrl)
+        assertEquals("https://epg.example/dune.png", anyRemote.getValue("Dune TV").logoUrl)
 
-        // EPG-first: both channels prefer the mapped EPG icon over the playlist logo.
-        setProviderLogoPriority("epg")
-        val epgFirst = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
-        assertEquals("https://epg.example/ard.png", epgFirst.getValue("ARD HD").logoUrl)
-        assertEquals("https://epg.example/dune.png", epgFirst.getValue("Dune TV").logoUrl)
+        // Reordering the sources does NOT change the repository projection (resolution is App-side now).
+        setProviderLogoPriority("epg,playlist,local")
+        val reordered = repository.observeChannels(PROVIDER_ID, LIVE_CATEGORY_ID).first().associateBy { it.name }
+        assertEquals("https://logos.example/ard.png", reordered.getValue("ARD HD").logoUrl)
+        assertEquals("https://epg.example/dune.png", reordered.getValue("Dune TV").logoUrl)
     }
 
     private suspend fun setProviderLogoPriority(priority: String) {

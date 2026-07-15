@@ -270,6 +270,7 @@ private fun VivicastApp(
     var filePickerRequest by remember { mutableStateOf<FilePickerRequest?>(null) }
     // Drives the "Diagnoseprotokoll exportieren" row spinner while the export runs (after folder pick).
     var diagnosticsExporting by remember { mutableStateOf(false) }
+    var rescanningLogos by remember { mutableStateOf(false) }
     // Backup export: the folder chosen in the picker, held while the passphrase dialog is shown.
     var pendingBackupExportDir by remember { mutableStateOf<File?>(null) }
     // True while the backup is being written — keeps the passphrase dialog open with a button spinner.
@@ -940,13 +941,19 @@ private fun VivicastApp(
                 },
                 onRescanLogos = {
                     // Same folder → the pref doesn't change, so rescan explicitly (for files added/removed live).
+                    rescanningLogos = true
                     scope.launch {
-                        val folder = preferences.localLogoFolder?.let { File(it) }
-                        val count = appContainer.localLogoIndex.rebuild(folder)
-                        appContainer.diagnosticsStore.logLogoIndex(folder, count)
-                        Toast.makeText(context, context.getString(R.string.main_logos_rescanned), Toast.LENGTH_SHORT).show()
+                        try {
+                            val folder = preferences.localLogoFolder?.let { File(it) }
+                            val count = appContainer.localLogoIndex.rebuild(folder)
+                            appContainer.diagnosticsStore.logLogoIndex(folder, count)
+                            Toast.makeText(context, context.getString(R.string.main_logos_rescanned), Toast.LENGTH_SHORT).show()
+                        } finally {
+                            rescanningLogos = false
+                        }
                     }
                 },
+                rescanningLogos = rescanningLogos,
                 onRemoveLogoFolder = {
                     // Clearing the pref triggers the localLogoFolder LaunchedEffect, which empties the index.
                     scope.launch {
