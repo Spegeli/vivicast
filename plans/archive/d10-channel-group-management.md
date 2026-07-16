@@ -1,6 +1,7 @@
 # D10 — per-playlist channel-GROUP management: show / hide / sort
 
-Status: **IMPLEMENTED + owner-driven on emulator (2026-07-16).**
+Status: **✅ COMPLETED / ABGESCHLOSSEN (2026-07-16)** — implemented, owner-driven on emulator, audited,
+committed + pushed to main (`ed791f7`), archived.
 
 ### Update 2026-07-16 (post non-blocking-imports)
 - Group-panel drive fully done: all-visible chips, focus-escape fixes, reorder as a `VivicastDialog` overlay,

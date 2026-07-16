@@ -119,6 +119,10 @@ Navigations- oder lokalisiertes-Messaging (bei `suspend Result`-VM-Events) — a
 - **Baseline: 36 Einträge** — bekannte große Composables/Routes (`PlayerRoute`, `VivicastApp`,
   `RoomLiveTvRoute`/`RoomMoviesRoute`/`RoomSeriesRoute`/`HomeContent`, Settings-Composables), DAOs
   (`CatalogDao`, `EpgDao`), `SettingsViewModel` (TooManyFunctions), `StandardBackupRestoreValidator`.
+  - _Nachtrag (post-Remediation, 2026-07-16):_ Die 36 ist der Stand **bei Remediation-Abschluss**; die
+    Baseline steht inzwischen bei **34** Einträgen. Spätere Feature-Arbeit (D10 Gruppen-Verwaltung,
+    Playlist-Aktions-Menü, non-blocking staged DB-Imports v18) hat sie neu justiert — u.a.
+    `RoomCatalogImportRepository` (TooManyFunctions) und `SettingsRoute` (zusätzliche Callback-Params).
 - Keine neuen nicht-baselined God-Files.
 - `VivicastComponents.kt` **entfernt**; 9 kohäsive Designsystem-Dateien (Surfaces/Layout/Badges/Panels/
   Dialogs/Inputs/Cards/Navigation/Player) + `VivicastTheme.kt`.

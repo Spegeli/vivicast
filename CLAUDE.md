@@ -42,6 +42,12 @@ The P0–P3 architecture remediation is **completed** (see the completion report
 - The designsystem is split into grouped `Vivicast*.kt` files (`VivicastComponents.kt` no longer exists).
 - A detekt size/complexity gate exists.
 
+Post-remediation feature work (2026-07-16, on main): a **playlist actions-menu** (Overview → Actions →
+Editor/Groups), **per-playlist channel-GROUP management** (show/hide, sort mode playlist/name/manual,
+manual reorder, new-groups policy; Room **v17** — `manualSortOrder` + `provider_category_settings`), and
+**non-blocking staged DB imports** (Room **v18** — catalog/EPG imports stage chunked, then a fingerprint
+delta-merge, so interactive writes don't block on a background refresh; implements the ADR-012 pipeline).
+
 ## Active App Architecture References
 
 Only these three docs are active app-architecture references:
@@ -116,7 +122,8 @@ app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPrefer
 core/
   cache/      ← M3uStreamReferenceStore, MediaCache
   common/     ← AppResult
-  database/   ← Room DB, DAOs (Provider, Catalog, EPG, Favorites, Playback, Search)
+  database/   ← Room DB (v18), DAOs (Provider, Catalog, CategorySettings, EPG, Favorites, Playback,
+                Search); staged delta-merge import infra (ChunkedTransaction, SyncFingerprint, *_stage entities)
   datastore/  ← UserPreferencesStore
   designsystem/ ← VivicastTheme + grouped components: VivicastSurfaces / Layout / Badges / Panels /
                 Dialogs / Inputs / Cards / Navigation / Player (no VivicastComponents.kt)
@@ -126,7 +133,7 @@ core/
 data/
   epg/        ← EpgRepository, EpgImportRepository
   favorites/  ← FavoritesRepository
-  media/      ← MediaRepository, CatalogImportRepository
+  media/      ← MediaRepository, CatalogImportRepository (staged delta-merge), CategoryGroupRepository
   playback/   ← PlaybackRepository, PlaybackStreamResolver, PlaybackProgressRules,
                 PlaybackRequestFactory, PlaybackProgressRecorder
   provider/   ← ProviderRepository, ProviderConfigurationModels, TestProviderConnectionUseCase
@@ -138,7 +145,8 @@ feature/      ← each feature = Route + ViewModel + UiState (+ ViewModelFactory
   player/     ← PlayerRoute (realtime player; reads controller state via collectAsState)
   search/     ← SearchRoute, SearchViewModel, SearchUiState
   series/     ← SeriesRoute, SeriesViewModel, SeriesUiState
-  settings/   ← SettingsRoute, SettingsViewModel, SettingsUiState + panels
+  settings/   ← SettingsRoute, SettingsViewModel, SettingsUiState + panels (incl. ProviderActionsPanel,
+                ProviderGroupsPanel)
 iptv/
   m3u/        ← M3uParser + Contracts
   xmltv/      ← XmltvParser + Contracts

@@ -1,6 +1,7 @@
 # Playlist actions-menu restructure (intermediate detail/actions view)
 
-Status: **IMPLEMENTED + owner-driven on emulator (2026-07-16).**
+Status: **✅ COMPLETED / ABGESCHLOSSEN (2026-07-16)** — implemented, owner-driven on emulator, audited,
+committed + pushed to main (`ed791f7`), archived.
 
 ### Update 2026-07-16 (post non-blocking-imports)
 - Actions menu fully driven: header "Updated" right-aligned, focus-escape fixes, per-provider refresh label

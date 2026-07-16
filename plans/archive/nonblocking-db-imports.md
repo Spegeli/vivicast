@@ -1,7 +1,9 @@
 # Plan: Non-blocking DB Imports — staged + fingerprint delta-merge
 
-Status: **IMPLEMENTED + verified (GO 2026-07-16).** detekt (baseline 34) / full unit tests / assembleDebug
-green; migration + EPG + catalog androidTests pass on API 28 floor + API 36 ceiling; app boots clean on v18.
+Status: **✅ COMPLETED / ABGESCHLOSSEN (2026-07-16)** — implemented, verified, audited (no cross-feature
+conflicts), committed + pushed to main (`ed791f7`), archived. detekt (baseline 34) / full unit tests /
+assembleDebug green; migration + EPG + catalog androidTests pass on API 28 floor + API 36 ceiling; app boots
+clean on v18.
 Supersedes the earlier hybrid/rowid drafts. Decision recorded in §2.
 
 ### Implementation status (2026-07-16)

@@ -46,9 +46,10 @@ formatter in the project).
 
 ## Why a baseline exists
 
-`config/detekt/baseline.xml` records the **36** size/complexity violations that already existed when
-the gate was introduced, so the gate does not block the build on accepted legacy files while still
-failing on anything **new**. These are known/accepted and intentionally not refactored here.
+`config/detekt/baseline.xml` records the size/complexity violations that already existed when the gate
+was introduced (originally **36**; **34** currently, after later feature work — D10 group management +
+the non-blocking-import rebuild), so the gate does not block the build on accepted legacy files while
+still failing on anything **new**. These are known/accepted and intentionally not refactored here.
 
 ### Known large files tolerated via baseline
 
@@ -61,6 +62,10 @@ failing on anything **new**. These are known/accepted and intentionally not refa
   `PlaybackSettingsPanel`, `SettingsRowIcon`.
 - `feature/settings/.../SettingsViewModel.kt` (`TooManyFunctions` — aggregates all settings sections).
 - Room DAOs `CatalogDao`, `EpgDao` (`TooManyFunctions`).
+- `data/media/.../RoomCatalogImportRepository.kt` (`TooManyFunctions` — the staged delta-merge import
+  helpers added by the non-blocking-import rebuild).
+- `feature/settings/.../SettingsRoute.kt` (`LongParameterList`/`LongMethod`/`CyclomaticComplexMethod` — a
+  large route host; the diagnostics-log callbacks added a couple more params).
 - `StandardBackupRestoreValidator.kt` validation method.
 
 `core/designsystem/VivicastComponents.kt` was split in P2-06 into nine cohesive designsystem files
