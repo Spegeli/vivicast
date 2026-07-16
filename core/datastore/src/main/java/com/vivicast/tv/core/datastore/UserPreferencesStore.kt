@@ -114,7 +114,7 @@ enum class LanguagePreference { System, German, English }
 
 enum class AnimationSpeedPreference { Off, Slow, Normal, Fast }
 
-enum class BufferSizePreference { Off, Small, Medium, Large, ExtraLarge }
+enum class BufferSizePreference { Off, Small, Medium, Large }
 
 enum class DecoderPreference { Hardware, Software }
 

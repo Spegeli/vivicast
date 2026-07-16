@@ -117,6 +117,9 @@ internal fun AboutSettingsPanel(
     val legalBackFocus = remember { FocusRequester() }
     val legalRowFocus = remember { FocusRequester() }
     val legalTermsRowFocus = remember { FocusRequester() }
+    var showTechnical by remember { mutableStateOf(false) }
+    val technicalRowFocus = remember { FocusRequester() }
+    val technicalBackFocus = remember { FocusRequester() }
     val legalTitle = activeLegalPage?.let { stringResource(it.titleRes) }.orEmpty()
     val legalParagraphs = activeLegalPage?.let { stringResource(it.bodyRes).split("\n\n") }.orEmpty()
     // Close: move focus back to the row that OPENED the overlay FIRST, then drop the overlay. Removing the
@@ -128,44 +131,38 @@ internal fun AboutSettingsPanel(
     }
     // OK on the rail section collapses the open legal page to the overview. Focus is on the rail (not the
     // overlay), so unlike closeLegal this just drops the page without a row-refocus. No-op if none open.
+    val closeTechnical = {
+        runCatching { technicalRowFocus.requestFocus() }
+        showTechnical = false
+    }
     LaunchedEffect(collapseSubViewSignal) {
-        if (legalPage != null) {
-            legalPage = null
-        }
+        if (legalPage != null) legalPage = null
+        if (showTechnical) showTechnical = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Hidden (but kept composed, so the focused legal row survives) while a legal page is open — the
         // legal overlay renders transparently over it on the host GlassPanel background.
         LazyColumn(
-            modifier = Modifier.alpha(if (activeLegalPage != null) 0f else 1f),
+            modifier = Modifier.alpha(if (activeLegalPage != null || showTechnical) 0f else 1f),
             verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
         ) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_app_version_title),
                 help = stringResource(R.string.about_help_version),
-                value = state.appVersion,
+                value = stringResource(R.string.about_version_build_format, state.appVersion, state.buildNumber),
                 modifier = firstFocusModifier,
             )
         }
         item {
-            VivicastSettingsRow(title = stringResource(R.string.about_build_number), help = stringResource(R.string.about_help_build), value = state.buildNumber)
-        }
-        item {
-            VivicastSettingsRow(title = stringResource(R.string.about_package_name), help = stringResource(R.string.about_help_package), value = state.packageName)
-        }
-        item {
-            VivicastSettingsRow(title = stringResource(R.string.about_db_version), help = stringResource(R.string.about_help_db), value = state.databaseVersion.toString())
-        }
-        item {
-            VivicastSettingsRow(title = stringResource(R.string.about_android_version), help = stringResource(R.string.about_help_android), value = state.androidVersion)
-        }
-        item {
-            VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = state.deviceModel)
-        }
-        item {
-            VivicastSettingsRow(title = stringResource(R.string.about_player_engine), help = stringResource(R.string.about_help_player_engine), value = state.playerEngine)
+            VivicastSettingsRow(
+                title = stringResource(R.string.about_technical_details),
+                help = stringResource(R.string.about_help_technical_details),
+                value = stringResource(R.string.about_open_value),
+                modifier = Modifier.focusRequester(technicalRowFocus),
+                onClick = { showTechnical = true },
+            )
         }
         item {
             VivicastSettingsRow(
@@ -219,6 +216,14 @@ internal fun AboutSettingsPanel(
                 onClose = closeLegal,
             )
         }
+        if (showTechnical) {
+            TechnicalDetailsOverlay(
+                state = state,
+                backFocus = technicalBackFocus,
+                firstFocusModifier = firstFocusModifier,
+                onClose = closeTechnical,
+            )
+        }
     }
 }
 
@@ -257,6 +262,43 @@ private fun AboutLegalOverlay(
                 },
             )
         }
+    }
+}
+
+// Technical-details sub-page: mirrors AboutLegalOverlay (alpha-hides the About list, renders over the host
+// GlassPanel, Back closes + refocuses the opening row). Read-only info rows; the first blocks Up so focus
+// can't escape to the top nav (which navigates on focus).
+@Composable
+private fun TechnicalDetailsOverlay(
+    state: AboutAppState,
+    backFocus: FocusRequester,
+    firstFocusModifier: Modifier,
+    onClose: () -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    LaunchedEffect(Unit) { runCatching { backFocus.requestFocus() } }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        item { SectionTitle(text = stringResource(R.string.about_technical_details)) }
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.about_package_name),
+                help = stringResource(R.string.about_help_package),
+                value = state.packageName,
+                modifier = firstFocusModifier
+                    .focusRequester(backFocus)
+                    .focusProperties { up = FocusRequester.Cancel },
+            )
+        }
+        item { VivicastSettingsRow(title = stringResource(R.string.about_build_type), help = stringResource(R.string.about_help_build_type), value = state.buildType) }
+        item { VivicastSettingsRow(title = stringResource(R.string.about_player_engine), help = stringResource(R.string.about_help_player_engine), value = state.playerEngine) }
+        item { VivicastSettingsRow(title = stringResource(R.string.about_db_version), help = stringResource(R.string.about_help_db), value = state.databaseVersion.toString()) }
+        item { VivicastSettingsRow(title = stringResource(R.string.about_android_version), help = stringResource(R.string.about_help_android), value = state.androidVersion) }
+        // CPU architecture folded into the device model in parens (e.g. "Xiaomi TV 4 (arm64-v8a)") — one
+        // fewer row. cpuAbi stays a separate field for the diagnostics export.
+        item { VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = stringResource(R.string.about_model_abi_format, state.deviceModel, state.cpuAbi)) }
     }
 }
 

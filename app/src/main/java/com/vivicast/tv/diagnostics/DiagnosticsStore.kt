@@ -163,9 +163,13 @@ class DiagnosticsStore(
         val coveredTo = fileEntries.mapNotNull { it.second.lastAt }.maxOrNull()
         return JSONObject()
             .put("appVersion", about.appVersion)
+            .put("buildNumber", about.buildNumber)
             .put("packageName", about.packageName)
             .put("androidVersion", about.androidVersion)
             .put("deviceModel", about.deviceModel)
+            .put("playerEngine", about.playerEngine)
+            .put("buildType", about.buildType)
+            .put("cpuAbi", about.cpuAbi)
             .put("databaseVersion", about.databaseVersion)
             .put("language", about.languageTag)
             .put("timeZone", about.timeZoneId)
@@ -228,6 +232,10 @@ data class DiagnosticsAbout(
     val databaseVersion: Int,
     val androidVersion: String,
     val deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+    val buildNumber: String = "0",
+    val playerEngine: String = "Media3/ExoPlayer",
+    val buildType: String = "Unbekannt",
+    val cpuAbi: String = "Unbekannt",
     val languageTag: String = Locale.getDefault().toLanguageTag(),
     val timeZoneId: String = TimeZone.getDefault().id,
 )

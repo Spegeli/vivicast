@@ -1,6 +1,7 @@
 package com.vivicast.tv.core.player
 
 import android.content.Context
+import androidx.media3.common.MediaLibraryInfo
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -42,7 +43,7 @@ data class PlaybackTuning(
 enum class DecoderMode { Hardware, Software }
 
 /** Core-player-local buffer tier (App maps DataStore's BufferSizePreference onto this). */
-enum class BufferTier { Off, Small, Medium, Large, ExtraLarge }
+enum class BufferTier { Off, Small, Medium, Large }
 
 /** ExoPlayer LoadControl buffer durations in ms. */
 data class BufferDurations(val minMs: Int, val maxMs: Int, val forPlaybackMs: Int, val afterRebufferMs: Int)
@@ -57,8 +58,10 @@ fun BufferTier.toBufferDurations(): BufferDurations = when (this) {
     BufferTier.Small -> BufferDurations(5000, 15000, 1500, 2500)
     BufferTier.Medium -> BufferDurations(15000, 30000, 2500, 5000)
     BufferTier.Large -> BufferDurations(30000, 60000, 2500, 5000)
-    BufferTier.ExtraLarge -> BufferDurations(60000, 120000, 3000, 6000)
 }
+
+/** Player engine label including the bundled Media3 version, for the About screen + diagnostics export. */
+fun playerEngineLabel(): String = "Media3/ExoPlayer ${MediaLibraryInfo.VERSION}"
 
 /**
  * Reorders MediaCodec candidates to put software-only platform codecs first when the tuning requests

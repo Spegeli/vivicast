@@ -564,10 +564,10 @@ class SettingsViewModelTest {
         val vm = newViewModel(scope, store)
 
         vm.onPlaybackSettingsChanged(
-            PlaybackSettingsState(bufferSize = PlaybackBufferSizeMode.ExtraLarge, autoNextEnabled = true, autoNextCountdownSeconds = 20),
+            PlaybackSettingsState(bufferSize = PlaybackBufferSizeMode.Large, autoNextEnabled = true, autoNextCountdownSeconds = 20),
         )
 
-        assertEquals(BufferSizePreference.ExtraLarge, store.flow.value.playback.bufferSize)
+        assertEquals(BufferSizePreference.Large, store.flow.value.playback.bufferSize)
         assertEquals(true, store.flow.value.playback.autoNextEnabled)
         assertEquals(20, store.flow.value.playback.autoNextCountdownSeconds)
         scope.cancel()

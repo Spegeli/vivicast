@@ -401,7 +401,7 @@ class StandardBackupTest {
                         fontScale = FontScalePreference.Large,
                     ),
                     playback = PlaybackPreferences(
-                        bufferSize = BufferSizePreference.ExtraLarge,
+                        bufferSize = BufferSizePreference.Large,
                         afrEnabled = true,
                         audioPassthroughEnabled = true,
                         autoNextCountdownSeconds = 42,
@@ -420,7 +420,7 @@ class StandardBackupTest {
             // Audit #3: backed-up settings are re-applied on restore...
             assertEquals(ThemeColor.Green, preferencesStore.appearance.backgroundColor)
             assertEquals(FontScalePreference.Large, preferencesStore.appearance.fontScale)
-            assertEquals(BufferSizePreference.ExtraLarge, preferencesStore.playback.bufferSize)
+            assertEquals(BufferSizePreference.Large, preferencesStore.playback.bufferSize)
             assertTrue(preferencesStore.playback.afrEnabled)
             assertTrue(preferencesStore.playback.audioPassthroughEnabled)
             assertEquals(42, preferencesStore.playback.autoNextCountdownSeconds)

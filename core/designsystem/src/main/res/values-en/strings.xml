@@ -226,8 +226,6 @@
     <string name="size_small">Small</string>
     <string name="size_medium">Medium</string>
     <string name="size_large">Large</string>
-    <string name="size_very_large">Very large</string>
-
     <!-- Decoder options -->
     <string name="decoder_hardware">Hardware</string>
     <string name="decoder_software">Software</string>
@@ -617,8 +615,12 @@
     <!-- About section -->
     <string name="about_app_version_title">App version</string>
     <string name="about_help_version">Installed app version.</string>
-    <string name="about_build_number">Build number</string>
-    <string name="about_help_build">Internal app build number.</string>
+    <string name="about_version_build_format">%1$s (Build %2$s)</string>
+    <string name="about_technical_details">Technical details</string>
+    <string name="about_help_technical_details">Version, device and player for support/diagnostics.</string>
+    <string name="about_build_type">Build type</string>
+    <string name="about_help_build_type">Debug or release build of the app.</string>
+    <string name="about_model_abi_format">%1$s (%2$s)</string>
     <string name="about_package_name">Package name</string>
     <string name="about_help_package">Android Application ID.</string>
     <string name="about_db_version">Database version</string>

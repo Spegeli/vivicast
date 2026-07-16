@@ -295,7 +295,6 @@ private fun PlaybackBufferSizeMode.label(): String = when (this) {
     PlaybackBufferSizeMode.Small -> stringResource(R.string.size_small)
     PlaybackBufferSizeMode.Medium -> stringResource(R.string.size_medium)
     PlaybackBufferSizeMode.Large -> stringResource(R.string.size_large)
-    PlaybackBufferSizeMode.ExtraLarge -> stringResource(R.string.size_very_large)
 }
 
 @Composable

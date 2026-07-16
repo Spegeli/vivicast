@@ -89,7 +89,6 @@ internal fun BufferSizePreference.toSettingsBufferSizeMode(): PlaybackBufferSize
         BufferSizePreference.Small -> PlaybackBufferSizeMode.Small
         BufferSizePreference.Medium -> PlaybackBufferSizeMode.Medium
         BufferSizePreference.Large -> PlaybackBufferSizeMode.Large
-        BufferSizePreference.ExtraLarge -> PlaybackBufferSizeMode.ExtraLarge
     }
 
 internal fun PlaybackBufferSizeMode.toDataStoreBufferSizePreference(): BufferSizePreference =
@@ -98,7 +97,6 @@ internal fun PlaybackBufferSizeMode.toDataStoreBufferSizePreference(): BufferSiz
         PlaybackBufferSizeMode.Small -> BufferSizePreference.Small
         PlaybackBufferSizeMode.Medium -> BufferSizePreference.Medium
         PlaybackBufferSizeMode.Large -> BufferSizePreference.Large
-        PlaybackBufferSizeMode.ExtraLarge -> BufferSizePreference.ExtraLarge
     }
 
 internal fun DecoderPreference.toSettingsDecoderMode(): PlaybackDecoderMode =

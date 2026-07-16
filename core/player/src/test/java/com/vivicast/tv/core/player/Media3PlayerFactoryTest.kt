@@ -21,7 +21,7 @@ class Media3PlayerFactoryTest {
         }
         // Spec-signed-off anchors.
         assertEquals(BufferDurations(15000, 30000, 2500, 5000), BufferTier.Medium.toBufferDurations())
-        assertEquals(BufferDurations(60000, 120000, 3000, 6000), BufferTier.ExtraLarge.toBufferDurations())
+        assertEquals(BufferDurations(30000, 60000, 2500, 5000), BufferTier.Large.toBufferDurations())
     }
 
     @Test

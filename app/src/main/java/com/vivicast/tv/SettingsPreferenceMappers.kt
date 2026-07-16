@@ -177,9 +177,11 @@ internal fun Context.aboutAppState(): AboutAppState {
         buildNumber = buildNumber,
         packageName = packageName,
         databaseVersion = VIVICAST_DATABASE_VERSION,
-        androidVersion = Build.VERSION.RELEASE ?: "Unbekannt",
+        androidVersion = "${Build.VERSION.RELEASE ?: "?"} (API ${Build.VERSION.SDK_INT})",
         deviceModel = deviceModel,
-        playerEngine = "Media3/ExoPlayer",
+        playerEngine = com.vivicast.tv.core.player.playerEngineLabel(),
+        buildType = if (com.vivicast.tv.BuildConfig.DEBUG) "Debug" else "Release",
+        cpuAbi = Build.SUPPORTED_ABIS.firstOrNull() ?: "Unbekannt",
         languageTag = languageTag,
         timeZoneId = timeZoneId,
     )
@@ -193,6 +195,10 @@ internal fun Context.diagnosticsAbout(): DiagnosticsAbout =
             databaseVersion = state.databaseVersion,
             androidVersion = state.androidVersion,
             deviceModel = state.deviceModel,
+            buildNumber = state.buildNumber,
+            playerEngine = state.playerEngine,
+            buildType = state.buildType,
+            cpuAbi = state.cpuAbi,
             languageTag = state.languageTag,
             timeZoneId = state.timeZoneId,
         )
@@ -235,7 +241,6 @@ private fun BufferSizePreference.toBufferTier(): BufferTier =
         BufferSizePreference.Small -> BufferTier.Small
         BufferSizePreference.Medium -> BufferTier.Medium
         BufferSizePreference.Large -> BufferTier.Large
-        BufferSizePreference.ExtraLarge -> BufferTier.ExtraLarge
     }
 
 private fun DecoderPreference.toDecoderMode(): DecoderMode =

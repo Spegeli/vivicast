@@ -106,7 +106,6 @@ enum class PlaybackBufferSizeMode {
     Small,
     Medium,
     Large,
-    ExtraLarge,
 }
 
 enum class PlaybackDecoderMode {
@@ -116,9 +115,9 @@ enum class PlaybackDecoderMode {
 
 enum class PlaybackAudioLanguage {
     SystemDefault,
+    Original,
     German,
     English,
-    Original,
 }
 
 enum class PlaybackSubtitleLanguage {
@@ -136,6 +135,8 @@ data class AboutAppState(
     val androidVersion: String = "Unbekannt",
     val deviceModel: String = "Unbekannt",
     val playerEngine: String = "Media3/ExoPlayer",
+    val buildType: String = "Unbekannt",
+    val cpuAbi: String = "Unbekannt",
     val languageTag: String = "Unbekannt",
     val timeZoneId: String = "Unbekannt",
 )
