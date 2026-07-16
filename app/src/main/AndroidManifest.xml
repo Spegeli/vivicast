@@ -39,12 +39,15 @@
         android:name=".VivicastApplication"
         android:allowBackup="false"
         android:banner="@drawable/banner"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.Vivicast">
         <activity
             android:name=".MainActivity"
+            android:banner="@drawable/banner"
             android:exported="true">
             <meta-data
                 android:name="android.app.searchable"

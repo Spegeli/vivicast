@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500">
+  <!-- Feature Graphic 1024x500. Logo-Block zentriert (Block-Mitte auf 512, translate 121.7).
+       Tagline mittig unter der Wortmarke (x=676 = Wortmarken-Mitte). Export 24-bit PNG, KEIN Alpha.
+       Wortmarke vor Export in Pfade wandeln. -->
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5FE0FF"/>
+      <stop offset="1" stop-color="#00B4F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="#050914"/>
+  <g transform="translate(121.7 -32) scale(2.8)">
+    <g transform="translate(8 35) scale(1.0185)">
+      <path d="M74 81.5 A34 34 0 1 1 74 26.5" fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round"/>
+      <path d="M40 45 L54 70 L68 45" fill="none" stroke="#00C8FF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <path d="M97 77 L97 103 L120 90 Z" fill="url(#pg)" stroke="url(#pg)" stroke-width="5" stroke-linejoin="round"/>
+    <text x="140" y="103" font-family="system-ui,'Segoe UI',Roboto,sans-serif" font-size="32" font-weight="700" fill="#F8FAFC"><tspan fill="#00C8FF">V</tspan>ivicast</text>
+  </g>
+  <text x="676" y="300" text-anchor="middle" font-family="system-ui,'Segoe UI',Roboto,sans-serif" font-size="34" font-weight="500" fill="#94A3B8">IPTV · Live-TV · Filme · Serien</text>
+</svg>

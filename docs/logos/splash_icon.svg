@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- Splash-Icon (Android 12+). Motiv im inneren ~288dp (scale .8). Transparent. Zentriert. -->
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5FE0FF"/>
+      <stop offset="1" stop-color="#00B4F0"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(54 54) scale(0.8) translate(-54 -54)">
+    <path d="M64.85 78.3 A30 30 0 1 1 64.85 29.7" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"/>
+    <path d="M33.25 44 L47.25 68 L61.25 44" fill="none" stroke="#00C8FF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M75.75 45 L75.75 63 L93.75 54 Z" fill="url(#pg)" stroke="url(#pg)" stroke-width="4" stroke-linejoin="round"/>
+  </g>
+</svg>

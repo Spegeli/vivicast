@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <!-- Play-Store TV-Banner 1280x720 = zentrierter banner_320x180 exakt x4. Export als 24-bit PNG, KEIN Alpha. -->
+  <defs>
+    <linearGradient id="pg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5FE0FF"/>
+      <stop offset="1" stop-color="#00B4F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="#050914"/>
+  <g transform="scale(4)">
+    <g transform="translate(20.6 0)">
+      <g transform="translate(8 35) scale(1.0185)">
+        <path d="M74 81.5 A34 34 0 1 1 74 26.5" fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round"/>
+        <path d="M40 45 L54 70 L68 45" fill="none" stroke="#00C8FF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <path d="M97 77 L97 103 L120 90 Z" fill="url(#pg)" stroke="url(#pg)" stroke-width="5" stroke-linejoin="round"/>
+      <text x="140" y="103" font-family="system-ui,'Segoe UI',Roboto,sans-serif" font-size="32" font-weight="700" fill="#F8FAFC"><tspan fill="#00C8FF">V</tspan>ivicast</text>
+    </g>
+  </g>
+</svg>
