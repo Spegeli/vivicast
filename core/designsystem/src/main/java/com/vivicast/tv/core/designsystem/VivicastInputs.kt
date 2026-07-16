@@ -325,7 +325,9 @@ fun VivicastSettingsRow(
     // Shows a small spinner before the value while a row-triggered background action runs (e.g. an
     // in-flight diagnostics export). The caller swaps [value] to a "Wird …" text in the same state.
     valueLoading: Boolean = false,
-    onClick: () -> Unit = {},
+    // Null = a pure display row: no action, and no chevron (the chevron would misread as "tappable").
+    // A non-null handler makes the row actionable and shows the "›" affordance.
+    onClick: (() -> Unit)? = null,
 ) {
     val scheme = LocalVivicastColors.current
     val disabledColor = VivicastColors.TextSecondary.copy(alpha = 0.55f)
@@ -374,7 +376,7 @@ fun VivicastSettingsRow(
                         },
                     ),
                 )
-                if (enabled) {
+                if (enabled && onClick != null) {
                     Spacer(modifier = Modifier.width(VivicastSpacing.Space2))
                     Text(
                         text = "›",
