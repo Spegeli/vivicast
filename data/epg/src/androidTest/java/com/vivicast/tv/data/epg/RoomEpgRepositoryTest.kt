@@ -201,6 +201,54 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun importXmltvDeltaMergeUpdatesChangedKeepsUnchangedRemovesGone() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = "epg-source-1", name = "Public EPG", sourceConfigKey = "secure:epg-source-1", timeShiftMinutes = 0, isActive = true),
+        )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
+        val ard = XmltvChannel(id = "ard.de", displayNames = listOf("ARD"), iconUrl = null)
+
+        // Import A: Tagesschau (description "old") + Brennpunkt.
+        repository.importXmltv(
+            PROVIDER_ID,
+            "epg-source-1",
+            XmltvDocument(
+                channels = listOf(ard),
+                programs = listOf(
+                    XmltvProgram("ard.de", 1_000L, 2_000L, "Tagesschau", null, "old", null, null, false),
+                    XmltvProgram("ard.de", 2_000L, 3_000L, "Brennpunkt", null, null, null, null, false),
+                ),
+                skippedPrograms = 0,
+            ),
+        )
+        assertEquals(2, countPrograms(PROVIDER_ID, "epg-source-1"))
+
+        // Import B: Tagesschau description changed (same id -> updated in place), Brennpunkt dropped
+        // (removed -> deleted), Mittagsmagazin added (new -> inserted).
+        repository.importXmltv(
+            PROVIDER_ID,
+            "epg-source-1",
+            XmltvDocument(
+                channels = listOf(ard),
+                programs = listOf(
+                    XmltvProgram("ard.de", 1_000L, 2_000L, "Tagesschau", null, "new", null, null, false),
+                    XmltvProgram("ard.de", 3_000L, 4_000L, "Mittagsmagazin", null, null, null, null, false),
+                ),
+                skippedPrograms = 0,
+            ),
+        )
+
+        val programs = repository.observeProgramsForChannel(PROVIDER_ID, "channel-ard", 0L, Long.MAX_VALUE)
+            .first().sortedBy { it.startTime }
+        assertEquals(listOf("Tagesschau", "Mittagsmagazin"), programs.map { it.title })
+        assertEquals("new", programs.first { it.title == "Tagesschau" }.description)
+        assertEquals(2, countPrograms(PROVIDER_ID, "epg-source-1"))
+        // Staging is transient — drained after every import.
+        assertEquals(0, countTable("epg_programs_stage"))
+    }
+
+    @Test
     fun saveEpgSourceRejectsDuplicateNameButAllowsEditingSelf() = runBlocking {
         repository.saveEpgSource(
             EpgSourceSaveRequest(sourceId = "s1", name = "News EPG", sourceConfigKey = "secure:s1", timeShiftMinutes = 0, isActive = true),

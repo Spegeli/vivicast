@@ -15,7 +15,12 @@ import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.domain.model.Category
+import com.vivicast.tv.domain.model.CategoryGroupSettings
+import com.vivicast.tv.domain.model.CategorySortMode
+import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.domain.model.Channel
@@ -48,6 +53,7 @@ internal class SettingsViewModel(
     private val mediaCacheStore: MediaCacheStore,
     private val epgSourceRepository: EpgSourceRepository,
     private val providerRepository: ProviderRepository,
+    private val categoryGroupRepository: CategoryGroupRepository,
     // Coil image cache is App-owned (Context/Coil types stay out of the VM): the App passes its size
     // and a clear action as suspend lambdas so the cache row reflects the whole app image cache.
     private val imageCacheSizeBytes: suspend () -> Long = { 0L },
@@ -64,12 +70,18 @@ internal class SettingsViewModel(
     private var currentProviderEpgLinks: List<ProviderEpgSource> = emptyList()
     private var currentManualMappingChannels: List<Channel> = emptyList()
     private var currentManualMappings: List<EpgChannelMapping> = emptyList()
+    private var currentManageGroups: List<Category> = emptyList()
+    private var currentManageGroupSettings: CategoryGroupSettings = CategoryGroupSettings()
 
     /** Selected provider in the EPG area; keys the provider↔EPG-source link + manual-mapping channel flows. */
     private val selectedEpgProviderId = MutableStateFlow<String?>(null)
 
     /** Selected channel in the manual-mapping area; keys the mappings flow. */
     private val selectedManualMappingChannelId = MutableStateFlow<String?>(null)
+
+    /** Selected (provider, active type tab) for "Gruppen verwalten"; keys the managed-groups + settings flows. */
+    private val selectedGroupProvider = MutableStateFlow<String?>(null)
+    private val selectedGroupType = MutableStateFlow(CategoryType.LiveTv)
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -92,6 +104,9 @@ internal class SettingsViewModel(
                 currentProviders = providers
                 if (selectedEpgProviderId.value != null && providers.none { it.id == selectedEpgProviderId.value }) {
                     selectedEpgProviderId.value = null
+                }
+                if (selectedGroupProvider.value != null && providers.none { it.id == selectedGroupProvider.value }) {
+                    selectedGroupProvider.value = null
                 }
                 recomposeState()
             }
@@ -133,6 +148,24 @@ internal class SettingsViewModel(
                     recomposeState()
                 }
         }
+        coroutineScope.launch {
+            combine(selectedGroupProvider, selectedGroupType) { providerId, type -> providerId to type }
+                .flatMapLatest { (providerId, type) ->
+                    if (providerId == null) {
+                        flowOf(emptyList<Category>() to CategoryGroupSettings())
+                    } else {
+                        combine(
+                            categoryGroupRepository.observeManagedGroups(providerId, type),
+                            categoryGroupRepository.observeGroupSettings(providerId, type),
+                        ) { groups, settings -> groups to settings }
+                    }
+                }
+                .collect { (groups, settings) ->
+                    currentManageGroups = groups
+                    currentManageGroupSettings = settings
+                    recomposeState()
+                }
+        }
     }
 
     /** Rebuilds the immutable [SettingsUiState] from all currently held sources. */
@@ -146,6 +179,10 @@ internal class SettingsViewModel(
             manualMappingChannels = currentManualMappingChannels,
             selectedManualMappingChannelId = selectedManualMappingChannelId.value,
             manualMappingsForSelectedChannel = currentManualMappings,
+            manageGroupsProviderId = selectedGroupProvider.value,
+            manageGroupsType = selectedGroupType.value,
+            manageGroups = currentManageGroups,
+            manageGroupSettings = currentManageGroupSettings,
         )
     }
 
@@ -233,6 +270,39 @@ internal class SettingsViewModel(
 
     suspend fun deleteProvider(providerId: String): Result<Unit> =
         runCatching { providerRepository.deleteProvider(providerId) }
+
+    // Group management ("Gruppen verwalten") — mirror the EPG selection + runCatching pattern. The panel
+    // reads manageGroups/manageGroupSettings from UiState and calls these; German strings stay panel-side.
+    fun onManageGroups(providerId: String) {
+        selectedGroupType.value = CategoryType.LiveTv
+        selectedGroupProvider.value = providerId
+    }
+
+    fun onManageGroupsTypeSelected(type: CategoryType) {
+        selectedGroupType.value = type
+    }
+
+    fun onCloseManageGroups() {
+        selectedGroupProvider.value = null
+    }
+
+    suspend fun setGroupHidden(categoryId: String, hidden: Boolean): Result<Unit> =
+        runCatching { categoryGroupRepository.setGroupHidden(categoryId, hidden) }
+
+    suspend fun setAllGroupsHidden(providerId: String, type: CategoryType, hidden: Boolean): Result<Unit> =
+        runCatching { categoryGroupRepository.setAllGroupsHidden(providerId, type, hidden) }
+
+    suspend fun reorderGroups(orderedCategoryIds: List<String>): Result<Unit> =
+        runCatching { categoryGroupRepository.reorderGroups(orderedCategoryIds) }
+
+    suspend fun resetGroupOrder(providerId: String, type: CategoryType): Result<Unit> =
+        runCatching { categoryGroupRepository.resetManualOrder(providerId, type) }
+
+    suspend fun setGroupSortMode(providerId: String, type: CategoryType, mode: CategorySortMode): Result<Unit> =
+        runCatching { categoryGroupRepository.setSortMode(providerId, type, mode) }
+
+    suspend fun setHideNewGroups(providerId: String, type: CategoryType, hidden: Boolean): Result<Unit> =
+        runCatching { categoryGroupRepository.setHideNewGroups(providerId, type, hidden) }
 
     /**
      * EPG-source CRUD + provider-link actions run the repository call inside the ViewModel and

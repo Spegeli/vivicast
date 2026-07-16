@@ -2,15 +2,21 @@ package com.vivicast.tv.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Embedded
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
+import com.vivicast.tv.core.database.model.ChannelStageEntity
 import com.vivicast.tv.core.database.model.EpisodeEntity
+import com.vivicast.tv.core.database.model.EpisodeStageEntity
 import com.vivicast.tv.core.database.model.MovieEntity
+import com.vivicast.tv.core.database.model.MovieStageEntity
 import com.vivicast.tv.core.database.model.SeasonEntity
 import com.vivicast.tv.core.database.model.SeriesEntity
+import com.vivicast.tv.core.database.model.SeriesStageEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -48,6 +54,34 @@ interface CatalogDao {
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId AND type = :type")
     suspend fun getCategories(providerId: String, type: String): List<CategoryEntity>
+
+    // All groups of a type INCLUDING hidden ones, for the group-management panel (the browse rails use
+    // observeVisibleCategories). Base order is source order; the mode-aware final order (PLAYLIST / NAME /
+    // MANUAL) is applied in the repository, which also carries the per-(provider,type) sort mode.
+    @Query(
+        """
+        SELECT * FROM categories
+        WHERE providerId = :providerId AND type = :type
+        ORDER BY sortOrder, name COLLATE NOCASE
+        """,
+    )
+    fun observeAllCategories(providerId: String, type: String): Flow<List<CategoryEntity>>
+
+    @Query("UPDATE categories SET isHidden = :hidden, updatedAt = :updatedAt WHERE id = :categoryId")
+    suspend fun setCategoryHidden(categoryId: String, hidden: Boolean, updatedAt: Long)
+
+    @Query(
+        "UPDATE categories SET isHidden = :hidden, updatedAt = :updatedAt " +
+            "WHERE providerId = :providerId AND type = :type",
+    )
+    suspend fun setCategoriesHiddenForType(providerId: String, type: String, hidden: Boolean, updatedAt: Long)
+
+    @Query("UPDATE categories SET manualSortOrder = :manualSortOrder, updatedAt = :updatedAt WHERE id = :categoryId")
+    suspend fun updateManualSortOrder(categoryId: String, manualSortOrder: Int?, updatedAt: Long)
+
+    // Clears the manual order for a (provider, type) so MANUAL mode falls back to source (playlist) order.
+    @Query("UPDATE categories SET manualSortOrder = NULL, updatedAt = :updatedAt WHERE providerId = :providerId AND type = :type")
+    suspend fun resetManualSortOrder(providerId: String, type: String, updatedAt: Long)
 
     @Query("SELECT * FROM channels WHERE providerId = :providerId")
     suspend fun getChannels(providerId: String): List<ChannelEntity>
@@ -334,6 +368,256 @@ interface CatalogDao {
 
     @Upsert
     suspend fun upsertEpisodes(episodes: List<EpisodeEntity>)
+
+    // --- Staged delta-merge (non-blocking import; plans/nonblocking-db-imports.md) ---
+    // Catalog rows are staged chunked into <table>_stage under the real providerId, then merged into the
+    // live table by the delta trio (delete-changed -> insert-missing -> delete-stale). Each op fires the
+    // matching search FTS trigger, so the search mirror stays consistent on the delta. INSERT OR REPLACE is
+    // deliberately NOT used: on a conflict it would skip the fts delete trigger and desync the mirror. Stage
+    // is cleared around the import. removed*Ids lists the live ids with no stage match (what delete-stale
+    // will drop) for pre-merge cleanup of dependent rows.
+
+    // Channels
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChannelsStage(rows: List<ChannelStageEntity>)
+
+    @Query("DELETE FROM channels_stage WHERE providerId = :providerId")
+    suspend fun clearChannelsStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM channels
+        WHERE providerId = :providerId
+            AND EXISTS (
+                SELECT 1 FROM channels_stage s
+                WHERE s.id = channels.id AND s.syncFingerprint <> channels.syncFingerprint
+            )
+        """,
+    )
+    suspend fun deleteChangedChannelsFromStage(providerId: String): Int
+
+    @Query(
+        """
+        INSERT INTO channels (
+            id, providerId, categoryId, stableKey, remoteId, channelNumber, name, logoUrl,
+            epgChannelId, isCatchupAvailable, catchupDays, createdAt, updatedAt, syncFingerprint
+        )
+        SELECT id, providerId, categoryId, stableKey, remoteId, channelNumber, name, logoUrl,
+            epgChannelId, isCatchupAvailable, catchupDays, createdAt, updatedAt, syncFingerprint
+        FROM channels_stage s
+        WHERE s.providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM channels l WHERE l.id = s.id)
+        """,
+    )
+    suspend fun insertMissingChannelsFromStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM channels
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM channels_stage s WHERE s.id = channels.id)
+        """,
+    )
+    suspend fun deleteStaleChannelsFromStage(providerId: String)
+
+    @Query(
+        """
+        SELECT id FROM channels
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM channels_stage s WHERE s.id = channels.id)
+        """,
+    )
+    suspend fun removedChannelsIds(providerId: String): List<String>
+
+    // Movies (`cast` is a SQL keyword — backticked)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMoviesStage(rows: List<MovieStageEntity>)
+
+    @Query("DELETE FROM movies_stage WHERE providerId = :providerId")
+    suspend fun clearMoviesStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM movies
+        WHERE providerId = :providerId
+            AND EXISTS (
+                SELECT 1 FROM movies_stage s
+                WHERE s.id = movies.id AND s.syncFingerprint <> movies.syncFingerprint
+            )
+        """,
+    )
+    suspend fun deleteChangedMoviesFromStage(providerId: String): Int
+
+    @Query(
+        """
+        INSERT INTO movies (
+            id, providerId, categoryId, stableKey, remoteId, name, originalName, containerExtension,
+            posterUrl, backdropUrl, rating, year, genre, duration, director, `cast`, plot, trailerUrl,
+            addedAt, ageRating, isAdult, createdAt, updatedAt, syncFingerprint
+        )
+        SELECT id, providerId, categoryId, stableKey, remoteId, name, originalName, containerExtension,
+            posterUrl, backdropUrl, rating, year, genre, duration, director, `cast`, plot, trailerUrl,
+            addedAt, ageRating, isAdult, createdAt, updatedAt, syncFingerprint
+        FROM movies_stage s
+        WHERE s.providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM movies l WHERE l.id = s.id)
+        """,
+    )
+    suspend fun insertMissingMoviesFromStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM movies
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM movies_stage s WHERE s.id = movies.id)
+        """,
+    )
+    suspend fun deleteStaleMoviesFromStage(providerId: String)
+
+    @Query(
+        """
+        SELECT id FROM movies
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM movies_stage s WHERE s.id = movies.id)
+        """,
+    )
+    suspend fun removedMoviesIds(providerId: String): List<String>
+
+    // Series (`cast` is a SQL keyword — backticked)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSeriesStage(rows: List<SeriesStageEntity>)
+
+    @Query("DELETE FROM series_stage WHERE providerId = :providerId")
+    suspend fun clearSeriesStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM series
+        WHERE providerId = :providerId
+            AND EXISTS (
+                SELECT 1 FROM series_stage s
+                WHERE s.id = series.id AND s.syncFingerprint <> series.syncFingerprint
+            )
+        """,
+    )
+    suspend fun deleteChangedSeriesFromStage(providerId: String): Int
+
+    @Query(
+        """
+        INSERT INTO series (
+            id, providerId, categoryId, stableKey, remoteId, name, originalName, posterUrl, backdropUrl,
+            rating, year, genre, director, `cast`, plot, addedAt, ageRating, isAdult, createdAt,
+            updatedAt, syncFingerprint
+        )
+        SELECT id, providerId, categoryId, stableKey, remoteId, name, originalName, posterUrl, backdropUrl,
+            rating, year, genre, director, `cast`, plot, addedAt, ageRating, isAdult, createdAt,
+            updatedAt, syncFingerprint
+        FROM series_stage s
+        WHERE s.providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM series l WHERE l.id = s.id)
+        """,
+    )
+    suspend fun insertMissingSeriesFromStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM series
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM series_stage s WHERE s.id = series.id)
+        """,
+    )
+    suspend fun deleteStaleSeriesFromStage(providerId: String)
+
+    @Query(
+        """
+        SELECT id FROM series
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM series_stage s WHERE s.id = series.id)
+        """,
+    )
+    suspend fun removedSeriesIds(providerId: String): List<String>
+
+    // Episodes
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEpisodesStage(rows: List<EpisodeStageEntity>)
+
+    @Query("DELETE FROM episodes_stage WHERE providerId = :providerId")
+    suspend fun clearEpisodesStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM episodes
+        WHERE providerId = :providerId
+            AND EXISTS (
+                SELECT 1 FROM episodes_stage s
+                WHERE s.id = episodes.id AND s.syncFingerprint <> episodes.syncFingerprint
+            )
+        """,
+    )
+    suspend fun deleteChangedEpisodesFromStage(providerId: String): Int
+
+    @Query(
+        """
+        INSERT INTO episodes (
+            id, providerId, seriesId, seasonId, stableKey, remoteId, episodeNumber, seasonNumber, name,
+            plot, thumbnailUrl, containerExtension, duration, airDate, ageRating, isAdult, createdAt,
+            updatedAt, syncFingerprint
+        )
+        SELECT id, providerId, seriesId, seasonId, stableKey, remoteId, episodeNumber, seasonNumber, name,
+            plot, thumbnailUrl, containerExtension, duration, airDate, ageRating, isAdult, createdAt,
+            updatedAt, syncFingerprint
+        FROM episodes_stage s
+        WHERE s.providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM episodes l WHERE l.id = s.id)
+        """,
+    )
+    suspend fun insertMissingEpisodesFromStage(providerId: String)
+
+    @Query(
+        """
+        DELETE FROM episodes
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM episodes_stage s WHERE s.id = episodes.id)
+        """,
+    )
+    suspend fun deleteStaleEpisodesFromStage(providerId: String)
+
+    @Query(
+        """
+        SELECT id FROM episodes
+        WHERE providerId = :providerId
+            AND NOT EXISTS (SELECT 1 FROM episodes_stage s WHERE s.id = episodes.id)
+        """,
+    )
+    suspend fun removedEpisodesIds(providerId: String): List<String>
+
+    // Count of staged rows with no live match = the genuinely-new rows (the "added" import count). Must be
+    // read BEFORE delete-changed, which would otherwise turn changed rows into apparent new ones.
+    @Query("SELECT COUNT(*) FROM channels_stage s WHERE s.providerId = :providerId AND NOT EXISTS (SELECT 1 FROM channels l WHERE l.id = s.id)")
+    suspend fun countNewChannelsFromStage(providerId: String): Int
+
+    @Query("SELECT COUNT(*) FROM movies_stage s WHERE s.providerId = :providerId AND NOT EXISTS (SELECT 1 FROM movies l WHERE l.id = s.id)")
+    suspend fun countNewMoviesFromStage(providerId: String): Int
+
+    @Query("SELECT COUNT(*) FROM series_stage s WHERE s.providerId = :providerId AND NOT EXISTS (SELECT 1 FROM series l WHERE l.id = s.id)")
+    suspend fun countNewSeriesFromStage(providerId: String): Int
+
+    @Query("SELECT COUNT(*) FROM episodes_stage s WHERE s.providerId = :providerId AND NOT EXISTS (SELECT 1 FROM episodes l WHERE l.id = s.id)")
+    suspend fun countNewEpisodesFromStage(providerId: String): Int
+
+    // Startup crash-recovery: drop any staged rows a killed import left behind (self-heals on the next
+    // import too, since staging clears before use). Provider-agnostic.
+    @Query("DELETE FROM channels_stage")
+    suspend fun clearAllChannelsStage()
+
+    @Query("DELETE FROM movies_stage")
+    suspend fun clearAllMoviesStage()
+
+    @Query("DELETE FROM series_stage")
+    suspend fun clearAllSeriesStage()
+
+    @Query("DELETE FROM episodes_stage")
+    suspend fun clearAllEpisodesStage()
 
     @Query("DELETE FROM categories WHERE providerId = :providerId")
     suspend fun deleteCategoriesForProvider(providerId: String)

@@ -275,6 +275,99 @@ object VivicastMigrations {
             db.execSQL("ALTER TABLE channels ADD COLUMN epgChannelId TEXT DEFAULT NULL")
         }
     }
+
+    // D10 group management: per-category manual order (used only in the MANUAL sort mode) + a per-provider-
+    // per-type settings table (sort mode + new-groups-hidden policy). DEFAULT NULL/'PLAYLIST'/0 match the
+    // entity @ColumnInfo defaults so Room's schema validation accepts the migration.
+    val Migration16To17: Migration = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.addNullableIntegerColumn("categories", "manualSortOrder")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `provider_category_settings` (
+                    `id` TEXT NOT NULL,
+                    `providerId` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `sortMode` TEXT NOT NULL DEFAULT 'PLAYLIST',
+                    `hideNewGroups` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_provider_category_settings_providerId` " +
+                    "ON `provider_category_settings` (`providerId`)",
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_provider_category_settings_providerId_type` " +
+                    "ON `provider_category_settings` (`providerId`, `type`)",
+            )
+        }
+    }
+
+    // Non-blocking imports (plans/nonblocking-db-imports.md): a content fingerprint on the delta-merged
+    // live tables + staging tables mirroring their schema, so a bulk import stages rows chunked and merges
+    // only the delta into the live table. Stage DDL copied verbatim from the exported 18.json.
+    val Migration17To18: Migration = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.addTextColumn("channels", "syncFingerprint")
+            db.addTextColumn("movies", "syncFingerprint")
+            db.addTextColumn("series", "syncFingerprint")
+            db.addTextColumn("episodes", "syncFingerprint")
+            db.addTextColumn("epg_programs", "syncFingerprint")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `channels_stage` (`id` TEXT NOT NULL, `providerId` TEXT NOT NULL, " +
+                    "`categoryId` TEXT, `stableKey` TEXT NOT NULL DEFAULT '', `remoteId` TEXT NOT NULL, " +
+                    "`channelNumber` TEXT, `name` TEXT NOT NULL, `logoUrl` TEXT, `epgChannelId` TEXT DEFAULT NULL, " +
+                    "`isCatchupAvailable` INTEGER NOT NULL, `catchupDays` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncFingerprint` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_channels_stage_providerId` ON `channels_stage` (`providerId`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `movies_stage` (`id` TEXT NOT NULL, `providerId` TEXT NOT NULL, " +
+                    "`categoryId` TEXT, `stableKey` TEXT NOT NULL DEFAULT '', `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                    "`originalName` TEXT, `containerExtension` TEXT, `posterUrl` TEXT, `backdropUrl` TEXT, `rating` TEXT, " +
+                    "`year` TEXT, `genre` TEXT, `duration` INTEGER, `director` TEXT, `cast` TEXT, `plot` TEXT, " +
+                    "`trailerUrl` TEXT, `addedAt` INTEGER, `ageRating` TEXT, `isAdult` INTEGER NOT NULL DEFAULT 0, " +
+                    "`createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `syncFingerprint` TEXT NOT NULL DEFAULT '', " +
+                    "PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_movies_stage_providerId` ON `movies_stage` (`providerId`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `series_stage` (`id` TEXT NOT NULL, `providerId` TEXT NOT NULL, " +
+                    "`categoryId` TEXT, `stableKey` TEXT NOT NULL DEFAULT '', `remoteId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                    "`originalName` TEXT, `posterUrl` TEXT, `backdropUrl` TEXT, `rating` TEXT, `year` TEXT, `genre` TEXT, " +
+                    "`director` TEXT, `cast` TEXT, `plot` TEXT, `addedAt` INTEGER, `ageRating` TEXT, " +
+                    "`isAdult` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                    "`syncFingerprint` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_series_stage_providerId` ON `series_stage` (`providerId`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `episodes_stage` (`id` TEXT NOT NULL, `providerId` TEXT NOT NULL, " +
+                    "`seriesId` TEXT NOT NULL, `seasonId` TEXT NOT NULL, `stableKey` TEXT NOT NULL DEFAULT '', " +
+                    "`remoteId` TEXT NOT NULL, `episodeNumber` INTEGER NOT NULL, `seasonNumber` INTEGER NOT NULL, " +
+                    "`name` TEXT NOT NULL, `plot` TEXT, `thumbnailUrl` TEXT, `containerExtension` TEXT, `duration` INTEGER, " +
+                    "`airDate` TEXT, `ageRating` TEXT, `isAdult` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncFingerprint` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_episodes_stage_providerId` ON `episodes_stage` (`providerId`)")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `epg_programs_stage` (`id` TEXT NOT NULL, `providerId` TEXT NOT NULL, " +
+                    "`channelId` TEXT NOT NULL, `epgSourceId` TEXT NOT NULL, `stableKey` TEXT NOT NULL DEFAULT '', " +
+                    "`epgChannelId` TEXT NOT NULL, `title` TEXT NOT NULL, `normalizedTitle` TEXT NOT NULL DEFAULT '', " +
+                    "`subtitle` TEXT, `description` TEXT, `startTime` INTEGER NOT NULL, `endTime` INTEGER NOT NULL, " +
+                    "`category` TEXT, `iconUrl` TEXT, `isCatchupAvailable` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, `syncFingerprint` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`id`))",
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_programs_stage_providerId` ON `epg_programs_stage` (`providerId`)")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_epg_programs_stage_providerId_epgSourceId` " +
+                    "ON `epg_programs_stage` (`providerId`, `epgSourceId`)",
+            )
+        }
+    }
 }
 
 private fun SupportSQLiteDatabase.addTextColumn(tableName: String, columnName: String) {

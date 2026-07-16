@@ -21,12 +21,17 @@ import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
+import com.vivicast.tv.domain.model.Category
+import com.vivicast.tv.domain.model.CategoryGroupSettings
+import com.vivicast.tv.domain.model.CategorySortMode
+import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgProgram
@@ -55,7 +60,7 @@ class SettingsViewModelTest {
         epgRepo: FakeEpgSourceRepository = FakeEpgSourceRepository(),
         providerRepo: FakeProviderRepository = FakeProviderRepository(),
     ): SettingsViewModel =
-        SettingsViewModel(store, cacheStore, epgRepo, providerRepo, scope = scope)
+        SettingsViewModel(store, cacheStore, epgRepo, providerRepo, FakeCategoryGroupRepository(), scope = scope)
 
     @Test
     fun initialState_mapsGeneralAppearancePlaybackFromPreferences() = runBlocking {
@@ -246,6 +251,7 @@ class SettingsViewModelTest {
             cacheStore,
             FakeEpgSourceRepository(),
             FakeProviderRepository(),
+            FakeCategoryGroupRepository(),
             imageCacheSizeBytes = { 500L },
             clearImageCache = { imageCleared = true },
             scope = scope,
@@ -776,4 +782,17 @@ private class FakeProviderRepository(
     override suspend fun deleteProvider(providerId: String) {
         deletedProviderId = providerId
     }
+}
+
+private class FakeCategoryGroupRepository : CategoryGroupRepository {
+    override fun observeManagedGroups(providerId: String, type: CategoryType): Flow<List<Category>> =
+        flowOf(emptyList())
+    override fun observeGroupSettings(providerId: String, type: CategoryType): Flow<CategoryGroupSettings> =
+        flowOf(CategoryGroupSettings())
+    override suspend fun setSortMode(providerId: String, type: CategoryType, mode: CategorySortMode) = Unit
+    override suspend fun setHideNewGroups(providerId: String, type: CategoryType, hidden: Boolean) = Unit
+    override suspend fun setGroupHidden(categoryId: String, hidden: Boolean) = Unit
+    override suspend fun setAllGroupsHidden(providerId: String, type: CategoryType, hidden: Boolean) = Unit
+    override suspend fun reorderGroups(orderedCategoryIds: List<String>) = Unit
+    override suspend fun resetManualOrder(providerId: String, type: CategoryType) = Unit
 }

@@ -93,6 +93,7 @@ import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCreateRequest
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
@@ -159,6 +160,7 @@ private fun FocusEnterExitScope.exitSectionRail(topNav: FocusRequester) {
 fun SettingsRoute(
     providerRepository: ProviderRepository,
     epgSourceRepository: EpgSourceRepository,
+    categoryGroupRepository: CategoryGroupRepository,
     userPreferencesStore: UserPreferencesStore,
     mediaCacheStore: MediaCacheStore,
     parentalControlSettingsState: ParentalControlSettingsState = ParentalControlSettingsState(),
@@ -176,7 +178,13 @@ fun SettingsRoute(
     onTestEpgConnection: suspend (String) -> EpgConnectionTestResult = { EpgConnectionTestResult(null, null) },
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
+    onRefreshProvider: (String) -> Unit = {},
     onLogProviderSaved: (descriptor: String, switchedFromType: String?) -> Unit = { _, _ -> },
+    // App-layer diagnostics loggers (feature/VM never touch DiagnosticsStore). Provider id / category id go
+    // under a "target" key — both are opaque (random-UUID provider id; category id = "<providerId>:...:<hash>"),
+    // carrying no name/URL/credential, so they are safe to log raw; type/mode/policy/count are plain enums.
+    onLogProviderDeleted: (providerId: String) -> Unit = {},
+    onLogGroupEvent: (message: String, details: Map<String, String>) -> Unit = { _, _ -> },
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit = {},
     onSetPin: (String) -> String? = { null },
@@ -199,6 +207,7 @@ fun SettingsRoute(
             mediaCacheStore,
             epgSourceRepository,
             providerRepository,
+            categoryGroupRepository,
             imageCacheSizeBytes,
             clearImageCache,
         ),
@@ -404,10 +413,54 @@ fun SettingsRoute(
                             onCreateProvider = viewModel::createProvider,
                             onUpdateProvider = viewModel::updateProvider,
                             onSetProviderEnabled = viewModel::setProviderEnabled,
-                            onDeleteProvider = viewModel::deleteProvider,
+                            onDeleteProvider = { id ->
+                                viewModel.deleteProvider(id).also { if (it.isSuccess) onLogProviderDeleted(id) }
+                            },
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
+                            onRefreshProvider = onRefreshProvider,
+                            groupsControls = ProviderGroupsControls(
+                                activeType = settingsUiState.manageGroupsType,
+                                groups = settingsUiState.manageGroups,
+                                settings = settingsUiState.manageGroupSettings,
+                                onOpen = viewModel::onManageGroups,
+                                onClose = viewModel::onCloseManageGroups,
+                                onSelectType = viewModel::onManageGroupsTypeSelected,
+                                onToggleHidden = { categoryId, hidden ->
+                                    onLogGroupEvent(if (hidden) "group_hidden" else "group_shown", mapOf("target" to categoryId))
+                                    routeScope.launch { viewModel.setGroupHidden(categoryId, hidden) }
+                                },
+                                onSetAllHidden = { providerId, type, hidden ->
+                                    onLogGroupEvent(
+                                        if (hidden) "groups_bulk_hidden" else "groups_bulk_shown",
+                                        mapOf("type" to type.name, "count" to settingsUiState.manageGroups.size.toString()),
+                                    )
+                                    routeScope.launch { viewModel.setAllGroupsHidden(providerId, type, hidden) }
+                                },
+                                onReorder = { ids ->
+                                    onLogGroupEvent(
+                                        "group_reordered",
+                                        mapOf("type" to settingsUiState.manageGroupsType.name, "count" to ids.size.toString()),
+                                    )
+                                    routeScope.launch { viewModel.reorderGroups(ids) }
+                                },
+                                onResetOrder = { providerId, type ->
+                                    onLogGroupEvent("group_order_reset", mapOf("type" to type.name))
+                                    routeScope.launch { viewModel.resetGroupOrder(providerId, type) }
+                                },
+                                onSetSortMode = { providerId, type, mode ->
+                                    onLogGroupEvent("sort_mode_changed", mapOf("type" to type.name, "mode" to mode.name))
+                                    routeScope.launch { viewModel.setGroupSortMode(providerId, type, mode) }
+                                },
+                                onSetHideNewGroups = { providerId, type, hidden ->
+                                    onLogGroupEvent(
+                                        "new_groups_policy_changed",
+                                        mapOf("type" to type.name, "policy" to if (hidden) "hidden" else "shown"),
+                                    )
+                                    routeScope.launch { viewModel.setHideNewGroups(providerId, type, hidden) }
+                                },
+                            ),
                             onLogProviderSaved = onLogProviderSaved,
                             epgSources = settingsUiState.epgSources,
                             providerEpgLinks = settingsUiState.providerEpgLinks,

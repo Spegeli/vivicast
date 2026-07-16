@@ -4,12 +4,18 @@ import androidx.room.withTransaction
 import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.forEachChunkedTransaction
+import com.vivicast.tv.core.database.syncFingerprint
 import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
+import com.vivicast.tv.core.database.model.ChannelStageEntity
 import com.vivicast.tv.core.database.model.EpisodeEntity
+import com.vivicast.tv.core.database.model.EpisodeStageEntity
 import com.vivicast.tv.core.database.model.MovieEntity
+import com.vivicast.tv.core.database.model.MovieStageEntity
 import com.vivicast.tv.core.database.model.SeasonEntity
 import com.vivicast.tv.core.database.model.SeriesEntity
+import com.vivicast.tv.core.database.model.SeriesStageEntity
 import com.vivicast.tv.iptv.m3u.DefaultM3uContentClassifier
 import com.vivicast.tv.iptv.m3u.M3uChannel
 import com.vivicast.tv.iptv.m3u.M3uContentClassifier
@@ -30,6 +36,7 @@ class RoomCatalogImportRepository(
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : CatalogImportRepository {
     private val catalogDao = database.catalogDao()
+    private val providerCategorySettingsDao = database.providerCategorySettingsDao()
     private val favoritesDao = database.favoritesDao()
     private val playbackDao = database.playbackDao()
     private val epgDao = database.epgDao()
@@ -44,27 +51,44 @@ class RoomCatalogImportRepository(
         val liveCategoryIds = classified.liveChannels.mapTo(mutableSetOf()) { it.categoryRemoteId() }
         val movieCategoryIds = classified.vodItems.mapTo(mutableSetOf()) { it.categoryRemoteId() }
         val seriesCategoryIds = classified.seriesItems.mapTo(mutableSetOf()) { it.categoryRemoteId() }
+        val seriesRemoteIds = classified.seriesItems.mapTo(mutableSetOf()) { it.remoteId }
 
+        // Build the staged rows (deterministic ids come out final; the fingerprint drives the merge, so no
+        // per-row existing read is needed). M3U carries its whole catalog, so seasons/episodes are always
+        // reconciled from the parse.
+        val channels = classified.liveChannels.map { channel ->
+            channel.toEntity(
+                providerId = providerId,
+                categoryId = categoryId(providerId, CATEGORY_TYPE_LIVE, channel.categoryRemoteId()),
+                existing = null,
+                now = now,
+            ).toStage()
+        }
+        val movies = classified.vodItems.associateBy { it.remoteId }.values
+            .map { it.toEntity(providerId, existing = null, now).toStage() }
+        val series = classified.seriesItems.associateBy { it.remoteId }.values
+            .map { it.toEntity(providerId, existing = null, now).toStage() }
+        val seasons = buildSeasons(providerId, classified.seriesInfos, seriesRemoteIds, now)
+        val episodes = buildEpisodes(providerId, classified.seriesInfos, seriesRemoteIds, now).map { it.toStage() }
+
+        // Stage chunked, outside the merge transaction — the single writer is released between chunks.
+        stageChannels(providerId, channels)
+        stageMovies(providerId, movies)
+        stageSeries(providerId, series)
+        stageEpisodes(providerId, episodes)
+
+        // Merge: one short transaction applies categories (with the D10 group user-state preserve), then
+        // only the delta for channels/movies/series/episodes, then the FTS rebuild — atomic old->new flip.
         val result = database.withTransaction {
             val liveCategories = buildCategories(providerId, CATEGORY_TYPE_LIVE, m3uCategories(liveCategoryIds), liveCategoryIds, now)
             val movieCategories = buildCategories(providerId, CATEGORY_TYPE_MOVIE, m3uCategories(movieCategoryIds), movieCategoryIds, now)
             val seriesCategories = buildCategories(providerId, CATEGORY_TYPE_SERIES, m3uCategories(seriesCategoryIds), seriesCategoryIds, now)
 
-            val existingChannels = catalogDao.getChannels(providerId).associateBy { it.remoteId }
-            val channels = classified.liveChannels.map { channel ->
-                channel.toEntity(
-                    providerId = providerId,
-                    categoryId = categoryId(providerId, CATEGORY_TYPE_LIVE, channel.categoryRemoteId()),
-                    existing = existingChannels[channel.remoteId],
-                    now = now,
-                )
-            }
-            val channelCount = upsertChannels(providerId, channels, existingChannels)
-            upsertMovies(providerId, classified.vodItems, now)
-            upsertSeries(providerId, classified.seriesItems, now)
-            val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
-            upsertSeasons(providerId, buildSeasons(providerId, classified.seriesInfos, seriesByRemoteId, now))
-            upsertEpisodes(providerId, buildEpisodes(providerId, classified.seriesInfos, seriesByRemoteId, now))
+            val channelCount = mergeChannels(providerId)
+            mergeMovies(providerId)
+            mergeSeries(providerId, cascadeSeasonsEpisodes = false)
+            upsertSeasons(providerId, seasons)
+            mergeEpisodes(providerId)
 
             deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, liveCategories.removedIds)
             deleteRemovedCategories(providerId, CATEGORY_TYPE_MOVIE, movieCategories.removedIds)
@@ -81,6 +105,7 @@ class RoomCatalogImportRepository(
                 skippedEntries = playlist.skippedEntries,
             )
         }
+        clearAllStage(providerId)
         m3uStreamReferenceStore.replaceProviderReferences(providerId, classified.streamReferences)
         return result
     }
@@ -95,7 +120,29 @@ class RoomCatalogImportRepository(
 
     override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult {
         val now = clock()
-        return database.withTransaction {
+        val seriesRemoteIds = catalog.seriesItems.mapTo(mutableSetOf()) { it.remoteId }
+        // Season/episode detail is imported separately via importXtreamSeriesDetails (background job). When
+        // seriesInfos is empty (the fast main refresh), leave existing seasons/episodes untouched — do not
+        // stage/merge them, or the delta-merge would delete every existing episode against an empty stage.
+        val hasSeriesDetails = catalog.seriesInfos.isNotEmpty()
+
+        val channels = catalog.liveStreams.associateBy { it.remoteId }.values
+            .map { it.toEntity(providerId, existing = null, now).toStage() }
+        val movies = catalog.vodItems.associateBy { it.remoteId }.values
+            .map { it.toEntity(providerId, existing = null, now).toStage() }
+        val series = catalog.seriesItems.associateBy { it.remoteId }.values
+            .map { it.toEntity(providerId, existing = null, now).toStage() }
+        val seasons = if (hasSeriesDetails) buildSeasons(providerId, catalog.seriesInfos, seriesRemoteIds, now) else emptyList()
+        val episodes = if (hasSeriesDetails) buildEpisodes(providerId, catalog.seriesInfos, seriesRemoteIds, now).map { it.toStage() } else emptyList()
+
+        stageChannels(providerId, channels)
+        stageMovies(providerId, movies)
+        stageSeries(providerId, series)
+        if (hasSeriesDetails) {
+            stageEpisodes(providerId, episodes)
+        }
+
+        val result = database.withTransaction {
             val liveCategories = buildCategories(
                 providerId = providerId,
                 type = CATEGORY_TYPE_LIVE,
@@ -118,29 +165,17 @@ class RoomCatalogImportRepository(
                 now = now,
             )
 
-            val existingChannels = catalogDao.getChannels(providerId).associateBy { it.remoteId }
-            val channelCount = upsertChannels(
-                providerId = providerId,
-                channels = catalog.liveStreams
-                    .associateBy { it.remoteId }
-                    .values
-                    .map { stream -> stream.toEntity(providerId, existingChannels[stream.remoteId], now) },
-                existingChannels = existingChannels,
-            )
-            val movieCount = upsertMovies(providerId, catalog.vodItems.associateBy { it.remoteId }.values.toList(), now)
-            val seriesCount = upsertSeries(providerId, catalog.seriesItems.associateBy { it.remoteId }.values.toList(), now)
-            // Season/episode detail is imported separately via importXtreamSeriesDetails (background job).
-            // When seriesInfos is empty (the fast main refresh), leave existing seasons/episodes untouched
-            // instead of reconciling them away.
-            val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
+            val channelCount = mergeChannels(providerId)
+            val movieCount = mergeMovies(providerId)
+            val seriesCount = mergeSeries(providerId, cascadeSeasonsEpisodes = !hasSeriesDetails)
             val seasonCount: ImportCount
             val episodeCount: ImportCount
-            if (catalog.seriesInfos.isEmpty()) {
+            if (hasSeriesDetails) {
+                seasonCount = upsertSeasons(providerId, seasons)
+                episodeCount = mergeEpisodes(providerId)
+            } else {
                 seasonCount = ImportCount(added = 0, updated = 0, removed = 0)
                 episodeCount = ImportCount(added = 0, updated = 0, removed = 0)
-            } else {
-                seasonCount = upsertSeasons(providerId, buildSeasons(providerId, catalog.seriesInfos, seriesByRemoteId, now))
-                episodeCount = upsertEpisodes(providerId, buildEpisodes(providerId, catalog.seriesInfos, seriesByRemoteId, now))
             }
 
             deleteRemovedCategories(providerId, CATEGORY_TYPE_LIVE, liveCategories.removedIds)
@@ -159,6 +194,8 @@ class RoomCatalogImportRepository(
                 episodes = episodeCount,
             )
         }
+        clearAllStage(providerId)
+        return result
     }
 
     override suspend fun importXtreamSeriesDetails(
@@ -166,12 +203,19 @@ class RoomCatalogImportRepository(
         seriesInfos: List<XtreamSeriesInfo>,
     ): XtreamSeriesDetailsImportResult {
         val now = clock()
-        return database.withTransaction {
-            val seriesByRemoteId = catalogDao.getSeries(providerId).associateBy { it.remoteId }
-            val seasonCount = upsertSeasons(providerId, buildSeasons(providerId, seriesInfos, seriesByRemoteId, now))
-            val episodeCount = upsertEpisodes(providerId, buildEpisodes(providerId, seriesInfos, seriesByRemoteId, now))
+        // Reconciles seasons/episodes for the provider's currently-known series (the caller passes ALL of
+        // them per run). Deterministic series ids let seasons/episodes bind without reading the series back.
+        val knownSeriesRemoteIds = catalogDao.getSeries(providerId).mapTo(mutableSetOf()) { it.remoteId }
+        val seasons = buildSeasons(providerId, seriesInfos, knownSeriesRemoteIds, now)
+        val episodes = buildEpisodes(providerId, seriesInfos, knownSeriesRemoteIds, now).map { it.toStage() }
+        stageEpisodes(providerId, episodes)
+        val result = database.withTransaction {
+            val seasonCount = upsertSeasons(providerId, seasons)
+            val episodeCount = mergeEpisodes(providerId)
             XtreamSeriesDetailsImportResult(seasons = seasonCount, episodes = episodeCount)
         }
+        clearEpisodesStageFor(providerId)
+        return result
     }
 
     private suspend fun buildCategories(
@@ -182,12 +226,16 @@ class RoomCatalogImportRepository(
         now: Long,
     ): CategoryImport {
         val existing = catalogDao.getCategories(providerId, type).associateBy { it.remoteId }
+        // New groups default to hidden per the provider's policy (NULL settings = show, the default).
+        val hideNewGroups = providerCategorySettingsDao.getSettings(providerId, type)?.hideNewGroups ?: false
         val categoryNames = categories.associate { it.remoteId to it.name }
+        // LinkedHashSet keeps first-appearance (source) order; sortOrder = that order = the PLAYLIST sort
+        // mode. No alphabetical sort here (NAME mode is applied at read time). Uncategorized falls at its
+        // natural source position — no longer force-pinned first (owner decision). See D10.
         val allRemoteIds = (categories.map { it.remoteId } + referencedRemoteIds)
             .map { it.ifBlank { UNCATEGORIZED_REMOTE_ID } }
             .toSet()
         val entities = allRemoteIds
-            .sortedBy { if (it == UNCATEGORIZED_REMOTE_ID) "" else categoryNames[it] ?: it }
             .mapIndexed { index, remoteId ->
                 val existingCategory = existing[remoteId]
                 CategoryEntity(
@@ -202,7 +250,11 @@ class RoomCatalogImportRepository(
                         categoryNames[remoteId] ?: remoteId
                     },
                     sortOrder = index,
-                    isHidden = existingCategory?.isHidden ?: false,
+                    // Preserved across import (keyed by remoteId), like isHidden: a hidden or manually
+                    // ordered group survives a refresh. New groups take the hide-new policy; new groups
+                    // have no manual position yet (null).
+                    isHidden = existingCategory?.isHidden ?: hideNewGroups,
+                    manualSortOrder = existingCategory?.manualSortOrder,
                     createdAt = existingCategory?.createdAt ?: now,
                     updatedAt = now,
                 )
@@ -220,70 +272,155 @@ class RoomCatalogImportRepository(
         return CategoryImport(ImportCount(added = added, updated = updated, removed = removedIds.size), removedIds)
     }
 
-    private suspend fun upsertChannels(
-        providerId: String,
-        channels: List<ChannelEntity>,
-        existingChannels: Map<String, ChannelEntity>,
-    ): ImportCount {
-        val importedIds = channels.mapTo(mutableSetOf()) { it.id }
-        val removedIds = existingChannels.values.filter { it.id !in importedIds }.map { it.id }
-        val count = countChanges(channels, existingChannels)
-        if (channels.isNotEmpty()) {
-            catalogDao.upsertChannels(channels)
+    // --- Staged delta-merge helpers (plans/nonblocking-db-imports.md) ---
+    // Each merge runs inside the import transaction: cascade the removed rows' user-state, then apply the
+    // delta trio (delete-changed -> insert-missing -> delete-stale) against the pre-staged rows. added =
+    // rows inserted that weren't just re-inserted from a change; updated = the changed rows; removed = the
+    // live ids with no stage match. IN(:ids) deletes are chunked under SQLite's 999-variable limit.
+
+    private suspend fun mergeChannels(providerId: String): ImportCount {
+        val removedIds = catalogDao.removedChannelsIds(providerId)
+        removedIds.chunked(SQL_IN_MAX).forEach { ids ->
+            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_CHANNEL, ids)
+            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_CHANNEL, ids)
+            playbackDao.deleteHistoryForChannels(providerId, ids)
+            epgDao.deleteMappingsForChannels(providerId, ids)
+            epgDao.deleteProgramsForChannels(providerId, ids)
         }
-        if (removedIds.isNotEmpty()) {
-            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_CHANNEL, removedIds)
-            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_CHANNEL, removedIds)
-            playbackDao.deleteHistoryForChannels(providerId, removedIds)
-            epgDao.deleteMappingsForChannels(providerId, removedIds)
-            epgDao.deleteProgramsForChannels(providerId, removedIds)
-            catalogDao.deleteChannels(providerId, removedIds)
-        }
-        return count.copy(removed = removedIds.size)
+        val added = catalogDao.countNewChannelsFromStage(providerId)
+        val updated = catalogDao.deleteChangedChannelsFromStage(providerId)
+        catalogDao.insertMissingChannelsFromStage(providerId)
+        catalogDao.deleteStaleChannelsFromStage(providerId)
+        return ImportCount(added = added, updated = updated, removed = removedIds.size)
     }
 
-    private suspend fun upsertMovies(providerId: String, items: List<XtreamVodItem>, now: Long): ImportCount {
-        val existing = catalogDao.getMovies(providerId).associateBy { it.remoteId }
-        val movies = items.map { item -> item.toEntity(providerId, existing[item.remoteId], now) }
-        val importedIds = movies.mapTo(mutableSetOf()) { it.id }
-        val removedIds = existing.values.filter { it.id !in importedIds }.map { it.id }
-        val count = countChanges(movies, existing)
-        if (movies.isNotEmpty()) {
-            catalogDao.upsertMovies(movies)
+    private suspend fun mergeMovies(providerId: String): ImportCount {
+        val removedIds = catalogDao.removedMoviesIds(providerId)
+        removedIds.chunked(SQL_IN_MAX).forEach { ids ->
+            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_MOVIE, ids)
+            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_MOVIE, ids)
         }
-        if (removedIds.isNotEmpty()) {
-            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_MOVIE, removedIds)
-            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_MOVIE, removedIds)
-            catalogDao.deleteMovies(providerId, removedIds)
-        }
-        return count.copy(removed = removedIds.size)
+        val added = catalogDao.countNewMoviesFromStage(providerId)
+        val updated = catalogDao.deleteChangedMoviesFromStage(providerId)
+        catalogDao.insertMissingMoviesFromStage(providerId)
+        catalogDao.deleteStaleMoviesFromStage(providerId)
+        return ImportCount(added = added, updated = updated, removed = removedIds.size)
     }
 
-    private suspend fun upsertSeries(providerId: String, items: List<XtreamSeriesItem>, now: Long): ImportCount {
-        val existing = catalogDao.getSeries(providerId).associateBy { it.remoteId }
-        val series = items.map { item -> item.toEntity(providerId, existing[item.remoteId], now) }
-        val importedIds = series.mapTo(mutableSetOf()) { it.id }
-        val removedIds = existing.values.filter { it.id !in importedIds }.map { it.id }
-        val count = countChanges(series, existing)
-        if (series.isNotEmpty()) {
-            catalogDao.upsertSeries(series)
-        }
-        if (removedIds.isNotEmpty()) {
-            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_SERIES, removedIds)
-            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_SERIES, removedIds)
-            // Cascade the removed series' seasons/episodes (+ episode progress). The fast Xtream refresh
-            // leaves seasons/episodes untouched otherwise, so without this a removed series would orphan
-            // its seasons/episodes until the separate series-details job reconciles them.
-            val orphanEpisodeIds = catalogDao.getEpisodeIdsForSeries(providerId, removedIds)
-            if (orphanEpisodeIds.isNotEmpty()) {
-                playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, orphanEpisodeIds)
+    private suspend fun mergeSeries(providerId: String, cascadeSeasonsEpisodes: Boolean): ImportCount {
+        val removedIds = catalogDao.removedSeriesIds(providerId)
+        removedIds.chunked(SQL_IN_MAX).forEach { ids ->
+            favoritesDao.deleteFavoritesByMediaIds(providerId, MEDIA_TYPE_SERIES, ids)
+            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_SERIES, ids)
+            // Cascade the removed series' seasons/episodes (+ episode progress) ONLY when this import does
+            // not merge episodes/seasons itself (the fast Xtream refresh, seriesInfos empty). When it does,
+            // the episode delta-merge + season reconcile already remove and COUNT them, so cascading here
+            // would double-delete and under-count episodes.removed.
+            if (cascadeSeasonsEpisodes) {
+                val orphanEpisodeIds = catalogDao.getEpisodeIdsForSeries(providerId, ids)
+                orphanEpisodeIds.chunked(SQL_IN_MAX).forEach { episodeIds ->
+                    playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, episodeIds)
+                }
+                catalogDao.deleteEpisodesForSeries(providerId, ids)
+                catalogDao.deleteSeasonsForSeries(providerId, ids)
             }
-            catalogDao.deleteEpisodesForSeries(providerId, removedIds)
-            catalogDao.deleteSeasonsForSeries(providerId, removedIds)
-            catalogDao.deleteSeries(providerId, removedIds)
         }
-        return count.copy(removed = removedIds.size)
+        val added = catalogDao.countNewSeriesFromStage(providerId)
+        val updated = catalogDao.deleteChangedSeriesFromStage(providerId)
+        catalogDao.insertMissingSeriesFromStage(providerId)
+        catalogDao.deleteStaleSeriesFromStage(providerId)
+        return ImportCount(added = added, updated = updated, removed = removedIds.size)
     }
+
+    private suspend fun mergeEpisodes(providerId: String): ImportCount {
+        val removedIds = catalogDao.removedEpisodesIds(providerId)
+        removedIds.chunked(SQL_IN_MAX).forEach { ids ->
+            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, ids)
+        }
+        val added = catalogDao.countNewEpisodesFromStage(providerId)
+        val updated = catalogDao.deleteChangedEpisodesFromStage(providerId)
+        catalogDao.insertMissingEpisodesFromStage(providerId)
+        catalogDao.deleteStaleEpisodesFromStage(providerId)
+        return ImportCount(added = added, updated = updated, removed = removedIds.size)
+    }
+
+    private suspend fun stageChannels(providerId: String, rows: List<ChannelStageEntity>) {
+        catalogDao.clearChannelsStage(providerId)
+        rows.forEachChunkedTransaction(database, STAGE_CHUNK_SIZE) { catalogDao.insertChannelsStage(it) }
+    }
+
+    private suspend fun stageMovies(providerId: String, rows: List<MovieStageEntity>) {
+        catalogDao.clearMoviesStage(providerId)
+        rows.forEachChunkedTransaction(database, STAGE_CHUNK_SIZE) { catalogDao.insertMoviesStage(it) }
+    }
+
+    private suspend fun stageSeries(providerId: String, rows: List<SeriesStageEntity>) {
+        catalogDao.clearSeriesStage(providerId)
+        rows.forEachChunkedTransaction(database, STAGE_CHUNK_SIZE) { catalogDao.insertSeriesStage(it) }
+    }
+
+    private suspend fun stageEpisodes(providerId: String, rows: List<EpisodeStageEntity>) {
+        catalogDao.clearEpisodesStage(providerId)
+        rows.forEachChunkedTransaction(database, STAGE_CHUNK_SIZE) { catalogDao.insertEpisodesStage(it) }
+    }
+
+    // Drop the transient staged rows after the merge consumes them (a crash before this is cleaned at
+    // startup). clearEpisodesStageFor is the series-details job's narrower cleanup.
+    private suspend fun clearAllStage(providerId: String) {
+        catalogDao.clearChannelsStage(providerId)
+        catalogDao.clearMoviesStage(providerId)
+        catalogDao.clearSeriesStage(providerId)
+        catalogDao.clearEpisodesStage(providerId)
+    }
+
+    private suspend fun clearEpisodesStageFor(providerId: String) {
+        catalogDao.clearEpisodesStage(providerId)
+    }
+
+    // Live entity -> staging row + a content-only fingerprint (excludes id/providerId/stableKey/createdAt/
+    // updatedAt — the derived/bookkeeping columns) that the delta-merge compares against the live row.
+    private fun ChannelEntity.toStage(): ChannelStageEntity = ChannelStageEntity(
+        id = id, providerId = providerId, categoryId = categoryId, stableKey = stableKey, remoteId = remoteId,
+        channelNumber = channelNumber, name = name, logoUrl = logoUrl, epgChannelId = epgChannelId,
+        isCatchupAvailable = isCatchupAvailable, catchupDays = catchupDays, createdAt = createdAt, updatedAt = updatedAt,
+        syncFingerprint = syncFingerprint(
+            categoryId, remoteId, channelNumber, name, logoUrl, epgChannelId, isCatchupAvailable, catchupDays,
+        ),
+    )
+
+    private fun MovieEntity.toStage(): MovieStageEntity = MovieStageEntity(
+        id = id, providerId = providerId, categoryId = categoryId, stableKey = stableKey, remoteId = remoteId,
+        name = name, originalName = originalName, containerExtension = containerExtension, posterUrl = posterUrl,
+        backdropUrl = backdropUrl, rating = rating, year = year, genre = genre, duration = duration, director = director,
+        cast = cast, plot = plot, trailerUrl = trailerUrl, addedAt = addedAt, ageRating = ageRating, isAdult = isAdult,
+        createdAt = createdAt, updatedAt = updatedAt,
+        syncFingerprint = syncFingerprint(
+            categoryId, remoteId, name, originalName, containerExtension, posterUrl, backdropUrl, rating, year, genre,
+            duration, director, cast, plot, trailerUrl, addedAt, ageRating, isAdult,
+        ),
+    )
+
+    private fun SeriesEntity.toStage(): SeriesStageEntity = SeriesStageEntity(
+        id = id, providerId = providerId, categoryId = categoryId, stableKey = stableKey, remoteId = remoteId,
+        name = name, originalName = originalName, posterUrl = posterUrl, backdropUrl = backdropUrl, rating = rating,
+        year = year, genre = genre, director = director, cast = cast, plot = plot, addedAt = addedAt, ageRating = ageRating,
+        isAdult = isAdult, createdAt = createdAt, updatedAt = updatedAt,
+        syncFingerprint = syncFingerprint(
+            categoryId, remoteId, name, originalName, posterUrl, backdropUrl, rating, year, genre, director, cast, plot,
+            addedAt, ageRating, isAdult,
+        ),
+    )
+
+    private fun EpisodeEntity.toStage(): EpisodeStageEntity = EpisodeStageEntity(
+        id = id, providerId = providerId, seriesId = seriesId, seasonId = seasonId, stableKey = stableKey, remoteId = remoteId,
+        episodeNumber = episodeNumber, seasonNumber = seasonNumber, name = name, plot = plot, thumbnailUrl = thumbnailUrl,
+        containerExtension = containerExtension, duration = duration, airDate = airDate, ageRating = ageRating, isAdult = isAdult,
+        createdAt = createdAt, updatedAt = updatedAt,
+        syncFingerprint = syncFingerprint(
+            seriesId, seasonId, remoteId, episodeNumber, seasonNumber, name, plot, thumbnailUrl, containerExtension,
+            duration, airDate, ageRating, isAdult,
+        ),
+    )
 
     private suspend fun upsertSeasons(providerId: String, seasons: List<SeasonEntity>): ImportCount {
         val existing = catalogDao.getSeasons(providerId).associateBy { it.id }
@@ -306,58 +443,45 @@ class RoomCatalogImportRepository(
         return ImportCount(added = added, updated = updated, removed = removedIds.size)
     }
 
-    private suspend fun upsertEpisodes(providerId: String, episodes: List<EpisodeEntity>): ImportCount {
-        val existing = catalogDao.getEpisodes(providerId).associateBy { it.remoteId }
-        val importedIds = episodes.mapTo(mutableSetOf()) { it.id }
-        val removedIds = existing.values.filter { it.id !in importedIds }.map { it.id }
-        val episodesWithCreatedAt = episodes.map { episode ->
-            episode.copy(createdAt = existing[episode.remoteId]?.createdAt ?: episode.createdAt)
-        }
-        val count = countChanges(episodesWithCreatedAt, existing)
-        if (episodesWithCreatedAt.isNotEmpty()) {
-            catalogDao.upsertEpisodes(episodesWithCreatedAt)
-        }
-        if (removedIds.isNotEmpty()) {
-            playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, removedIds)
-            catalogDao.deleteEpisodes(providerId, removedIds)
-        }
-        return count.copy(removed = removedIds.size)
-    }
-
     private suspend fun deleteRemovedCategories(providerId: String, type: String, categoryIds: List<String>) {
         if (categoryIds.isNotEmpty()) {
             catalogDao.deleteCategories(providerId, type, categoryIds)
         }
     }
 
+    // Series ids are deterministic (seriesId(providerId, remoteId)), so seasons/episodes bind to their
+    // series without reading it back. knownSeriesRemoteIds gates out infos for series not in the catalog
+    // (preserving the old "skip series we don't have" behaviour) so no orphan seasons/episodes are built.
     private fun buildSeasons(
         providerId: String,
         seriesInfos: List<XtreamSeriesInfo>,
-        seriesByRemoteId: Map<String, SeriesEntity>,
+        knownSeriesRemoteIds: Set<String>,
         now: Long,
     ): List<SeasonEntity> =
         seriesInfos.flatMap { info ->
-            val series = seriesByRemoteId[info.seriesRemoteId] ?: return@flatMap emptyList()
+            if (info.seriesRemoteId !in knownSeriesRemoteIds) return@flatMap emptyList()
+            val seriesRowId = seriesId(providerId, info.seriesRemoteId)
             val explicitSeasons = info.seasons.associateBy { it.seasonNumber }
             val episodeSeasonNumbers = info.episodes.mapTo(mutableSetOf()) { it.seasonNumber }
             (explicitSeasons.keys + episodeSeasonNumbers)
                 .sorted()
                 .map { seasonNumber ->
                     val season = explicitSeasons[seasonNumber]
-                    season.toEntity(providerId, series.id, info.seriesRemoteId, seasonNumber, now)
+                    season.toEntity(providerId, seriesRowId, info.seriesRemoteId, seasonNumber, now)
                 }
         }
 
     private fun buildEpisodes(
         providerId: String,
         seriesInfos: List<XtreamSeriesInfo>,
-        seriesByRemoteId: Map<String, SeriesEntity>,
+        knownSeriesRemoteIds: Set<String>,
         now: Long,
     ): List<EpisodeEntity> =
         seriesInfos.flatMap { info ->
-            val series = seriesByRemoteId[info.seriesRemoteId] ?: return@flatMap emptyList()
+            if (info.seriesRemoteId !in knownSeriesRemoteIds) return@flatMap emptyList()
+            val seriesRowId = seriesId(providerId, info.seriesRemoteId)
             info.episodes.map { episode ->
-                episode.toEntity(providerId, series.id, seasonId(providerId, info.seriesRemoteId, episode.seasonNumber), now)
+                episode.toEntity(providerId, seriesRowId, seasonId(providerId, info.seriesRemoteId, episode.seasonNumber), now)
             }
         }
 
@@ -499,43 +623,6 @@ class RoomCatalogImportRepository(
     private fun XtreamSeriesItem.categoryRemoteId(): String =
         categoryRemoteId?.takeIf { it.isNotBlank() } ?: UNCATEGORIZED_REMOTE_ID
 
-    private fun <T : Any> countChanges(entities: List<T>, existingByRemoteId: Map<String, T>): ImportCount =
-        ImportCount(
-            added = entities.count { entity -> entity.remoteId() !in existingByRemoteId },
-            updated = entities.count { entity ->
-                val existing = existingByRemoteId[entity.remoteId()]
-                existing != null && existing.withUpdatedAt(entity.updatedAt()) != entity
-            },
-            removed = 0,
-        )
-
-    private fun Any.remoteId(): String =
-        when (this) {
-            is ChannelEntity -> remoteId
-            is MovieEntity -> remoteId
-            is SeriesEntity -> remoteId
-            is EpisodeEntity -> remoteId
-            else -> error("Unsupported import entity: ${this::class.java.name}")
-        }
-
-    private fun Any.updatedAt(): Long =
-        when (this) {
-            is ChannelEntity -> updatedAt
-            is MovieEntity -> updatedAt
-            is SeriesEntity -> updatedAt
-            is EpisodeEntity -> updatedAt
-            else -> error("Unsupported import entity: ${this::class.java.name}")
-        }
-
-    private fun Any.withUpdatedAt(updatedAt: Long): Any =
-        when (this) {
-            is ChannelEntity -> copy(updatedAt = updatedAt)
-            is MovieEntity -> copy(updatedAt = updatedAt)
-            is SeriesEntity -> copy(updatedAt = updatedAt)
-            is EpisodeEntity -> copy(updatedAt = updatedAt)
-            else -> error("Unsupported import entity: ${this::class.java.name}")
-        }
-
     private data class CategoryImport(
         val count: ImportCount,
         val removedIds: List<String>,
@@ -551,6 +638,10 @@ class RoomCatalogImportRepository(
         const val MEDIA_TYPE_EPISODE = "EPISODE"
         const val UNCATEGORIZED_REMOTE_ID = "__UNCATEGORIZED__"
         const val UNCATEGORIZED_DISPLAY_NAME = "Nicht kategorisiert"
+
+        // Per-transaction stage chunk (writer released between chunks) + SQLite's IN(:ids) variable cap.
+        const val STAGE_CHUNK_SIZE = 1_000
+        const val SQL_IN_MAX = 900
 
         fun categoryId(providerId: String, type: String, remoteId: String): String =
             "$providerId:category:${type.lowercase()}:${stableHash(remoteId)}"

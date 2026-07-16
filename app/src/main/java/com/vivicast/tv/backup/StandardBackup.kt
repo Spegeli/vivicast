@@ -24,6 +24,7 @@ data class StandardBackupDocument(
     val providerEpgSources: List<StandardBackupProviderEpgSource> = emptyList(),
     val epgChannelMappings: List<StandardBackupEpgChannelMapping> = emptyList(),
     val categories: List<StandardBackupCategory> = emptyList(),
+    val categorySettings: List<StandardBackupCategorySettings> = emptyList(),
     val favorites: List<StandardBackupFavorite> = emptyList(),
     val playbackProgress: List<StandardBackupPlaybackProgress> = emptyList(),
     val channelHistory: List<StandardBackupChannelHistory> = emptyList(),
@@ -83,6 +84,15 @@ data class StandardBackupCategory(
     val name: String,
     val sortOrder: Int,
     val isHidden: Boolean,
+    val manualSortOrder: Int? = null,
+)
+
+// Per-(provider, type) group-management settings (sort mode + new-groups-hidden policy). See D10.
+data class StandardBackupCategorySettings(
+    val providerStableKey: String,
+    val type: String,
+    val sortMode: String,
+    val hideNewGroups: Boolean,
 )
 
 data class StandardBackupFavorite(
@@ -171,6 +181,7 @@ fun StandardBackupDocument.toJson(): JSONObject =
         .put("providerEpgSources", providerEpgSources.toJsonArray { it.toJson() })
         .put("epgChannelMappings", epgChannelMappings.toJsonArray { it.toJson() })
         .put("categories", categories.toJsonArray { it.toJson() })
+        .put("categorySettings", categorySettings.toJsonArray { it.toJson() })
         .put("favorites", favorites.toJsonArray { it.toJson() })
         .put("playbackProgress", playbackProgress.toJsonArray { it.toJson() })
         .put("channelHistory", channelHistory.toJsonArray { it.toJson() })
@@ -348,6 +359,14 @@ private fun StandardBackupCategory.toJson(): JSONObject =
         .put("name", name)
         .put("sortOrder", sortOrder)
         .put("isHidden", isHidden)
+        .put("manualSortOrder", manualSortOrder ?: JSONObject.NULL)
+
+private fun StandardBackupCategorySettings.toJson(): JSONObject =
+    JSONObject()
+        .put("providerStableKey", providerStableKey)
+        .put("type", type)
+        .put("sortMode", sortMode)
+        .put("hideNewGroups", hideNewGroups)
 
 private fun StandardBackupFavorite.toJson(): JSONObject =
     JSONObject()

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceRepository
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 
 /**
@@ -17,6 +18,7 @@ internal class SettingsViewModelFactory(
     private val mediaCacheStore: MediaCacheStore,
     private val epgSourceRepository: EpgSourceRepository,
     private val providerRepository: ProviderRepository,
+    private val categoryGroupRepository: CategoryGroupRepository,
     private val imageCacheSizeBytes: suspend () -> Long = { 0L },
     private val clearImageCache: suspend () -> Unit = {},
 ) : ViewModelProvider.Factory {
@@ -27,6 +29,7 @@ internal class SettingsViewModelFactory(
             mediaCacheStore,
             epgSourceRepository,
             providerRepository,
+            categoryGroupRepository,
             imageCacheSizeBytes,
             clearImageCache,
         ) as T

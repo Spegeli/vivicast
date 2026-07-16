@@ -22,6 +22,7 @@ class RoomProviderRepository(
 ) : ProviderRepository {
     private val providerDao = database.providerDao()
     private val catalogDao = database.catalogDao()
+    private val providerCategorySettingsDao = database.providerCategorySettingsDao()
     private val epgDao = database.epgDao()
     private val favoritesDao = database.favoritesDao()
     private val playbackDao = database.playbackDao()
@@ -256,6 +257,7 @@ class RoomProviderRepository(
         val existing = providerDao.getProvider(providerId)
         database.withTransaction {
             catalogDao.deleteCatalogForProvider(providerId)
+            providerCategorySettingsDao.deleteSettingsForProvider(providerId)
             epgDao.deleteProgramsForProvider(providerId)
             epgDao.deleteMappingsForProvider(providerId)
             epgDao.deleteProviderEpgSources(providerId)

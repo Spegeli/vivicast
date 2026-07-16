@@ -59,8 +59,12 @@ data class CategoryEntity(
     val type: String,
     val remoteId: String,
     val name: String,
+    // Source-appearance order from the import (the "playlist order" sort mode). Rewritten every import.
     val sortOrder: Int,
     val isHidden: Boolean,
+    // User's manual group order, used only in the MANUAL sort mode; NULL = never manually placed. Preserved
+    // across import (keyed by remoteId, like isHidden) so a reorder survives a refresh. See D10.
+    @ColumnInfo(defaultValue = "NULL") val manualSortOrder: Int? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -91,6 +95,10 @@ data class ChannelEntity(
     val catchupDays: Int,
     val createdAt: Long,
     val updatedAt: Long,
+    // SHA-256 over content columns only (excludes user-state + createdAt/updatedAt). Drives the staged
+    // delta-merge: a live row is rewritten only when its fingerprint differs from the staged one. See
+    // plans/nonblocking-db-imports.md.
+    @ColumnInfo(defaultValue = "''") val syncFingerprint: String = "",
 )
 
 @Entity(
@@ -127,6 +135,8 @@ data class MovieEntity(
     @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    // Content-only fingerprint for the staged delta-merge (see ChannelEntity / plans/nonblocking-db-imports.md).
+    @ColumnInfo(defaultValue = "''") val syncFingerprint: String = "",
 )
 
 @Entity(
@@ -160,6 +170,8 @@ data class SeriesEntity(
     @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    // Content-only fingerprint for the staged delta-merge (see ChannelEntity / plans/nonblocking-db-imports.md).
+    @ColumnInfo(defaultValue = "''") val syncFingerprint: String = "",
 )
 
 @Entity(
@@ -212,6 +224,8 @@ data class EpisodeEntity(
     @ColumnInfo(defaultValue = "0") val isAdult: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    // Content-only fingerprint for the staged delta-merge (see ChannelEntity / plans/nonblocking-db-imports.md).
+    @ColumnInfo(defaultValue = "''") val syncFingerprint: String = "",
 )
 
 @Entity(
@@ -273,6 +287,28 @@ data class ProviderEpgSourceEntity(
     val createdAt: Long,
 )
 
+// Per-(provider, category type) group-management settings: the sort mode and whether newly discovered
+// groups default to hidden. Provider-scoped user state (no FK, matching the other entities — cleaned up
+// with the catalog on provider deletion). id = "$providerId:$type". See D10.
+@Entity(
+    tableName = "provider_category_settings",
+    indices = [
+        Index(value = ["providerId"]),
+        Index(value = ["providerId", "type"], unique = true),
+    ],
+)
+data class ProviderCategorySettingsEntity(
+    @PrimaryKey val id: String,
+    val providerId: String,
+    val type: String,
+    // One of "PLAYLIST" (source order, default) | "NAME" (A→Z) | "MANUAL" (user order).
+    @ColumnInfo(defaultValue = "'PLAYLIST'") val sortMode: String = "PLAYLIST",
+    // When a refresh discovers a new group, default it to hidden (true) or shown (false, default).
+    @ColumnInfo(defaultValue = "0") val hideNewGroups: Boolean = false,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 @Entity(
     tableName = "epg_programs",
     indices = [
@@ -303,6 +339,8 @@ data class EpgProgramEntity(
     val isCatchupAvailable: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    // Content-only fingerprint for the staged delta-merge (see ChannelEntity / plans/nonblocking-db-imports.md).
+    @ColumnInfo(defaultValue = "''") val syncFingerprint: String = "",
 )
 
 @Entity(

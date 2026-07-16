@@ -15,6 +15,7 @@ import com.vivicast.tv.core.database.model.EpgProgramEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.FavoriteEntity
 import com.vivicast.tv.core.database.model.PlaybackProgressEntity
+import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
 import com.vivicast.tv.iptv.m3u.DefaultM3uParser
 import com.vivicast.tv.iptv.xtream.XtreamCategory
 import com.vivicast.tv.iptv.xtream.XtreamEpisode
@@ -337,6 +338,75 @@ class RoomCatalogImportRepositoryTest {
 
         assertEquals(0, countForProvider("favorites", PROVIDER_ID))
         assertEquals(0, countForProvider("playback_progress", PROVIDER_ID))
+    }
+
+    @Test
+    fun unchangedXtreamReimportSkipsRowsViaFingerprintAndDrainsStage() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        // Re-import the identical catalog: the fingerprint delta-merge must rewrite nothing.
+        val result = repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        assertEquals(0, result.channels.added + result.channels.updated + result.channels.removed)
+        assertEquals(0, result.movies.added + result.movies.updated + result.movies.removed)
+        assertEquals(0, result.series.added + result.series.updated + result.series.removed)
+
+        // Staging tables are transient — drained after the merge, never visible to reads.
+        assertEquals(0, countAll("channels_stage"))
+        assertEquals(0, countAll("movies_stage"))
+        assertEquals(0, countAll("series_stage"))
+        assertEquals(0, countAll("episodes_stage"))
+    }
+
+    @Test
+    fun categoryUserStateSurvivesReimportAndNewGroupHonoursHidePolicy() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        // Give one LIVE group user state: hidden + a manual order position.
+        val target = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").first()
+        database.catalogDao().setCategoryHidden(target.id, hidden = true, updatedAt = now)
+        database.catalogDao().updateManualSortOrder(target.id, manualSortOrder = 42, updatedAt = now)
+
+        // Turn on the hide-new-groups policy for (provider, LIVE).
+        database.providerCategorySettingsDao().upsertSettings(
+            ProviderCategorySettingsEntity(
+                id = "$PROVIDER_ID:LIVE",
+                providerId = PROVIDER_ID,
+                type = "LIVE",
+                hideNewGroups = true,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+
+        // Re-import the identical catalog: the user state must survive the refresh (D10 preserve guard).
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        val preserved = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").first { it.id == target.id }
+        assertTrue(preserved.isHidden)
+        assertEquals(42, preserved.manualSortOrder)
+
+        // A refresh that introduces a brand-new LIVE group defaults it to hidden per the policy.
+        now = 3_000L
+        repository.importXtreamCatalog(
+            PROVIDER_ID,
+            firstXtreamCatalog().copy(
+                liveCategories = firstXtreamCatalog().liveCategories +
+                    XtreamCategory(remoteId = "live-doku", name = "Doku"),
+                liveStreams = firstXtreamCatalog().liveStreams +
+                    XtreamLiveStream(
+                        remoteId = "live-3",
+                        name = "Doku HD",
+                        categoryRemoteId = "live-doku",
+                        channelNumber = "3",
+                        logoUrl = null,
+                        epgChannelId = "doku.de",
+                        isCatchupAvailable = false,
+                        catchupDays = 0,
+                    ),
+            ),
+        )
+        val newGroup = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").first { it.remoteId == "live-doku" }
+        assertTrue(newGroup.isHidden)
     }
 
     private fun firstPlaylist() = parser.parse(

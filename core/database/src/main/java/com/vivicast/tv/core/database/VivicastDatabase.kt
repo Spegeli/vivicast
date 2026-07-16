@@ -7,6 +7,7 @@ import com.vivicast.tv.core.database.dao.CatalogDao
 import com.vivicast.tv.core.database.dao.EpgDao
 import com.vivicast.tv.core.database.dao.FavoritesDao
 import com.vivicast.tv.core.database.dao.PlaybackDao
+import com.vivicast.tv.core.database.dao.ProviderCategorySettingsDao
 import com.vivicast.tv.core.database.dao.ProviderDao
 import com.vivicast.tv.core.database.dao.SearchDao
 import com.vivicast.tv.core.database.model.AndroidTvSearchEntryEntity
@@ -21,6 +22,7 @@ import com.vivicast.tv.core.database.model.EpisodeEntity
 import com.vivicast.tv.core.database.model.FavoriteEntity
 import com.vivicast.tv.core.database.model.MovieEntity
 import com.vivicast.tv.core.database.model.PlaybackProgressEntity
+import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
 import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.database.model.SearchHistoryEntity
@@ -30,6 +32,11 @@ import com.vivicast.tv.core.database.model.SearchMovieFtsEntity
 import com.vivicast.tv.core.database.model.SearchSeriesFtsEntity
 import com.vivicast.tv.core.database.model.SeasonEntity
 import com.vivicast.tv.core.database.model.SeriesEntity
+import com.vivicast.tv.core.database.model.ChannelStageEntity
+import com.vivicast.tv.core.database.model.MovieStageEntity
+import com.vivicast.tv.core.database.model.SeriesStageEntity
+import com.vivicast.tv.core.database.model.EpisodeStageEntity
+import com.vivicast.tv.core.database.model.EpgProgramStageEntity
 
 @Database(
     entities = [
@@ -43,6 +50,7 @@ import com.vivicast.tv.core.database.model.SeriesEntity
         EpgSourceEntity::class,
         EpgChannelEntity::class,
         ProviderEpgSourceEntity::class,
+        ProviderCategorySettingsEntity::class,
         EpgProgramEntity::class,
         EpgChannelMappingEntity::class,
         FavoriteEntity::class,
@@ -54,6 +62,12 @@ import com.vivicast.tv.core.database.model.SeriesEntity
         SearchSeriesFtsEntity::class,
         SearchEpgFtsEntity::class,
         AndroidTvSearchEntryEntity::class,
+        // Staging tables for the chunked delta-merge import (plans/nonblocking-db-imports.md).
+        ChannelStageEntity::class,
+        MovieStageEntity::class,
+        SeriesStageEntity::class,
+        EpisodeStageEntity::class,
+        EpgProgramStageEntity::class,
     ],
     version = VIVICAST_DATABASE_VERSION,
     exportSchema = true,
@@ -61,6 +75,7 @@ import com.vivicast.tv.core.database.model.SeriesEntity
 abstract class VivicastDatabase : RoomDatabase() {
     abstract fun providerDao(): ProviderDao
     abstract fun catalogDao(): CatalogDao
+    abstract fun providerCategorySettingsDao(): ProviderCategorySettingsDao
     abstract fun epgDao(): EpgDao
     abstract fun favoritesDao(): FavoritesDao
     abstract fun playbackDao(): PlaybackDao
@@ -68,7 +83,7 @@ abstract class VivicastDatabase : RoomDatabase() {
     abstract fun androidTvSearchDao(): AndroidTvSearchDao
 }
 
-const val VIVICAST_DATABASE_VERSION = 16
+const val VIVICAST_DATABASE_VERSION = 18
 
 /**
  * Installs the InvalidationTracker triggers for the UI-observed tables eagerly at startup. Room installs
@@ -92,6 +107,7 @@ fun VivicastDatabase.warmInvalidationTracker() {
 
 private val UI_OBSERVED_TABLES = arrayOf(
     "providers", "categories", "channels", "movies", "series", "seasons", "episodes",
-    "epg_sources", "epg_channels", "provider_epg_sources", "epg_channel_mappings", "epg_programs",
+    "epg_sources", "epg_channels", "provider_epg_sources", "provider_category_settings",
+    "epg_channel_mappings", "epg_programs",
     "playback_progress", "channel_history", "favorites", "search_history",
 )

@@ -20,6 +20,7 @@ import com.vivicast.tv.domain.model.SearchResults
 import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.util.Locale
 
@@ -28,12 +29,18 @@ class RoomMediaRepository(
     private val nowProvider: () -> Long = { System.currentTimeMillis() },
 ) : MediaRepository {
     private val catalogDao = database.catalogDao()
+    private val providerCategorySettingsDao = database.providerCategorySettingsDao()
     private val searchDao = database.searchDao()
     private val androidTvSearchDao = database.androidTvSearchDao()
 
+    // Visible groups (hidden filtered by the DAO), ordered by the provider's sort mode: PLAYLIST keeps the
+    // DAO's source order, NAME re-sorts A→Z, MANUAL uses the saved manual order (see sortedByGroupMode).
     override fun observeCategories(providerId: String, type: CategoryType): Flow<List<Category>> =
-        catalogDao.observeVisibleCategories(providerId, type.storageValue).map { categories ->
-            categories.map { it.toDomain() }
+        combine(
+            catalogDao.observeVisibleCategories(providerId, type.storageValue),
+            providerCategorySettingsDao.observeSettings(providerId, type.storageValue),
+        ) { categories, settings ->
+            categories.sortedByGroupMode(settings.groupSortMode()).map { it.toDomain() }
         }
 
     override fun observeChannels(providerId: String, categoryId: String?): Flow<List<Channel>> =
@@ -220,14 +227,14 @@ class RoomMediaRepository(
     }
 }
 
-private val CategoryType.storageValue: String
+internal val CategoryType.storageValue: String
     get() = when (this) {
         CategoryType.LiveTv -> "LIVE"
         CategoryType.Movies -> "MOVIE"
         CategoryType.Series -> "SERIES"
     }
 
-private fun String.toCategoryType(): CategoryType =
+internal fun String.toCategoryType(): CategoryType =
     when (this) {
         "LIVE" -> CategoryType.LiveTv
         "MOVIE" -> CategoryType.Movies
@@ -235,7 +242,7 @@ private fun String.toCategoryType(): CategoryType =
         else -> CategoryType.LiveTv
     }
 
-private fun CategoryEntity.toDomain(): Category =
+internal fun CategoryEntity.toDomain(): Category =
     Category(
         id = id,
         providerId = providerId,

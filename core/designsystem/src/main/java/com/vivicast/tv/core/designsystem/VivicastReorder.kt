@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,17 +55,30 @@ fun VivicastReorderList(
     var snapshotAtPickup by remember(items) { mutableStateOf<List<VivicastReorderItem>?>(null) }
     var moveTick by remember(items) { mutableIntStateOf(0) }
     val requesters = remember(items) { items.associate { it.id to FocusRequester() } }
+    val listState = rememberLazyListState()
 
     // Focus the first row on open so the list is immediately interactable (host is a dialog).
     LaunchedEffect(items) {
         withFrameNanos {}
         items.firstOrNull()?.let { requesters[it.id]?.runCatching { requestFocus() } }
     }
-    // Keep focus on the picked item after it moves — re-request next frame as a safety net (keyed items
-    // usually retain focus across reorder on their own).
+    // After a move: keep the picked row on screen (scroll to the edge it approaches, so it stays visible in
+    // a long list) and re-request its focus next frame (keyed items usually retain focus on their own).
     LaunchedEffect(moveTick) {
         val id = pickedId ?: return@LaunchedEffect
         withFrameNanos {}
+        val idx = order.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            val layout = listState.layoutInfo
+            val row = layout.visibleItemsInfo.firstOrNull { it.index == idx }
+            val viewHeight = layout.viewportEndOffset - layout.viewportStartOffset
+            when {
+                row == null -> listState.animateScrollToItem(idx)
+                row.offset < layout.viewportStartOffset -> listState.animateScrollToItem(idx)
+                row.offset + row.size > layout.viewportEndOffset ->
+                    listState.animateScrollToItem(idx, (viewHeight - row.size).coerceAtLeast(0))
+            }
+        }
         requesters[id]?.requestFocus()
     }
 
@@ -91,7 +105,7 @@ fun VivicastReorderList(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+        LazyColumn(state = listState, modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             itemsIndexed(order, key = { _, item -> item.id }) { index, item ->
                 ReorderRow(
                     label = item.label,

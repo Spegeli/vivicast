@@ -43,8 +43,10 @@ import com.vivicast.tv.data.epg.SecureEpgSourceRepository
 import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.favorites.RoomFavoritesRepository
 import com.vivicast.tv.data.media.CatalogImportRepository
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
+import com.vivicast.tv.data.media.RoomCategoryGroupRepository
 import com.vivicast.tv.data.media.RoomMediaRepository
 import com.vivicast.tv.data.playback.DefaultPlaybackStreamResolver
 import com.vivicast.tv.data.playback.PlaybackProgressRecorder
@@ -218,6 +220,10 @@ class AppContainer(
 
     val mediaRepository: MediaRepository by lazy {
         RoomMediaRepository(database = database)
+    }
+
+    val categoryGroupRepository: CategoryGroupRepository by lazy {
+        RoomCategoryGroupRepository(database = database)
     }
 
     val favoritesRepository: FavoritesRepository by lazy {
@@ -416,6 +422,12 @@ class AppContainer(
     suspend fun recoverStuckRefreshState() {
         database.providerDao().clearStuckRefreshingStatus()
         database.epgDao().clearStuckRefreshingState()
+        // Drop orphaned import staging rows a killed refresh left behind (plans/nonblocking-db-imports.md).
+        database.epgDao().clearAllProgramsStage()
+        database.catalogDao().clearAllChannelsStage()
+        database.catalogDao().clearAllMoviesStage()
+        database.catalogDao().clearAllSeriesStage()
+        database.catalogDao().clearAllEpisodesStage()
     }
 
     fun updateGlobalUserAgent(userAgent: String) {

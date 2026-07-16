@@ -295,9 +295,7 @@ internal fun ProviderEditor(
                         }
                     },
                 )
-                if (editor.isEditing) {
-                    ActionPill(label = stringResource(R.string.settings_delete), enabled = !signals.saving, onClick = onDelete)
-                }
+                // Delete moved to the Playlist-Aktionen menu (R9); the editor now only cancels/saves.
             }
         }
     }

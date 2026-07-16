@@ -2,10 +2,13 @@ package com.vivicast.tv.data.epg
 
 import androidx.room.withTransaction
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.forEachChunkedTransaction
+import com.vivicast.tv.core.database.syncFingerprint
 import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.database.model.EpgProgramStageEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.domain.model.Channel
@@ -180,105 +183,136 @@ class RoomEpgRepository(
         document: XmltvDocument,
     ): EpgImportResult {
         val now = clock()
-        return database.withTransaction {
-            val source = epgDao.getEpgSource(epgSourceId)
-                ?: error("EPG source not found: $epgSourceId")
-            val timeShiftMillis = source.timeShiftMinutes * MILLIS_PER_MINUTE
-            val channels = catalogDao.getChannels(providerId)
-            val existingMappings = epgDao.getMappingsForProviderAndSource(providerId, epgSourceId)
-            val manualMappings = existingMappings.filter { it.isManual }
-            val manualMappedChannelIds = manualMappings.mapTo(mutableSetOf()) { it.channelId }
+        // Reads run outside any long transaction — WAL lets them see the committed snapshot without blocking
+        // (and without holding the writer while we parse/build the staged rows).
+        val source = epgDao.getEpgSource(epgSourceId)
+            ?: error("EPG source not found: $epgSourceId")
+        val timeShiftMillis = source.timeShiftMinutes * MILLIS_PER_MINUTE
+        val channels = catalogDao.getChannels(providerId)
+        val existingMappings = epgDao.getMappingsForProviderAndSource(providerId, epgSourceId)
+        val manualMappings = existingMappings.filter { it.isManual }
+        val manualMappedChannelIds = manualMappings.mapTo(mutableSetOf()) { it.channelId }
 
-            val autoMappings = buildAutomaticMappings(
-                providerId = providerId,
-                epgSourceId = epgSourceId,
-                channels = channels,
-                xmltvChannels = document.channels,
-                existingMappings = existingMappings,
-                ignoredChannelIds = manualMappedChannelIds,
-                epgSourceStableKey = source.stableKey,
-                now = now,
-            )
+        val autoMappings = buildAutomaticMappings(
+            providerId = providerId,
+            epgSourceId = epgSourceId,
+            channels = channels,
+            xmltvChannels = document.channels,
+            existingMappings = existingMappings,
+            ignoredChannelIds = manualMappedChannelIds,
+            epgSourceStableKey = source.stableKey,
+            now = now,
+        )
 
+        // Persist the feed's channel <icon>s (replace per source) so the effective-logo join can serve them
+        // when a provider prefers EPG logos. Only channels that actually carry an icon are stored.
+        val epgChannelRows = document.channels
+            .associateBy { it.id }
+            .values
+            .mapNotNull { xmlChannel ->
+                val icon = xmlChannel.iconUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                EpgChannelEntity(
+                    id = epgChannelRowId(epgSourceId, xmlChannel.id),
+                    epgSourceId = epgSourceId,
+                    stableKey = epgChannelStableKey(xmlChannel.id),
+                    remoteId = xmlChannel.id,
+                    displayName = xmlChannel.displayNames.firstOrNull() ?: xmlChannel.id,
+                    iconUrl = icon,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            }
+
+        val channelById = channels.associateBy { it.id }
+        val sourceStableKey = source.stableKey
+        val externalChannelToLocal = (manualMappings + autoMappings)
+            .associateBy { it.epgChannelId }
+            .mapValues { (_, mapping) -> mapping.channelId }
+
+        // Build the staged programme rows (mapped to a local channel; unmapped programmes are skipped, as
+        // before). Deterministic ids come out final, so no id rewrite is needed at merge time.
+        var skippedUnmappedPrograms = 0
+        val stageRows = ArrayList<EpgProgramStageEntity>(document.programs.size)
+        document.programs.forEach { program ->
+            val channel = externalChannelToLocal[program.channelId]?.let(channelById::get)
+            if (channel == null) {
+                skippedUnmappedPrograms += 1
+            } else {
+                stageRows += program.toEntity(
+                    providerId = providerId,
+                    epgSourceId = epgSourceId,
+                    localChannel = channel,
+                    sourceStableKey = sourceStableKey,
+                    now = now,
+                    timeShiftMillis = timeShiftMillis,
+                ).toStage()
+            }
+        }
+
+        // Stage the programmes in small chunked transactions — the single writer is released between chunks,
+        // so an interactive write (sort/hide/save) never waits for the whole import. The stage table has no
+        // FTS triggers, so this bulk write never touches the search mirror.
+        epgDao.clearProgramsStage(providerId, epgSourceId)
+        stageRows.forEachChunkedTransaction(database, EPG_IMPORT_CHUNK_SIZE) { epgDao.insertProgramsStage(it) }
+
+        // Merge: one short transaction applies the mappings, the per-source channel icons, and only the
+        // programme delta (changed -> re-inserted, new -> inserted, removed -> deleted) atomically, so
+        // readers flip old->new with no partial state and each op fires its matching search_epg_fts trigger.
+        database.withTransaction {
             if (autoMappings.isNotEmpty()) {
                 epgDao.upsertMappings(autoMappings)
             }
-
-            // Persist the feed's channel <icon>s (replace per source) so the effective-logo join can serve
-            // them when a provider prefers EPG logos. Only channels that actually carry an icon are stored.
-            val epgChannelRows = document.channels
-                .associateBy { it.id }
-                .values
-                .mapNotNull { xmlChannel ->
-                    val icon = xmlChannel.iconUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                    EpgChannelEntity(
-                        id = epgChannelRowId(epgSourceId, xmlChannel.id),
-                        epgSourceId = epgSourceId,
-                        stableKey = epgChannelStableKey(xmlChannel.id),
-                        remoteId = xmlChannel.id,
-                        displayName = xmlChannel.displayNames.firstOrNull() ?: xmlChannel.id,
-                        iconUrl = icon,
-                        createdAt = now,
-                        updatedAt = now,
-                    )
-                }
             epgDao.deleteEpgChannelsForSource(epgSourceId)
             if (epgChannelRows.isNotEmpty()) {
                 epgDao.upsertEpgChannels(epgChannelRows)
             }
-
-            val channelById = channels.associateBy { it.id }
-            val sourceStableKey = source.stableKey
-            val externalChannelToLocal = (manualMappings + autoMappings)
-                .associateBy { it.epgChannelId }
-                .mapValues { (_, mapping) -> mapping.channelId }
-            epgDao.deleteProgramsForProviderAndSource(providerId, epgSourceId)
-            var importedPrograms = 0
-            var skippedUnmappedPrograms = 0
-            val programBuffer = ArrayList<EpgProgramEntity>(EPG_IMPORT_CHUNK_SIZE)
-            suspend fun flushPrograms() {
-                if (programBuffer.isEmpty()) return
-                epgDao.insertPrograms(programBuffer)
-                importedPrograms += programBuffer.size
-                programBuffer.clear()
-            }
-
-            document.programs.forEach { program ->
-                val channelId = externalChannelToLocal[program.channelId]
-                val channel = channelId?.let(channelById::get)
-                if (channel == null) {
-                    skippedUnmappedPrograms += 1
-                } else {
-                    programBuffer += program.toEntity(
-                        providerId = providerId,
-                        epgSourceId = epgSourceId,
-                        localChannel = channel,
-                        sourceStableKey = sourceStableKey,
-                        now = now,
-                        timeShiftMillis = timeShiftMillis,
-                    )
-                }
-                if (programBuffer.size >= EPG_IMPORT_CHUNK_SIZE) {
-                    flushPrograms()
-                }
-            }
-            flushPrograms()
-
-            EpgImportResult(
-                programsImported = importedPrograms,
-                programsSkipped = document.skippedPrograms + skippedUnmappedPrograms,
-                mappingsAdded = autoMappings.count { mapping ->
-                    existingMappings.none { it.channelId == mapping.channelId && it.epgSourceId == mapping.epgSourceId }
-                },
-                mappingsUpdated = autoMappings.count { mapping ->
-                    val existing = existingMappings.firstOrNull {
-                        it.channelId == mapping.channelId && it.epgSourceId == mapping.epgSourceId
-                    }
-                    existing != null && existing.epgChannelId != mapping.epgChannelId
-                },
-            )
+            epgDao.deleteChangedProgramsFromStage(providerId, epgSourceId)
+            epgDao.insertMissingProgramsFromStage(providerId, epgSourceId)
+            epgDao.deleteStaleProgramsFromStage(providerId, epgSourceId)
         }
+        // Drop the transient staged rows now the merge has consumed them.
+        epgDao.clearProgramsStage(providerId, epgSourceId)
+
+        return EpgImportResult(
+            programsImported = stageRows.size,
+            programsSkipped = document.skippedPrograms + skippedUnmappedPrograms,
+            mappingsAdded = autoMappings.count { mapping ->
+                existingMappings.none { it.channelId == mapping.channelId && it.epgSourceId == mapping.epgSourceId }
+            },
+            mappingsUpdated = autoMappings.count { mapping ->
+                val existing = existingMappings.firstOrNull {
+                    it.channelId == mapping.channelId && it.epgSourceId == mapping.epgSourceId
+                }
+                existing != null && existing.epgChannelId != mapping.epgChannelId
+            },
+        )
     }
+
+    // Live programme entity -> staging row + a content fingerprint (mutable columns only) that the delta-merge
+    // compares against the live row to decide changed-vs-unchanged.
+    private fun EpgProgramEntity.toStage(): EpgProgramStageEntity = EpgProgramStageEntity(
+        id = id,
+        providerId = providerId,
+        channelId = channelId,
+        epgSourceId = epgSourceId,
+        stableKey = stableKey,
+        epgChannelId = epgChannelId,
+        title = title,
+        normalizedTitle = normalizedTitle,
+        subtitle = subtitle,
+        description = description,
+        startTime = startTime,
+        endTime = endTime,
+        category = category,
+        iconUrl = iconUrl,
+        isCatchupAvailable = isCatchupAvailable,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        syncFingerprint = syncFingerprint(
+            channelId, epgChannelId, title, subtitle, description,
+            startTime, endTime, category, iconUrl, isCatchupAvailable,
+        ),
+    )
 
     override suspend fun cleanupProgramsOutsideRetention(
         nowMillis: Long,
@@ -380,7 +414,9 @@ class RoomEpgRepository(
         const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
         const val MIN_RETENTION_DAYS = 1
         const val MAX_RETENTION_DAYS = 14
-        const val EPG_IMPORT_CHUNK_SIZE = 20_000
+        // Per-transaction stage chunk. Each chunk commits on its own so the single writer is released
+        // between chunks (was a 20k within-one-transaction buffer before the staged rewrite).
+        const val EPG_IMPORT_CHUNK_SIZE = 2_000
         val SHA256: ThreadLocal<MessageDigest> = ThreadLocal.withInitial { MessageDigest.getInstance("SHA-256") }
 
         fun providerEpgSourceId(providerId: String, epgSourceId: String): String =

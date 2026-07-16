@@ -5,9 +5,11 @@ import android.util.Log
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.FavoriteEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.PlaybackProgressEntity
+import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
 import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.SearchHistoryEntity
 import com.vivicast.tv.core.datastore.AppearancePreferences
@@ -148,6 +150,78 @@ class StandardBackupTest {
             assertFalse(json.toString().contains("1234", ignoreCase = true))
         } finally {
             database.close()
+        }
+    }
+
+    @Test
+    fun backupRoundTripsCategoryUserStateAndSettings() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceDatabase = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
+        val targetDatabase = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java).build()
+        val sourceSecureStore = FakeSecureValueStore()
+        val targetSecureStore = FakeSecureValueStore()
+        try {
+            sourceDatabase.providerDao().upsertProvider(providerEntity())
+            // Safe m3u_url so the exported provider carries a restorable source (mirrors the snapshot test).
+            sourceSecureStore.write(SecureKey("provider:one:credentials:m3u_url"), "https://example.org/public.m3u")
+            sourceDatabase.catalogDao().upsertCategories(
+                listOf(
+                    CategoryEntity(
+                        id = "provider-one:category:live:news",
+                        providerId = "provider-one",
+                        stableKey = "news",
+                        type = "LIVE",
+                        remoteId = "news",
+                        name = "News",
+                        sortOrder = 0,
+                        isHidden = true,
+                        manualSortOrder = 7,
+                        createdAt = 1L,
+                        updatedAt = 2L,
+                    ),
+                ),
+            )
+            sourceDatabase.providerCategorySettingsDao().upsertSettings(
+                ProviderCategorySettingsEntity(
+                    id = "provider-one:LIVE",
+                    providerId = "provider-one",
+                    type = "LIVE",
+                    sortMode = "NAME",
+                    hideNewGroups = true,
+                    createdAt = 1L,
+                    updatedAt = 2L,
+                ),
+            )
+
+            val json = StandardBackupExporter(
+                m3uFileSourceStore = backupM3uStore(),
+                database = sourceDatabase,
+                userPreferencesStore = FakePreferencesStore(UserPreferences()),
+                secureValueStore = sourceSecureStore,
+                pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
+                clock = { 123L },
+            ).exportInternalSnapshotJson(indentSpaces = 0)
+
+            val restorer = StandardBackupRestorer(
+                database = targetDatabase,
+                userPreferencesStore = FakePreferencesStore(UserPreferences()),
+                secureValueStore = targetSecureStore,
+                pinSecurityStateStore = FakePinSecurityStateStore(PinSecurity.setPin("1234")),
+                m3uFileSourceStore = backupM3uStore(),
+                clock = { 1_000L },
+            )
+            assertTrue(restorer.restore(json) is StandardBackupRestoreValidation.Valid)
+
+            // Provider is restored under id == stableKey ("provider-stable").
+            val category = targetDatabase.catalogDao().getCategories("provider-stable", "LIVE").single()
+            assertTrue(category.isHidden)
+            assertEquals(7, category.manualSortOrder)
+            val settings = targetDatabase.providerCategorySettingsDao().getSettings("provider-stable", "LIVE")
+            assertEquals("NAME", settings?.sortMode)
+            assertTrue(settings?.hideNewGroups == true)
+        } finally {
+            sourceDatabase.close()
+            targetDatabase.close()
         }
     }
 

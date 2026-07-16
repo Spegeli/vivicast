@@ -20,7 +20,10 @@ interface RefreshWorkScheduler {
         repeatIntervalHours: Long = WorkerContracts.DEFAULT_GLOBAL_REFRESH_INTERVAL_HOURS,
     )
 
-    fun enqueuePlaylistRefresh(providerId: String)
+    // [restart] = true → ExistingWorkPolicy.REPLACE (cancel + restart an in-flight run with the current
+    // settings), for the foreground save + the per-playlist "Aktualisieren" action. Default false = KEEP
+    // (an in-flight run coalesces), for refresh-all / interval / app-start / restore. See D10 R10.
+    fun enqueuePlaylistRefresh(providerId: String, restart: Boolean = false)
 
     /**
      * Schedules this playlist's own periodic auto-refresh at [intervalHours]. [initialDelayMillis] phases
@@ -59,10 +62,10 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
-    override fun enqueuePlaylistRefresh(providerId: String) {
+    override fun enqueuePlaylistRefresh(providerId: String, restart: Boolean) {
         workManager.enqueueUniqueWork(
             WorkerContracts.uniquePlaylistRefreshWork(providerId),
-            ExistingWorkPolicy.KEEP,
+            if (restart) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             RefreshWorkRequests.playlistRefresh(providerId),
         )
     }

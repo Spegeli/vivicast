@@ -2,6 +2,7 @@ package com.vivicast.tv.backup
 
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
+import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
@@ -53,6 +54,12 @@ class StandardBackupExporter(
             categories = providers.flatMap { provider ->
                 BACKUP_CATEGORY_TYPES.flatMap { type -> database.catalogDao().getCategories(provider.id, type) }
             }.mapNotNull { it.toBackupCategory(providerStableKeys) },
+            categorySettings = providers.flatMap { provider ->
+                BACKUP_CATEGORY_TYPES.mapNotNull { type ->
+                    database.providerCategorySettingsDao().getSettings(provider.id, type)
+                        ?.toBackupCategorySettings(providerStableKeys)
+                }
+            },
             favorites = database.favoritesDao().getFavorites().mapNotNull { it.toBackupFavorite(providerStableKeys) },
             playbackProgress = database.playbackDao().getPlaybackProgress()
                 .mapNotNull { it.toBackupPlaybackProgress(providerStableKeys) },
@@ -209,6 +216,19 @@ private fun CategoryEntity.toBackupCategory(
         name = name,
         sortOrder = sortOrder,
         isHidden = isHidden,
+        manualSortOrder = manualSortOrder,
+    )
+}
+
+private fun ProviderCategorySettingsEntity.toBackupCategorySettings(
+    providerStableKeys: Map<String, String>,
+): StandardBackupCategorySettings? {
+    val providerStableKey = providerStableKeys[providerId] ?: return null
+    return StandardBackupCategorySettings(
+        providerStableKey = providerStableKey,
+        type = type,
+        sortMode = sortMode,
+        hideNewGroups = hideNewGroups,
     )
 }
 

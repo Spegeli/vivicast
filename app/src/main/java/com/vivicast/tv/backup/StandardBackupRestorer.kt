@@ -3,6 +3,7 @@ package com.vivicast.tv.backup
 import androidx.room.withTransaction
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.CategoryEntity
+import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
@@ -93,6 +94,9 @@ class StandardBackupRestorer(
             database.catalogDao().upsertCategories(
                 (json.optJSONArray("categories") ?: JSONArray()).toCategoryEntities(providerIds, now),
             )
+            (json.optJSONArray("categorySettings") ?: JSONArray()).toCategorySettingsEntities(providerIds, now).forEach {
+                database.providerCategorySettingsDao().upsertSettings(it)
+            }
             (json.optJSONArray("favorites") ?: JSONArray()).toFavoriteEntities(providerIds).forEach {
                 database.favoritesDao().upsertFavorite(it)
             }
@@ -282,6 +286,22 @@ private fun JSONArray.toCategoryEntities(providerIds: Map<String, String>, now: 
             name = category.optString("name", stableKey).ifBlank { stableKey },
             sortOrder = category.optInt("sortOrder", 0),
             isHidden = category.optBoolean("isHidden", false),
+            manualSortOrder = if (category.isNull("manualSortOrder")) null else category.optInt("manualSortOrder"),
+            createdAt = now,
+            updatedAt = now,
+        )
+    }
+
+private fun JSONArray.toCategorySettingsEntities(providerIds: Map<String, String>, now: Long): List<ProviderCategorySettingsEntity> =
+    mapObjects { settings ->
+        val providerId = providerIds[settings.requiredString("providerStableKey")] ?: return@mapObjects null
+        val type = settings.optString("type", CATEGORY_TYPE_LIVE).ifBlank { CATEGORY_TYPE_LIVE }
+        ProviderCategorySettingsEntity(
+            id = "$providerId:$type",
+            providerId = providerId,
+            type = type,
+            sortMode = settings.optString("sortMode", "PLAYLIST").ifBlank { "PLAYLIST" },
+            hideNewGroups = settings.optBoolean("hideNewGroups", false),
             createdAt = now,
             updatedAt = now,
         )

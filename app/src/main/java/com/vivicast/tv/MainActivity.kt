@@ -916,6 +916,7 @@ private fun VivicastApp(
             SettingsRoute(
                 providerRepository = appContainer.providerRepository,
                 epgSourceRepository = appContainer.epgSourceRepository,
+                categoryGroupRepository = appContainer.categoryGroupRepository,
                 userPreferencesStore = appContainer.userPreferencesStore,
                 mediaCacheStore = appContainer.mediaCacheStore,
                 parentalControlSettingsState = ParentalControlSettingsState(
@@ -969,6 +970,17 @@ private fun VivicastApp(
                         result.errorMessage?.let {
                             appContainer.diagnosticsStore.log("connection", "provider_test_failed", mapOf("error" to it))
                         }
+                        result.summary?.let { summary ->
+                            appContainer.diagnosticsStore.log(
+                                "connection",
+                                "provider_test_ok",
+                                mapOf(
+                                    "channels" to summary.channels.toString(),
+                                    "movies" to summary.movies.toString(),
+                                    "series" to summary.series.toString(),
+                                ),
+                            )
+                        }
                     }
                 },
                 onTestEpgConnection = { url ->
@@ -1011,6 +1023,13 @@ private fun VivicastApp(
                     // possibly just-changed interval — is (re)applied when the app next goes to background.
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId)
                 },
+                onRefreshProvider = { providerId ->
+                    // Save + the actions-menu "Aktualisieren" RESTART an in-flight refresh (REPLACE) so it
+                    // re-imports with the just-saved settings. Imports are non-blocking (staged delta-merge),
+                    // so group management and edits stay usable while it runs.
+                    appContainer.diagnosticsStore.log("refresh", "playlist_refresh_triggered", mapOf("target" to providerId))
+                    appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId, restart = true)
+                },
                 onLogProviderSaved = { descriptor, switchedFrom ->
                     appContainer.diagnosticsStore.log(
                         "provider",
@@ -1020,6 +1039,12 @@ private fun VivicastApp(
                             switchedFrom?.let { put("switchedFrom", it) }
                         },
                     )
+                },
+                onLogProviderDeleted = { providerId ->
+                    appContainer.diagnosticsStore.log("provider", "deleted", mapOf("target" to providerId))
+                },
+                onLogGroupEvent = { message, details ->
+                    appContainer.diagnosticsStore.log("groups", message, details)
                 },
                 onBackgroundRefreshChanged = { enabled ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.

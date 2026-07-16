@@ -8,6 +8,7 @@ import androidx.room.Upsert
 import com.vivicast.tv.core.database.model.EpgChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.database.model.EpgProgramStageEntity
 import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import kotlinx.coroutines.flow.Flow
@@ -136,6 +137,59 @@ interface EpgDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPrograms(programs: List<EpgProgramEntity>)
+
+    // --- Staged delta-merge (non-blocking import; plans/nonblocking-db-imports.md) ---
+    // Programmes are staged chunked into epg_programs_stage, then merged into live by the delta trio below
+    // (delete-changed -> insert-missing -> delete-stale). Each op fires the matching search_epg_fts trigger,
+    // so the FTS mirror stays consistent on the delta. INSERT OR REPLACE is deliberately NOT used: on a
+    // conflict it would skip the fts delete trigger and desync the mirror. Stage is cleared around the import.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProgramsStage(rows: List<EpgProgramStageEntity>)
+
+    @Query("DELETE FROM epg_programs_stage WHERE providerId = :providerId AND epgSourceId = :epgSourceId")
+    suspend fun clearProgramsStage(providerId: String, epgSourceId: String)
+
+    @Query(
+        """
+        DELETE FROM epg_programs
+        WHERE providerId = :providerId AND epgSourceId = :epgSourceId
+            AND EXISTS (
+                SELECT 1 FROM epg_programs_stage s
+                WHERE s.id = epg_programs.id AND s.syncFingerprint <> epg_programs.syncFingerprint
+            )
+        """,
+    )
+    suspend fun deleteChangedProgramsFromStage(providerId: String, epgSourceId: String)
+
+    @Query(
+        """
+        INSERT INTO epg_programs (
+            id, providerId, channelId, epgSourceId, stableKey, epgChannelId, title, normalizedTitle,
+            subtitle, description, startTime, endTime, category, iconUrl, isCatchupAvailable,
+            createdAt, updatedAt, syncFingerprint
+        )
+        SELECT id, providerId, channelId, epgSourceId, stableKey, epgChannelId, title, normalizedTitle,
+            subtitle, description, startTime, endTime, category, iconUrl, isCatchupAvailable,
+            createdAt, updatedAt, syncFingerprint
+        FROM epg_programs_stage s
+        WHERE s.providerId = :providerId AND s.epgSourceId = :epgSourceId
+            AND NOT EXISTS (SELECT 1 FROM epg_programs l WHERE l.id = s.id)
+        """,
+    )
+    suspend fun insertMissingProgramsFromStage(providerId: String, epgSourceId: String)
+
+    @Query(
+        """
+        DELETE FROM epg_programs
+        WHERE providerId = :providerId AND epgSourceId = :epgSourceId
+            AND NOT EXISTS (SELECT 1 FROM epg_programs_stage s WHERE s.id = epg_programs.id)
+        """,
+    )
+    suspend fun deleteStaleProgramsFromStage(providerId: String, epgSourceId: String)
+
+    // Startup crash-recovery: drop any staged programmes a killed refresh left behind.
+    @Query("DELETE FROM epg_programs_stage")
+    suspend fun clearAllProgramsStage()
 
     @Upsert
     suspend fun upsertMappings(mappings: List<EpgChannelMappingEntity>)

@@ -55,6 +55,15 @@ data class Category(
 
 enum class CategoryType { LiveTv, Movies, Series }
 
+/** Group sort mode per (provider, category type): Playlist = source order (default), Name = A→Z, Manual = user order. */
+enum class CategorySortMode { Playlist, Name, Manual }
+
+/** Per-(provider, category type) group-management settings. */
+data class CategoryGroupSettings(
+    val sortMode: CategorySortMode = CategorySortMode.Playlist,
+    val hideNewGroups: Boolean = false,
+)
+
 data class Channel(
     val id: String,
     val providerId: String,

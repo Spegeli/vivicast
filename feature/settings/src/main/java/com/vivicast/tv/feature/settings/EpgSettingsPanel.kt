@@ -143,6 +143,16 @@ internal fun EpgSettingsPanel(
     var connectionSummary by remember { mutableStateOf<EpgContentSummary?>(null) }
     var connectionError by remember { mutableStateOf<String?>(null) }
     val strEpgScheduled = stringResource(R.string.settings_epg_msg_scheduled)
+    // Cross-lock "Refresh EPG now" while ANY refresh runs (playlist or EPG): a playlist refresh with
+    // "refresh on playlist change" auto-chains an EPG refresh, so re-triggering here would stack a second
+    // chain. Non-null = the label naming which refresh is active; null = idle/clickable. Playlist-first.
+    val epgRefreshLabel: String? = when {
+        providers.any { it.status == ProviderStatus.Refreshing } ->
+            stringResource(R.string.settings_provider_action_refreshing_playlist)
+        sources.any { it.isRefreshing } ->
+            stringResource(R.string.settings_provider_action_refreshing_epg)
+        else -> null
+    }
     val strEpgSourceSaved = stringResource(R.string.settings_epg_msg_source_saved)
     val strEpgSourceDeleted = stringResource(R.string.settings_epg_msg_source_deleted)
     val strValidationEpgNameMissing = stringResource(R.string.validation_name_missing)
@@ -417,14 +427,15 @@ internal fun EpgSettingsPanel(
                         VivicastSettingsRow(
                             title = stringResource(R.string.settings_epg_now),
                             help = stringResource(R.string.settings_epg_help_run_now),
-                            value = stringResource(R.string.settings_epg_now_value),
+                            value = epgRefreshLabel ?: stringResource(R.string.settings_epg_now_value),
+                            valueLoading = epgRefreshLabel != null,
+                            // Kept enabled/focusable (disabling a focused row drops focus to the top nav);
+                            // the onClick is gated instead. Enqueue is KEEP, so an in-flight source coalesces.
                             onClick = {
-                                // Enqueue a scoped per-source EPG refresh for each active source. No
-                                // "any refreshing → skip" guard: enqueueEpgRefresh uses KEEP, so an
-                                // in-flight source coalesces while a stuck/idle one still starts — one
-                                // stuck-"Refreshing" source must not block refreshing everything else.
-                                sources.filter { it.isActive }.forEach { onRefreshEpgSource(it.id) }
-                                message = strEpgScheduled
+                                if (epgRefreshLabel == null) {
+                                    sources.filter { it.isActive }.forEach { onRefreshEpgSource(it.id) }
+                                    message = strEpgScheduled
+                                }
                             },
                         )
                     }

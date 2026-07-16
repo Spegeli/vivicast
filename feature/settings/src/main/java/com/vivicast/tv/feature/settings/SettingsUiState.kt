@@ -1,5 +1,8 @@
 package com.vivicast.tv.feature.settings
 
+import com.vivicast.tv.domain.model.Category
+import com.vivicast.tv.domain.model.CategoryGroupSettings
+import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
 import com.vivicast.tv.domain.model.EpgSource
@@ -32,4 +35,10 @@ internal data class SettingsUiState(
     val manualMappingChannels: List<Channel> = emptyList(),
     val selectedManualMappingChannelId: String? = null,
     val manualMappingsForSelectedChannel: List<EpgChannelMapping> = emptyList(),
+    // Group management for the playlist currently opened via "Gruppen verwalten" (null = closed). The
+    // active type tab + that (provider, type)'s groups (incl. hidden) and settings, mode-ordered.
+    val manageGroupsProviderId: String? = null,
+    val manageGroupsType: CategoryType = CategoryType.LiveTv,
+    val manageGroups: List<Category> = emptyList(),
+    val manageGroupSettings: CategoryGroupSettings = CategoryGroupSettings(),
 )
