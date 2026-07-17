@@ -660,6 +660,17 @@
     <string name="about_export_diagnostics">Export diagnostics</string>
     <string name="about_exporting_diagnostics">Exporting…</string>
     <string name="about_help_export_diagnostics">Creates a ZIP with vivicast-diagnostics.log and diagnostics-metadata.json.</string>
+    <string name="about_diagnostics_section">Diagnostics &amp; logs</string>
+    <string name="about_help_diagnostics_section">Logging, export, delete and view of the diagnostic logs.</string>
+    <string name="about_diagnostics_delete">Delete logs</string>
+    <string name="about_diagnostics_delete_title">Delete logs</string>
+    <string name="about_diagnostics_delete_body">Choose which logs to delete.</string>
+    <string name="about_diagnostics_kind_events">Normal logs</string>
+    <string name="about_diagnostics_kind_crashes">Crash logs</string>
+    <string name="about_diagnostics_view">View current log</string>
+    <string name="about_diagnostics_refresh">Refresh</string>
+    <string name="about_diagnostics_empty_events">No logs yet.</string>
+    <string name="about_diagnostics_empty_crashes">No crash logs yet.</string>
     <string name="settings_legal_privacy_title">Privacy Policy</string>
     <string name="settings_legal_terms_title">Terms of Use</string>
     <string name="settings_help_legal_privacy">How Vivicast handles your data.</string>

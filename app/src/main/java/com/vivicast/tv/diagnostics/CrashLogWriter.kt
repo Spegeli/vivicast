@@ -13,10 +13,11 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-private const val CRASH_PREFIX = "vivicast-crash"
+// Shared with DiagnosticsStore.clearCrashes (same package) so the public-copy location is defined once.
+internal const val CRASH_PREFIX = "vivicast-crash"
+internal const val CRASH_SUBDIR = "Vivicast/Crashes"
 private const val MAX_CRASH_FILES = 10
 private const val LOGCAT_LINES = "400"
-private const val CRASH_SUBDIR = "Vivicast/Crashes"
 
 /**
  * Always-on crash capture — independent of the diagnostics toggle (a crash can happen before the user

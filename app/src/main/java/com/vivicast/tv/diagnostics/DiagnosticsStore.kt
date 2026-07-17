@@ -1,9 +1,13 @@
 package com.vivicast.tv.diagnostics
 
+import android.content.ContentUris
 import android.content.Context
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,6 +28,7 @@ private const val LOG_FILE_EXT = "log"
 // user leaves diagnostics on forever.
 private const val ROTATE_BYTES = 5L * 1024 * 1024 // new file after 5 MB
 private const val TOTAL_CAP_BYTES = 20L * 1024 * 1024 // keep at most ~20 MB of logs
+private const val VIEW_TAIL_BYTES = 64 * 1024 // last ~64 KB shown by the in-app log viewer
 
 /**
  * Central diagnostics sink. Feature code never writes here directly — everything goes through the
@@ -34,6 +39,7 @@ class DiagnosticsStore(
     context: Context,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
+    private val appContext = context.applicationContext
     private val root = File(context.filesDir, ROOT_DIR)
     private val logsDir = File(root, LOGS_DIR)
 
@@ -114,6 +120,66 @@ class DiagnosticsStore(
             zip.putNextEntry(ZipEntry("diagnostics-metadata.json"))
             zip.write(metadata(about, logFiles, crashFiles, settings).toString(2).toByteArray(Charsets.UTF_8))
             zip.closeEntry()
+        }
+    }
+
+    /**
+     * Deletes every event-log file, including the active one. Safe while logging is ON: the next [log]
+     * sees the active file gone (`exists()` is false) and starts a fresh one — no restart needed.
+     */
+    @Synchronized
+    fun clearLogs() {
+        logFiles().forEach { it.delete() }
+        activeFile = null
+    }
+
+    /** Deletes crash logs: the private copies (export source) and the public Downloads/Vivicast/Crashes copies. */
+    fun clearCrashes() {
+        crashFiles().forEach { it.delete() }
+        runCatching { clearPublicCrashes() }
+    }
+
+    /** Tail of the newest event-log file (last ~64 KB), sanitized per line. Null when there are none. */
+    fun readLatestLog(): String? = readTail(logFiles().lastOrNull())
+
+    /** Tail of the newest private crash file (already redacted on write), re-sanitized. Null when none. */
+    fun readLatestCrash(): String? = readTail(crashFiles().lastOrNull())
+
+    private fun readTail(file: File?): String? {
+        if (file == null || !file.exists()) return null
+        return runCatching {
+            val length = file.length()
+            val fromByte = (length - VIEW_TAIL_BYTES).coerceAtLeast(0L)
+            val bytes = ByteArray((length - fromByte).toInt())
+            RandomAccessFile(file, "r").use { raf ->
+                raf.seek(fromByte)
+                raf.readFully(bytes)
+            }
+            var text = String(bytes, Charsets.UTF_8)
+            // Drop the (likely partial) first line when we started mid-file.
+            if (fromByte > 0) text = text.substringAfter('\n')
+            text.lineSequence().joinToString("\n") { DiagnosticsSanitizer.line(it) }
+        }.getOrNull()
+    }
+
+    private fun clearPublicCrashes() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = appContext.contentResolver
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
+            val args = arrayOf("%$CRASH_SUBDIR%", "$CRASH_PREFIX%")
+            val ids = mutableListOf<Long>()
+            resolver.query(collection, arrayOf(MediaStore.Downloads._ID), selection, args, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                while (cursor.moveToNext()) ids.add(cursor.getLong(idColumn))
+            }
+            ids.forEach { id ->
+                runCatching { resolver.delete(ContentUris.withAppendedId(collection, id), null, null) }
+            }
+        } else {
+            File(appContext.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), CRASH_SUBDIR)
+                .listFiles { file -> file.isFile && file.name.startsWith(CRASH_PREFIX) }
+                ?.forEach { it.delete() }
         }
     }
 

@@ -196,6 +196,8 @@ fun SettingsRoute(
     onImportBackup: () -> Unit = {},
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit = {},
     onExportDiagnostics: () -> Unit = {},
+    onDeleteLogs: suspend (Set<DiagnosticsLogKind>) -> Unit = {},
+    onReadLog: suspend (DiagnosticsLogKind) -> String? = { null },
     diagnosticsExporting: Boolean = false,
     onRefreshEpgSource: (sourceId: String) -> Unit,
     onClearHistory: suspend (Set<HistoryClearTarget>) -> Unit,
@@ -553,6 +555,8 @@ fun SettingsRoute(
                                 onDiagnosticsSettingsChanged(diagnostics)
                             },
                             onExportDiagnostics = onExportDiagnostics,
+                            onDeleteLogs = onDeleteLogs,
+                            onReadLog = onReadLog,
                             exporting = diagnosticsExporting,
                             firstFocusModifier = detailFirstFocusModifier,
                             collapseSubViewSignal = collapseSubViewSignal,

@@ -152,3 +152,9 @@ enum class HistoryClearTarget {
     Search,
 }
 
+// The two kinds of on-device diagnostic files, used by both the log viewer switch and the delete dialog.
+enum class DiagnosticsLogKind {
+    Events,
+    Crashes,
+}
+

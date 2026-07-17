@@ -1,0 +1,345 @@
+package com.vivicast.tv.feature.settings
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.vivicast.tv.core.designsystem.ActionPill
+import com.vivicast.tv.core.designsystem.BodyText
+import com.vivicast.tv.core.designsystem.R
+import com.vivicast.tv.core.designsystem.SectionTitle
+import com.vivicast.tv.core.designsystem.VivicastCardSizes
+import com.vivicast.tv.core.designsystem.VivicastCheckbox
+import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastDialog
+import com.vivicast.tv.core.designsystem.VivicastDialogActions
+import com.vivicast.tv.core.designsystem.VivicastDialogWidth
+import com.vivicast.tv.core.designsystem.VivicastFocusSurface
+import com.vivicast.tv.core.designsystem.VivicastSettingsRow
+import com.vivicast.tv.core.designsystem.VivicastShapes
+import com.vivicast.tv.core.designsystem.VivicastSpacing
+import com.vivicast.tv.core.designsystem.VivicastTypography
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.launch
+
+/**
+ * "Diagnose & Protokolle" sub-page of About. One full-panel overlay with an internal mode:
+ *  - rows mode: logging toggle, export, delete (multi-select dialog), view current log.
+ *  - viewer mode: a fixed Normale-Logs / Crash-Logs switch (+ Refresh for normal logs) over the log tail.
+ * Mirrors [TechnicalDetailsOverlay]: alpha-hidden About list underneath, Back closes / steps back, and
+ * the first focusable of the current mode carries [firstFocusModifier] (the section rail's RIGHT anchor).
+ */
+@Composable
+internal fun AboutDiagnosticsOverlay(
+    loggingEnabled: Boolean,
+    exporting: Boolean,
+    backFocus: FocusRequester,
+    firstFocusModifier: Modifier,
+    onToggleLogging: () -> Unit,
+    onExportDiagnostics: () -> Unit,
+    onDeleteLogs: suspend (Set<DiagnosticsLogKind>) -> Unit,
+    onReadLog: suspend (DiagnosticsLogKind) -> String?,
+    onClose: () -> Unit,
+) {
+    var viewingLog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var initialized by remember { mutableStateOf(false) }
+    val viewLogRowFocus = remember { FocusRequester() }
+    val firstPillFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
+    // Move focus once the new mode has composed: initial entry → the toggle (backFocus); into the viewer →
+    // the first pill; back to rows → the view-log row that opened it.
+    LaunchedEffect(viewingLog) {
+        awaitFrame()
+        when {
+            !initialized -> { initialized = true; runCatching { backFocus.requestFocus() } }
+            viewingLog -> runCatching { firstPillFocus.requestFocus() }
+            else -> runCatching { viewLogRowFocus.requestFocus() }
+        }
+    }
+
+    // Rows mode: Back closes the whole sub-page (viewer + dialog carry their own Back).
+    BackHandler(enabled = !viewingLog && !showDeleteDialog, onBack = onClose)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // The rows stay composed (just hidden) while viewing, so switching modes never destroys the
+        // focused row mid-transition (which would drop focus to the top nav → Home). The detail requester +
+        // entry focus live on whichever mode is currently visible.
+        DiagnosticsRows(
+            modifier = Modifier.alpha(if (viewingLog) 0f else 1f),
+            loggingEnabled = loggingEnabled,
+            exporting = exporting,
+            firstFocusModifier = if (viewingLog) Modifier else firstFocusModifier.focusRequester(backFocus),
+            viewLogRowFocus = viewLogRowFocus,
+            onToggleLogging = onToggleLogging,
+            onExportDiagnostics = onExportDiagnostics,
+            onOpenDeleteDialog = { showDeleteDialog = true },
+            onViewLog = { viewingLog = true },
+        )
+        if (viewingLog) {
+            DiagnosticsLogViewer(
+                firstFocusModifier = firstFocusModifier,
+                firstPillFocus = firstPillFocus,
+                onReadLog = onReadLog,
+                // Move focus back to the (composed, hidden) View-log row BEFORE removing the viewer, so its
+                // focused element isn't destroyed with focus still on it (which escapes to the top nav → Home).
+                onBack = {
+                    runCatching { viewLogRowFocus.requestFocus() }
+                    viewingLog = false
+                },
+            )
+        }
+    }
+
+    if (showDeleteDialog) {
+        DiagnosticsDeleteDialog(
+            deleting = deleting,
+            onCancel = { if (!deleting) showDeleteDialog = false },
+            onConfirm = { selected ->
+                scope.launch {
+                    deleting = true
+                    runCatching { onDeleteLogs(selected) }
+                    deleting = false
+                    showDeleteDialog = false
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun DiagnosticsRows(
+    loggingEnabled: Boolean,
+    exporting: Boolean,
+    firstFocusModifier: Modifier,
+    viewLogRowFocus: FocusRequester,
+    onToggleLogging: () -> Unit,
+    onExportDiagnostics: () -> Unit,
+    onOpenDeleteDialog: () -> Unit,
+    onViewLog: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        SectionTitle(text = stringResource(R.string.about_diagnostics_section))
+        VivicastSettingsRow(
+            title = stringResource(R.string.about_diagnostics_logging),
+            help = stringResource(R.string.about_help_logging),
+            value = if (loggingEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
+            // First focusable: carries the detail requester + entry focus, blocks Up (top-nav navigates on focus).
+            modifier = firstFocusModifier.focusProperties { up = FocusRequester.Cancel },
+            onClick = onToggleLogging,
+        )
+        VivicastSettingsRow(
+            title = stringResource(R.string.about_diagnostics_view),
+            help = "",
+            value = stringResource(R.string.about_open_value),
+            modifier = Modifier.focusRequester(viewLogRowFocus),
+            onClick = onViewLog,
+        )
+        VivicastSettingsRow(
+            title = stringResource(R.string.about_export_diagnostics),
+            help = stringResource(R.string.about_help_export_diagnostics),
+            value = stringResource(if (exporting) R.string.about_exporting_diagnostics else R.string.common_export),
+            forceTextValue = true,
+            valueLoading = exporting,
+            onClick = { if (!exporting) onExportDiagnostics() },
+        )
+        VivicastSettingsRow(
+            title = stringResource(R.string.about_diagnostics_delete),
+            help = "",
+            value = "",
+            forceTextValue = true,
+            onClick = onOpenDeleteDialog,
+        )
+    }
+}
+
+@Composable
+private fun DiagnosticsLogViewer(
+    firstFocusModifier: Modifier,
+    firstPillFocus: FocusRequester,
+    onReadLog: suspend (DiagnosticsLogKind) -> String?,
+    onBack: () -> Unit,
+) {
+    BackHandler(onBack = onBack)
+    var kind by remember { mutableStateOf(DiagnosticsLogKind.Events) }
+    var content by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val reload: () -> Unit = { scope.launch { content = onReadLog(kind) } }
+    LaunchedEffect(kind) { content = onReadLog(kind) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+    ) {
+        SectionTitle(text = stringResource(R.string.about_diagnostics_section))
+        // Fixed widths: ActionPill otherwise fills its 300dp cap, so two tabs alone would push Refresh
+        // off-screen. These fit the tabs + Refresh across the detail panel.
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            ActionPill(
+                label = stringResource(R.string.about_diagnostics_kind_events),
+                selected = kind == DiagnosticsLogKind.Events,
+                // First focusable of the viewer: detail requester + entry focus, blocks Up.
+                modifier = firstFocusModifier
+                    .focusRequester(firstPillFocus)
+                    .focusProperties { up = FocusRequester.Cancel }
+                    .width(200.dp),
+                onClick = { kind = DiagnosticsLogKind.Events },
+            )
+            ActionPill(
+                label = stringResource(R.string.about_diagnostics_kind_crashes),
+                selected = kind == DiagnosticsLogKind.Crashes,
+                modifier = Modifier.width(200.dp),
+                onClick = { kind = DiagnosticsLogKind.Crashes },
+            )
+            // Manual refresh only for the normal (growing) event log; crash logs don't change while open.
+            if (kind == DiagnosticsLogKind.Events) {
+                ActionPill(
+                    label = stringResource(R.string.about_diagnostics_refresh),
+                    modifier = Modifier.width(150.dp),
+                    onClick = reload,
+                )
+            }
+        }
+        val text = content
+        if (text.isNullOrBlank()) {
+            BodyText(
+                stringResource(
+                    if (kind == DiagnosticsLogKind.Events) R.string.about_diagnostics_empty_events
+                    else R.string.about_diagnostics_empty_crashes,
+                ),
+            )
+        } else {
+            val lines = remember(text) { text.lines() }
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                items(lines) { line -> DiagnosticsLogLine(line) }
+            }
+        }
+    }
+}
+
+// One focusable log line so the D-pad scrolls the LazyColumn through the full tail.
+@Composable
+private fun DiagnosticsLogLine(text: String) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .background(
+                color = if (focused) Color.White.copy(alpha = 0.06f) else Color.Transparent,
+                shape = VivicastShapes.CardRadius,
+            )
+            .padding(horizontal = VivicastSpacing.Space3, vertical = VivicastSpacing.Space1),
+    ) {
+        BasicText(
+            text = text.ifBlank { " " },
+            maxLines = Int.MAX_VALUE,
+            style = VivicastTypography.LabelSmall.copy(color = VivicastColors.TextSecondary),
+        )
+    }
+}
+
+@Composable
+private fun DiagnosticsDeleteDialog(
+    deleting: Boolean,
+    onCancel: () -> Unit,
+    onConfirm: (Set<DiagnosticsLogKind>) -> Unit,
+) {
+    var selected by remember { mutableStateOf(emptySet<DiagnosticsLogKind>()) }
+    val firstFocus = remember { FocusRequester() }
+    VivicastDialog(
+        onDismiss = onCancel,
+        width = VivicastDialogWidth.Standard,
+        title = stringResource(R.string.about_diagnostics_delete_title),
+        initialFocus = firstFocus,
+    ) {
+        BodyText(stringResource(R.string.about_diagnostics_delete_body))
+        DiagnosticsDeleteCategories.forEachIndexed { index, (target, labelRes) ->
+            DiagnosticsCategoryRow(
+                label = stringResource(labelRes),
+                checked = target in selected,
+                onToggle = {
+                    if (!deleting) {
+                        selected = if (target in selected) selected - target else selected + target
+                    }
+                },
+                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+            )
+        }
+        VivicastDialogActions(
+            primaryLabel = stringResource(if (deleting) R.string.settings_deleting else R.string.common_delete),
+            onPrimary = { onConfirm(selected) },
+            primaryEnabled = selected.isNotEmpty() && !deleting,
+            primaryLoading = deleting,
+            secondaryLabel = stringResource(R.string.common_cancel),
+            onSecondary = onCancel,
+        )
+    }
+}
+
+private val DiagnosticsDeleteCategories: List<Pair<DiagnosticsLogKind, Int>> = listOf(
+    DiagnosticsLogKind.Events to R.string.about_diagnostics_kind_events,
+    DiagnosticsLogKind.Crashes to R.string.about_diagnostics_kind_crashes,
+)
+
+@Composable
+private fun DiagnosticsCategoryRow(
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    VivicastFocusSurface(
+        onClick = onToggle,
+        modifier = modifier.fillMaxWidth().height(VivicastCardSizes.CompactSettingsRowHeight),
+        contentPadding = 0.dp,
+        focusScale = 1.0f,
+    ) { _ ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize().padding(horizontal = VivicastSpacing.Space3),
+        ) {
+            VivicastCheckbox(checked = checked)
+            Spacer(modifier = Modifier.width(VivicastSpacing.Space3))
+            BodyText(label, maxLines = 1)
+        }
+    }
+}

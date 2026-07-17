@@ -101,6 +101,7 @@ import com.vivicast.tv.diagnostics.DiagnosticsStore
 import com.vivicast.tv.diagnostics.PlaybackDiagnostics
 import com.vivicast.tv.feature.settings.AboutAppState
 import com.vivicast.tv.feature.settings.AppearanceSettingsState
+import com.vivicast.tv.feature.settings.DiagnosticsLogKind
 import com.vivicast.tv.feature.settings.DiagnosticsSettingsState
 import com.vivicast.tv.feature.settings.EpgSettingsState
 import com.vivicast.tv.feature.settings.GeneralSettingsState
@@ -1102,6 +1103,20 @@ private fun VivicastApp(
                             }
                         },
                     )
+                },
+                onDeleteLogs = { targets ->
+                    withContext(Dispatchers.IO) {
+                        if (DiagnosticsLogKind.Events in targets) appContainer.diagnosticsStore.clearLogs()
+                        if (DiagnosticsLogKind.Crashes in targets) appContainer.diagnosticsStore.clearCrashes()
+                    }
+                },
+                onReadLog = { kind ->
+                    withContext(Dispatchers.IO) {
+                        when (kind) {
+                            DiagnosticsLogKind.Events -> appContainer.diagnosticsStore.readLatestLog()
+                            DiagnosticsLogKind.Crashes -> appContainer.diagnosticsStore.readLatestCrash()
+                        }
+                    }
                 },
                 diagnosticsExporting = diagnosticsExporting,
                 onSetPin = { pin ->

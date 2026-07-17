@@ -99,6 +99,8 @@ internal fun AboutSettingsPanel(
     diagnosticsSettingsState: DiagnosticsSettingsState,
     onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
     onExportDiagnostics: () -> Unit,
+    onDeleteLogs: suspend (Set<DiagnosticsLogKind>) -> Unit,
+    onReadLog: suspend (DiagnosticsLogKind) -> String?,
     exporting: Boolean = false,
     firstFocusModifier: Modifier = Modifier,
     // Bumped when OK is pressed on the already-selected rail section: collapse the open legal page back
@@ -120,6 +122,9 @@ internal fun AboutSettingsPanel(
     var showTechnical by remember { mutableStateOf(false) }
     val technicalRowFocus = remember { FocusRequester() }
     val technicalBackFocus = remember { FocusRequester() }
+    var showDiagnostics by remember { mutableStateOf(false) }
+    val diagnosticsRowFocus = remember { FocusRequester() }
+    val diagnosticsBackFocus = remember { FocusRequester() }
     val legalTitle = activeLegalPage?.let { stringResource(it.titleRes) }.orEmpty()
     val legalParagraphs = activeLegalPage?.let { stringResource(it.bodyRes).split("\n\n") }.orEmpty()
     // Close: move focus back to the row that OPENED the overlay FIRST, then drop the overlay. Removing the
@@ -135,16 +140,23 @@ internal fun AboutSettingsPanel(
         runCatching { technicalRowFocus.requestFocus() }
         showTechnical = false
     }
+    // Back from the Diagnose sub-page: refocus its opener row first, then drop the overlay (same order as
+    // closeLegal, so removing the overlay can't reset focus to the top nav → Home).
+    val closeDiagnostics = {
+        runCatching { diagnosticsRowFocus.requestFocus() }
+        showDiagnostics = false
+    }
     LaunchedEffect(collapseSubViewSignal) {
         if (legalPage != null) legalPage = null
         if (showTechnical) showTechnical = false
+        if (showDiagnostics) showDiagnostics = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Hidden (but kept composed, so the focused legal row survives) while a legal page is open — the
         // legal overlay renders transparently over it on the host GlassPanel background.
         LazyColumn(
-            modifier = Modifier.alpha(if (activeLegalPage != null || showTechnical) 0f else 1f),
+            modifier = Modifier.alpha(if (activeLegalPage != null || showTechnical || showDiagnostics) 0f else 1f),
             verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
         ) {
         item {
@@ -165,23 +177,13 @@ internal fun AboutSettingsPanel(
             )
         }
         item {
+            // Diagnostic logging + export + delete + view now live behind this row (its own sub-page).
             VivicastSettingsRow(
-                title = stringResource(R.string.about_diagnostics_logging),
-                help = stringResource(R.string.about_help_logging),
-                value = if (diagnosticsSettingsState.diagnosticsLoggingEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                modifier = Modifier,
-                onClick = toggleDiagnostics,
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.about_export_diagnostics),
-                help = stringResource(R.string.about_help_export_diagnostics),
-                value = stringResource(if (exporting) R.string.about_exporting_diagnostics else R.string.common_export),
-                modifier = Modifier,
-                valueLoading = exporting,
-                // Block a second tap (which would re-open the folder picker) while an export runs.
-                onClick = { if (!exporting) onExportDiagnostics() },
+                title = stringResource(R.string.about_diagnostics_section),
+                help = stringResource(R.string.about_help_diagnostics_section),
+                value = stringResource(R.string.about_open_value),
+                modifier = Modifier.focusRequester(diagnosticsRowFocus),
+                onClick = { showDiagnostics = true },
             )
         }
         item {
@@ -222,6 +224,19 @@ internal fun AboutSettingsPanel(
                 backFocus = technicalBackFocus,
                 firstFocusModifier = firstFocusModifier,
                 onClose = closeTechnical,
+            )
+        }
+        if (showDiagnostics) {
+            AboutDiagnosticsOverlay(
+                loggingEnabled = diagnosticsSettingsState.diagnosticsLoggingEnabled,
+                exporting = exporting,
+                backFocus = diagnosticsBackFocus,
+                firstFocusModifier = firstFocusModifier,
+                onToggleLogging = toggleDiagnostics,
+                onExportDiagnostics = onExportDiagnostics,
+                onDeleteLogs = onDeleteLogs,
+                onReadLog = onReadLog,
+                onClose = closeDiagnostics,
             )
         }
     }
