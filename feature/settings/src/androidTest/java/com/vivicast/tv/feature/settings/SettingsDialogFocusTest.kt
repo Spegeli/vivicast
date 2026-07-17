@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import com.vivicast.tv.domain.model.EpgSource
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderStatus
@@ -123,7 +124,12 @@ class SettingsDialogFocusTest {
 
         compose.onNodeWithText("PIN setzen").performSemanticsAction(SemanticsActions.OnClick)
         compose.onNodeWithTag(pinDialogTag()).assertIsDisplayed()
+        // Fields open read-only (no auto-IME); DPAD-center enters edit mode before text can be typed.
+        compose.onNodeWithTag(pinNewFieldTag()).requestFocus()
+        compose.onNodeWithTag(pinNewFieldTag()).performKeyInput { pressKey(Key.DirectionCenter) }
         compose.onNodeWithTag(pinNewFieldTag()).performTextInput("1234")
+        compose.onNodeWithTag(pinRepeatFieldTag()).requestFocus()
+        compose.onNodeWithTag(pinRepeatFieldTag()).performKeyInput { pressKey(Key.DirectionCenter) }
         compose.onNodeWithTag(pinRepeatFieldTag()).performTextInput("1234")
         compose.onNodeWithTag(pinConfirmTag()).performSemanticsAction(SemanticsActions.OnClick)
 

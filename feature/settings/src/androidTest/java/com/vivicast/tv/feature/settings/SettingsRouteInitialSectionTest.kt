@@ -25,12 +25,17 @@ import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
+import com.vivicast.tv.data.media.CategoryGroupRepository
 import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
+import com.vivicast.tv.domain.model.Category
+import com.vivicast.tv.domain.model.CategoryGroupSettings
+import com.vivicast.tv.domain.model.CategorySortMode
+import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping as DomainEpgChannelMapping
 import com.vivicast.tv.domain.model.EpgProgram as DomainEpgProgram
@@ -91,6 +96,7 @@ class SettingsRouteInitialSectionTest {
             SettingsRoute(
                 providerRepository = EmptyProviderRepository,
                 epgSourceRepository = EmptyEpgSourceRepository,
+                categoryGroupRepository = EmptyCategoryGroupRepository,
                 userPreferencesStore = EmptyUserPreferencesStore,
                 mediaCacheStore = EmptyMediaCacheStore,
                 aboutAppState = AboutAppState(),
@@ -164,6 +170,18 @@ private val EMPTY_PROVIDER = Provider(
     createdAt = 0L,
     updatedAt = 0L,
 )
+
+private object EmptyCategoryGroupRepository : CategoryGroupRepository {
+    override fun observeManagedGroups(providerId: String, type: CategoryType): Flow<List<Category>> = flowOf(emptyList())
+    override fun observeGroupSettings(providerId: String, type: CategoryType): Flow<CategoryGroupSettings> =
+        flowOf(CategoryGroupSettings())
+    override suspend fun setSortMode(providerId: String, type: CategoryType, mode: CategorySortMode) = Unit
+    override suspend fun setHideNewGroups(providerId: String, type: CategoryType, hidden: Boolean) = Unit
+    override suspend fun setGroupHidden(categoryId: String, hidden: Boolean) = Unit
+    override suspend fun setAllGroupsHidden(providerId: String, type: CategoryType, hidden: Boolean) = Unit
+    override suspend fun reorderGroups(orderedCategoryIds: List<String>) = Unit
+    override suspend fun resetManualOrder(providerId: String, type: CategoryType) = Unit
+}
 
 private object EmptyEpgSourceRepository : EpgSourceRepository {
     override fun observeEpgSources(): Flow<List<EpgSource>> = flowOf(emptyList())

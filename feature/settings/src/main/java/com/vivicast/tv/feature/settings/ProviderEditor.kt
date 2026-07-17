@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -601,7 +600,10 @@ private fun ProviderM3uFilePicker(
         ) {
             ActionPill(
                 label = stringResource(R.string.settings_provider_file_pick),
-                modifier = Modifier.width(190.dp).focusRequester(fileFocusRequester),
+                // Long descriptive label: stretch to the row's free space (next to the fixed test button)
+                // instead of the fixed 190dp — fillWidth shows the full label past ActionPill's 300dp cap.
+                fillWidth = true,
+                modifier = Modifier.weight(1f).focusRequester(fileFocusRequester),
                 onClick = {
                     onPickM3uFile { fileName, content ->
                         onEditorChange(

@@ -691,7 +691,7 @@
     <string name="settings_provider_file_stage">Datei bereit. Speichern ersetzt die bisherige Quelle.</string>
     <string name="settings_provider_file_import_only">Datei wird nur importiert. Es wird keine dauerhafte Kopie gespeichert.</string>
     <string name="settings_provider_file_ready_test">Datei bereit. Prüfen und speichern.</string>
-    <string name="settings_provider_file_pick">Datei auswählen</string>
+    <string name="settings_provider_file_pick">Lokale .m3u/.m3u8-Datei wählen…</string>
     <string name="settings_provider_file_name">Datei: %1$s</string>
     <string name="settings_provider_file_label_empty">Datei:</string>
     <string name="settings_provider_file_label">Datei: %1$s • %2$d Kanäle, %3$d Filme, %4$d Serien</string>

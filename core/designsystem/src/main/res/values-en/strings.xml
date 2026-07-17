@@ -691,7 +691,7 @@
     <string name="settings_provider_file_stage">File ready. Save will replace the current source.</string>
     <string name="settings_provider_file_import_only">File is import-only. No permanent copy is stored.</string>
     <string name="settings_provider_file_ready_test">File ready. Check and save.</string>
-    <string name="settings_provider_file_pick">Select file</string>
+    <string name="settings_provider_file_pick">Choose a local .m3u/.m3u8 file…</string>
     <string name="settings_provider_file_name">File: %1$s</string>
     <string name="settings_provider_file_label_empty">File:</string>
     <string name="settings_provider_file_label">File: %1$s • %2$d channels, %3$d movies, %4$d series</string>

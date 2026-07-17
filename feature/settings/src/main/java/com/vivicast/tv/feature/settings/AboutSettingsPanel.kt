@@ -21,9 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -243,12 +243,15 @@ private fun AboutLegalOverlay(
     // No own background: the About list underneath is hidden via alpha(0) (kept composed so the focused row
     // survives), so the legal text renders directly on the host GlassPanel — same fill + transparency, no
     // colour seam, and the panel's normal padding/border instead of a mismatched inner rectangle + stripes.
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    // A scrollable Column (not a LazyColumn) so every paragraph stays composed even when scrolled off — the
+    // first paragraph carries the detail focus requester (the section rail's RIGHT re-entry target), and if
+    // it were disposed on scroll that RIGHT would land nowhere.
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
-        item { SectionTitle(text = title) }
-        itemsIndexed(paragraphs) { index, paragraph ->
+        SectionTitle(text = title)
+        paragraphs.forEachIndexed { index, paragraph ->
             FocusableLegalParagraph(
                 text = paragraph,
                 // First paragraph is the focus entry: it carries the detail requester + entry focus and
@@ -277,28 +280,28 @@ private fun TechnicalDetailsOverlay(
 ) {
     BackHandler(onBack = onClose)
     LaunchedEffect(Unit) { runCatching { backFocus.requestFocus() } }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    // Scrollable Column (not LazyColumn) so the first row — which holds the detail focus requester used by
+    // the section rail's RIGHT re-entry — stays composed even when scrolled off.
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
-        item { SectionTitle(text = stringResource(R.string.about_technical_details)) }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.about_package_name),
-                help = stringResource(R.string.about_help_package),
-                value = state.packageName,
-                modifier = firstFocusModifier
-                    .focusRequester(backFocus)
-                    .focusProperties { up = FocusRequester.Cancel },
-            )
-        }
-        item { VivicastSettingsRow(title = stringResource(R.string.about_build_type), help = stringResource(R.string.about_help_build_type), value = state.buildType) }
-        item { VivicastSettingsRow(title = stringResource(R.string.about_player_engine), help = stringResource(R.string.about_help_player_engine), value = state.playerEngine) }
-        item { VivicastSettingsRow(title = stringResource(R.string.about_db_version), help = stringResource(R.string.about_help_db), value = state.databaseVersion.toString()) }
-        item { VivicastSettingsRow(title = stringResource(R.string.about_android_version), help = stringResource(R.string.about_help_android), value = state.androidVersion) }
+        SectionTitle(text = stringResource(R.string.about_technical_details))
+        VivicastSettingsRow(
+            title = stringResource(R.string.about_package_name),
+            help = stringResource(R.string.about_help_package),
+            value = state.packageName,
+            modifier = firstFocusModifier
+                .focusRequester(backFocus)
+                .focusProperties { up = FocusRequester.Cancel },
+        )
+        VivicastSettingsRow(title = stringResource(R.string.about_build_type), help = stringResource(R.string.about_help_build_type), value = state.buildType)
+        VivicastSettingsRow(title = stringResource(R.string.about_player_engine), help = stringResource(R.string.about_help_player_engine), value = state.playerEngine)
+        VivicastSettingsRow(title = stringResource(R.string.about_db_version), help = stringResource(R.string.about_help_db), value = state.databaseVersion.toString())
+        VivicastSettingsRow(title = stringResource(R.string.about_android_version), help = stringResource(R.string.about_help_android), value = state.androidVersion)
         // CPU architecture folded into the device model in parens (e.g. "Xiaomi TV 4 (arm64-v8a)") — one
         // fewer row. cpuAbi stays a separate field for the diagnostics export.
-        item { VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = stringResource(R.string.about_model_abi_format, state.deviceModel, state.cpuAbi)) }
+        VivicastSettingsRow(title = stringResource(R.string.about_device_model), help = stringResource(R.string.about_help_device), value = stringResource(R.string.about_model_abi_format, state.deviceModel, state.cpuAbi))
     }
 }
 

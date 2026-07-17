@@ -6,6 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,8 +45,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -130,6 +141,7 @@ fun VivicastSpinner(
  * Standard dialog text field: optional label, theme rounding, focus highlight, placeholder, and
  * error state (red border + label). [label] = null for single-field dialogs where the title labels it.
  */
+@OptIn(ExperimentalLayoutApi::class) // WindowInsets.isImeVisible (bind edit mode to the keyboard)
 @Composable
 fun VivicastTextField(
     value: String,
@@ -151,7 +163,35 @@ fun VivicastTextField(
 ) {
     var focused by remember { mutableStateOf(false) }
     var revealed by remember { mutableStateOf(false) }
+    // TV: the field behaves like a button. Focus only highlights it (the keyboard does NOT pop up the
+    // instant focus lands — e.g. on dialog open or an error-focus jump); DPAD-OK opens the IME. It stays
+    // one BasicTextField toggled read-only ↔ editable, so focus never leaves the node — entering edit
+    // mode can't glitch focus out of the surrounding editor. read-only = focusable, shows value, no IME.
+    var editing by remember { mutableStateOf(false) }
+    val internalFocus = remember { FocusRequester() }
+    // The caller's focusRequester (dialog auto-focus / error-focus jump) targets the field itself.
+    val fieldFocus = focusRequester ?: internalFocus
+    val keyboard = LocalSoftwareKeyboardController.current
     val scheme = LocalVivicastColors.current
+    // isImeVisible recomposes on IME show/hide, so keying a LaunchedEffect on it fires on each change.
+    val imeVisible = WindowInsets.isImeVisible
+    // Latches once the IME has actually appeared this edit session, so the "IME dismissed → read-only"
+    // reset only fires after a real show — never on the initial hidden state, and never in a headless
+    // test that has no IME (there editing stays on so a test can type into the field).
+    var imeShownWhileEditing by remember { mutableStateOf(false) }
+
+    // Bind edit mode to the keyboard: OK enters edit mode and shows it; dismissing it (Done or BACK)
+    // drops back to read-only so the D-pad resumes navigating instead of moving the text cursor, with
+    // focus staying on the field.
+    LaunchedEffect(editing) { if (editing) keyboard?.show() }
+    LaunchedEffect(editing, imeVisible) {
+        when {
+            !editing -> imeShownWhileEditing = false
+            imeVisible -> imeShownWhileEditing = true
+            imeShownWhileEditing -> editing = false
+        }
+    }
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         if (label != null) {
             BasicText(
@@ -163,44 +203,42 @@ fun VivicastTextField(
                 ),
             )
         }
+        val visualModifier = Modifier
+            .height(height)
+            .then(fieldModifier)
+            .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
+            .background(if (focused) scheme.surface(VivicastColors.SurfaceSelected) else scheme.surface(VivicastColors.Surface))
+            .border(
+                width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
+                color = when {
+                    isError -> VivicastColors.Error
+                    focused -> scheme.focusRing
+                    else -> scheme.surface(Color(0x66344A62))
+                },
+                shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
+            )
+            .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3)
         val field: @Composable (Modifier) -> Unit = { widthModifier ->
-            BasicTextField(
+            FieldTextField(
                 value = value,
-                onValueChange = { if (maxLength != null) onValueChange(it.take(maxLength)) else onValueChange(it) },
+                onValueChange = onValueChange,
                 singleLine = singleLine,
                 keyboardOptions = keyboardOptions,
-                textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
-                visualTransformation = if (secret && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
-                modifier = widthModifier
-                    .height(height)
-                    .then(fieldModifier)
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                    .onFocusChanged { focused = it.isFocused }
-                    .clip(RoundedCornerShape(VivicastShapes.RadiusMedium))
-                    .background(if (focused) scheme.surface(VivicastColors.SurfaceSelected) else scheme.surface(VivicastColors.Surface))
-                    .border(
-                        width = if (focused || isError) VivicastBorders.FocusWidth else VivicastBorders.Hairline,
-                        color = when {
-                            isError -> VivicastColors.Error
-                            focused -> scheme.focusRing
-                            else -> scheme.surface(Color(0x66344A62))
-                        },
-                        shape = RoundedCornerShape(VivicastShapes.RadiusMedium),
-                    )
-                    .padding(horizontal = VivicastSpacing.Space4, vertical = VivicastSpacing.Space3),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                        if (value.isEmpty() && placeholder.isNotEmpty()) {
-                            BasicText(
-                                text = placeholder,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
+                secret = secret,
+                revealed = revealed,
+                maxLength = maxLength,
+                placeholder = placeholder,
+                editing = editing,
+                fieldFocus = fieldFocus,
+                widthModifier = widthModifier,
+                visualModifier = visualModifier,
+                // Focus moved away (D-Pad to another control) resets to read-only for the next visit.
+                onFocusChanged = { isFocused -> focused = isFocused; if (!isFocused) editing = false },
+                // OK opens the IME: enters edit mode; the LaunchedEffect shows the keyboard and drops
+                // back to read-only once it is dismissed.
+                onActivate = { editing = true },
+                // Done on the IME hides it; the editing watcher then returns the field to read-only.
+                onDone = { keyboard?.hide() },
             )
         }
         if (secret && allowReveal) {
@@ -223,6 +261,69 @@ fun VivicastTextField(
             )
         }
     }
+}
+
+/**
+ * The one text field of [VivicastTextField]. read-only until [editing]: focusable and shows the value
+ * but raises no IME. OK (DPAD-center / Enter) calls [onActivate] to open the keyboard. The field never
+ * leaves composition, so focus can't escape the surrounding editor when the IME opens.
+ */
+@Composable
+private fun FieldTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    singleLine: Boolean,
+    keyboardOptions: KeyboardOptions,
+    secret: Boolean,
+    revealed: Boolean,
+    maxLength: Int?,
+    placeholder: String,
+    editing: Boolean,
+    fieldFocus: FocusRequester,
+    widthModifier: Modifier,
+    visualModifier: Modifier,
+    onFocusChanged: (Boolean) -> Unit,
+    onActivate: () -> Unit,
+    onDone: () -> Unit,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = { if (maxLength != null) onValueChange(it.take(maxLength)) else onValueChange(it) },
+        readOnly = !editing,
+        singleLine = singleLine,
+        keyboardOptions = keyboardOptions.copy(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        textStyle = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
+        visualTransformation = if (secret && !revealed) PasswordVisualTransformation() else VisualTransformation.None,
+        modifier = widthModifier
+            .focusRequester(fieldFocus)
+            .onFocusChanged { onFocusChanged(it.isFocused) }
+            // Intercept OK before the field's own key handling so read-only mode still opens the IME.
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter)
+                ) {
+                    onActivate()
+                    true
+                } else {
+                    false
+                }
+            }
+            .then(visualModifier),
+        decorationBox = { innerTextField ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty() && placeholder.isNotEmpty()) {
+                    BasicText(
+                        text = placeholder,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
+                    )
+                }
+                innerTextField()
+            }
+        },
+    )
 }
 
 /** Focusable eye toggle that reveals/hides a secret text field. Slash overlay = currently hidden. */

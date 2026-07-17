@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.FocusEnterExitScope
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -239,7 +240,6 @@ fun SettingsRoute(
     val sectionFocusRequesters = remember(settingsSections) {
         settingsSections.associateWith { FocusRequester() }
     }
-    val sectionsWithDetailFocus = remember(settingsSections) { settingsSections.toSet() }
     val selectedSectionFocusRequester = sectionFocusRequesters[selectedSection] ?: FocusRequester.Default
     val detailFirstFocusModifier = Modifier
         .focusRequester(detailFocusRequester)
@@ -297,7 +297,8 @@ fun SettingsRoute(
             ) {
                 Column(
                     // Rail focus bounds: LEFT stops (leftmost pane); UP from the top section exits to the
-                    // top-nav gear. RIGHT (→ detail) stays per-item; BACK (→ gear) stays global.
+                    // top-nav gear. RIGHT (→ detail) is a spatial search into the detail focusRestorer;
+                    // BACK (→ gear) stays global.
                     modifier = Modifier
                         .fillMaxSize()
                         .focusGroup()
@@ -317,16 +318,12 @@ fun SettingsRoute(
                                 selected = section == selectedSection,
                                 onClick = { activateSection(section) },
                                 onFocused = { selectSection(section) },
+                                // RIGHT → detail: no hard target. A spatial search enters the detail
+                                // focusGroup, whose focusRestorer lands on the last-focused (visible) row
+                                // — so RIGHT still works when the first row is scrolled off. See below.
                                 modifier = Modifier
                                     .focusRequester(sectionFocusRequesters.getValue(section))
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (section in sectionsWithDetailFocus) {
-                                            Modifier.focusProperties { right = detailFocusRequester }
-                                        } else {
-                                            Modifier
-                                        },
-                                    ),
+                                    .fillMaxWidth(),
                                 contentPadding = VivicastSpacing.Space2,
                             ) {
                                 Row(
@@ -351,8 +348,7 @@ fun SettingsRoute(
                         modifier = Modifier
                             .focusRequester(sectionFocusRequesters.getValue(sectionAbout))
                             .fillMaxWidth()
-                            .wrapContentHeight(unbounded = true)
-                            .focusProperties { right = detailFocusRequester },
+                            .wrapContentHeight(unbounded = true),
                         contentPadding = VivicastSpacing.Space2,
                     ) {
                         Row(
@@ -379,7 +375,10 @@ fun SettingsRoute(
                     // Detail focus bounds: LEFT (at the panel's left edge) returns to the current section;
                     // UP/DOWN stop at the ends. Internal navigation (rows, button groups) is unaffected —
                     // an exit target only applies when there's no focus target left inside the group.
+                    // focusRestorer: on RIGHT re-entry restore the last-focused child (so it works when the
+                    // first row is scrolled out of the LazyColumn); fallback = the first row on first entry.
                     modifier = Modifier
+                        .focusRestorer(detailFocusRequester)
                         .focusGroup()
                         .onFocusChanged { detailFocused = it.hasFocus }
                         .focusProperties {
