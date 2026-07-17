@@ -1,20 +1,48 @@
 package com.vivicast.tv.worker
 
+import com.vivicast.tv.core.cache.MediaCacheCleanupResult
+
 class MaintenanceRefreshOrchestrator(
     private val logoRefresher: LogoRefresher,
     private val cacheCleaner: CacheCleaner,
     private val diagnostics: RefreshDiagnostics,
+    private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
     // Playlists and EPG sources are refreshed by their own per-item periodic/one-time workers now, so the
     // global periodic covers only logos + cache maintenance.
     suspend fun refresh(): RefreshReport {
+        val startedAt = clock()
         diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.RefreshStarted, "Global refresh started."))
 
-        logoRefresher.refreshLogos()
-        diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.LogoRefreshCompleted, "Logo refresh completed."))
+        val logoStart = clock()
+        val logos = logoRefresher.refreshLogos()
+        diagnostics.record(
+            RefreshDiagnosticEvent(
+                RefreshDiagnosticType.LogoRefreshCompleted,
+                "Logo refresh completed.",
+                mapOf(
+                    "targets" to logos.targets.toString(),
+                    "fetched" to logos.fetched.toString(),
+                    "failed" to logos.failed.toString(),
+                    "durationMs" to (clock() - logoStart).toString(),
+                ),
+            ),
+        )
 
-        cacheCleaner.cleanup()
-        diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.CacheCleanupCompleted, "Cache cleanup completed."))
+        val cacheStart = clock()
+        val cleanup = cacheCleaner.cleanup()
+        diagnostics.record(
+            RefreshDiagnosticEvent(
+                RefreshDiagnosticType.CacheCleanupCompleted,
+                "Cache cleanup completed.",
+                mapOf(
+                    "removedFiles" to cleanup.removedFiles.toString(),
+                    "removedBytes" to cleanup.removedBytes.toString(),
+                    "remainingBytes" to cleanup.remainingBytes.toString(),
+                    "durationMs" to (clock() - cacheStart).toString(),
+                ),
+            ),
+        )
 
         val report = RefreshReport(
             playlistsCollected = 0,
@@ -25,7 +53,13 @@ class MaintenanceRefreshOrchestrator(
             epgSourcesFailed = 0,
             seriesDetailsProviderIds = emptyList(),
         )
-        diagnostics.record(RefreshDiagnosticEvent(RefreshDiagnosticType.RefreshCompleted, "Global refresh completed."))
+        diagnostics.record(
+            RefreshDiagnosticEvent(
+                RefreshDiagnosticType.RefreshCompleted,
+                "Global refresh completed.",
+                mapOf("durationMs" to (clock() - startedAt).toString()),
+            ),
+        )
         return report
     }
 }
@@ -39,8 +73,15 @@ interface EpgRefresher {
 }
 
 interface LogoRefresher {
-    suspend fun refreshLogos()
+    suspend fun refreshLogos(): LogoRefreshResult
 }
+
+/** Sanitized logo-prefetch counts for the diagnostics event: how many logos were considered / fetched / failed. */
+data class LogoRefreshResult(
+    val targets: Int = 0,
+    val fetched: Int = 0,
+    val failed: Int = 0,
+)
 
 interface SeriesDetailsRefresher {
     suspend fun refresh(providerId: String): SeriesDetailsRefreshOutcome
@@ -49,10 +90,12 @@ interface SeriesDetailsRefresher {
 data class SeriesDetailsRefreshOutcome(
     val providerId: String,
     val success: Boolean,
+    // Sanitized season/episode counts for the diagnostics event; empty on failure.
+    val logMetadata: Map<String, String> = emptyMap(),
 )
 
 interface CacheCleaner {
-    suspend fun cleanup()
+    suspend fun cleanup(): MediaCacheCleanupResult
 }
 
 data class PlaylistRefreshTarget(
@@ -68,9 +111,9 @@ data class PlaylistRefreshOutcome(
     // from a failure: the caller must NOT retry (the in-flight run covers it), else the whole playlist is
     // re-fetched/re-imported a few seconds later.
     val skipped: Boolean = false,
-    // Import counts for the diagnostics event (sanitized numbers only). 0 on skip/fail.
-    val channelsImported: Int = 0,
-    val skippedEntries: Int = 0,
+    // Sanitized count fields for the diagnostics event (type, per-content added/updated/removed, skipped,
+    // status), built by the refresher. Empty on skip/fail.
+    val logMetadata: Map<String, String> = emptyMap(),
 )
 
 data class EpgRefreshTarget(
@@ -82,12 +125,9 @@ data class EpgRefreshOutcome(
     val success: Boolean,
     // See PlaylistRefreshOutcome.skipped — already refreshing in-process, do not retry.
     val skipped: Boolean = false,
-    // Import counts for the diagnostics event (sanitized numbers only). Summed across the source's
-    // active providers; 0 on skip/fail.
-    val channels: Int = 0,
-    val mappingsAdded: Int = 0,
-    val mappingsUpdated: Int = 0,
-    val programsImported: Int = 0,
+    // Sanitized count fields for the diagnostics event (channels, mappingsAdded/Updated, programs,
+    // skippedPrograms, providers). Empty on skip/fail.
+    val logMetadata: Map<String, String> = emptyMap(),
 )
 
 data class RefreshReport(

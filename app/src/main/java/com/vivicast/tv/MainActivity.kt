@@ -317,6 +317,7 @@ private fun VivicastApp(
                 put("audioCh", audioCh)
                 cause?.let { put("cause", it) }
                 codec?.let { put("codec", it) }
+                putAll(playerContext(playerState.request))
             }
             appContainer.diagnosticsStore.log("player", "playback_error", details)
         }
@@ -325,14 +326,14 @@ private fun VivicastApp(
     // hard error). Log the transition into reconnecting (gated).
     LaunchedEffect(playerState.isReconnecting) {
         if (playerState.isReconnecting) {
-            appContainer.diagnosticsStore.log("player", "reconnecting")
+            appContainer.diagnosticsStore.log("player", "reconnecting", playerContext(playerState.request))
         }
     }
     // Diagnostics: mid-stream rebuffering (STATE_BUFFERING while already Playing) — the common "stutter"
     // that isn't a hard error. Initial load buffers under status=Starting, so this only fires on a stall.
     LaunchedEffect(playerState.isBuffering) {
         if (playerState.isBuffering && playerState.status == PlaybackStatus.Playing) {
-            appContainer.diagnosticsStore.log("player", "rebuffering")
+            appContainer.diagnosticsStore.log("player", "rebuffering", playerContext(playerState.request))
         }
     }
     var pinSecurityState by remember { mutableStateOf(PinSecurityState()) }
@@ -988,6 +989,16 @@ private fun VivicastApp(
                     appContainer.testEpgSourceConnection(url).also { result ->
                         result.errorMessage?.let {
                             appContainer.diagnosticsStore.log("connection", "epg_test_failed", mapOf("error" to it))
+                        }
+                        result.summary?.let { summary ->
+                            appContainer.diagnosticsStore.log(
+                                "connection",
+                                "epg_test_ok",
+                                mapOf(
+                                    "channels" to summary.channels.toString(),
+                                    "programs" to summary.programs.toString(),
+                                ),
+                            )
                         }
                     }
                 },
@@ -1691,6 +1702,13 @@ private fun DiagnosticsStore.logLogoIndex(folder: File?, count: Int) {
     if (count < 0) log("logos", "folder_unreadable")
     else log("logos", "index_built", mapOf("files" to count.toString()))
 }
+
+// Sanitized correlation fields for player diagnostics (which stream errored/stalled) — provider + media id
+// and type, never a URL or title. Empty when nothing is playing.
+private fun playerContext(request: PlaybackRequest?): Map<String, String> =
+    request?.let {
+        mapOf("providerId" to it.providerId, "mediaId" to it.mediaId, "mediaType" to it.mediaType.name)
+    } ?: emptyMap()
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_SETTINGS = "settings"

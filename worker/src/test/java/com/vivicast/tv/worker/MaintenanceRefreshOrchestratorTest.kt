@@ -1,5 +1,6 @@
 package com.vivicast.tv.worker
 
+import com.vivicast.tv.core.cache.MediaCacheCleanupResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -16,10 +17,10 @@ class MaintenanceRefreshOrchestratorTest {
         val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = object : LogoRefresher {
                 // Simulates WorkManager stopping the worker mid-refresh.
-                override suspend fun refreshLogos() { throw CancellationException("stopped") }
+                override suspend fun refreshLogos(): LogoRefreshResult { throw CancellationException("stopped") }
             },
             cacheCleaner = object : CacheCleaner {
-                override suspend fun cleanup() { calls += "cache" }
+                override suspend fun cleanup(): MediaCacheCleanupResult { calls += "cache"; return EMPTY_CLEANUP }
             },
             diagnostics = RecordingRefreshDiagnostics(),
         )
@@ -39,10 +40,10 @@ class MaintenanceRefreshOrchestratorTest {
         val diagnostics = RecordingRefreshDiagnostics()
         val orchestrator = MaintenanceRefreshOrchestrator(
             logoRefresher = object : LogoRefresher {
-                override suspend fun refreshLogos() { calls += "refresh-logos" }
+                override suspend fun refreshLogos(): LogoRefreshResult { calls += "refresh-logos"; return LogoRefreshResult() }
             },
             cacheCleaner = object : CacheCleaner {
-                override suspend fun cleanup() { calls += "cache-cleanup" }
+                override suspend fun cleanup(): MediaCacheCleanupResult { calls += "cache-cleanup"; return EMPTY_CLEANUP }
             },
             diagnostics = diagnostics,
         )
@@ -55,6 +56,8 @@ class MaintenanceRefreshOrchestratorTest {
         assertEquals(RefreshDiagnosticType.RefreshCompleted, diagnostics.events.last().type)
     }
 }
+
+private val EMPTY_CLEANUP = MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
 
 private class RecordingRefreshDiagnostics : RefreshDiagnostics {
     val events = mutableListOf<RefreshDiagnosticEvent>()
