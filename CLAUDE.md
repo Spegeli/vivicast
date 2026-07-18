@@ -48,6 +48,16 @@ manual reorder, new-groups policy; Room **v17** — `manualSortOrder` + `provide
 **non-blocking staged DB imports** (Room **v18** — catalog/EPG imports stage chunked, then a fingerprint
 delta-merge, so interactive writes don't block on a background refresh; implements the ADR-012 pipeline).
 
+Later feature work (2026-07-17/18, on main): an About **"Diagnose & Protokolle" sub-page** (log viewer +
+multi-select delete; every event centrally sanitized/opaque before it is persisted); **Xtream companion
+EPG auto-detect** (a provider save with a *changed* Xtream source probes `xmltv.php` and auto-creates a
+deduped, linked EPG source named after the username — see ADR-002; no-op for M3U or a pure metadata edit);
+and a **provider add/edit/delete/refresh lifecycle pass** — the per-playlist User-Agent is now settable on
+ADD (not only edit), Xtream HTTP-429 is avoided by fetching series season/episode detail **on-demand** when
+a series opens (the eager per-series refresh worker was deleted) plus a 429 backoff, and playlist/EPG
+**delete dropped from ~4 min to sub-second** via rowid-tied search FTS (Room **v19**; in-merge
+provider/source existence guards stop orphan rows when a delete races a refresh).
+
 ## Active App Architecture References
 
 Only these three docs are active app-architecture references:
@@ -122,7 +132,7 @@ app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPrefer
 core/
   cache/      ← M3uStreamReferenceStore, MediaCache
   common/     ← AppResult
-  database/   ← Room DB (v18), DAOs (Provider, Catalog, CategorySettings, EPG, Favorites, Playback,
+  database/   ← Room DB (v19), DAOs (Provider, Catalog, CategorySettings, EPG, Favorites, Playback,
                 Search); staged delta-merge import infra (ChunkedTransaction, SyncFingerprint, *_stage entities)
   datastore/  ← UserPreferencesStore
   designsystem/ ← VivicastTheme + grouped components: VivicastSurfaces / Layout / Badges / Panels /
