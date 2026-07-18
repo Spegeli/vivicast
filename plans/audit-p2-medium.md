@@ -1,5 +1,20 @@
 # Audit Remediation — Phase 2: Medium Findings
 
+> **STATUS: ✅ COMPLETED + shipped 2026-07-19.** All 17 Medium findings implemented, gated per cluster
+> (detekt + assembleDebug + test green), **merged to `main` and pushed** (up to `fe8fcda`); feature branch
+> `audit/p2-medium` deleted (local + origin). Room **v20→v21** (#11 `sourceEpoch` + `Migration20To21`).
+> Two additions beyond the 17, from the post-implementation diagnostics review:
+> - `#13` follow-up — `PlaylistRefreshCancelled` / `EpgRefreshCancelled` diagnostics events (a cancelled
+>   refresh previously vanished from the Protokoll).
+> - Host-redaction fix — the bare provider host leaked into the shareable diagnostics export via the
+>   network-event logger; added `host` to `DiagnosticsSanitizer` (key-blank + line SECRET pattern).
+>
+> Emulator-verified (API 36, debug): v21 migration clean + data preserved, #10 background-release
+> (`ExoPlayerImpl: Release`), #3 M3U file encrypted on disk, #31 HD/SD 7/7, #32 6 links, #4 export trim.
+> User confirmed #14/#12/#15 manually. `#22` extracted `EnsureSeriesDetailUseCase` (:data:media) + moved the
+> auto-EPG dedup mutex into `AutoXtreamEpgSourceUseCase`, but did **not** fold autoDetectXtreamEpg's core into
+> :data:epg (that module lacks :iptv:xtream + the validation is App-hoisted). Decisions below are historical.
+
 Source: `CODE_REVIEW.md` (2026-07-18). Scope = the **17 Medium** findings. Full evidence per finding in
 `CODE_REVIEW.md` (`CR #n`). **No code changes until explicit GO.** ⚠ = decision needed before implementing.
 
