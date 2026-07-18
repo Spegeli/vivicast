@@ -204,5 +204,6 @@ private object EmptyEpgSourceRepository : EpgSourceRepository {
     override suspend fun deleteSource(sourceId: String) = Unit
     override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) = Unit
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) = Unit
+    override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>) = Unit
 }
 

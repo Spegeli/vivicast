@@ -131,6 +131,7 @@ private class FakeRepo : EpgSourceRepository {
     override fun observeEpgSources(): Flow<List<EpgSource>> = flowOf(sources.toList())
     override suspend fun deleteSource(sourceId: String): Unit = error("unused")
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String): Unit = error("unused")
+    override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>): Unit = error("unused")
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = error("unused")
     override fun observeProgramsForChannel(
         providerId: String,

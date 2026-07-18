@@ -130,6 +130,7 @@ internal fun ProviderSettingsPanel(
     providerEpgLinks: List<ProviderEpgSource> = emptyList(),
     onSelectEpgProvider: (String) -> Unit = {},
     onToggleEpgLink: (providerId: String, sourceId: String, link: Boolean) -> Unit = { _, _, _ -> },
+    onReorderEpgLink: (providerId: String, orderedSourceIds: List<String>) -> Unit = { _, _ -> },
     firstFocusModifier: Modifier = Modifier,
     onParkFocusBeforeEditor: () -> Unit = {},
     // Bumped when OK is pressed on the already-selected rail section: collapse the open editor back to
@@ -624,10 +625,15 @@ internal fun ProviderSettingsPanel(
             onToggleEpgLink = { sourceId, link ->
                 selectedProviderId?.let { onToggleEpgLink(it, sourceId, link) }
             },
+            onReorderEpg = { orderedIds ->
+                selectedProviderId?.let { onReorderEpgLink(it, orderedIds) }
+            },
             ),
             epgLinks = ProviderEpgLinkInfo(
                 sources = epgSources,
                 linkedIds = providerEpgLinks.mapTo(mutableSetOf()) { it.epgSourceId },
+                // providerEpgLinks is ORDER BY priority → assigned section + reorder list use this order.
+                linkedInOrder = providerEpgLinks.mapNotNull { link -> epgSources.firstOrNull { it.id == link.epgSourceId } },
             ),
             modifier = Modifier.fillMaxSize(),
         )

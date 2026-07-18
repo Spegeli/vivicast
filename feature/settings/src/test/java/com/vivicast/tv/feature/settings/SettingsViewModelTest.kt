@@ -347,6 +347,18 @@ class SettingsViewModelTest {
         scope.cancel()
     }
 
+    @Test
+    fun reorderEpgSources_delegatesToRepository() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val epgRepo = FakeEpgSourceRepository()
+        val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
+
+        vm.reorderEpgSourcesForProvider("p1", listOf("s3", "s1", "s2"))
+
+        assertEquals("p1" to listOf("s3", "s1", "s2"), epgRepo.reorderCall)
+        scope.cancel()
+    }
+
 
     @Test
     fun epgSourceFlowChange_updatesUiStateReactively() = runBlocking {
@@ -695,6 +707,8 @@ private class FakeEpgSourceRepository(
         private set
     var unlinkCall: Pair<String, String>? = null
         private set
+    var reorderCall: Pair<String, List<String>>? = null
+        private set
     var setMappingRequest: ManualEpgChannelMappingRequest? = null
         private set
     var clearMappingCall: Triple<String, String, String>? = null
@@ -739,6 +753,10 @@ private class FakeEpgSourceRepository(
 
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {
         unlinkCall = providerId to epgSourceId
+    }
+
+    override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>) {
+        reorderCall = providerId to orderedSourceIds
     }
 
 }

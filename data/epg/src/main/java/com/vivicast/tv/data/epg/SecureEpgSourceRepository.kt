@@ -23,6 +23,9 @@ interface EpgSourceRepository : EpgRepository {
     suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int)
 
     suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String)
+
+    /** Renumber [providerId]'s linked EPG sources to match [orderedSourceIds] (index 0 = priority 1). */
+    suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>)
 }
 
 data class EpgSourceEditRequest(
@@ -90,7 +93,27 @@ class SecureEpgSourceRepository(
             if (remaining.size == links.size) return@withTransaction
 
             database.epgDao().deleteProviderEpgSource(providerId, epgSourceId)
+            // F1: drop this (provider, source) pair's mappings + programmes so nothing stale lingers or
+            // resurfaces on re-link. Scoped to the pair — other providers sharing the source keep theirs.
+            database.epgDao().deleteMappingsForProviderAndSource(providerId, epgSourceId)
+            database.epgDao().deleteProgramsForProviderAndSource(providerId, epgSourceId)
             rewritePriorities(remaining)
+        }
+    }
+
+    override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>) {
+        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
+
+        database.withTransaction {
+            val links = database.epgDao().getProviderEpgSources(providerId)
+            if (links.size < 2) return@withTransaction
+
+            // Apply the requested order; any linked source not named in the request keeps its current
+            // relative order, appended after the named ones (defensive against a stale/partial UI list).
+            val byId = links.associateBy { it.epgSourceId }
+            val reordered = orderedSourceIds.mapNotNull { byId[it] } +
+                links.filterNot { it.epgSourceId in orderedSourceIds }
+            rewritePriorities(reordered)
         }
     }
 

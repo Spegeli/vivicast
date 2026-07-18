@@ -306,7 +306,7 @@ internal fun ProviderEditor(
         }
     }
 
-    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink)
+    ProviderEditorDialogs(dialogs, editor, epgLinks, isDuplicateName, onEditorChange, actions.onToggleEpgLink, actions.onReorderEpg)
 }
 
 /** Open/closed flags for the editor's popups (name / interval / User-Agent / EPG sources). */
@@ -327,6 +327,7 @@ private fun ProviderEditorDialogs(
     isDuplicateName: (String) -> Boolean,
     onEditorChange: (ProviderEditorState) -> Unit,
     onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit,
+    onReorderEpg: (orderedSourceIds: List<String>) -> Unit,
 ) {
     if (dialogs.showName) {
         NameEditDialog(
@@ -365,7 +366,9 @@ private fun ProviderEditorDialogs(
         ProviderEpgSourcesDialog(
             sources = epgLinks.sources,
             linkedIds = epgLinks.linkedIds,
+            linkedInOrder = epgLinks.linkedInOrder,
             onToggle = onToggleEpgLink,
+            onReorder = onReorderEpg,
             onDismiss = { dialogs.showEpgSources = false },
         )
     }
@@ -411,12 +414,16 @@ internal class ProviderEditorActions(
     val onPickM3uFile: ((String, String) -> Unit) -> Unit,
     // Links/unlinks an EPG source to the edited playlist immediately (no save button).
     val onToggleEpgLink: (sourceId: String, link: Boolean) -> Unit = { _, _ -> },
+    // Persists a new EPG-source priority order for the edited playlist (from the "Priorität" dialog).
+    val onReorderEpg: (orderedSourceIds: List<String>) -> Unit = {},
 )
 
 /** All EPG sources plus the ids linked to the edited playlist, for the "EPG Quellen" assignment popup. */
 internal class ProviderEpgLinkInfo(
     val sources: List<EpgSource> = emptyList(),
     val linkedIds: Set<String> = emptySet(),
+    // The linked sources in priority order — drives the "assigned" section + the reorder dialog.
+    val linkedInOrder: List<EpgSource> = emptyList(),
 )
 
 /** Edit mode only: an enable/disable toggle that flips the playlist immediately (no save needed). */
@@ -918,14 +925,23 @@ private fun ProviderUserAgentDialog(
     }
 }
 
-/** EPG-source assignment popup — every EPG source with a toggle; toggling links/unlinks immediately. */
+/**
+ * EPG-source assignment popup. Two sections: "Zugewiesene Quellen" (linked, in priority order, ON toggles)
+ * and "Nicht zugewiesene Quellen" (OFF toggles). Toggling links/unlinks immediately; the row moves between
+ * sections on the next state emission. No Close button — Back dismisses. With ≥2 assigned sources a
+ * "Priorität" action opens a nested reorder dialog (grab-and-move) that persists a new priority order.
+ */
 @Composable
 private fun ProviderEpgSourcesDialog(
     sources: List<EpgSource>,
     linkedIds: Set<String>,
+    linkedInOrder: List<EpgSource>,
     onToggle: (sourceId: String, link: Boolean) -> Unit,
+    onReorder: (orderedSourceIds: List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var showPriority by remember { mutableStateOf(false) }
+    val unassigned = sources.filter { it.id !in linkedIds }
     VivicastDialog(
         onDismiss = onDismiss,
         width = VivicastDialogWidth.Compact,
@@ -934,20 +950,52 @@ private fun ProviderEpgSourcesDialog(
         if (sources.isEmpty()) {
             BodyText(stringResource(R.string.settings_provider_epg_none), maxLines = 2)
         } else {
-            sources.forEach { source ->
-                val linked = source.id in linkedIds
-                VivicastSettingsRow(
-                    title = source.name,
-                    help = "",
-                    value = if (linked) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-                    onClick = { onToggle(source.id, !linked) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            // Assigned section — linked sources in priority order; each row's ON toggle unlinks.
+            if (linkedInOrder.isNotEmpty()) {
+                BodyText(stringResource(R.string.settings_provider_epg_assigned))
+                linkedInOrder.forEach { source ->
+                    VivicastSettingsRow(
+                        title = source.name,
+                        help = "",
+                        value = stringResource(R.string.value_on),
+                        onClick = { onToggle(source.id, false) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (linkedInOrder.size >= 2) {
+                    ActionPill(
+                        label = stringResource(R.string.settings_provider_epg_priority),
+                        onClick = { showPriority = true },
+                    )
+                }
+            }
+            // Unassigned section — the rest; each row's OFF toggle links (appended last in priority).
+            if (unassigned.isNotEmpty()) {
+                BodyText(stringResource(R.string.settings_provider_epg_unassigned))
+                unassigned.forEach { source ->
+                    VivicastSettingsRow(
+                        title = source.name,
+                        help = "",
+                        value = stringResource(R.string.value_off),
+                        onClick = { onToggle(source.id, true) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
-        Spacer(modifier = Modifier.height(VivicastSpacing.Space2))
-        VivicastButtonRow {
-            ActionPill(label = stringResource(R.string.common_close), onClick = onDismiss)
+    }
+    if (showPriority) {
+        // Nested reorder dialog over the popup — its own window, so Back closes it back to the popup.
+        VivicastDialog(
+            onDismiss = { showPriority = false },
+            width = VivicastDialogWidth.Wide,
+            title = stringResource(R.string.settings_provider_epg_priority),
+        ) {
+            VivicastReorderList(
+                items = linkedInOrder.map { VivicastReorderItem(it.id, it.name) },
+                onReorder = onReorder,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp),
+            )
         }
     }
 }

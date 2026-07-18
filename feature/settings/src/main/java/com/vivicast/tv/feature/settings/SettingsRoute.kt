@@ -485,6 +485,9 @@ fun SettingsRoute(
                                     }
                                 }
                             },
+                            onReorderEpgLink = { providerId, orderedIds ->
+                                routeScope.launch { viewModel.reorderEpgSourcesForProvider(providerId, orderedIds) }
+                            },
                             firstFocusModifier = detailFirstFocusModifier,
                             // Park focus on the (always-present) section button before the overview
                             // swaps to the inline editor, so focus can't escape to the top nav bar.

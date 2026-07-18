@@ -325,6 +325,9 @@ internal class SettingsViewModel(
     suspend fun unlinkEpgSourceFromProvider(providerId: String, sourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }
 
+    suspend fun reorderEpgSourcesForProvider(providerId: String, orderedSourceIds: List<String>): Result<Unit> =
+        runCatching { epgSourceRepository.reorderProviderEpgSources(providerId, orderedSourceIds) }
+
     fun onLaunchOnBootChanged(enabled: Boolean) = updateGeneral { it.copy(launchOnBoot = enabled) }
 
     fun onDoubleBackToExitChanged(enabled: Boolean) = updateGeneral { it.copy(doubleBackToExit = enabled) }

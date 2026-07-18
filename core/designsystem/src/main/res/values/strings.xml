@@ -755,6 +755,9 @@
     <string name="settings_epg_global_interval">Globales Aktualisierungsintervall</string>
     <string name="settings_provider_refresh_on_start">Beim App-Start aktualisieren</string>
     <string name="settings_provider_epg_sources">EPG Quellen</string>
+    <string name="settings_provider_epg_assigned">Zugewiesene Quellen</string>
+    <string name="settings_provider_epg_unassigned">Nicht zugewiesene Quellen</string>
+    <string name="settings_provider_epg_priority">Priorität</string>
     <string name="settings_provider_logo_priority">Logo-Priorität</string>
     <string name="settings_provider_output_format">Ausgabeformat</string>
     <string name="settings_provider_output_hls">HLS</string>

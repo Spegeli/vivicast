@@ -11,6 +11,7 @@ import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
@@ -562,6 +563,129 @@ class RoomEpgRepositoryTest {
             database.epgDao().getProviderEpgSources(PROVIDER_ID).map { it.epgSourceId to it.priority },
         )
     }
+
+    @Test
+    fun secureEpgSourceRepositoryRewritesPrioritiesToRequestedOrder() = runBlocking {
+        val sourceRepository = SecureEpgSourceRepository(database = database, secureValueStore = secureValueStore, delegate = repository)
+        listOf("one", "two", "three").forEachIndexed { index, id ->
+            sourceRepository.saveSource(EpgSourceEditRequest(sourceId = id, name = "EPG $id", url = "https://epg.example/$id.xml"))
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+        }
+
+        sourceRepository.reorderProviderEpgSources(PROVIDER_ID, listOf("three", "one", "two"))
+
+        assertEquals(
+            listOf("three" to 1, "one" to 2, "two" to 3),
+            database.epgDao().getProviderEpgSources(PROVIDER_ID).map { it.epgSourceId to it.priority },
+        )
+    }
+
+    @Test
+    fun unlinkPurgesThatPairsProgramsAndMappingsButKeepsOthers() = runBlocking {
+        val sourceRepository = SecureEpgSourceRepository(database = database, secureValueStore = secureValueStore, delegate = repository)
+        listOf("s1", "s2").forEachIndexed { index, id ->
+            sourceRepository.saveSource(EpgSourceEditRequest(sourceId = id, name = "EPG $id", url = "https://epg.example/$id.xml"))
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+        }
+        seedMapping(PROVIDER_ID, "chA", "s1", manual = false)
+        seedMapping(PROVIDER_ID, "chA", "s2", manual = false)
+        seedProgram(PROVIDER_ID, "chA", "s1", "P1")
+        seedProgram(PROVIDER_ID, "chA", "s2", "P2")
+
+        sourceRepository.unlinkSourceFromProvider(PROVIDER_ID, "s1")
+
+        assertEquals(0, mappingCount(PROVIDER_ID, "s1"))
+        assertEquals(0, programCount(PROVIDER_ID, "s1"))
+        assertEquals(1, mappingCount(PROVIDER_ID, "s2"))
+        assertEquals(1, programCount(PROVIDER_ID, "s2"))
+    }
+
+    @Test
+    fun observeProgramsForChannelResolvesByPriorityWithManualOverride() = runBlocking {
+        seedActiveSource("srcHi")
+        seedActiveSource("srcLo")
+        linkSource(PROVIDER_ID, "srcHi", priority = 1)
+        linkSource(PROVIDER_ID, "srcLo", priority = 2)
+
+        // chX: both sources match → the higher-priority source (srcHi) wins.
+        seedMapping(PROVIDER_ID, "chX", "srcHi", manual = false)
+        seedMapping(PROVIDER_ID, "chX", "srcLo", manual = false)
+        seedProgram(PROVIDER_ID, "chX", "srcHi", "HI-X")
+        seedProgram(PROVIDER_ID, "chX", "srcLo", "LO-X")
+        // chY: only the lower-priority source matched → it serves the channel.
+        seedMapping(PROVIDER_ID, "chY", "srcLo", manual = false)
+        seedProgram(PROVIDER_ID, "chY", "srcLo", "LO-Y")
+        // chZ: a manual mapping to the lower-priority source wins over the higher-priority auto match.
+        seedMapping(PROVIDER_ID, "chZ", "srcHi", manual = false)
+        seedMapping(PROVIDER_ID, "chZ", "srcLo", manual = true)
+        seedProgram(PROVIDER_ID, "chZ", "srcHi", "HI-Z")
+        seedProgram(PROVIDER_ID, "chZ", "srcLo", "LO-Z")
+
+        val to = now + 100_000_000L
+        assertEquals(listOf("HI-X"), repository.observeProgramsForChannel(PROVIDER_ID, "chX", 0L, to).first().map { it.title })
+        assertEquals(listOf("LO-Y"), repository.observeProgramsForChannel(PROVIDER_ID, "chY", 0L, to).first().map { it.title })
+        assertEquals(listOf("LO-Z"), repository.observeProgramsForChannel(PROVIDER_ID, "chZ", 0L, to).first().map { it.title })
+    }
+
+    private suspend fun seedActiveSource(id: String) {
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(sourceId = id, name = "EPG $id", sourceConfigKey = "secure:$id", timeShiftMinutes = 0, isActive = true),
+        )
+    }
+
+    private suspend fun linkSource(providerId: String, sourceId: String, priority: Int) {
+        database.epgDao().upsertProviderEpgSources(
+            listOf(ProviderEpgSourceEntity(id = "$providerId:$sourceId", providerId = providerId, epgSourceId = sourceId, priority = priority, createdAt = now)),
+        )
+    }
+
+    private suspend fun seedMapping(providerId: String, channelId: String, sourceId: String, manual: Boolean) {
+        database.epgDao().upsertMappings(
+            listOf(
+                EpgChannelMappingEntity(
+                    id = "$providerId:$channelId:$sourceId",
+                    providerId = providerId,
+                    channelId = channelId,
+                    epgSourceId = sourceId,
+                    epgChannelId = "$sourceId-chan",
+                    isManual = manual,
+                    createdAt = now,
+                ),
+            ),
+        )
+    }
+
+    private suspend fun seedProgram(providerId: String, channelId: String, sourceId: String, title: String) {
+        database.epgDao().upsertPrograms(
+            listOf(
+                EpgProgramEntity(
+                    id = "$providerId:$channelId:$sourceId:$title",
+                    providerId = providerId,
+                    channelId = channelId,
+                    epgSourceId = sourceId,
+                    epgChannelId = "$sourceId-chan",
+                    title = title,
+                    subtitle = null,
+                    description = null,
+                    startTime = now,
+                    endTime = now + 3_600_000L,
+                    category = null,
+                    iconUrl = null,
+                    isCatchupAvailable = false,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            ),
+        )
+    }
+
+    private fun programCount(providerId: String, sourceId: String): Int =
+        database.query(SimpleSQLiteQuery("SELECT COUNT(*) FROM epg_programs WHERE providerId = ? AND epgSourceId = ?", arrayOf(providerId, sourceId)))
+            .use { c -> c.moveToFirst(); c.getInt(0) }
+
+    private fun mappingCount(providerId: String, sourceId: String): Int =
+        database.query(SimpleSQLiteQuery("SELECT COUNT(*) FROM epg_channel_mappings WHERE providerId = ? AND epgSourceId = ?", arrayOf(providerId, sourceId)))
+            .use { c -> c.moveToFirst(); c.getInt(0) }
 
     private suspend fun seedLiveChannel(
         providerId: String,

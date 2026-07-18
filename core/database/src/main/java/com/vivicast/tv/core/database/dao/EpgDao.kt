@@ -51,15 +51,31 @@ interface EpgDao {
     )
     suspend fun getProviderEpgSourcesForSource(epgSourceId: String): List<ProviderEpgSourceEntity>
 
+    // A channel's EPG comes from ONE source, chosen by priority: a manual mapping wins; otherwise the
+    // highest-priority (lowest `priority`) still-linked + active source that matched this channel (i.e. has
+    // a mapping for it). Lower-priority sources cover only channels the higher ones didn't match. Match-based
+    // (not programme-count-based): a source that matched the channel owns it even if it currently has no
+    // programmes in the window (no silent fallback). The winner subquery references only :providerId /
+    // :channelId (not the outer row), so SQLite evaluates it once per query.
     @Query(
         """
         SELECT p.* FROM epg_programs p
-        INNER JOIN epg_sources s ON p.epgSourceId = s.id
         WHERE p.providerId = :providerId
             AND p.channelId = :channelId
             AND p.endTime >= :fromMillis
             AND p.startTime <= :toMillis
-            AND s.isActive = 1
+            AND p.epgSourceId = (
+                SELECT m.epgSourceId
+                FROM epg_channel_mappings m
+                INNER JOIN epg_sources s ON s.id = m.epgSourceId
+                INNER JOIN provider_epg_sources pes
+                    ON pes.providerId = m.providerId AND pes.epgSourceId = m.epgSourceId
+                WHERE m.providerId = :providerId
+                    AND m.channelId = :channelId
+                    AND s.isActive = 1
+                ORDER BY m.isManual DESC, pes.priority ASC
+                LIMIT 1
+            )
         ORDER BY p.startTime
         """,
     )
@@ -219,6 +235,12 @@ interface EpgDao {
 
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteMappingsForChannels(providerId: String, channelIds: List<String>)
+
+    // Unlinking a source from one provider drops that (provider, source) pair's mappings (see
+    // deleteProgramsForProviderAndSource for the programme side) so no stale rows linger / resurface on
+    // re-link. Scoped to the pair — other providers sharing the source keep their mappings.
+    @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND epgSourceId = :epgSourceId")
+    suspend fun deleteMappingsForProviderAndSource(providerId: String, epgSourceId: String)
 
     @Query(
         """
