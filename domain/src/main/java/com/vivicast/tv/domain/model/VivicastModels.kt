@@ -27,6 +27,9 @@ data class Provider(
     val lastRefreshAt: Long? = null,
     // Xtream live output format: "hls" (default) or "ts". Ignored for M3U. See XTREAM_OUTPUT_* in data:provider.
     val xtreamOutputFormat: String = "hls",
+    // #11: bumped on any source switch. Captured at refresh start; re-checked in the import merge so a stale
+    // in-flight refresh can't resurrect the old catalog.
+    val sourceEpoch: Int = 0,
 )
 
 enum class ProviderType { M3u, Xtream }

@@ -162,6 +162,8 @@ class RoomProviderRepository(
             // type), so clear it — otherwise an M3U provider would keep showing an expiry/connection badge.
             xtreamExpiresAtMillis = if (leavingXtream) null else existing.xtreamExpiresAtMillis,
             xtreamMaxConnections = if (leavingXtream) null else existing.xtreamMaxConnections,
+            // #11: a source switch bumps the epoch so a stale in-flight refresh's merge is rejected.
+            sourceEpoch = existing.sourceEpoch.bumpedOnSourceSwitch(sourceSwitched),
         )
         database.withTransaction {
             // The old catalog belongs to the old source; clear it (and its favorites/history/progress/EPG
@@ -407,6 +409,10 @@ class RoomProviderRepository(
     }
 }
 
+// #11: a source switch bumps the provider's sourceEpoch; a plain edit leaves it. Kept out of updateProvider
+// so its cyclomatic complexity stays under the detekt gate.
+private fun Int.bumpedOnSourceSwitch(sourceSwitched: Boolean): Int = if (sourceSwitched) this + 1 else this
+
 private fun ProviderEntity.toDomain(): Provider =
     Provider(
         id = id,
@@ -429,6 +435,7 @@ private fun ProviderEntity.toDomain(): Provider =
         userAgent = userAgent,
         refreshOnAppStartEnabled = refreshOnAppStartEnabled,
         lastRefreshAt = lastRefreshAt,
+        sourceEpoch = sourceEpoch,
     )
 
 private fun Provider.toEntity(): ProviderEntity =
@@ -453,6 +460,7 @@ private fun Provider.toEntity(): ProviderEntity =
         userAgent = userAgent,
         refreshOnAppStartEnabled = refreshOnAppStartEnabled,
         lastRefreshAt = lastRefreshAt,
+        sourceEpoch = sourceEpoch,
     )
 
 private val ProviderType.storageValue: String

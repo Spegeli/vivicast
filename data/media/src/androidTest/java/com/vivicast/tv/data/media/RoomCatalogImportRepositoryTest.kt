@@ -37,7 +37,7 @@ import kotlin.system.measureTimeMillis
 @RunWith(AndroidJUnit4::class)
 class RoomCatalogImportRepositoryTest {
     private lateinit var database: VivicastDatabase
-    private lateinit var repository: RoomCatalogImportRepository
+    private lateinit var repository: CatalogImportRepository
     private lateinit var streamReferenceStore: FakeM3uStreamReferenceStore
     private val parser = DefaultM3uParser()
     private var now = 1_000L

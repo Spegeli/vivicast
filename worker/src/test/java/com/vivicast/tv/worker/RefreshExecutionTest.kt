@@ -461,7 +461,7 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
     var m3uProviderId: String? = null
     var m3uPlaylist: M3uPlaylist? = null
 
-    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
+    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int): CatalogImportResult {
         m3uProviderId = providerId
         m3uPlaylist = playlist
         return CatalogImportResult(
@@ -475,10 +475,10 @@ private class FakeCatalogImportRepository : CatalogImportRepository {
         )
     }
 
-    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult =
-        importM3uCatalog(providerId, playlist)
+    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int): CatalogImportResult =
+        importM3uCatalog(providerId, playlist, expectedSourceEpoch)
 
-    override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult =
+    override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog, expectedSourceEpoch: Int): XtreamCatalogImportResult =
         XtreamCatalogImportResult(
             liveCategories = ImportCount(0, 0, 0),
             movieCategories = ImportCount(0, 0, 0),

@@ -254,7 +254,7 @@ class DefaultPlaylistRefresher(
         if (playlist.channels.isEmpty()) {
             throw RefreshImportException("M3U playlist contains no importable entries.")
         }
-        val result = catalogImportRepository.importM3uCatalog(provider.id, playlist)
+        val result = catalogImportRepository.importM3uCatalog(provider.id, playlist, provider.sourceEpoch)
         val status = if (result.skippedEntries > 0) ProviderStatus.ActiveWithPartialErrors else ProviderStatus.Active
         // M3U's import result only carries the Live/channel counts (movie/series counts aren't returned).
         return PlaylistImportSummary(
@@ -316,7 +316,7 @@ class DefaultPlaylistRefresher(
             // importXtreamSeriesDetail), so the heavy per-series loop never runs during a catalog refresh.
             seriesInfos = emptyList(),
         )
-        val importResult = catalogImportRepository.importXtreamCatalog(provider.id, catalog)
+        val importResult = catalogImportRepository.importXtreamCatalog(provider.id, catalog, provider.sourceEpoch)
         // Best-effort account snapshot (expiry + max connections). A user_info failure must NOT
         // fail the catalog refresh that already succeeded, so it is isolated in runCancellableCatching.
         runCancellableCatching {

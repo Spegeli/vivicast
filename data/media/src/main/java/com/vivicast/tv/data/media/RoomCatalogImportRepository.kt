@@ -46,10 +46,10 @@ class RoomCatalogImportRepository(
     private val epgDao = database.epgDao()
     private val androidTvSearchDao = database.androidTvSearchDao()
 
-    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult =
-        importM3uCatalog(providerId, playlist)
+    override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int): CatalogImportResult =
+        importM3uCatalog(providerId, playlist, expectedSourceEpoch)
 
-    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult {
+    override suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int): CatalogImportResult {
         val now = clock()
         val classified = classifyM3uPlaylist(playlist, classifier)
         val liveCategoryIds = classified.liveChannels.mapTo(mutableSetOf()) { it.categoryRemoteId() }
@@ -84,9 +84,11 @@ class RoomCatalogImportRepository(
         // Merge: one short transaction applies categories (with the D10 group user-state preserve), then
         // only the delta for channels/movies/series/episodes, then the FTS rebuild — atomic old->new flip.
         val result = database.withTransaction {
-            // Provider deleted mid-import (delete + refresh serialise on the single writer): skip the merge
-            // so no catalog rows are re-inserted for a now-missing providerId (the schema has no FKs).
-            if (providerDao.getProvider(providerId) == null) return@withTransaction null
+            // Provider deleted OR its source switched mid-import (#11): skip the merge so a stale in-flight
+            // refresh can't re-insert catalog rows for a gone/changed source (delete/switch + refresh serialise
+            // on the single writer; the schema has no FKs, so this guard is the safety net).
+            val current = providerDao.getProvider(providerId)
+            if (current == null || current.sourceEpoch != expectedSourceEpoch) return@withTransaction null
             val liveCategories = buildCategories(providerId, CATEGORY_TYPE_LIVE, m3uCategories(liveCategoryIds), liveCategoryIds, now)
             val movieCategories = buildCategories(providerId, CATEGORY_TYPE_MOVIE, m3uCategories(movieCategoryIds), movieCategoryIds, now)
             val seriesCategories = buildCategories(providerId, CATEGORY_TYPE_SERIES, m3uCategories(seriesCategoryIds), seriesCategoryIds, now)
@@ -130,7 +132,7 @@ class RoomCatalogImportRepository(
             )
         }
 
-    override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult {
+    override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog, expectedSourceEpoch: Int): XtreamCatalogImportResult {
         val now = clock()
         val seriesRemoteIds = catalog.seriesItems.mapTo(mutableSetOf()) { it.remoteId }
         // Season/episode detail is imported on-demand per series via importXtreamSeriesDetail. When
@@ -155,9 +157,11 @@ class RoomCatalogImportRepository(
         }
 
         val result = database.withTransaction {
-            // Provider deleted mid-import (delete + refresh serialise on the single writer): skip the merge
-            // so no catalog rows are re-inserted for a now-missing providerId (the schema has no FKs).
-            if (providerDao.getProvider(providerId) == null) return@withTransaction null
+            // Provider deleted OR its source switched mid-import (#11): skip the merge so a stale in-flight
+            // refresh can't re-insert catalog rows for a gone/changed source (delete/switch + refresh serialise
+            // on the single writer; the schema has no FKs, so this guard is the safety net).
+            val current = providerDao.getProvider(providerId)
+            if (current == null || current.sourceEpoch != expectedSourceEpoch) return@withTransaction null
             val liveCategories = buildCategories(
                 providerId = providerId,
                 type = CATEGORY_TYPE_LIVE,

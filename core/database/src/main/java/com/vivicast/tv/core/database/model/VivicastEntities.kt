@@ -40,6 +40,9 @@ data class ProviderEntity(
     @ColumnInfo(defaultValue = "NULL") val lastRefreshAt: Long? = null,
     // Xtream live output format: "hls" (default) or "ts". Ignored for M3U.
     @ColumnInfo(defaultValue = "'hls'") val xtreamOutputFormat: String = "hls",
+    // #11 source-switch race guard: bumped on any source switch. A refresh captures this at start and the
+    // import merge re-checks it, so a stale in-flight refresh can't resurrect the old catalog.
+    @ColumnInfo(defaultValue = "0") val sourceEpoch: Int = 0,
 )
 
 @Entity(

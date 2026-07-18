@@ -340,6 +340,15 @@ object VivicastMigrations {
         }
     }
 
+    // v20->v21: add providers.sourceEpoch (#11 source-switch race guard). Bumped on a source switch; a refresh
+    // captures it at start and the import merge re-checks it, so a stale in-flight refresh can't resurrect the
+    // old catalog. DEFAULT 0 matches the entity @ColumnInfo default.
+    val Migration20To21: Migration = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE providers ADD COLUMN sourceEpoch INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     // live tables + staging tables mirroring their schema, so a bulk import stages rows chunked and merges
     // only the delta into the live table. Stage DDL copied verbatim from the exported 18.json.
     val Migration17To18: Migration = object : Migration(17, 18) {

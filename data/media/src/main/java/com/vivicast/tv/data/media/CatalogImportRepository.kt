@@ -13,12 +13,14 @@ interface CatalogImportRepository {
      * into the matching catalog structures. The returned counts describe the Live/category portion;
      * Movie/Series/Episode results are queried from the catalog directly.
      */
-    suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist): CatalogImportResult
+    suspend fun importM3uCatalog(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int = 0): CatalogImportResult
 
     /** Retained for API compatibility; delegates to [importM3uCatalog] (now content-aware). */
-    suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist): CatalogImportResult
+    suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int = 0): CatalogImportResult
 
-    suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult
+    // expectedSourceEpoch (#11): the provider's sourceEpoch captured at refresh start. The merge re-checks it
+    // and skips if the source switched since, so a stale in-flight refresh can't resurrect the old catalog.
+    suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog, expectedSourceEpoch: Int = 0): XtreamCatalogImportResult
 
     /**
      * Imports season/episode detail for ONE series (on-demand, when the user opens it). Reconciles WITHIN
