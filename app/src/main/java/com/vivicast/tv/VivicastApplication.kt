@@ -4,6 +4,9 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -31,12 +34,26 @@ class VivicastApplication : Application(), SingletonImageLoader.Factory {
             CrashLogWriter(this, appContainer.diagnosticsStore.crashDir, diagnosticsAbout()).install()
         }
         installLifecycleBreadcrumbs()
+        installBackgroundPlayerRelease()
         CoroutineScope(Dispatchers.IO).launch {
             // Warm the DB invalidation triggers before any refresh import can hold the writer, so the
             // first Flow subscription (Settings/Home right after a cold start) emits immediately.
             appContainer.warmDatabaseObservers()
             appContainer.installWorkerRunner()
         }
+    }
+
+    // Release the ExoPlayer when the whole app backgrounds so weak TV boxes reclaim codecs/threads. Uses
+    // ProcessLifecycleOwner (not the per-Activity callbacks above) because it debounces ~700ms — a
+    // locale-change recreate() completes well within that window and never trips ON_STOP, so playback isn't
+    // torn down across a recreate. The controller rebuilds the engine lazily on the next play(); foreground
+    // channel zaps stay warm (they never reach ON_STOP).
+    private fun installBackgroundPlayerRelease() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                appContainer.playerController.release()
+            }
+        })
     }
 
     // Foreground/background breadcrumbs (gated inside the store: no-op unless logging is enabled).

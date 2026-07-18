@@ -69,7 +69,7 @@ class DefaultVivicastPlayerControllerTest {
     }
 
     @Test
-    fun releaseStopsPlaybackAndIgnoresFutureStarts() = runBlocking {
+    fun releaseStopsPlaybackAndRevivesOnNextPlay() = runBlocking {
         val engine = BlockingPlaybackEngine()
         val controller = testController(engine)
 
@@ -77,11 +77,14 @@ class DefaultVivicastPlayerControllerTest {
         withTimeout(5_000) { engine.awaitStarted("first") }
 
         controller.release()
-        controller.play(SECOND_REQUEST)
-
         assertTrue(engine.released)
         assertEquals(PlaybackStatus.Released, controller.state.value.status)
-        assertEquals(listOf("first"), engine.startedIds)
+
+        // #10: a background release() is NOT terminal — the next play() reinitializes the engine and starts.
+        controller.play(SECOND_REQUEST)
+        withTimeout(5_000) { engine.awaitStarted("second") }
+        assertEquals(false, engine.released)
+        assertEquals(listOf("first", "second"), engine.startedIds)
     }
 
     @Test
@@ -332,6 +335,9 @@ private class BlockingPlaybackEngine : PlaybackEngine {
     override fun stop() = Unit
     override fun release() {
         released = true
+    }
+    override fun reinitialize() {
+        released = false
     }
 }
 

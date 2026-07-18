@@ -178,6 +178,10 @@ class DefaultVivicastPlayerController(
     override val state: StateFlow<VivicastPlayerState> = mutableState.asStateFlow()
 
     init {
+        startEngineCollectors()
+    }
+
+    private fun startEngineCollectors() {
         engineErrorJob = scope.launch(dispatcher) {
             engine.playbackErrors.collect { error ->
                 handlePlaybackError(error)
@@ -195,8 +199,17 @@ class DefaultVivicastPlayerController(
         }
     }
 
+    // #10: after a background release() freed the engine, the next play() rebuilds it in place so the SAME
+    // controller instance (and its exposed state flow) stays valid. Foreground channel zaps never release,
+    // so this only runs when returning from a whole-app background.
+    private fun reviveAfterBackgroundRelease() {
+        engine.reinitialize()
+        startEngineCollectors()
+        released = false
+    }
+
     override fun play(request: PlaybackRequest) {
-        if (released) return
+        if (released) reviveAfterBackgroundRelease()
         startJob?.cancel()
         reconnectJob?.cancel()
         stopProgressPolling()
@@ -619,6 +632,9 @@ interface PlaybackEngine {
     fun stop()
 
     fun release()
+
+    /** Rebuild the underlying player after a background [release]; no-op for engines that hold no resources. */
+    fun reinitialize() = Unit
 }
 
 class Media3PlaybackEngine(
@@ -850,6 +866,13 @@ class Media3PlaybackEngine(
     override fun release() {
         activePlaybackId = null
         player.release()
+    }
+
+    override fun reinitialize() {
+        // A background release() freed the player; build a fresh one (mirrors rebuildPlayerIfTuningChanged)
+        // and re-attach the remembered video surface so the next start() has a live engine.
+        player = buildExoPlayer(appContext, builtTuning).also { it.addListener(newPlayerListener()) }
+        videoSurfaceView?.let { player.setVideoSurfaceView(it) }
     }
 
     private companion object {
