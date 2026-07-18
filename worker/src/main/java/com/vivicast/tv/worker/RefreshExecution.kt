@@ -92,7 +92,9 @@ class DefaultRefreshWorkerRunner(
         val target = providerId?.takeIf { it.isNotBlank() }?.let(::PlaylistRefreshTarget)
             ?: return RefreshWorkerResult.Failure
         val startedAt = clock()
-        return runCancellableCatching { playlistRefresher.refresh(target) }
+        return recordingCancellation(RefreshDiagnosticType.PlaylistRefreshCancelled, target.providerId, startedAt) {
+            runCancellableCatching { playlistRefresher.refresh(target) }
+        }
             .fold(
                 onSuccess = { outcome ->
                     if (outcome.success) {
@@ -132,7 +134,9 @@ class DefaultRefreshWorkerRunner(
         val target = epgSourceId?.takeIf { it.isNotBlank() }?.let(::EpgRefreshTarget)
             ?: return RefreshWorkerResult.Failure
         val startedAt = clock()
-        return runCancellableCatching { epgRefresher.refresh(target) }
+        return recordingCancellation(RefreshDiagnosticType.EpgRefreshCancelled, target.epgSourceId, startedAt) {
+            runCancellableCatching { epgRefresher.refresh(target) }
+        }
             .fold(
                 onSuccess = { outcome ->
                     if (outcome.success) {
@@ -155,6 +159,22 @@ class DefaultRefreshWorkerRunner(
                 },
             )
     }
+
+    // #13: record a cancelled refresh (superseded by a newer run / WorkManager-stopped) so the Protokoll
+    // distinguishes it from a hung or failed run — the prior status is already restored by the refresher.
+    // The CancellationException is re-thrown, never swallowed.
+    private suspend fun <T> recordingCancellation(
+        cancelledType: RefreshDiagnosticType,
+        target: String,
+        startedAt: Long,
+        block: suspend () -> Result<T>,
+    ): Result<T> =
+        try {
+            block()
+        } catch (cancellation: CancellationException) {
+            recordRefresh(cancelledType, target, startedAt)
+            throw cancellation
+        }
 
     // Records one per-item refresh result. `target` is a provider/EPG-source id (not a URL/credential);
     // durations + error reason are what a "why did the refresh fail" report needs. `extra` carries the
