@@ -45,6 +45,8 @@ import com.vivicast.tv.data.favorites.FavoritesRepository
 import com.vivicast.tv.data.favorites.RoomFavoritesRepository
 import com.vivicast.tv.data.media.CatalogImportRepository
 import com.vivicast.tv.data.media.CategoryGroupRepository
+import com.vivicast.tv.data.media.EnsureSeriesDetailResult
+import com.vivicast.tv.data.media.EnsureSeriesDetailUseCase
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.media.RoomCatalogImportRepository
 import com.vivicast.tv.data.media.RoomCategoryGroupRepository
@@ -103,8 +105,6 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -488,17 +488,22 @@ class AppContainer(
         AutoXtreamEpgSourceUseCase(epgSourceRepository)
     }
 
-    // Serialises auto-detection so two quick Xtream saves can't both create a source for the same account
-    // (the dedup scan + create isn't atomic). Detection is short DB work, so the lock stays uncontended.
-    private val xtreamEpgDetectionMutex = Mutex()
+    private val ensureSeriesDetailUseCase: EnsureSeriesDetailUseCase by lazy {
+        EnsureSeriesDetailUseCase(
+            catalogImportRepository = catalogImportRepository,
+            xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
+            xtreamParser = DefaultXtreamParser(),
+        )
+    }
 
     /**
      * After an Xtream provider is saved (new / type-switch / credential change), auto-detect its companion
      * `xmltv.php` EPG: validate it serves usable XMLTV, then create-or-reuse + link an EPG source named
      * after the username (dedup by server+username). Returns the source id to refresh, or null if nothing
-     * was reachable/written. Non-blocking + silent by contract — callers ignore failures.
+     * was reachable/written. Non-blocking + silent by contract — callers ignore failures. The dedup scan +
+     * create is serialised inside [AutoXtreamEpgSourceUseCase] (#22).
      */
-    suspend fun autoDetectXtreamEpg(providerId: String): String? = xtreamEpgDetectionMutex.withLock {
+    suspend fun autoDetectXtreamEpg(providerId: String): String? {
         val credentials = providerRepository.getCredentials(providerId) as? ProviderCredentials.Xtream
             ?: return null
         val xmltvUrl = xtreamXmltvUrl(credentials.serverUrl, credentials.username, credentials.password)
@@ -525,7 +530,7 @@ class AppContainer(
                 "programs" to summary.programs.toString(),
             ),
         )
-        result.epgSourceId
+        return result.epgSourceId
     }
 
     /**
@@ -534,42 +539,38 @@ class AppContainer(
      * on an expired account. Replaces the old eager per-series worker that caused the HTTP-429 storm.
      */
     suspend fun ensureSeriesDetail(series: Series) {
-        withContext(Dispatchers.IO) {
-            val credentials = providerRepository.getCredentials(series.providerId) as? ProviderCredentials.Xtream
-                ?: return@withContext
-            val xtreamCredentials = XtreamCredentials(
-                serverUrl = credentials.serverUrl,
-                username = credentials.username,
-                password = credentials.password,
+        // Credential resolution stays App-side (Keystore + provider DB); the fetch/parse/import core lives in
+        // EnsureSeriesDetailUseCase (:data:media). Diagnostics stay here, driven by the returned result (#22).
+        val credentials = withContext(Dispatchers.IO) {
+            val xtream = providerRepository.getCredentials(series.providerId) as? ProviderCredentials.Xtream
+                ?: return@withContext null
+            XtreamCredentials(
+                serverUrl = xtream.serverUrl,
+                username = xtream.username,
+                password = xtream.password,
                 userAgent = providerRepository.getProvider(series.providerId)?.userAgent,
             )
-            val client = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient))
-            val info = runCatching {
-                DefaultXtreamParser().parseSeriesInfo(
-                    series.remoteId,
-                    client.getSeriesInfo(xtreamCredentials, series.remoteId),
-                )
-            }.getOrNull()
-            if (info == null) {
+        } ?: return
+        when (val result = ensureSeriesDetailUseCase.importDetail(series.providerId, series.remoteId, credentials)) {
+            EnsureSeriesDetailResult.Failed ->
                 // Fetch failed (offline / expired account / bad response). Opaque: provider + series ids only.
                 diagnosticsStore.log(
                     "series",
                     "detail_fetch_failed",
                     mapOf("target" to series.providerId, "source" to series.id),
                 )
-                return@withContext
-            }
-            val result = catalogImportRepository.importXtreamSeriesDetail(series.providerId, info)
-            diagnosticsStore.log(
-                "series",
-                "detail_fetched",
-                mapOf(
-                    "target" to series.providerId,
-                    "source" to series.id,
-                    "seasons" to result.seasons.added.toString(),
-                    "episodes" to result.episodes.added.toString(),
-                ),
-            )
+
+            is EnsureSeriesDetailResult.Imported ->
+                diagnosticsStore.log(
+                    "series",
+                    "detail_fetched",
+                    mapOf(
+                        "target" to series.providerId,
+                        "source" to series.id,
+                        "seasons" to result.seasonsAdded.toString(),
+                        "episodes" to result.episodesAdded.toString(),
+                    ),
+                )
         }
     }
 

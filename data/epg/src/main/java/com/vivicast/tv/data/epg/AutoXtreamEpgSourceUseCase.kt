@@ -1,6 +1,8 @@
 package com.vivicast.tv.data.epg
 
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.URI
 import java.net.URLDecoder
 
@@ -19,6 +21,11 @@ import java.net.URLDecoder
 class AutoXtreamEpgSourceUseCase(
     private val repository: EpgSourceRepository,
 ) {
+    // #22: serialises the dedup scan + create so two quick Xtream saves can't both create a source for the
+    // same account (moved here from AppContainer — the race is exactly the read-then-write below). Detection
+    // is short DB work, so the lock stays uncontended.
+    private val detectionMutex = Mutex()
+
     /**
      * @param xmltvUrl the built (and already-validated) `xmltv.php` URL — also the dedup identity source.
      * @return the created/reused source id + whether it was reused (so the caller can enqueue a refresh
@@ -26,7 +33,10 @@ class AutoXtreamEpgSourceUseCase(
      */
     suspend fun ensureFor(providerId: String, username: String, xmltvUrl: String): AutoXtreamEpgResult? {
         if (providerId.isBlank() || username.isBlank() || xmltvUrl.isBlank()) return null
+        return detectionMutex.withLock { createOrReuseAndLink(providerId, username, xmltvUrl) }
+    }
 
+    private suspend fun createOrReuseAndLink(providerId: String, username: String, xmltvUrl: String): AutoXtreamEpgResult {
         val sources = repository.getEpgSources()
         val match = sources.firstOrNull { source ->
             sameEndpoint(repository.getSourceUrl(source.id), xmltvUrl)
