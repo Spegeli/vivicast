@@ -188,6 +188,9 @@ fun SettingsRoute(
     // carrying no name/URL/credential, so they are safe to log raw; type/mode/policy/count are plain enums.
     onLogProviderDeleted: (providerId: String, durationMs: Long) -> Unit = { _, _ -> },
     onLogGroupEvent: (message: String, details: Map<String, String>) -> Unit = { _, _ -> },
+    // App-layer EPG-assignment diagnostics (opaque provider/source ids + priority/count/order only — no
+    // name/url). Covers source_linked / source_unlinked / priority_reordered.
+    onLogEpgEvent: (message: String, details: Map<String, String>) -> Unit = { _, _ -> },
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit = {},
     onSetPin: (String) -> String? = { null },
@@ -479,14 +482,25 @@ fun SettingsRoute(
                                 routeScope.launch {
                                     if (link) {
                                         val priority = (settingsUiState.providerEpgLinks.maxOfOrNull { it.priority } ?: 0) + 1
-                                        viewModel.linkEpgSourceToProvider(providerId, sourceId, priority)
+                                        viewModel.linkEpgSourceToProvider(providerId, sourceId, priority).onSuccess {
+                                            onLogEpgEvent("source_linked", mapOf("target" to providerId, "source" to sourceId, "priority" to priority.toString()))
+                                        }
                                     } else {
-                                        viewModel.unlinkEpgSourceFromProvider(providerId, sourceId)
+                                        viewModel.unlinkEpgSourceFromProvider(providerId, sourceId).onSuccess {
+                                            onLogEpgEvent("source_unlinked", mapOf("target" to providerId, "source" to sourceId))
+                                        }
                                     }
                                 }
                             },
                             onReorderEpgLink = { providerId, orderedIds ->
-                                routeScope.launch { viewModel.reorderEpgSourcesForProvider(providerId, orderedIds) }
+                                routeScope.launch {
+                                    viewModel.reorderEpgSourcesForProvider(providerId, orderedIds).onSuccess {
+                                        onLogEpgEvent(
+                                            "priority_reordered",
+                                            mapOf("target" to providerId, "count" to orderedIds.size.toString(), "order" to orderedIds.joinToString(",")),
+                                        )
+                                    }
+                                }
                             },
                             firstFocusModifier = detailFirstFocusModifier,
                             // Park focus on the (always-present) section button before the overview

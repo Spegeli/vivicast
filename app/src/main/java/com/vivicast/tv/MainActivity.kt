@@ -1078,6 +1078,9 @@ private fun VivicastApp(
                 onLogGroupEvent = { message, details ->
                     appContainer.diagnosticsStore.log("groups", message, details)
                 },
+                onLogEpgEvent = { message, details ->
+                    appContainer.diagnosticsStore.log("epg", message, details)
+                },
                 onBackgroundRefreshChanged = { enabled ->
                     // Preference write moved to SettingsViewModel (P1-04f1); only the scheduler side effect stays here.
                     scope.launch {
