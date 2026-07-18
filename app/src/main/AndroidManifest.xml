@@ -5,7 +5,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Interner Datei-Picker (SAF ist auf Android TV unzuverlässig). Gestaffelt nach API:
-         ≤29 Runtime-READ + WRITE für File-Zugriff; 30+ MANAGE_EXTERNAL_STORAGE ("Alle Dateien"). -->
+         ≤29 Runtime-READ + WRITE für File-Zugriff; 30+ MANAGE_EXTERNAL_STORAGE ("Alle Dateien").
+         requestLegacyExternalStorage (unten am <application>) opt-tet API 29 (Android 10) zurück auf
+         Legacy-Storage, damit der File-API-Zugriff von StorageAccess dort greift. NICHT entfernen: das
+         Geräte-API-Level (nicht targetSdk) entscheidet die Wirkung — auf 30+ ignoriert, ≤28 irrelevant. -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -38,6 +41,7 @@
     <application
         android:name=".VivicastApplication"
         android:allowBackup="false"
+        android:requestLegacyExternalStorage="true"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
