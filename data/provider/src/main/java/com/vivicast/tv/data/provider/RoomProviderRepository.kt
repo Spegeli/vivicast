@@ -265,7 +265,8 @@ class RoomProviderRepository(
             playbackDao.deleteProgressForProvider(providerId)
             playbackDao.deleteHistoryForProvider(providerId)
             providerDao.deleteProvider(providerId)
-            androidTvSearchDao.rebuildEntries()
+            // Only this provider's rows changed — a targeted delete beats a full all-providers rebuild.
+            existing?.let { androidTvSearchDao.deleteEntriesForProvider(it.stableKey) }
         }
         existing?.sourceConfigKey?.let { deleteCredentials(it) }
         m3uFileSourceStore.delete(providerId)

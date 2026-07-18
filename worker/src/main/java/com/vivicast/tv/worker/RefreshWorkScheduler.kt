@@ -25,6 +25,9 @@ interface RefreshWorkScheduler {
     // (an in-flight run coalesces), for refresh-all / interval / app-start / restore. See D10 R10.
     fun enqueuePlaylistRefresh(providerId: String, restart: Boolean = false)
 
+    /** Cancels this playlist's in-flight/queued one-time refresh (used when the provider is deleted). */
+    fun cancelPlaylistRefresh(providerId: String)
+
     /**
      * Schedules this playlist's own periodic auto-refresh at [intervalHours]. [initialDelayMillis] phases
      * the first run (remaining time since the last refresh) so a foreground cancel + background re-enqueue
@@ -37,13 +40,14 @@ interface RefreshWorkScheduler {
 
     fun enqueueEpgRefresh(epgSourceId: String)
 
+    /** Cancels this EPG source's in-flight/queued one-time refresh (used when the source is deleted). */
+    fun cancelEpgRefresh(epgSourceId: String)
+
     /** Schedules this EPG source's own periodic auto-refresh at [intervalHours]. See [enqueuePlaylistPeriodic]. */
     fun enqueueEpgPeriodic(epgSourceId: String, intervalHours: Int, initialDelayMillis: Long = 0L)
 
     /** Cancels this EPG source's periodic auto-refresh (used when its interval is set to "off"). */
     fun cancelEpgPeriodic(epgSourceId: String)
-
-    fun enqueueSeriesDetailsRefresh(providerId: String)
 }
 
 class WorkManagerRefreshWorkScheduler(
@@ -70,6 +74,10 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
+    override fun cancelPlaylistRefresh(providerId: String) {
+        workManager.cancelUniqueWork(WorkerContracts.uniquePlaylistRefreshWork(providerId))
+    }
+
     override fun enqueuePlaylistPeriodic(providerId: String, intervalHours: Int, initialDelayMillis: Long) {
         workManager.enqueueUniquePeriodicWork(
             WorkerContracts.uniquePlaylistPeriodicWork(providerId),
@@ -90,6 +98,10 @@ class WorkManagerRefreshWorkScheduler(
         )
     }
 
+    override fun cancelEpgRefresh(epgSourceId: String) {
+        workManager.cancelUniqueWork(WorkerContracts.uniqueEpgRefreshWork(epgSourceId))
+    }
+
     override fun enqueueEpgPeriodic(epgSourceId: String, intervalHours: Int, initialDelayMillis: Long) {
         workManager.enqueueUniquePeriodicWork(
             WorkerContracts.uniqueEpgPeriodicWork(epgSourceId),
@@ -100,16 +112,6 @@ class WorkManagerRefreshWorkScheduler(
 
     override fun cancelEpgPeriodic(epgSourceId: String) {
         workManager.cancelUniqueWork(WorkerContracts.uniqueEpgPeriodicWork(epgSourceId))
-    }
-
-    override fun enqueueSeriesDetailsRefresh(providerId: String) {
-        // REPLACE: a new refresh cycle restarts the (full) series-details fetch, superseding any
-        // still-running job from the previous cycle.
-        workManager.enqueueUniqueWork(
-            WorkerContracts.uniqueSeriesDetailsRefreshWork(providerId),
-            ExistingWorkPolicy.REPLACE,
-            RefreshWorkRequests.seriesDetailsRefresh(providerId),
-        )
     }
 }
 
@@ -157,13 +159,6 @@ internal object RefreshWorkRequests {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
             .build()
     }
-
-    fun seriesDetailsRefresh(providerId: String): OneTimeWorkRequest =
-        networkOneTimeRequest<SeriesDetailsRefreshWorker>(
-            Data.Builder()
-                .putString(WorkerContracts.INPUT_PROVIDER_ID, providerId)
-                .build(),
-        )
 
     private inline fun <reified T : DelegatingRefreshWorker> networkOneTimeRequest(
         inputData: Data = Data.EMPTY,

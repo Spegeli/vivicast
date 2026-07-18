@@ -26,6 +26,7 @@ import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.provider.ContentSummary
 import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.ProviderStatus
 import kotlinx.coroutines.android.awaitFrame
 
 /**
@@ -113,15 +114,19 @@ internal fun ProviderActionsPanel(
             )
         }
         item {
-            // Imports are non-blocking now (staged delta-merge; plans/nonblocking-db-imports.md), so opening
-            // group management during a refresh no longer risks a queued write or stale groups — the former
-            // freshness gate ("wird aktualisiert…" + disabled onClick) has been removed.
+            // "Gruppen verwalten" is locked ONLY while THIS playlist's own playlist-refresh runs, so groups
+            // open on fresh data. It is NOT gated by an EPG refresh (groups stay editable regardless) or by
+            // other playlists' refreshes — provider.status == Refreshing is set solely by this playlist's
+            // playlist refresh. The row stays focusable (no enabled=false, which would drop focus to the top
+            // nav = jump to Home); while locked the click is a no-op and the value shows "wird aktualisiert…".
+            val playlistRefreshing = provider.status == ProviderStatus.Refreshing
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_provider_action_groups),
                 help = "",
-                value = "",
+                value = if (playlistRefreshing) stringResource(R.string.settings_provider_action_refreshing_playlist) else "",
+                valueLoading = playlistRefreshing,
                 modifier = Modifier.focusRequester(groupsRowRequester),
-                onClick = onManageGroups,
+                onClick = { if (!playlistRefreshing) onManageGroups() },
             )
         }
         item {

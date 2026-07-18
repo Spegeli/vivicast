@@ -45,6 +45,10 @@ interface AndroidTvSearchDao {
     @Query("DELETE FROM android_tv_search_entries")
     suspend fun clearEntries()
 
+    /** Targeted removal for a single deleted provider — avoids a full all-providers rebuild on delete. */
+    @Query("DELETE FROM android_tv_search_entries WHERE providerStableKey = :providerStableKey")
+    suspend fun deleteEntriesForProvider(providerStableKey: String)
+
     @Query(
         """
         INSERT INTO android_tv_search_entries (

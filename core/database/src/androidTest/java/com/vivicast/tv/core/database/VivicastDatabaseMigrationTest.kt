@@ -50,6 +50,7 @@ class VivicastDatabaseMigrationTest {
             VivicastMigrations.Migration15To16,
             VivicastMigrations.Migration16To17,
             VivicastMigrations.Migration17To18,
+            VivicastMigrations.Migration18To19,
         )
 
         migrated.use {
@@ -68,6 +69,24 @@ class VivicastDatabaseMigrationTest {
             assertEquals("fixture series", it.stringValue("SELECT name FROM search_series_fts WHERE mediaId = 'series-1'"))
             assertEquals("fixture show", it.stringValue("SELECT title FROM search_epg_fts WHERE programId = 'program-1'"))
             assertEquals(3, it.longValue("SELECT COUNT(*) FROM android_tv_search_entries").toInt())
+
+            // v18->v19: each FTS row's docid is now its base row's rowid (so delete/update triggers are O(1)).
+            assertEquals(
+                it.longValue("SELECT rowid FROM channels WHERE id = 'channel-1'"),
+                it.longValue("SELECT docid FROM search_channels_fts WHERE mediaId = 'channel-1'"),
+            )
+            assertEquals(
+                it.longValue("SELECT rowid FROM movies WHERE id = 'movie-1'"),
+                it.longValue("SELECT docid FROM search_movies_fts WHERE mediaId = 'movie-1'"),
+            )
+            assertEquals(
+                it.longValue("SELECT rowid FROM series WHERE id = 'series-1'"),
+                it.longValue("SELECT docid FROM search_series_fts WHERE mediaId = 'series-1'"),
+            )
+            assertEquals(
+                it.longValue("SELECT rowid FROM epg_programs WHERE id = 'program-1'"),
+                it.longValue("SELECT docid FROM search_epg_fts WHERE programId = 'program-1'"),
+            )
         }
     }
 
@@ -90,6 +109,7 @@ class VivicastDatabaseMigrationTest {
         validateMigrationStep("migration-15-16.db", 15, 16, VivicastMigrations.Migration15To16)
         validateMigrationStep("migration-16-17.db", 16, 17, VivicastMigrations.Migration16To17)
         validateMigrationStep("migration-17-18.db", 17, 18, VivicastMigrations.Migration17To18)
+        validateMigrationStep("migration-18-19.db", 18, 19, VivicastMigrations.Migration18To19)
     }
 
     private fun validateMigrationStep(

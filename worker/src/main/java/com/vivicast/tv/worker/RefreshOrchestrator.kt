@@ -83,17 +83,6 @@ data class LogoRefreshResult(
     val failed: Int = 0,
 )
 
-interface SeriesDetailsRefresher {
-    suspend fun refresh(providerId: String): SeriesDetailsRefreshOutcome
-}
-
-data class SeriesDetailsRefreshOutcome(
-    val providerId: String,
-    val success: Boolean,
-    // Sanitized season/episode counts for the diagnostics event; empty on failure.
-    val logMetadata: Map<String, String> = emptyMap(),
-)
-
 interface CacheCleaner {
     suspend fun cleanup(): MediaCacheCleanupResult
 }
@@ -106,7 +95,6 @@ data class PlaylistRefreshOutcome(
     val providerId: String,
     val success: Boolean,
     val epgSourceIds: List<String>,
-    val needsSeriesDetailsRefresh: Boolean = false,
     // True when this run was skipped because the same provider is already refreshing in-process. Distinct
     // from a failure: the caller must NOT retry (the in-flight run covers it), else the whole playlist is
     // re-fetched/re-imported a few seconds later.

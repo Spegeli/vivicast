@@ -27,6 +27,9 @@ import java.util.UUID
 class RoomEpgRepository(
     private val database: VivicastDatabase,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    // Called (post-transaction) when an EPG import is skipped because the provider or source was deleted
+    // mid-refresh — the App layer logs it (data layer never touches DiagnosticsStore). No-op by default.
+    private val onImportSkipped: (providerId: String, epgSourceId: String) -> Unit = { _, _ -> },
 ) : EpgRepository, EpgImportRepository {
     private val catalogDao = database.catalogDao()
     private val epgDao = database.epgDao()
@@ -261,7 +264,13 @@ class RoomEpgRepository(
         // Merge: one short transaction applies the mappings, the per-source channel icons, and only the
         // programme delta (changed -> re-inserted, new -> inserted, removed -> deleted) atomically, so
         // readers flip old->new with no partial state and each op fires its matching search_epg_fts trigger.
-        database.withTransaction {
+        val merged = database.withTransaction {
+            // Provider or EPG source deleted mid-refresh (delete + refresh serialise on the single writer):
+            // skip so no epg_programs/channels/mappings are written for a now-missing provider/source (the
+            // schema has no FKs to stop it).
+            if (database.providerDao().getProvider(providerId) == null || epgDao.getEpgSource(epgSourceId) == null) {
+                return@withTransaction false
+            }
             if (autoMappings.isNotEmpty()) {
                 epgDao.upsertMappings(autoMappings)
             }
@@ -272,9 +281,17 @@ class RoomEpgRepository(
             epgDao.deleteChangedProgramsFromStage(providerId, epgSourceId)
             epgDao.insertMissingProgramsFromStage(providerId, epgSourceId)
             epgDao.deleteStaleProgramsFromStage(providerId, epgSourceId)
+            true
         }
         // Drop the transient staged rows now the merge has consumed them.
         epgDao.clearProgramsStage(providerId, epgSourceId)
+
+        // Guard tripped (provider/source gone mid-refresh): nothing was written, so report an empty result
+        // instead of the staged-row count.
+        if (!merged) {
+            onImportSkipped(providerId, epgSourceId)
+            return EpgImportResult(programsImported = 0, programsSkipped = 0, mappingsAdded = 0, mappingsUpdated = 0)
+        }
 
         return EpgImportResult(
             programsImported = stageRows.size,

@@ -43,7 +43,7 @@ class RoomEpgRepositoryTest {
         database = Room.inMemoryDatabaseBuilder(context, VivicastDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = RoomEpgRepository(database) { now }
+        repository = RoomEpgRepository(database = database, clock = { now })
         secureValueStore = InMemorySecureValueStore()
     }
 

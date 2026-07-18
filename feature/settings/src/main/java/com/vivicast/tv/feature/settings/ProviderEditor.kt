@@ -250,7 +250,14 @@ internal fun ProviderEditor(
 
         providerImportItem(editor, importFocus, onEditorChange)
 
-        // Update interval / app-start / User-Agent / EPG assignment are edit-only; a new playlist uses
+        // User-Agent is available on ADD too: some providers only answer a custom UA, so without it the
+        // playlist can't even be created/connection-tested. In edit mode the UA row comes from
+        // providerEditControlItems below, so render it here only when adding (avoids a duplicate key).
+        if (!editor.isEditing) {
+            providerUserAgentItem(editor) { dialogs.showUserAgent = true }
+        }
+
+        // Update interval / app-start / EPG assignment / logo / output are edit-only; a new playlist uses
         // the defaults until it has been saved (and thus has an id to assign EPG sources to).
         if (editor.isEditing) {
             providerEditControlItems(
@@ -683,6 +690,18 @@ private fun LazyListScope.providerImportItem(
     }
 }
 
+/** Per-playlist User-Agent row (button → dialog). Shared by add mode and the edit-only control block. */
+private fun LazyListScope.providerUserAgentItem(editor: ProviderEditorState, onOpen: () -> Unit) {
+    item(key = "user-agent") {
+        VivicastSettingsRow(
+            title = stringResource(R.string.settings_user_agent),
+            help = "",
+            value = editor.userAgent.ifBlank { stringResource(R.string.value_app_default) },
+            onClick = onOpen,
+        )
+    }
+}
+
 /** Edit-only rows: update interval (button → popup), refresh-on-app-start toggle, per-playlist
  * User-Agent (button → dialog), and EPG-source assignment (button → popup). */
 private fun LazyListScope.providerEditControlItems(
@@ -715,14 +734,7 @@ private fun LazyListScope.providerEditControlItems(
             )
         }
     }
-    item(key = "user-agent") {
-        VivicastSettingsRow(
-            title = stringResource(R.string.settings_user_agent),
-            help = "",
-            value = editor.userAgent.ifBlank { stringResource(R.string.value_app_default) },
-            onClick = onOpenUserAgent,
-        )
-    }
+    providerUserAgentItem(editor, onOpenUserAgent)
     item(key = "epg-sources") {
         VivicastSettingsRow(
             title = stringResource(R.string.settings_provider_epg_sources),

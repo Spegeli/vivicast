@@ -21,14 +21,13 @@ interface CatalogImportRepository {
     suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult
 
     /**
-     * Imports only the season/episode detail for the given series (from getSeriesInfo). Run separately
-     * from [importXtreamCatalog] so the heavy per-series fetch does not block the main catalog refresh.
-     * Reconciles seasons/episodes globally against the passed set — pass ALL of a provider's series
-     * per run. Does not touch channels/movies/series/categories.
+     * Imports season/episode detail for ONE series (on-demand, when the user opens it). Reconciles WITHIN
+     * that single series only (delete-then-insert its own seasons/episodes) — never provider-wide, so it
+     * can't touch a sibling series. No-op if the provider or the series row is gone (deleted/re-imported).
      */
-    suspend fun importXtreamSeriesDetails(
+    suspend fun importXtreamSeriesDetail(
         providerId: String,
-        seriesInfos: List<XtreamSeriesInfo>,
+        seriesInfo: XtreamSeriesInfo,
     ): XtreamSeriesDetailsImportResult
 }
 

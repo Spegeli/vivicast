@@ -56,6 +56,7 @@ fun SeriesRoute(
     playbackRepository: PlaybackRepository? = null,
     resolveSeriesPosterModel: suspend (Series) -> Any? = { null },
     resolveSeriesBackdropModel: suspend (Series) -> Any? = { null },
+    ensureSeriesDetail: suspend (Series) -> Unit = {},
     onOpenPlayer: (Episode) -> Unit = {},
     targetProviderId: String? = null,
     targetCategoryId: String? = null,
@@ -74,6 +75,7 @@ fun SeriesRoute(
             playbackRepository = playbackRepository,
             resolveSeriesPosterModel = resolveSeriesPosterModel,
             resolveSeriesBackdropModel = resolveSeriesBackdropModel,
+            ensureSeriesDetail = ensureSeriesDetail,
             onOpenPlayer = onOpenPlayer,
             targetProviderId = targetProviderId,
             targetCategoryId = targetCategoryId,
@@ -105,6 +107,7 @@ private fun RoomSeriesRoute(
     playbackRepository: PlaybackRepository,
     resolveSeriesPosterModel: suspend (Series) -> Any?,
     resolveSeriesBackdropModel: suspend (Series) -> Any?,
+    ensureSeriesDetail: suspend (Series) -> Unit,
     onOpenPlayer: (Episode) -> Unit,
     targetProviderId: String?,
     targetCategoryId: String?,
@@ -119,6 +122,7 @@ private fun RoomSeriesRoute(
             mediaRepository = mediaRepository,
             favoritesRepository = favoritesRepository,
             playbackRepository = playbackRepository,
+            ensureSeriesDetail = ensureSeriesDetail,
         ),
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

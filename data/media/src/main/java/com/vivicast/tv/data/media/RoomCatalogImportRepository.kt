@@ -34,7 +34,11 @@ class RoomCatalogImportRepository(
     private val m3uStreamReferenceStore: M3uStreamReferenceStore,
     private val classifier: M3uContentClassifier = DefaultM3uContentClassifier(),
     private val clock: () -> Long = { System.currentTimeMillis() },
+    // Called (post-transaction) when a merge is skipped because the provider was deleted mid-import — the
+    // App layer logs it (data layer never touches DiagnosticsStore). No-op by default (tests).
+    private val onImportSkipped: (providerId: String) -> Unit = {},
 ) : CatalogImportRepository {
+    private val providerDao = database.providerDao()
     private val catalogDao = database.catalogDao()
     private val providerCategorySettingsDao = database.providerCategorySettingsDao()
     private val favoritesDao = database.favoritesDao()
@@ -80,6 +84,9 @@ class RoomCatalogImportRepository(
         // Merge: one short transaction applies categories (with the D10 group user-state preserve), then
         // only the delta for channels/movies/series/episodes, then the FTS rebuild — atomic old->new flip.
         val result = database.withTransaction {
+            // Provider deleted mid-import (delete + refresh serialise on the single writer): skip the merge
+            // so no catalog rows are re-inserted for a now-missing providerId (the schema has no FKs).
+            if (providerDao.getProvider(providerId) == null) return@withTransaction null
             val liveCategories = buildCategories(providerId, CATEGORY_TYPE_LIVE, m3uCategories(liveCategoryIds), liveCategoryIds, now)
             val movieCategories = buildCategories(providerId, CATEGORY_TYPE_MOVIE, m3uCategories(movieCategoryIds), movieCategoryIds, now)
             val seriesCategories = buildCategories(providerId, CATEGORY_TYPE_SERIES, m3uCategories(seriesCategoryIds), seriesCategoryIds, now)
@@ -106,6 +113,11 @@ class RoomCatalogImportRepository(
             )
         }
         clearAllStage(providerId)
+        // Skipped (provider gone): don't write stream refs for a deleted provider; return an empty result.
+        if (result == null) {
+            onImportSkipped(providerId)
+            return CatalogImportResult(0, 0, 0, 0, 0, 0, 0)
+        }
         m3uStreamReferenceStore.replaceProviderReferences(providerId, classified.streamReferences)
         return result
     }
@@ -121,7 +133,7 @@ class RoomCatalogImportRepository(
     override suspend fun importXtreamCatalog(providerId: String, catalog: XtreamCatalog): XtreamCatalogImportResult {
         val now = clock()
         val seriesRemoteIds = catalog.seriesItems.mapTo(mutableSetOf()) { it.remoteId }
-        // Season/episode detail is imported separately via importXtreamSeriesDetails (background job). When
+        // Season/episode detail is imported on-demand per series via importXtreamSeriesDetail. When
         // seriesInfos is empty (the fast main refresh), leave existing seasons/episodes untouched — do not
         // stage/merge them, or the delta-merge would delete every existing episode against an empty stage.
         val hasSeriesDetails = catalog.seriesInfos.isNotEmpty()
@@ -143,6 +155,9 @@ class RoomCatalogImportRepository(
         }
 
         val result = database.withTransaction {
+            // Provider deleted mid-import (delete + refresh serialise on the single writer): skip the merge
+            // so no catalog rows are re-inserted for a now-missing providerId (the schema has no FKs).
+            if (providerDao.getProvider(providerId) == null) return@withTransaction null
             val liveCategories = buildCategories(
                 providerId = providerId,
                 type = CATEGORY_TYPE_LIVE,
@@ -195,27 +210,42 @@ class RoomCatalogImportRepository(
             )
         }
         clearAllStage(providerId)
+        // Skipped (provider gone mid-import): return an empty result instead of the merged counts.
+        if (result == null) {
+            onImportSkipped(providerId)
+            val zero = ImportCount(added = 0, updated = 0, removed = 0)
+            return XtreamCatalogImportResult(zero, zero, zero, zero, zero, zero, zero, zero)
+        }
         return result
     }
 
-    override suspend fun importXtreamSeriesDetails(
+    override suspend fun importXtreamSeriesDetail(
         providerId: String,
-        seriesInfos: List<XtreamSeriesInfo>,
+        seriesInfo: XtreamSeriesInfo,
     ): XtreamSeriesDetailsImportResult {
         val now = clock()
-        // Reconciles seasons/episodes for the provider's currently-known series (the caller passes ALL of
-        // them per run). Deterministic series ids let seasons/episodes bind without reading the series back.
-        val knownSeriesRemoteIds = catalogDao.getSeries(providerId).mapTo(mutableSetOf()) { it.remoteId }
-        val seasons = buildSeasons(providerId, seriesInfos, knownSeriesRemoteIds, now)
-        val episodes = buildEpisodes(providerId, seriesInfos, knownSeriesRemoteIds, now).map { it.toStage() }
-        stageEpisodes(providerId, episodes)
-        val result = database.withTransaction {
-            val seasonCount = upsertSeasons(providerId, seasons)
-            val episodeCount = mergeEpisodes(providerId)
-            XtreamSeriesDetailsImportResult(seasons = seasonCount, episodes = episodeCount)
+        val seriesRowId = seriesId(providerId, seriesInfo.seriesRemoteId)
+        val known = setOf(seriesInfo.seriesRemoteId)
+        val seasons = buildSeasons(providerId, listOf(seriesInfo), known, now)
+        val episodes = buildEpisodes(providerId, listOf(seriesInfo), known, now)
+        val zero = ImportCount(added = 0, updated = 0, removed = 0)
+        return database.withTransaction {
+            // On-demand write: skip if the provider or the series row is gone (deleted / re-imported), so a
+            // late fetch can't leave orphan rows. Reconciles WITHIN this one series only (delete-then-insert).
+            if (providerDao.getProvider(providerId) == null ||
+                catalogDao.getSeries(providerId, seriesRowId) == null
+            ) {
+                return@withTransaction XtreamSeriesDetailsImportResult(seasons = zero, episodes = zero)
+            }
+            catalogDao.deleteSeasonsForSeries(providerId, listOf(seriesRowId))
+            catalogDao.deleteEpisodesForSeries(providerId, listOf(seriesRowId))
+            catalogDao.upsertSeasons(seasons)
+            catalogDao.upsertEpisodes(episodes)
+            XtreamSeriesDetailsImportResult(
+                seasons = ImportCount(added = seasons.size, updated = 0, removed = 0),
+                episodes = ImportCount(added = episodes.size, updated = 0, removed = 0),
+            )
         }
-        clearEpisodesStageFor(providerId)
-        return result
     }
 
     private suspend fun buildCategories(
@@ -365,15 +395,11 @@ class RoomCatalogImportRepository(
     }
 
     // Drop the transient staged rows after the merge consumes them (a crash before this is cleaned at
-    // startup). clearEpisodesStageFor is the series-details job's narrower cleanup.
+    // startup).
     private suspend fun clearAllStage(providerId: String) {
         catalogDao.clearChannelsStage(providerId)
         catalogDao.clearMoviesStage(providerId)
         catalogDao.clearSeriesStage(providerId)
-        catalogDao.clearEpisodesStage(providerId)
-    }
-
-    private suspend fun clearEpisodesStageFor(providerId: String) {
         catalogDao.clearEpisodesStage(providerId)
     }
 

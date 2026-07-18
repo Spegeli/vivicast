@@ -49,7 +49,7 @@ class RoomCatalogImportRepositoryTest {
             .allowMainThreadQueries()
             .build()
         streamReferenceStore = FakeM3uStreamReferenceStore()
-        repository = RoomCatalogImportRepository(database, streamReferenceStore) { now }
+        repository = RoomCatalogImportRepository(database, streamReferenceStore, clock = { now })
     }
 
     @After
@@ -243,8 +243,8 @@ class RoomCatalogImportRepositoryTest {
         assertEquals(seasonsBefore, database.catalogDao().getSeasons(PROVIDER_ID).size)
         assertEquals(episodesBefore, database.catalogDao().getEpisodes(PROVIDER_ID).size)
 
-        // Background series-details import reconciles seasons/episodes from the (full) seriesInfos.
-        repository.importXtreamSeriesDetails(PROVIDER_ID, firstXtreamCatalog().seriesInfos)
+        // On-demand per-series detail import repopulates seasons/episodes for each opened series.
+        firstXtreamCatalog().seriesInfos.forEach { repository.importXtreamSeriesDetail(PROVIDER_ID, it) }
         assertEquals(seasonsBefore, database.catalogDao().getSeasons(PROVIDER_ID).size)
         assertEquals(episodesBefore, database.catalogDao().getEpisodes(PROVIDER_ID).size)
     }

@@ -186,7 +186,7 @@ fun SettingsRoute(
     // App-layer diagnostics loggers (feature/VM never touch DiagnosticsStore). Provider id / category id go
     // under a "target" key — both are opaque (random-UUID provider id; category id = "<providerId>:...:<hash>"),
     // carrying no name/URL/credential, so they are safe to log raw; type/mode/policy/count are plain enums.
-    onLogProviderDeleted: (providerId: String) -> Unit = {},
+    onLogProviderDeleted: (providerId: String, durationMs: Long) -> Unit = { _, _ -> },
     onLogGroupEvent: (message: String, details: Map<String, String>) -> Unit = { _, _ -> },
     onBackgroundRefreshChanged: (Boolean) -> Unit,
     onLanguageChanged: (SettingsLanguage) -> Unit = {},
@@ -202,6 +202,9 @@ fun SettingsRoute(
     onReadLog: suspend (DiagnosticsLogKind) -> String? = { null },
     diagnosticsExporting: Boolean = false,
     onRefreshEpgSource: (sourceId: String) -> Unit,
+    // App-hoisted: after an EPG source is deleted, cancel its in-flight/queued refresh (best-effort; the
+    // import's in-merge source-existence guard is what prevents orphan epg rows).
+    onEpgSourceDeleted: (sourceId: String, durationMs: Long) -> Unit = { _, _ -> },
     onClearHistory: suspend (Set<HistoryClearTarget>) -> Unit,
     imageCacheSizeBytes: suspend () -> Long = { 0L },
     clearImageCache: suspend () -> Unit = {},
@@ -417,7 +420,10 @@ fun SettingsRoute(
                             onUpdateProvider = viewModel::updateProvider,
                             onSetProviderEnabled = viewModel::setProviderEnabled,
                             onDeleteProvider = { id ->
-                                viewModel.deleteProvider(id).also { if (it.isSuccess) onLogProviderDeleted(id) }
+                                val start = System.currentTimeMillis()
+                                viewModel.deleteProvider(id).also {
+                                    if (it.isSuccess) onLogProviderDeleted(id, System.currentTimeMillis() - start)
+                                }
                             },
                             onTestProviderConnection = onTestProviderConnection,
                             onPickM3uFile = onPickM3uFile,
@@ -500,7 +506,12 @@ fun SettingsRoute(
                             onRefreshEpgSource = onRefreshEpgSource,
                             onSelectProvider = viewModel::onEpgProviderSelected,
                             onSaveEpgSource = viewModel::saveEpgSource,
-                            onDeleteEpgSource = viewModel::deleteEpgSource,
+                            onDeleteEpgSource = { id ->
+                                val start = System.currentTimeMillis()
+                                viewModel.deleteEpgSource(id).also {
+                                    if (it.isSuccess) onEpgSourceDeleted(id, System.currentTimeMillis() - start)
+                                }
+                            },
                             onSelectManualMappingChannel = viewModel::onManualMappingChannelSelected,
                             onResetManualMappingChannel = viewModel::onManualMappingReset,
                             onSetManualMapping = viewModel::setManualChannelMapping,

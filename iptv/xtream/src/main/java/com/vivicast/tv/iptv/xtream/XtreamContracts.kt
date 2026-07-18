@@ -164,24 +164,38 @@ class XtreamHttpException(
 ) : RuntimeException("Xtream request failed with HTTP status $statusCode.")
 
 private const val MAX_XTREAM_ATTEMPTS = 2
+private const val MAX_XTREAM_RATE_LIMIT_ATTEMPTS = 4
 private const val XTREAM_RETRY_BASE_DELAY_MS = 750L
 private const val XTREAM_RETRY_MAX_DELAY_MS = 3_000L
+private const val XTREAM_RATE_LIMIT_DELAY_MS = 2_000L
+private const val HTTP_TOO_MANY_REQUESTS = 429
 
 /**
- * Retries transient failures only: [IOException] (timeouts/connect) and HTTP 5xx.
- * 4xx (invalid credentials) propagates immediately; CancellationException is never caught.
+ * Retries transient failures: [IOException] (timeouts/connect), HTTP 5xx, and HTTP 429 (rate limit —
+ * more attempts + a longer backoff, since the server is asking us to slow down). Other 4xx (invalid
+ * credentials) propagates immediately; CancellationException is never caught.
+ * ponytail: uses a fixed rate-limit backoff — honour a `Retry-After` header if servers set it and it
+ * ever matters (the transport would need to surface it on [XtreamHttpException]).
  */
 private suspend fun <T> withXtreamRetry(block: suspend () -> T): T {
     var attempt = 1
     while (true) {
+        var rateLimited = false
         try {
             return block()
         } catch (e: IOException) {
             if (attempt >= MAX_XTREAM_ATTEMPTS) throw e
         } catch (e: XtreamHttpException) {
-            if (e.statusCode < 500 || attempt >= MAX_XTREAM_ATTEMPTS) throw e
+            rateLimited = e.statusCode == HTTP_TOO_MANY_REQUESTS
+            val maxAttempts = if (rateLimited) MAX_XTREAM_RATE_LIMIT_ATTEMPTS else MAX_XTREAM_ATTEMPTS
+            if ((e.statusCode < 500 && !rateLimited) || attempt >= maxAttempts) throw e
         }
-        delay((XTREAM_RETRY_BASE_DELAY_MS * attempt).coerceAtMost(XTREAM_RETRY_MAX_DELAY_MS))
+        val delayMs = if (rateLimited) {
+            XTREAM_RATE_LIMIT_DELAY_MS * attempt
+        } else {
+            (XTREAM_RETRY_BASE_DELAY_MS * attempt).coerceAtMost(XTREAM_RETRY_MAX_DELAY_MS)
+        }
+        delay(delayMs)
         attempt++
     }
 }

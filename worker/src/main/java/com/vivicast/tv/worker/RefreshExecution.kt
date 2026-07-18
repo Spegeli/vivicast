@@ -45,7 +45,6 @@ class DefaultRefreshWorkerRunner(
     private val orchestrator: MaintenanceRefreshOrchestrator,
     private val playlistRefresher: PlaylistRefresher,
     private val epgRefresher: EpgRefresher,
-    private val seriesDetailsRefresher: SeriesDetailsRefresher,
     private val scheduler: RefreshWorkScheduler,
     private val refreshEpgOnPlaylistChangeProvider: suspend () -> Boolean = { true },
     // Per-item refresh results feed the diagnostics log — the primary signal for "import failed" reports.
@@ -69,9 +68,9 @@ class DefaultRefreshWorkerRunner(
             .fold(
                 onSuccess = { outcome ->
                     if (outcome.success) {
-                        if (outcome.needsSeriesDetailsRefresh) {
-                            scheduler.enqueueSeriesDetailsRefresh(target.providerId)
-                        }
+                        // Series season/episode detail is fetched ON-DEMAND when a series is opened (see
+                        // AppContainer.ensureSeriesDetail); the old eager getSeriesInfo-per-series worker here
+                        // was the HTTP-429 storm cause, so it is no longer enqueued.
                         // "Refresh EPG on playlist change": the catalog just changed, so re-refresh the
                         // EPG sources assigned to this provider (mapping re-runs against the fresh
                         // channels). epgSourceIds is empty when the provider has no assigned source, so
@@ -96,30 +95,6 @@ class DefaultRefreshWorkerRunner(
                 },
                 onFailure = { error ->
                     recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt, error)
-                    RefreshWorkerResult.Retry
-                },
-            )
-    }
-
-    override suspend fun runSeriesDetailsRefresh(providerId: String?): RefreshWorkerResult {
-        val id = providerId?.takeIf { it.isNotBlank() } ?: return RefreshWorkerResult.Failure
-        val startedAt = clock()
-        return runCancellableCatching { seriesDetailsRefresher.refresh(id) }
-            .fold(
-                onSuccess = { outcome ->
-                    if (outcome.success) {
-                        recordRefresh(
-                            RefreshDiagnosticType.SeriesDetailsRefreshSucceeded, id, startedAt,
-                            extra = outcome.logMetadata,
-                        )
-                        RefreshWorkerResult.Success
-                    } else {
-                        recordRefresh(RefreshDiagnosticType.SeriesDetailsRefreshFailed, id, startedAt)
-                        RefreshWorkerResult.Retry
-                    }
-                },
-                onFailure = { error ->
-                    recordRefresh(RefreshDiagnosticType.SeriesDetailsRefreshFailed, id, startedAt, error)
                     RefreshWorkerResult.Retry
                 },
             )
@@ -221,7 +196,6 @@ class DefaultPlaylistRefresher(
                     providerId = provider.id,
                     success = true,
                     epgSourceIds = epgSourceReader.getActiveSourceIdsForProvider(provider.id),
-                    needsSeriesDetailsRefresh = provider.type == ProviderType.Xtream && provider.includeSeries,
                     logMetadata = summary.logMetadata,
                 )
             }.getOrElse { error ->
@@ -309,8 +283,8 @@ class DefaultPlaylistRefresher(
             },
             seriesItems = seriesItems,
             // Season/episode detail (one getSeriesInfo per series) is intentionally NOT fetched here —
-            // it is scheduled as a separate background job (SeriesDetailsRefreshWorker) so the heavy
-            // per-series loop does not block/kill the main catalog refresh. See needsSeriesDetailsRefresh.
+            // it is fetched on-demand when a series is opened (AppContainer.ensureSeriesDetail ->
+            // importXtreamSeriesDetail), so the heavy per-series loop never runs during a catalog refresh.
             seriesInfos = emptyList(),
         )
         val importResult = catalogImportRepository.importXtreamCatalog(provider.id, catalog)
@@ -339,47 +313,6 @@ class DefaultPlaylistRefresher(
 }
 
 private const val MILLIS_PER_SECOND = 1_000L
-
-class DefaultSeriesDetailsRefresher(
-    private val providerRepository: ProviderRepository,
-    private val catalogImportRepository: CatalogImportRepository,
-    private val xtreamClient: XtreamClient,
-    private val xtreamParser: XtreamParser,
-) : SeriesDetailsRefresher {
-    override suspend fun refresh(providerId: String): SeriesDetailsRefreshOutcome {
-        val provider = providerRepository.getProvider(providerId)
-            ?: return SeriesDetailsRefreshOutcome(providerId, success = false)
-        if (provider.type != ProviderType.Xtream || !provider.includeSeries ||
-            !provider.isActive || provider.status == ProviderStatus.Disabled
-        ) {
-            return SeriesDetailsRefreshOutcome(providerId, success = true)
-        }
-        val credentials = providerRepository.getCredentials(providerId) as? ProviderCredentials.Xtream
-            ?: return SeriesDetailsRefreshOutcome(providerId, success = false)
-        val xtreamCredentials = XtreamCredentials(
-            serverUrl = credentials.serverUrl,
-            username = credentials.username,
-            password = credentials.password,
-            userAgent = provider.userAgent,
-        )
-        val seriesItems = xtreamParser.parseSeries(xtreamClient.getSeries(xtreamCredentials))
-        // Full per cycle: fetch getSeriesInfo for every series (sequential — 1-connection-safe), then
-        // import all season/episode detail in one reconciling call.
-        val seriesInfos = seriesItems.map { series ->
-            xtreamParser.parseSeriesInfo(series.remoteId, xtreamClient.getSeriesInfo(xtreamCredentials, series.remoteId))
-        }
-        val detailsResult = catalogImportRepository.importXtreamSeriesDetails(providerId, seriesInfos)
-        return SeriesDetailsRefreshOutcome(
-            providerId,
-            success = true,
-            logMetadata = buildMap {
-                put("series", seriesItems.size.toString())
-                putCounts("seasons", detailsResult.seasons)
-                putCounts("episodes", detailsResult.episodes)
-            },
-        )
-    }
-}
 
 class RoomEpgSourceReader(
     private val database: VivicastDatabase,

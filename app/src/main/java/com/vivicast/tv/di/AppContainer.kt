@@ -78,12 +78,12 @@ import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.xtreamXmltvUrl
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
 import com.vivicast.tv.domain.model.ProviderType
+import com.vivicast.tv.domain.model.Series
 import com.vivicast.tv.worker.DefaultCacheCleaner
 import com.vivicast.tv.worker.DefaultEpgRefresher
 import com.vivicast.tv.worker.DefaultLogoRefresher
 import com.vivicast.tv.worker.DefaultPlaylistRefresher
 import com.vivicast.tv.worker.DefaultRefreshWorkerRunner
-import com.vivicast.tv.worker.DefaultSeriesDetailsRefresher
 import com.vivicast.tv.worker.MaintenanceRefreshOrchestrator
 import com.vivicast.tv.worker.M3uSourceTooLargeException
 import com.vivicast.tv.worker.OkHttpBinaryFetcher
@@ -220,6 +220,10 @@ class AppContainer(
         RoomCatalogImportRepository(
             database = database,
             m3uStreamReferenceStore = m3uStreamReferenceStore,
+            // A catalog merge skipped because the provider was deleted mid-import (delete raced the refresh).
+            onImportSkipped = { providerId ->
+                diagnosticsStore.log("refresh", "playlist_import_skipped", mapOf("target" to providerId))
+            },
         )
     }
 
@@ -236,7 +240,17 @@ class AppContainer(
     }
 
     val epgImportRepository: EpgImportRepository by lazy {
-        RoomEpgRepository(database = database)
+        RoomEpgRepository(
+            database = database,
+            // An EPG merge skipped because the provider or source was deleted mid-refresh.
+            onImportSkipped = { providerId, epgSourceId ->
+                diagnosticsStore.log(
+                    "refresh",
+                    "epg_import_skipped",
+                    mapOf("target" to providerId, "source" to epgSourceId),
+                )
+            },
+        )
     }
 
     val epgSourceRepository: EpgSourceRepository by lazy {
@@ -374,12 +388,6 @@ class AppContainer(
             epgImportRepository = epgImportRepository,
             epgPastRetentionDaysProvider = { userPreferencesStore.values.first().epg.pastRetentionDays },
         )
-        val seriesDetailsRefresher = DefaultSeriesDetailsRefresher(
-            providerRepository = providerRepository,
-            catalogImportRepository = catalogImportRepository,
-            xtreamClient = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient)),
-            xtreamParser = DefaultXtreamParser(),
-        )
         val logoRefresher = DefaultLogoRefresher(
             mediaImageRefreshSource = RoomMediaImageRefreshSource(database),
             mediaCacheStore = mediaCacheStore,
@@ -397,7 +405,6 @@ class AppContainer(
             orchestrator = orchestrator,
             playlistRefresher = playlistRefresher,
             epgRefresher = epgRefresher,
-            seriesDetailsRefresher = seriesDetailsRefresher,
             scheduler = refreshWorkScheduler,
             refreshEpgOnPlaylistChangeProvider = {
                 userPreferencesStore.values.first().epg.refreshOnPlaylistChangeEnabled
@@ -518,6 +525,51 @@ class AppContainer(
             ),
         )
         result.epgSourceId
+    }
+
+    /**
+     * On-demand: fetch one Xtream series' seasons/episodes when the user opens it, then import them (within
+     * that single series only). Runs on IO; a no-op for M3U (no getSeriesInfo) and fails silently offline /
+     * on an expired account. Replaces the old eager per-series worker that caused the HTTP-429 storm.
+     */
+    suspend fun ensureSeriesDetail(series: Series) {
+        withContext(Dispatchers.IO) {
+            val credentials = providerRepository.getCredentials(series.providerId) as? ProviderCredentials.Xtream
+                ?: return@withContext
+            val xtreamCredentials = XtreamCredentials(
+                serverUrl = credentials.serverUrl,
+                username = credentials.username,
+                password = credentials.password,
+                userAgent = providerRepository.getProvider(series.providerId)?.userAgent,
+            )
+            val client = DefaultXtreamClient(OkHttpXtreamTransport(okHttpClient))
+            val info = runCatching {
+                DefaultXtreamParser().parseSeriesInfo(
+                    series.remoteId,
+                    client.getSeriesInfo(xtreamCredentials, series.remoteId),
+                )
+            }.getOrNull()
+            if (info == null) {
+                // Fetch failed (offline / expired account / bad response). Opaque: provider + series ids only.
+                diagnosticsStore.log(
+                    "series",
+                    "detail_fetch_failed",
+                    mapOf("target" to series.providerId, "source" to series.id),
+                )
+                return@withContext
+            }
+            val result = catalogImportRepository.importXtreamSeriesDetail(series.providerId, info)
+            diagnosticsStore.log(
+                "series",
+                "detail_fetched",
+                mapOf(
+                    "target" to series.providerId,
+                    "source" to series.id,
+                    "seasons" to result.seasons.added.toString(),
+                    "episodes" to result.episodes.added.toString(),
+                ),
+            )
+        }
     }
 
     private companion object {

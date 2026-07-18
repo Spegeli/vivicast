@@ -879,6 +879,7 @@ private fun VivicastApp(
                 playbackRepository = appContainer.playbackRepository,
                 resolveSeriesPosterModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesPoster) },
                 resolveSeriesBackdropModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesBackdrop) },
+                ensureSeriesDetail = appContainer::ensureSeriesDetail,
                 onOpenPlayer = { episode -> openEpisode(episode, origin = PlaybackOrigin.SeriesDetail) },
                 targetProviderId = seriesSearchTarget?.providerId,
                 targetCategoryId = seriesSearchTarget?.categoryId,
@@ -1062,8 +1063,17 @@ private fun VivicastApp(
                         },
                     )
                 },
-                onLogProviderDeleted = { providerId ->
-                    appContainer.diagnosticsStore.log("provider", "deleted", mapOf("target" to providerId))
+                onLogProviderDeleted = { providerId, durationMs ->
+                    // durationMs confirms the delete stayed fast (the O(1)-FTS fix) — a regression shows up here.
+                    appContainer.diagnosticsStore.log(
+                        "provider",
+                        "deleted",
+                        mapOf("target" to providerId, "durationMs" to durationMs.toString()),
+                    )
+                    // Stop any in-flight/queued refresh for the now-deleted provider so it can't keep fetching
+                    // (best-effort — the import's in-merge existence guard is what actually prevents orphans).
+                    appContainer.refreshWorkScheduler.cancelPlaylistRefresh(providerId)
+                    appContainer.refreshWorkScheduler.cancelPlaylistPeriodic(providerId)
                 },
                 onLogGroupEvent = { message, details ->
                     appContainer.diagnosticsStore.log("groups", message, details)
@@ -1281,6 +1291,18 @@ private fun VivicastApp(
                     // Per-source EPG refresh (like per-provider playlist refresh). Stamps lastRefreshAt on
                     // success, so the interval clock restarts and the loop won't immediately re-refresh.
                     appContainer.refreshWorkScheduler.enqueueEpgRefresh(sourceId)
+                },
+                onEpgSourceDeleted = { sourceId, durationMs ->
+                    // durationMs confirms the source delete stayed fast (same O(1)-FTS fix as provider delete).
+                    appContainer.diagnosticsStore.log(
+                        "epg",
+                        "source_deleted",
+                        mapOf("target" to sourceId, "durationMs" to durationMs.toString()),
+                    )
+                    // Stop any in-flight/queued refresh for the now-deleted source (best-effort; the EPG
+                    // import's in-merge source-existence guard is what actually prevents orphan rows).
+                    appContainer.refreshWorkScheduler.cancelEpgRefresh(sourceId)
+                    appContainer.refreshWorkScheduler.cancelEpgPeriodic(sourceId)
                 },
                 onClearHistory = { targets ->
                     // Suspends until every category is cleared so the confirm dialog spinner covers the work.

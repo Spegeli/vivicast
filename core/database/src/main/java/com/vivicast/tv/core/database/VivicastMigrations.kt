@@ -308,6 +308,22 @@ object VivicastMigrations {
     }
 
     // Non-blocking imports (plans/nonblocking-db-imports.md): a content fingerprint on the delta-merged
+    // v18->v19: realign the search FTS tables so each FTS row's docid == its base row's rowid, and switch
+    // the sync triggers to key deletes/updates on `docid = old.rowid` (O(1)) instead of scanning a
+    // notindexed column (which made bulk provider/source deletes O(N*M)). Only rebuilds FTS content +
+    // swaps the triggers — no @Entity/schema change, so 19.json mirrors 18.json.
+    val Migration18To19: Migration = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.dropSearchFtsTriggers()
+            db.execSQL("DELETE FROM `search_channels_fts`")
+            db.execSQL("DELETE FROM `search_movies_fts`")
+            db.execSQL("DELETE FROM `search_series_fts`")
+            db.execSQL("DELETE FROM `search_epg_fts`")
+            db.rebuildSearchFts()
+            db.createSearchFtsTriggers()
+        }
+    }
+
     // live tables + staging tables mirroring their schema, so a bulk import stages rows chunked and merges
     // only the delta into the live table. Stage DDL copied verbatim from the exported 18.json.
     val Migration17To18: Migration = object : Migration(17, 18) {
@@ -613,14 +629,22 @@ private fun SupportSQLiteDatabase.createSearchFtsTables() {
     )
 }
 
+internal fun SupportSQLiteDatabase.dropSearchFtsTriggers() {
+    for (table in listOf("channels", "movies", "series", "epg")) {
+        for (kind in listOf("insert", "update", "delete")) {
+            execSQL("DROP TRIGGER IF EXISTS `search_${table}_fts_$kind`")
+        }
+    }
+}
+
 internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
     execSQL(
         """
         CREATE TRIGGER IF NOT EXISTS `search_channels_fts_insert`
         AFTER INSERT ON `channels`
         BEGIN
-            INSERT INTO `search_channels_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`channelNumber`);
+            INSERT INTO `search_channels_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`channelNumber`);
         END
         """.trimIndent(),
     )
@@ -629,9 +653,9 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_channels_fts_update`
         AFTER UPDATE ON `channels`
         BEGIN
-            DELETE FROM `search_channels_fts` WHERE `mediaId` = old.`id`;
-            INSERT INTO `search_channels_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`channelNumber`);
+            DELETE FROM `search_channels_fts` WHERE `docid` = old.`rowid`;
+            INSERT INTO `search_channels_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`channelNumber`);
         END
         """.trimIndent(),
     )
@@ -640,7 +664,7 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_channels_fts_delete`
         AFTER DELETE ON `channels`
         BEGIN
-            DELETE FROM `search_channels_fts` WHERE `mediaId` = old.`id`;
+            DELETE FROM `search_channels_fts` WHERE `docid` = old.`rowid`;
         END
         """.trimIndent(),
     )
@@ -650,8 +674,8 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_movies_fts_insert`
         AFTER INSERT ON `movies`
         BEGIN
-            INSERT INTO `search_movies_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
+            INSERT INTO `search_movies_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
         END
         """.trimIndent(),
     )
@@ -660,9 +684,9 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_movies_fts_update`
         AFTER UPDATE ON `movies`
         BEGIN
-            DELETE FROM `search_movies_fts` WHERE `mediaId` = old.`id`;
-            INSERT INTO `search_movies_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
+            DELETE FROM `search_movies_fts` WHERE `docid` = old.`rowid`;
+            INSERT INTO `search_movies_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
         END
         """.trimIndent(),
     )
@@ -671,7 +695,7 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_movies_fts_delete`
         AFTER DELETE ON `movies`
         BEGIN
-            DELETE FROM `search_movies_fts` WHERE `mediaId` = old.`id`;
+            DELETE FROM `search_movies_fts` WHERE `docid` = old.`rowid`;
         END
         """.trimIndent(),
     )
@@ -681,8 +705,8 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_series_fts_insert`
         AFTER INSERT ON `series`
         BEGIN
-            INSERT INTO `search_series_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
+            INSERT INTO `search_series_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
         END
         """.trimIndent(),
     )
@@ -691,9 +715,9 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_series_fts_update`
         AFTER UPDATE ON `series`
         BEGIN
-            DELETE FROM `search_series_fts` WHERE `mediaId` = old.`id`;
-            INSERT INTO `search_series_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-            VALUES (new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
+            DELETE FROM `search_series_fts` WHERE `docid` = old.`rowid`;
+            INSERT INTO `search_series_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`stableKey`, new.`categoryId`, new.`name`, new.`originalName`, new.`genre`);
         END
         """.trimIndent(),
     )
@@ -702,7 +726,7 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_series_fts_delete`
         AFTER DELETE ON `series`
         BEGIN
-            DELETE FROM `search_series_fts` WHERE `mediaId` = old.`id`;
+            DELETE FROM `search_series_fts` WHERE `docid` = old.`rowid`;
         END
         """.trimIndent(),
     )
@@ -712,8 +736,8 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_epg_fts_insert`
         AFTER INSERT ON `epg_programs`
         BEGIN
-            INSERT INTO `search_epg_fts` (`programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
-            VALUES (new.`id`, new.`providerId`, new.`channelId`, new.`epgSourceId`, new.`title`, new.`subtitle`, new.`description`);
+            INSERT INTO `search_epg_fts` (`docid`, `programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`channelId`, new.`epgSourceId`, new.`title`, new.`subtitle`, new.`description`);
         END
         """.trimIndent(),
     )
@@ -722,9 +746,9 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_epg_fts_update`
         AFTER UPDATE ON `epg_programs`
         BEGIN
-            DELETE FROM `search_epg_fts` WHERE `programId` = old.`id`;
-            INSERT INTO `search_epg_fts` (`programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
-            VALUES (new.`id`, new.`providerId`, new.`channelId`, new.`epgSourceId`, new.`title`, new.`subtitle`, new.`description`);
+            DELETE FROM `search_epg_fts` WHERE `docid` = old.`rowid`;
+            INSERT INTO `search_epg_fts` (`docid`, `programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
+            VALUES (new.`rowid`, new.`id`, new.`providerId`, new.`channelId`, new.`epgSourceId`, new.`title`, new.`subtitle`, new.`description`);
         END
         """.trimIndent(),
     )
@@ -733,38 +757,41 @@ internal fun SupportSQLiteDatabase.createSearchFtsTriggers() {
         CREATE TRIGGER IF NOT EXISTS `search_epg_fts_delete`
         AFTER DELETE ON `epg_programs`
         BEGIN
-            DELETE FROM `search_epg_fts` WHERE `programId` = old.`id`;
+            DELETE FROM `search_epg_fts` WHERE `docid` = old.`rowid`;
         END
         """.trimIndent(),
     )
 }
 
+// docid = the base row's rowid, so the FTS delete/update triggers can key on `docid = old.rowid` (O(1))
+// instead of scanning a notindexed column. Every rebuild path (fresh install, historical migrations, the
+// v18->v19 realign) must use this shape so the FTS stays rowid-aligned.
 private fun SupportSQLiteDatabase.rebuildSearchFts() {
     execSQL(
         """
-        INSERT INTO `search_channels_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
-        SELECT `id`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`
+        INSERT INTO `search_channels_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`)
+        SELECT `rowid`, `id`, `providerId`, `stableKey`, `categoryId`, `name`, `channelNumber`
         FROM `channels`
         """.trimIndent(),
     )
     execSQL(
         """
-        INSERT INTO `search_movies_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-        SELECT `id`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`
+        INSERT INTO `search_movies_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+        SELECT `rowid`, `id`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`
         FROM `movies`
         """.trimIndent(),
     )
     execSQL(
         """
-        INSERT INTO `search_series_fts` (`mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
-        SELECT `id`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`
+        INSERT INTO `search_series_fts` (`docid`, `mediaId`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`)
+        SELECT `rowid`, `id`, `providerId`, `stableKey`, `categoryId`, `name`, `originalName`, `genre`
         FROM `series`
         """.trimIndent(),
     )
     execSQL(
         """
-        INSERT INTO `search_epg_fts` (`programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
-        SELECT `id`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`
+        INSERT INTO `search_epg_fts` (`docid`, `programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
+        SELECT `rowid`, `id`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`
         FROM `epg_programs`
         """.trimIndent(),
     )
@@ -774,8 +801,8 @@ private fun SupportSQLiteDatabase.rebuildSearchEpgFts() {
     execSQL("DELETE FROM `search_epg_fts`")
     execSQL(
         """
-        INSERT INTO `search_epg_fts` (`programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
-        SELECT `id`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`
+        INSERT INTO `search_epg_fts` (`docid`, `programId`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`)
+        SELECT `rowid`, `id`, `providerId`, `channelId`, `epgSourceId`, `title`, `subtitle`, `description`
         FROM `epg_programs`
         """.trimIndent(),
     )

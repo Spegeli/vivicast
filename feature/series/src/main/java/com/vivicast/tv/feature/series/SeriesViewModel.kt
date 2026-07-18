@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -44,6 +45,8 @@ internal class SeriesViewModel(
     private val mediaRepository: MediaRepository,
     private val favoritesRepository: FavoritesRepository,
     private val playbackRepository: PlaybackRepository,
+    // On-demand season/episode fetch (App-hoisted: Xtream getSeriesInfo -> import). No-op for M3U.
+    private val ensureSeriesDetail: suspend (Series) -> Unit = {},
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -170,7 +173,17 @@ internal class SeriesViewModel(
             combine(selectedProviderIdFlow, detailSeriesIdFlow) { p, s -> p to s }
                 .collect { (providerId, seriesId) ->
                     loadedDetailSeries = if (providerId != null && seriesId != null) {
-                        mediaRepository.getSeries(providerId, seriesId)
+                        mediaRepository.getSeries(providerId, seriesId)?.also { detail ->
+                            // On-demand: opening a series detail — from browsing, search, or a deep-link, all
+                            // of which set detailSeriesIdFlow — fetches its season/episode detail if absent.
+                            // Xtream only (ensureSeriesDetail no-ops for M3U); silent on failure; guarded to
+                            // avoid refetch. Launched separately so the network call never blocks this flow.
+                            coroutineScope.launch {
+                                if (mediaRepository.observeSeasons(providerId, seriesId).first().isEmpty()) {
+                                    runCatching { ensureSeriesDetail(detail) }
+                                }
+                            }
+                        }
                     } else {
                         null
                     }
@@ -243,6 +256,8 @@ internal class SeriesViewModel(
     fun onOpenSeriesDetail(seriesId: String) {
         selectedSeriesIdFlow.value = seriesId
         detailSeriesIdFlow.value = seriesId
+        // The on-demand season/episode fetch is driven by the detailSeriesIdFlow collector above, so it
+        // covers every open path (browse, search, deep-link), not just this one.
     }
 
     fun onCloseDetail() {
