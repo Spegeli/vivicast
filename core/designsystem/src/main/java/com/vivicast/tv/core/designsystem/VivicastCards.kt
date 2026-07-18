@@ -25,10 +25,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 
 @Composable
 fun PosterCard(
@@ -142,6 +144,16 @@ private fun PosterArtwork(
                 },
             ),
     ) {
+        // #26: placeholder drawn first (behind); a failed/absent image falls back to it (children draw back-to-front).
+        Text(
+            text = if (hasPoster) initialsFor(title) else stringResource(R.string.card_no_poster),
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = VivicastSpacing.Space4),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.TitleSmall.copy(
+                color = if (focused) Color.White else VivicastColors.TextSecondary,
+            ),
+        )
         if (imageModel != null) {
             AsyncImage(
                 model = imageModel,
@@ -165,16 +177,6 @@ private fun PosterArtwork(
                 modifier = Modifier
                     .matchParentSize()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xA8050910)))),
-            )
-        } else {
-            Text(
-                text = if (hasPoster) initialsFor(title) else "Kein Poster",
-                modifier = Modifier.align(Alignment.Center).padding(horizontal = VivicastSpacing.Space4),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = VivicastTypography.TitleSmall.copy(
-                    color = if (focused) Color.White else VivicastColors.TextSecondary,
-                ),
             )
         }
         StatusBadge(rating, modifier = Modifier.align(Alignment.TopStart).padding(VivicastSpacing.Space2), tone = Color(0xD011445C))
@@ -234,7 +236,7 @@ fun VivicastSearchResultCard(
                     style = VivicastTypography.LabelLarge,
                 )
                 if (rating != null) {
-                    StatusBadge("Rating $rating")
+                    StatusBadge("★ $rating")
                 } else {
                     BodyText(subtitle, maxLines = 1)
                 }
@@ -260,6 +262,11 @@ private fun SearchPosterThumb(
             .border(VivicastBorders.Hairline, Color(0x334FC3F7), VivicastShapes.RadiusMediumShape),
         contentAlignment = Alignment.Center,
     ) {
+        // #26: initials drawn first (behind); a failed/absent image falls back to them.
+        Text(
+            text = initialsFor(title),
+            style = VivicastTypography.TitleSmall.copy(color = if (focused) Color.White else VivicastColors.TextSecondary),
+        )
         if (imageModel != null) {
             AsyncImage(
                 model = imageModel,
@@ -284,14 +291,9 @@ private fun SearchPosterThumb(
                     .matchParentSize()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99070A12)))),
             )
-        } else {
-            Text(
-                text = initialsFor(title),
-                style = VivicastTypography.TitleSmall.copy(color = if (focused) Color.White else VivicastColors.TextSecondary),
-            )
         }
         if (rating != null) {
-            StatusBadge("Rating $rating", modifier = Modifier.align(Alignment.TopStart).padding(VivicastSpacing.Space1))
+            StatusBadge("★ $rating", modifier = Modifier.align(Alignment.TopStart).padding(VivicastSpacing.Space1))
         }
     }
 }
@@ -335,9 +337,9 @@ fun VivicastChannelCard(
                 BodyText(program, maxLines = 1)
                 ProgressLine(progressPercent)
                 Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                    StatusBadge("Live", tone = Color(0xFF6D1D1D))
-                    if (favorite) StatusBadge("Favorit", tone = Color(0xFF72520C))
-                    if (catchUp) StatusBadge("Catch-Up", tone = Color(0xFF4D3A78))
+                    StatusBadge(stringResource(R.string.livetv_live_badge), tone = Color(0xFF6D1D1D))
+                    if (favorite) StatusBadge(stringResource(R.string.favorite_badge), tone = Color(0xFF72520C))
+                    if (catchUp) StatusBadge(stringResource(R.string.livetv_badge_catchup), tone = Color(0xFF4D3A78))
                 }
             }
         }
@@ -367,6 +369,7 @@ fun MiniLogo(
             .border(VivicastBorders.Hairline, Color(0x554FC3F7), VivicastShapes.RadiusMediumShape),
         contentAlignment = Alignment.Center,
     ) {
+        var loaded by remember(imageModel) { mutableStateOf(false) }
         if (imageModel != null) {
             AsyncImage(
                 model = imageModel,
@@ -375,6 +378,7 @@ fun MiniLogo(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(VivicastSpacing.Space2),
+                onState = { loaded = it is AsyncImagePainter.State.Success },
             )
         } else if (imageResId != null) {
             Image(
@@ -385,7 +389,10 @@ fun MiniLogo(
                     .fillMaxSize()
                     .padding(VivicastSpacing.Space2),
             )
-        } else {
+        }
+        // #26: Fit leaves margins, so a behind-placeholder would bleed around a loaded logo —
+        // show the initials/"?" unless an async logo actually loaded (also covers 404/empty).
+        if (imageResId == null && (imageModel == null || !loaded)) {
             Text(
                 text = if (missing) "?" else text.take(2).uppercase(),
                 style = VivicastTypography.LabelMedium.copy(color = Color.White),

@@ -155,6 +155,8 @@
     <string name="livetv_preview_hint">OK startet Vorschau</string>
     <string name="livetv_press_ok">Drücke OK, um die Vorschau zu starten.</string>
     <string name="livetv_live_badge">Live</string>
+    <string name="favorite_badge">Favorit</string>
+    <string name="card_no_poster">Kein Poster</string>
     <string name="livetv_cat_button">Kat.</string>
     <string name="livetv_details_button">Details</string>
     <string name="livetv_empty_playlist">Lege in den Einstellungen zuerst eine Wiedergabeliste an.</string>

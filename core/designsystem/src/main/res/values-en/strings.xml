@@ -155,6 +155,8 @@
     <string name="livetv_preview_hint">OK starts preview</string>
     <string name="livetv_press_ok">Press OK to start the preview.</string>
     <string name="livetv_live_badge">Live</string>
+    <string name="favorite_badge">Favorite</string>
+    <string name="card_no_poster">No poster</string>
     <string name="livetv_cat_button">Cat.</string>
     <string name="livetv_details_button">Details</string>
     <string name="livetv_empty_playlist">Set up a playlist in settings first.</string>
