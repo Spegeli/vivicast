@@ -201,8 +201,9 @@ class AppContainer(
         NetworkClientFactory().createOkHttpClient(
             userAgentProvider = userAgentPolicy::current,
             trustAllCertificates = BuildConfig.DEBUG,
-            // Log failing HTTP (host + code/duration, no path/query) — covers every network layer at once
-            // (logos, xtream sub-calls, EPG, connection tests). The store no-ops when logging is off.
+            // Log failing HTTP (code/duration + error class, no path/query) — covers every network layer at
+            // once (logos, xtream sub-calls, EPG, connection tests). The host is passed but DiagnosticsSanitizer
+            // blanks it, so a provider host never reaches the shareable export (PRD-11). No-op when logging off.
             networkEventLogger = { host, statusCode, durationMs, error ->
                 diagnosticsStore.log(
                     category = "network",
