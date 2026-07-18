@@ -28,35 +28,15 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 - **No** provider-specific header/cookie in PRD v1. A **per-provider User-Agent override is allowed**
   (the global User-Agent under Allgemein is the default; a playlist may override it) — see
   `docs/SETTINGS-DOCS-CODE-AUDIT.md` D6
+- **Distribution:** open-source on GitHub (`github.com/Spegeli/vivicast`); **sideload / GitHub-release
+  APK only — no Google Play**. So Play-restricted permissions (e.g. `MANAGE_EXTERNAL_STORAGE`) are
+  acceptable. Release builds are signed via a gitignored `keystore.properties` (CI: env vars), **R8/minify off**.
 
 ## Current Architecture Status
 
-The P0–P3 architecture remediation is **completed** (see the completion report for the full record):
-
-- 6/6 main feature areas (Home, Live-TV, Movies, Series, Search, Settings) use a ViewModel + immutable UiState.
-- No direct Repository Flows/CRUD in feature Composables.
-- Normal Routes read state via `collectAsStateWithLifecycle`.
-- `PlayerRoute`'s `collectAsState` is a documented realtime-player exception.
-- `PlaybackRequestFactory` / `PlaybackProgressRecorder` live in `:data:playback`.
-- `TestProviderConnectionUseCase` lives in `:data:provider`.
-- The designsystem is split into grouped `Vivicast*.kt` files (`VivicastComponents.kt` no longer exists).
-- A detekt size/complexity gate exists.
-
-Post-remediation feature work (2026-07-16, on main): a **playlist actions-menu** (Overview → Actions →
-Editor/Groups), **per-playlist channel-GROUP management** (show/hide, sort mode playlist/name/manual,
-manual reorder, new-groups policy; Room **v17** — `manualSortOrder` + `provider_category_settings`), and
-**non-blocking staged DB imports** (Room **v18** — catalog/EPG imports stage chunked, then a fingerprint
-delta-merge, so interactive writes don't block on a background refresh; implements the ADR-012 pipeline).
-
-Later feature work (2026-07-17/18, on main): an About **"Diagnose & Protokolle" sub-page** (log viewer +
-multi-select delete; every event centrally sanitized/opaque before it is persisted); **Xtream companion
-EPG auto-detect** (a provider save with a *changed* Xtream source probes `xmltv.php` and auto-creates a
-deduped, linked EPG source named after the username — see ADR-002; no-op for M3U or a pure metadata edit);
-and a **provider add/edit/delete/refresh lifecycle pass** — the per-playlist User-Agent is now settable on
-ADD (not only edit), Xtream HTTP-429 is avoided by fetching series season/episode detail **on-demand** when
-a series opens (the eager per-series refresh worker was deleted) plus a 429 backoff, and playlist/EPG
-**delete dropped from ~4 min to sub-second** via rowid-tied search FTS (Room **v19**; in-merge
-provider/source existence guards stop orphan rows when a delete races a refresh).
+P0–P3 architecture remediation is **completed** — see `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`.
+The resulting invariants are the **Mandatory Architecture Rules** below; the Room schema is at **v19**.
+Per-feature history lives in git and the completion report — not in this file.
 
 ## Active App Architecture References
 
@@ -218,6 +198,9 @@ Follow these for all new/changed app code (they encode the completed remediation
 .\gradlew.bat detekt
 .\gradlew.bat assembleDebug
 .\gradlew.bat test
+
+# Signed release build (uses gitignored keystore.properties; R8/minify off) -> app-release.apk (v1+v2)
+.\gradlew.bat assembleRelease
 ```
 
 For playback/protection/WatchNext changes, also run the relevant smoke tests when an emulator is

@@ -5,10 +5,14 @@ that gate any release. Full evidence per finding is in `CODE_REVIEW.md` (referen
 
 **Rule: no code changes until explicit GO.** Items marked ⚠ need a decision from you before I implement them.
 
-**Status (2026-07-18):** all six implemented on branch `audit/p1-release-blockers`; `detekt` + `assembleDebug`
-+ `test` green (incl. new `#6` `RefreshErrorClassificationTest` and `#2` XMLTV guard tests). Signed
-`assembleRelease` verified — `app-release.apk` (36.5 MB), **v1+v2** schemes, `apksigner verify` exit 0
-(installs from API 23). On-device smoke (API 28 + 36) for `#2`/`#7` and the commit still pending.
+**Status: ✅ P1 COMPLETE (2026-07-18).** All six implemented on branch `audit/p1-release-blockers`, committed
+(2 commits), **merged into `main` and pushed**. `detekt` + `assembleDebug` + `test` green (incl. new `#6`
+`RefreshErrorClassificationTest` and `#2` XMLTV guard tests). Signed `assembleRelease` verified —
+`app-release.apk` (36.5 MB), **v1+v2** schemes, `apksigner verify` exit 0 (installs from API 23). **On-device
+(API 36):** launch + D-pad navigation + HTTPS playback OK; `#7` verified — the player overlay shows a real
+`29:27 / 29:30` timeline on a seekable 3sat timeshift stream (the old fake `00:xx` / `01:40` is gone); release
+correctly blocks cleartext-HTTP streams. Remaining (optional): an API 28 pass. `#2` carries one intentional
+deviation — see its note.
 
 ## Ordering
 
@@ -39,7 +43,7 @@ per CLAUDE.md) because R8 stripping only shows at runtime; `#7` → visual playe
 
 ---
 
-## `#28` (Critical) — No release signing / R8 / shrink config
+## `#28` (Critical) — No release signing / R8 / shrink config — ✅ DONE
 
 **Decision (resolved 2026-07-18):** R8 **off** — no minify/shrink/obfuscate (pointless for an open-source,
 non-Play app distributed as sideload / GitHub-release APKs). Sign with an own release keystore; Gradle reads
@@ -82,7 +86,7 @@ Secrets set by the user via GitHub UI; never committed.
 
 ---
 
-## `#1` (High) — Exported search ContentProvider has no permission
+## `#1` (High) — Exported search ContentProvider has no permission — ✅ DONE
 
 **Decision (resolved 2026-07-18):** keep the TV global-search integration, lock the provider to `GLOBAL_SEARCH`.
 
@@ -98,7 +102,7 @@ Secrets set by the user via GitHub UI; never committed.
 
 ---
 
-## `#29` (resolved → cleanup) — MANAGE_EXTERNAL_STORAGE
+## `#29` (resolved → cleanup) — MANAGE_EXTERNAL_STORAGE — ✅ DONE
 
 **Decision (resolved 2026-07-18):** distribution is **sideload / GitHub-release (no Google Play)**, so the
 Play restricted-permission blocker does not apply. **Keep** `MANAGE_EXTERNAL_STORAGE` (the TV-safe in-app
@@ -117,7 +121,7 @@ the storage permissions as-is.
 
 ---
 
-## `#6` (High) — Permanent auth failure retries forever
+## `#6` (High) — Permanent auth failure retries forever — ✅ DONE
 
 **Decision (resolved 2026-07-18):** targeted classification **plus** a hard `runAttemptCount` backstop for
 transient errors. User-visibility: rely on the existing `InvalidCredentials` provider status (no new notification).
@@ -137,7 +141,7 @@ transient errors. User-visibility: rely on the existing `InvalidCredentials` pro
 
 ---
 
-## `#2` (High) — XMLTV streaming parser billion-laughs DoS ⚠
+## `#2` (High) — XMLTV streaming parser billion-laughs DoS — ✅ DONE (see note)
 
 **Decision (resolved 2026-07-18):** keep DOCTYPE **allowed** (the streaming parser accepts it on purpose —
 real XMLTV feeds carry `<!DOCTYPE tv SYSTEM "xmltv.dtd">`, see `XmltvStreamParser.kt:44`); block the actual
@@ -161,11 +165,18 @@ plain `<!DOCTYPE tv SYSTEM "xmltv.dtd">` (no internal entities) still parses. Ve
 Expat behavior differs by version). Extend `XmltvStreamParserTest`. Related: `#17` (gzip head read) touches the
 same `maybeGunzip` head — coordinate the peek logic.
 
+**Implemented (2026-07-18):** the internal-entity guard is in place (`rejectInternalEntities` +
+`UnsafeXmltvEntityException` in `XmltvStreamParser.kt`, classified terminal in the worker); tests green
+(billion-laughs rejected, plain external DOCTYPE still parses). The "fail-closed `setFeature`" sub-point was
+**intentionally not done** — forcing `setFeature` to throw on an unsupported feature risks false-breaking on
+devices whose SAX doesn't recognize a benign feature, and the head-scan guard already guarantees rejection
+independent of SAX-feature support.
+
 **Ref:** CR #2.
 
 ---
 
-## `#7` (High) — Player timeline shows fabricated time ⚠
+## `#7` (High) — Player timeline shows fabricated time — ✅ DONE
 
 **Decision (resolved 2026-07-18):** VOD (seekable) shows real elapsed / total (mm:ss, h:mm:ss when ≥1h). Live
 shows **only** the right-side `LIVE` marker, **no left time value** (drop the fake left clock). Both the
