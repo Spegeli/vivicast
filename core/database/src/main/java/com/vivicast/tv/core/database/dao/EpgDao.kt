@@ -97,18 +97,6 @@ interface EpgDao {
 
     @Query(
         """
-        SELECT * FROM epg_programs
-        WHERE title LIKE '%' || :query || '%' COLLATE NOCASE
-           OR subtitle LIKE '%' || :query || '%' COLLATE NOCASE
-           OR description LIKE '%' || :query || '%' COLLATE NOCASE
-        ORDER BY startTime
-        LIMIT :limit
-        """,
-    )
-    suspend fun searchPrograms(query: String, limit: Int): List<EpgProgramEntity>
-
-    @Query(
-        """
         SELECT * FROM epg_channel_mappings
         WHERE providerId = :providerId AND epgSourceId = :epgSourceId
         """,
@@ -164,6 +152,14 @@ interface EpgDao {
 
     @Query("DELETE FROM epg_programs_stage WHERE providerId = :providerId AND epgSourceId = :epgSourceId")
     suspend fun clearProgramsStage(providerId: String, epgSourceId: String)
+
+    // Stage hygiene on delete: drop any half-staged rows so a delete racing a mid-stage refresh leaves no
+    // orphan stage rows (else they linger until recoverStuckRefreshState on the next app start).
+    @Query("DELETE FROM epg_programs_stage WHERE providerId = :providerId")
+    suspend fun clearProgramsStageForProvider(providerId: String)
+
+    @Query("DELETE FROM epg_programs_stage WHERE epgSourceId = :epgSourceId")
+    suspend fun clearProgramsStageForSource(epgSourceId: String)
 
     @Query(
         """

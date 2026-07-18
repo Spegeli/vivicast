@@ -12,9 +12,11 @@ import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.EpisodeEntity
 import com.vivicast.tv.core.database.model.MovieEntity
 import com.vivicast.tv.core.database.model.ProviderEntity
+import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.database.model.SeriesEntity
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.CategoryType
@@ -498,6 +500,32 @@ class RoomMediaRepositoryTest {
                     isCatchupAvailable = false,
                     createdAt = NOW,
                     updatedAt = NOW,
+                ),
+            ),
+        )
+        // The priority-winner EPG search query resolves a channel's programmes via a mapping + an active
+        // linked source; seed all three for channel-dune → epg-1 so "Dune Special" survives the filter.
+        database.epgDao().upsertMappings(
+            listOf(
+                EpgChannelMappingEntity(
+                    id = "map-dune-catalog", providerId = PROVIDER_ID, channelId = "channel-dune",
+                    epgSourceId = "epg-1", epgChannelId = "dune.tv", isManual = false, createdAt = NOW,
+                ),
+            ),
+        )
+        database.epgDao().upsertEpgSources(
+            listOf(
+                EpgSourceEntity(
+                    id = "epg-1", stableKey = "epg-1", name = "EPG 1", sourceConfigKey = "epg:1:url",
+                    timeShiftMinutes = 0, isActive = true, createdAt = NOW, updatedAt = NOW,
+                ),
+            ),
+        )
+        database.epgDao().upsertProviderEpgSources(
+            listOf(
+                ProviderEpgSourceEntity(
+                    id = "$PROVIDER_ID:epg-1", providerId = PROVIDER_ID, epgSourceId = "epg-1",
+                    priority = 1, createdAt = NOW,
                 ),
             ),
         )

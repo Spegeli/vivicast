@@ -41,6 +41,12 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 
+// A DB constraint failure is deterministic — retrying the same import hits it again and just spins a
+// WorkManager backoff loop (re-downloading the feed each attempt). Fail instead; transient errors
+// (IO/network/timeout, a briefly-locked DB) still retry.
+private fun Throwable.isDeterministicRefreshError(): Boolean =
+    generateSequence(this) { it.cause }.any { it is android.database.sqlite.SQLiteConstraintException }
+
 class DefaultRefreshWorkerRunner(
     private val orchestrator: MaintenanceRefreshOrchestrator,
     private val playlistRefresher: PlaylistRefresher,
@@ -95,7 +101,7 @@ class DefaultRefreshWorkerRunner(
                 },
                 onFailure = { error ->
                     recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt, error)
-                    RefreshWorkerResult.Retry
+                    if (error.isDeterministicRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
                 },
             )
     }
@@ -123,7 +129,7 @@ class DefaultRefreshWorkerRunner(
                 },
                 onFailure = { error ->
                     recordRefresh(RefreshDiagnosticType.EpgRefreshFailed, target.epgSourceId, startedAt, error)
-                    RefreshWorkerResult.Retry
+                    if (error.isDeterministicRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
                 },
             )
     }
@@ -174,8 +180,10 @@ class DefaultPlaylistRefresher(
     private val refreshRunGuard: RefreshRunGuard = RefreshRunGuard(),
 ) : PlaylistRefresher {
     override suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome {
+        // Provider gone (deleted since this refresh was enqueued): a SKIP, not a failure — else success=false
+        // maps to Retry and loops. (A merely-deactivated provider is handled below as success=true.)
         val provider = providerRepository.getProvider(target.providerId)
-            ?: return PlaylistRefreshOutcome(target.providerId, success = false, epgSourceIds = emptyList())
+            ?: return PlaylistRefreshOutcome(target.providerId, success = false, epgSourceIds = emptyList(), skipped = true)
         if (!provider.isActive || provider.status == ProviderStatus.Disabled) {
             return PlaylistRefreshOutcome(provider.id, success = true, epgSourceIds = emptyList())
         }
@@ -349,8 +357,11 @@ class DefaultEpgRefresher(
     private val refreshRunGuard: RefreshRunGuard = RefreshRunGuard(),
 ) : EpgRefresher {
     override suspend fun refresh(target: EpgRefreshTarget): EpgRefreshOutcome {
+        // Source no longer active/resolvable (deactivated or deleted since this refresh was enqueued):
+        // a SKIP, not a failure — else the worker maps success=false to Retry and loops forever
+        // (getActiveSource stays null on every backoff, EpgRefreshFailed spams the log every 1-2 min).
         val source = epgSourceReader.getActiveSource(target.epgSourceId)
-            ?: return EpgRefreshOutcome(target.epgSourceId, success = false)
+            ?: return EpgRefreshOutcome(target.epgSourceId, success = false, skipped = true)
         if (!refreshRunGuard.tryEnter(source.id)) {
             return EpgRefreshOutcome(target.epgSourceId, success = false, skipped = true)
         }

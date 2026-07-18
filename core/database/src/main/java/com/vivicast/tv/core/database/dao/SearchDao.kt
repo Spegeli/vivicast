@@ -93,9 +93,23 @@ interface SearchDao {
         INNER JOIN epg_programs ON epg_programs.id = search_epg_fts.programId
         INNER JOIN channels ON channels.id = epg_programs.channelId
         WHERE search_epg_fts MATCH :matchQuery
+            AND epg_programs.epgSourceId = (
+                SELECT m.epgSourceId FROM epg_channel_mappings m
+                INNER JOIN epg_sources s ON s.id = m.epgSourceId
+                INNER JOIN provider_epg_sources pes
+                    ON pes.providerId = m.providerId AND pes.epgSourceId = m.epgSourceId
+                WHERE m.providerId = epg_programs.providerId
+                    AND m.channelId = epg_programs.channelId
+                    AND s.isActive = 1
+                ORDER BY m.isManual DESC, pes.priority ASC
+                LIMIT 1
+            )
         ORDER BY epg_programs.startTime, channels.name COLLATE NOCASE, epg_programs.title COLLATE NOCASE
         LIMIT :limit
         """,
     )
+    // Only the priority winner per (provider, channel) is returned (manual first, else highest-priority
+    // linked+active source that matched the channel) — mirrors observeProgramsForChannel, so a channel
+    // matched by >=2 sources doesn't yield duplicate hits. Keep the two winner subqueries in sync.
     suspend fun searchEpg(matchQuery: String, limit: Int): List<EpgProgramEntity>
 }

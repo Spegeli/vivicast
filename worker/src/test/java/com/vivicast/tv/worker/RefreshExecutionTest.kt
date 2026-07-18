@@ -229,6 +229,24 @@ class RefreshExecutionTest {
     }
 
     @Test
+    fun epgRefreshSkipsWhenSourceInactiveOrGone() = runBlocking {
+        // getActiveSource returns null (the source was deactivated/deleted after this refresh was enqueued).
+        val refresher = DefaultEpgRefresher(
+            epgSourceReader = FakeEpgSourceReader(),
+            providerRepository = FakeProviderRepository(emptyList()),
+            epgStreamSource = FakeEpgStreamSource(),
+            xmltvParser = DefaultXmltvParser(),
+            epgImportRepository = FakeEpgImportRepository(),
+        )
+
+        val outcome = refresher.refresh(EpgRefreshTarget("gone-source"))
+
+        // Skipped (not a failure) so the worker maps it to Success — no Retry loop, no EpgRefreshFailed spam.
+        assertEquals(false, outcome.success)
+        assertEquals(true, outcome.skipped)
+    }
+
+    @Test
     fun epgRefreshParsesOnceAndImportsForActiveLinkedProviders() = runBlocking {
         val activeProvider = provider(id = "provider-active")
         val disabledProvider = provider(id = "provider-disabled", isActive = false)

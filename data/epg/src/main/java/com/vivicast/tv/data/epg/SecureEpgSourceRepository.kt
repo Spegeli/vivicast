@@ -74,6 +74,8 @@ class SecureEpgSourceRepository(
             database.epgDao().deleteProviderEpgSourcesForSource(sourceId)
             database.epgDao().deleteMappingsForSource(sourceId)
             database.epgDao().deleteProgramsForSource(sourceId)
+            // Stage hygiene: drop any half-staged rows for this source (delete racing a mid-stage refresh).
+            database.epgDao().clearProgramsStageForSource(sourceId)
             database.epgDao().deleteEpgSource(sourceId)
         }
         source?.sourceConfigKey?.let { secureValueStore.delete(SecureKey(it)) }

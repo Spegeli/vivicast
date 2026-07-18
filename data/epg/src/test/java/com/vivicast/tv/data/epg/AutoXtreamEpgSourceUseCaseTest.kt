@@ -63,6 +63,24 @@ class AutoXtreamEpgSourceUseCaseTest {
     }
 
     @Test
+    fun `server change unlinks the old-server source from this provider but keeps the source`() = runBlocking {
+        val repo = FakeRepo()
+        // Old-server auto-EPG source for the same account, already linked to p1.
+        repo.seed(id = "old", name = "alice", url = url("old-host", "alice", "pw"))
+        repo.linkSourceToProvider("p1", "old", priority = 1)
+
+        val result = AutoXtreamEpgSourceUseCase(repo).ensureFor("p1", "alice", url("new-host", "alice", "pw"))
+
+        assertEquals(false, result?.reused)
+        // Old-server link removed from p1, new source linked instead.
+        assertTrue(repo.unlinked.contains("p1" to "old"))
+        assertTrue(repo.links.none { it.providerId == "p1" && it.epgSourceId == "old" })
+        assertTrue(repo.links.any { it.providerId == "p1" && it.epgSourceId == result?.epgSourceId })
+        // The source itself is NOT deleted (may serve other playlists).
+        assertTrue(repo.sources.any { it.id == "old" })
+    }
+
+    @Test
     fun `blank inputs are a no-op`() = runBlocking {
         val repo = FakeRepo()
         assertNull(AutoXtreamEpgSourceUseCase(repo).ensureFor("", "alice", url("h", "alice", "p")))
@@ -76,6 +94,7 @@ private class FakeRepo : EpgSourceRepository {
     val sources = mutableListOf<EpgSource>()
     val urls = mutableMapOf<String, String>()
     val links = mutableListOf<ProviderEpgSource>()
+    val unlinked = mutableListOf<Pair<String, String>>()
     private var seq = 0
 
     fun seed(id: String, name: String, url: String, isActive: Boolean = true, timeShift: Int = 0) {
@@ -127,10 +146,14 @@ private class FakeRepo : EpgSourceRepository {
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         flowOf(links.filter { it.providerId == providerId })
 
+    override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {
+        unlinked.add(providerId to epgSourceId)
+        links.removeAll { it.providerId == providerId && it.epgSourceId == epgSourceId }
+    }
+
     // Unused by the use case:
     override fun observeEpgSources(): Flow<List<EpgSource>> = flowOf(sources.toList())
     override suspend fun deleteSource(sourceId: String): Unit = error("unused")
-    override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String): Unit = error("unused")
     override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>): Unit = error("unused")
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = error("unused")
     override fun observeProgramsForChannel(

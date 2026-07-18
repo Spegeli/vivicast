@@ -257,6 +257,13 @@ class RoomProviderRepository(
         val existing = providerDao.getProvider(providerId)
         database.withTransaction {
             catalogDao.deleteCatalogForProvider(providerId)
+            // Stage hygiene: drop any half-staged import rows for this provider so a delete racing a
+            // mid-stage refresh leaves no orphan *_stage rows.
+            catalogDao.clearChannelsStage(providerId)
+            catalogDao.clearMoviesStage(providerId)
+            catalogDao.clearSeriesStage(providerId)
+            catalogDao.clearEpisodesStage(providerId)
+            epgDao.clearProgramsStageForProvider(providerId)
             providerCategorySettingsDao.deleteSettingsForProvider(providerId)
             epgDao.deleteProgramsForProvider(providerId)
             epgDao.deleteMappingsForProvider(providerId)

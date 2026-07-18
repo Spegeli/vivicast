@@ -11,6 +11,7 @@ import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
+import com.vivicast.tv.core.database.model.ProviderEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
@@ -46,6 +47,33 @@ class RoomEpgRepositoryTest {
             .build()
         repository = RoomEpgRepository(database = database, clock = { now })
         secureValueStore = InMemorySecureValueStore()
+        // importXmltv's in-merge guard skips the write when the provider row is missing (the delete-race
+        // guard from the provider-lifecycle work). Seed the providers these tests import for.
+        runBlocking {
+            seedProvider(PROVIDER_ID)
+            seedProvider(OTHER_PROVIDER_ID)
+        }
+    }
+
+    private suspend fun seedProvider(providerId: String) {
+        database.providerDao().upsertProvider(
+            ProviderEntity(
+                id = providerId,
+                stableKey = "$providerId-stable",
+                name = "Provider $providerId",
+                type = "M3U",
+                sourceConfigKey = "provider:$providerId:credentials",
+                isActive = true,
+                status = "ACTIVE",
+                includeLiveTv = true,
+                includeMovies = true,
+                includeSeries = true,
+                refreshIntervalHours = 24,
+                logoPriority = "provider",
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
     }
 
     @After
@@ -319,6 +347,7 @@ class RoomEpgRepositoryTest {
     fun largeFixtureEpgNowNextAndDayViewStayWithinPrd13Targets() = runBlocking {
         now = 3L * MILLIS_PER_DAY + 12L * MILLIS_PER_HOUR
         seedLargeEpgFixture(channelCount = 50, days = 7)
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-large", priority = 1)
 
         val firstChannelPrograms = repository.observeProgramsForChannel(
             providerId = PROVIDER_ID,
@@ -408,6 +437,7 @@ class RoomEpgRepositoryTest {
                 isActive = true,
             ),
         )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
 
         val mapping = repository.setManualChannelMapping(
             ManualEpgChannelMappingRequest(
@@ -446,6 +476,7 @@ class RoomEpgRepositoryTest {
                 isActive = true,
             ),
         )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
         repository.setManualChannelMapping(
             ManualEpgChannelMappingRequest(
                 providerId = PROVIDER_ID,
@@ -483,6 +514,7 @@ class RoomEpgRepositoryTest {
                 isActive = true,
             ),
         )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
         repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
 
         repository.clearManualChannelMapping(PROVIDER_ID, "channel-ard", "epg-source-1")
@@ -625,6 +657,32 @@ class RoomEpgRepositoryTest {
         assertEquals(listOf("HI-X"), repository.observeProgramsForChannel(PROVIDER_ID, "chX", 0L, to).first().map { it.title })
         assertEquals(listOf("LO-Y"), repository.observeProgramsForChannel(PROVIDER_ID, "chY", 0L, to).first().map { it.title })
         assertEquals(listOf("LO-Z"), repository.observeProgramsForChannel(PROVIDER_ID, "chZ", 0L, to).first().map { it.title })
+    }
+
+    @Test
+    fun searchEpgReturnsOnlyThePriorityWinnerPerChannel() = runBlocking {
+        seedLiveChannel(providerId = PROVIDER_ID, channelId = "chX", remoteId = "chX-remote", name = "Das Erste", catchup = false)
+        seedActiveSource("srcHi")
+        seedActiveSource("srcLo")
+        linkSource(PROVIDER_ID, "srcHi", priority = 1)
+        linkSource(PROVIDER_ID, "srcLo", priority = 2)
+        // Channel chX matched by both sources; both carry a programme with the same searchable title.
+        seedMapping(PROVIDER_ID, "chX", "srcHi", manual = false)
+        seedMapping(PROVIDER_ID, "chX", "srcLo", manual = false)
+        seedProgram(PROVIDER_ID, "chX", "srcHi", "Tagesschau")
+        seedProgram(PROVIDER_ID, "chX", "srcLo", "Tagesschau")
+        // The FTS sync triggers aren't installed on this in-memory DB; populate the mirror directly from the
+        // seeded programmes (the winner filter under test lives in the search query, not the trigger).
+        database.openHelper.writableDatabase.execSQL(
+            "INSERT INTO search_epg_fts (docid, programId, providerId, channelId, epgSourceId, title, subtitle, description) " +
+                "SELECT rowid, id, providerId, channelId, epgSourceId, title, subtitle, description FROM epg_programs",
+        )
+
+        val hits = database.searchDao().searchEpg("Tagesschau", limit = 20)
+
+        // Winner = srcHi (priority 1): a single hit, not one per source.
+        assertEquals(1, hits.size)
+        assertEquals("srcHi", hits.single().epgSourceId)
     }
 
     private suspend fun seedActiveSource(id: String) {
@@ -828,6 +886,21 @@ class RoomEpgRepositoryTest {
                         updatedAt = now,
                     )
                 }
+            },
+        )
+        // A mapping per channel so the priority-winner display query resolves each channel to this source.
+        database.epgDao().upsertMappings(
+            (1..channelCount).map { channelIndex ->
+                val channelSuffix = channelIndex.toString().padStart(4, '0')
+                EpgChannelMappingEntity(
+                    id = "map-large-$channelSuffix",
+                    providerId = PROVIDER_ID,
+                    channelId = "channel-large-$channelSuffix",
+                    epgSourceId = "epg-large",
+                    epgChannelId = "channel-large-$channelSuffix",
+                    isManual = false,
+                    createdAt = now,
+                )
             },
         )
     }

@@ -53,6 +53,22 @@ class AutoXtreamEpgSourceUseCase(
         }
 
         repository.linkSourceToProvider(providerId, sourceId, nextPriority(providerId, sourceId))
+
+        if (match == null) {
+            // A NEW source was created — either first-time auto-EPG, or the server changed (same account,
+            // new host). Unlink THIS provider's other xmltv sources for the same username but a different
+            // endpoint = the superseded old-server auto-EPG. The source stays global (may serve other
+            // playlists); the unlink also purges this provider's stale programmes+mappings for it (F1).
+            // First-time auto-EPG finds none → no-op.
+            val trimmedUsername = username.trim()
+            repository.observeProviderEpgSources(providerId).first()
+                .filter { it.epgSourceId != sourceId }
+                .filter { link ->
+                    val url = repository.getSourceUrl(link.epgSourceId)
+                    url != null && parseEndpoint(url)?.username == trimmedUsername && !sameEndpoint(url, xmltvUrl)
+                }
+                .forEach { repository.unlinkSourceFromProvider(providerId, it.epgSourceId) }
+        }
         return AutoXtreamEpgResult(epgSourceId = sourceId, reused = match != null)
     }
 
