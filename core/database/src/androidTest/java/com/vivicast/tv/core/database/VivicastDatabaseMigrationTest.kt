@@ -51,6 +51,7 @@ class VivicastDatabaseMigrationTest {
             VivicastMigrations.Migration16To17,
             VivicastMigrations.Migration17To18,
             VivicastMigrations.Migration18To19,
+            VivicastMigrations.Migration19To20,
         )
 
         migrated.use {
@@ -110,6 +111,37 @@ class VivicastDatabaseMigrationTest {
         validateMigrationStep("migration-16-17.db", 16, 17, VivicastMigrations.Migration16To17)
         validateMigrationStep("migration-17-18.db", 17, 18, VivicastMigrations.Migration17To18)
         validateMigrationStep("migration-18-19.db", 18, 19, VivicastMigrations.Migration18To19)
+        validateMigrationStep("migration-19-20.db", 19, 20, VivicastMigrations.Migration19To20)
+    }
+
+    // The v19->v20 fix: epg_programs are per-provider, so two providers must be able to hold rows with the
+    // same (epgSourceId, epgChannelId, stableKey). At v19 the 2nd insert would hit the UNIQUE index; after
+    // v20 (providerId added to the key) both coexist.
+    @Test
+    fun migration19To20AllowsSameProgramKeyAcrossProviders() {
+        helper.createDatabase("migration-19-20-coexist.db", 19).apply {
+            insertEpgProgram(id = "prog-a", providerId = "prov-a", channelId = "ch-a")
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(
+            "migration-19-20-coexist.db", 20, true, VivicastMigrations.Migration19To20,
+        )
+        // Same source/channel/stableKey as prog-a, different provider — rejected at v19, allowed at v20.
+        migrated.insertEpgProgram(id = "prog-b", providerId = "prov-b", channelId = "ch-b")
+        migrated.use {
+            assertEquals(2, it.longValue("SELECT COUNT(*) FROM epg_programs").toInt())
+        }
+    }
+
+    private fun SupportSQLiteDatabase.insertEpgProgram(id: String, providerId: String, channelId: String) {
+        execSQL(
+            "INSERT INTO epg_programs (id, providerId, channelId, epgSourceId, stableKey, epgChannelId, " +
+                "title, normalizedTitle, subtitle, description, startTime, endTime, category, iconUrl, " +
+                "isCatchupAvailable, createdAt, updatedAt, syncFingerprint) VALUES " +
+                "('$id', '$providerId', '$channelId', 'src-1', 'key-1', 'chan-1', 'Show', 'show', NULL, " +
+                "NULL, 1000, 2000, NULL, NULL, 0, 1, 2, '')",
+        )
     }
 
     private fun validateMigrationStep(

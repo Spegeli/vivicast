@@ -324,6 +324,22 @@ object VivicastMigrations {
         }
     }
 
+    // v19->v20: epg_programs are stored per provider, but the UNIQUE index omitted providerId — a source
+    // shared by >=2 playlists collided on the 2nd provider's import (SQLITE_CONSTRAINT 2067). Add providerId
+    // to the unique key so each provider's copy coexists. The old index guaranteed uniqueness on the sub-key
+    // (epgSourceId, epgChannelId, stableKey), so the super-key can't have duplicates — the new UNIQUE index
+    // builds cleanly (verified on the real DB: 0 dups, 0.18 s).
+    val Migration19To20: Migration = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP INDEX IF EXISTS `index_epg_programs_epgSourceId_epgChannelId_stableKey`")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                    "`index_epg_programs_providerId_epgSourceId_epgChannelId_stableKey` " +
+                    "ON `epg_programs` (`providerId`, `epgSourceId`, `epgChannelId`, `stableKey`)",
+            )
+        }
+    }
+
     // live tables + staging tables mirroring their schema, so a bulk import stages rows chunked and merges
     // only the delta into the live table. Stage DDL copied verbatim from the exported 18.json.
     val Migration17To18: Migration = object : Migration(17, 18) {

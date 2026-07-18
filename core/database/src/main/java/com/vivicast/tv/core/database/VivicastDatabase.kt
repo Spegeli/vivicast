@@ -83,7 +83,7 @@ abstract class VivicastDatabase : RoomDatabase() {
     abstract fun androidTvSearchDao(): AndroidTvSearchDao
 }
 
-const val VIVICAST_DATABASE_VERSION = 19
+const val VIVICAST_DATABASE_VERSION = 20
 
 /**
  * Installs the InvalidationTracker triggers for the UI-observed tables eagerly at startup. Room installs

@@ -313,7 +313,7 @@ data class ProviderCategorySettingsEntity(
     tableName = "epg_programs",
     indices = [
         Index(value = ["providerId"]),
-        Index(value = ["epgSourceId", "epgChannelId", "stableKey"], unique = true),
+        Index(value = ["providerId", "epgSourceId", "epgChannelId", "stableKey"], unique = true),
         Index(value = ["channelId"]),
         Index(value = ["epgSourceId"]),
         Index(value = ["epgSourceId", "epgChannelId", "startTime", "endTime"]),

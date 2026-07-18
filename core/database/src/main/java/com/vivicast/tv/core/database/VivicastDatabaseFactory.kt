@@ -43,6 +43,7 @@ object VivicastDatabaseFactory {
                 VivicastMigrations.Migration16To17,
                 VivicastMigrations.Migration17To18,
                 VivicastMigrations.Migration18To19,
+                VivicastMigrations.Migration19To20,
             )
         if (queryCallback != null) {
             builder.setQueryCallback(queryCallback, Executor { it.run() })
