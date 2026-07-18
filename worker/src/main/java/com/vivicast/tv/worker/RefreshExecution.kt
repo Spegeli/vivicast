@@ -33,6 +33,7 @@ import com.vivicast.tv.iptv.xtream.XtreamHttpException
 import com.vivicast.tv.iptv.xtream.XtreamParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -169,7 +170,10 @@ class DefaultRefreshWorkerRunner(
         val metadata = buildMap {
             put("target", target)
             put("durationMs", (clock() - startedAt).toString())
-            error?.let { put("error", it.message ?: it::class.java.simpleName) }
+            // #5: an IOException message often carries the provider host/IP ("Unable to resolve host ...")
+            // which the downstream scheme://-URL / key=value redaction can't strip; the class name
+            // (UnknownHost/Connect/Timeout) is diagnostic without the host. Other errors keep their message.
+            error?.let { put("error", if (it is IOException) it::class.java.simpleName else (it.message ?: it::class.java.simpleName)) }
             putAll(extra)
         }
         diagnostics.record(RefreshDiagnosticEvent(type, type.name, metadata))
@@ -212,6 +216,8 @@ class DefaultPlaylistRefresher(
             return PlaylistRefreshOutcome(provider.id, success = false, epgSourceIds = emptyList(), skipped = true)
         }
 
+        // #13: capture the pre-refresh status so a cancellation can restore it (else the provider is stuck at REFRESHING).
+        val priorStatus = provider.status
         try {
             providerRepository.setProviderStatus(provider.id, ProviderStatus.Refreshing)
             return runCatching {
@@ -228,9 +234,14 @@ class DefaultPlaylistRefresher(
                     logMetadata = summary.logMetadata,
                 )
             }.getOrElse { error ->
-                // A cancelled refresh (worker stopped) is not a provider error — propagate without
-                // overwriting the status, so the provider isn't left marked as failed on shutdown.
-                if (error is CancellationException) throw error
+                if (error is CancellationException) {
+                    // #13: a cancelled refresh (worker stop / ~10-min limit / OS kill) must not leave the
+                    // provider stuck at REFRESHING. Restore the pre-refresh status; NonCancellable shields the
+                    // DB write because the scope is already cancelling.
+                    withContext(NonCancellable) { providerRepository.setProviderStatus(provider.id, priorStatus) }
+                    throw error
+                }
+                // Non-cancellation error: reflect it as the provider status.
                 providerRepository.setProviderStatus(provider.id, error.toProviderStatus())
                 throw error
             }
