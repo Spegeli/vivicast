@@ -56,11 +56,21 @@ fun VivicastReorderList(
     var moveTick by remember(items) { mutableIntStateOf(0) }
     val requesters = remember(items) { items.associate { it.id to FocusRequester() } }
     val listState = rememberLazyListState()
+    // #27: NOT keyed on items, so they survive the post-drop re-emit. Latch the initial-open focus so
+    // that re-emit doesn't re-run focus(first) and yank focus to the top; re-focus the dropped row instead.
+    var initialFocusDone by remember { mutableStateOf(false) }
+    var lastDroppedId by remember { mutableStateOf<String?>(null) }
 
-    // Focus the first row on open so the list is immediately interactable (host is a dialog).
+    // On open focus the first row (host is a dialog); after a drop, focus the row that was just dropped.
     LaunchedEffect(items) {
         withFrameNanos {}
-        items.firstOrNull()?.let { requesters[it.id]?.runCatching { requestFocus() } }
+        val dropped = lastDroppedId?.takeIf { id -> items.any { it.id == id } }
+        val focusId = dropped ?: items.firstOrNull()?.id?.takeUnless { initialFocusDone }
+        lastDroppedId = null
+        if (focusId != null) {
+            requesters[focusId]?.runCatching { requestFocus() }
+            initialFocusDone = true
+        }
     }
     // After a move: keep the picked row on screen (scroll to the edge it approaches, so it stays visible in
     // a long list) and re-request its focus next frame (keyed items usually retain focus on their own).
@@ -93,7 +103,7 @@ fun VivicastReorderList(
     fun toggle(id: String) {
         when (pickedId) {
             null -> { snapshotAtPickup = order; pickedId = id }
-            id -> { pickedId = null; snapshotAtPickup = null; onReorder(order.map { it.id }) }
+            id -> { pickedId = null; snapshotAtPickup = null; lastDroppedId = id; onReorder(order.map { it.id }) }
             else -> Unit
         }
     }

@@ -10,6 +10,11 @@
 > Green: `assembleDebug`, `detekt`, unit tests, androidTest compile. NOT yet driven on an emulator.
 > Companion to `plans/d10-channel-group-management.md` (this is the reorder-UX piece D10 flagged as
 > "No precedent in the app"). Also the missing UI for EPG-source priority ordering.
+>
+> **P2 update (audit #27):** fixed the post-drop focus yank in `VivicastReorder.kt` — `LaunchedEffect(items)`
+> re-fired `focus(items.first())` on the caller's re-emit after a drop, snapping D-pad focus to the top row.
+> Now the initial-open focus is latched (a non-`items`-keyed flag) and the just-dropped id is re-focused on
+> the re-emit. Folds into this plan's still-pending emulator verification of the reorder component.
 
 ## Goal
 
