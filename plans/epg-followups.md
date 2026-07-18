@@ -1,7 +1,8 @@
 # EPG follow-ups: winner-aware search · no-retry-on-deterministic · stage hygiene · Xtream server-change
 
-> Status: **IMPLEMENTED 2026-07-18 (uncommitted).** All 4 fixes + Fix 5 (deactivated/deleted-source skip,
-> found mid-work) done + gates green (assembleDebug,
+> Status: **COMPLETED 2026-07-18 (committed + pushed, cfa8714).** All 4 fixes + Fix 5
+> (deactivated/deleted-source skip, found mid-work) done; also repaired 30 pre-existing red EPG
+> androidTests. Gates green (assembleDebug,
 > testDebugUnitTest incl. the new AutoXtream server-change test, detekt). Fix 1 winner-search + Fix 4
 > unit test pass; RoomEpgRepositoryTest (20) + RoomMediaRepositoryTest (10) pass on the API-36 emulator.
 > **Also repaired pre-existing androidTest breakage** (red on main since the winner-query fc2cb03 +
