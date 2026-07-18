@@ -35,7 +35,7 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 ## Current Architecture Status
 
 P0–P3 architecture remediation is **completed** — see `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`.
-The resulting invariants are the **Mandatory Architecture Rules** below; the Room schema is at **v19**.
+The resulting invariants are the **Mandatory Architecture Rules** below; the Room schema is at **v20**.
 Per-feature history lives in git and the completion report — not in this file.
 
 ## Active App Architecture References
@@ -112,7 +112,7 @@ app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPrefer
 core/
   cache/      ← M3uStreamReferenceStore, MediaCache
   common/     ← AppResult
-  database/   ← Room DB (v19), DAOs (Provider, Catalog, CategorySettings, EPG, Favorites, Playback,
+  database/   ← Room DB (v20), DAOs (Provider, Catalog, CategorySettings, EPG, Favorites, Playback,
                 Search); staged delta-merge import infra (ChunkedTransaction, SyncFingerprint, *_stage entities)
   datastore/  ← UserPreferencesStore
   designsystem/ ← VivicastTheme + grouped components: VivicastSurfaces / Layout / Badges / Panels /
