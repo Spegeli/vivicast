@@ -71,6 +71,10 @@ hygiene, minor robustness. Full evidence in `CODE_REVIEW.md` (`CR #n`). **No cod
 **Files:** `feature/movies/.../MoviesViewModel.kt` (L97/229) (+ identical LiveTv/Series).
 **Fix (optional):** consolidate source flows into one `combine(...)` → single UiState, or conflate `rebuild()`. Acceptable to leave as-is (single-threaded, StateFlow dedups, self-heals). Lowest priority. **Ref:** CR #20.
 
+### `#35` (Low, from the P2-review regression pass — not in CR) — `isTerminalRefreshError` treats transient HTTP 408/425 as terminal
+**Files:** `worker/.../RefreshExecution.kt` (`isTerminalHttpStatus`, `this in 400..499 && this != 429`).
+**Fix:** exclude **408** (Request Timeout) and optionally **425** (Too Early) / **423** (Locked) from the terminal set, so a provider returning 408 under load gets WorkManager backoff-retry instead of an immediate `Failure` for that cycle. Bounded impact (the next *scheduled* refresh still runs), hence Low. Optionally reconsider whether the broad `IllegalArgumentException` terminal catch is too wide. Surfaced by the P1/P2 post-implementation adversarial regression review (2026-07-19).
+
 ---
 
 ## Unused preference
