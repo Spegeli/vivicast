@@ -20,7 +20,7 @@ interface EpgSourceRepository : EpgRepository {
 
     suspend fun deleteSource(sourceId: String)
 
-    suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int)
+    suspend fun linkSourceToProvider(providerId: String, epgSourceId: String)
 
     suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String)
 
@@ -81,8 +81,18 @@ class SecureEpgSourceRepository(
         source?.sourceConfigKey?.let { secureValueStore.delete(SecureKey(it)) }
     }
 
-    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) {
-        delegate.linkEpgSourceToProvider(providerId, epgSourceId, priority)
+    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String) {
+        require(providerId.isNotBlank()) { "Provider ID must not be blank." }
+        require(epgSourceId.isNotBlank()) { "EPG source ID must not be blank." }
+        database.withTransaction {
+            val links = database.epgDao().getProviderEpgSources(providerId)
+            // #32: compute priority atomically from a fresh DB read (not a stale UI snapshot), so two quick
+            // link presses can't compute the same value and collide on UNIQUE(providerId, priority) — which
+            // previously dropped the second link silently. Already linked → keep its slot; else max+1.
+            val priority = links.firstOrNull { it.epgSourceId == epgSourceId }?.priority
+                ?: ((links.maxOfOrNull { it.priority } ?: 0) + 1)
+            delegate.linkEpgSourceToProvider(providerId, epgSourceId, priority)
+        }
     }
 
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {

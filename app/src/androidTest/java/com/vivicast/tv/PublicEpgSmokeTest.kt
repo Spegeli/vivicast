@@ -65,7 +65,7 @@ class PublicEpgSmokeTest {
                 isActive = true,
             ),
         )
-        appContainer.epgSourceRepository.linkSourceToProvider(provider.id, source.id, priority = 1)
+        appContainer.epgSourceRepository.linkSourceToProvider(provider.id, source.id)
 
         assertEquals(
             RefreshWorkerResult.Success,

@@ -231,27 +231,32 @@ class RoomEpgRepository(
 
         val channelById = channels.associateBy { it.id }
         val sourceStableKey = source.stableKey
-        val externalChannelToLocal = (manualMappings + autoMappings)
-            .associateBy { it.epgChannelId }
-            .mapValues { (_, mapping) -> mapping.channelId }
+        // #31: one-to-many — several local channels can share a tvg-id (HD/SD variants); map programmes to
+        // ALL of them, not just the last associateBy winner.
+        val externalChannelToLocals: Map<String, List<String>> = (manualMappings + autoMappings)
+            .groupBy({ it.epgChannelId }, { it.channelId })
 
         // Build the staged programme rows (mapped to a local channel; unmapped programmes are skipped, as
         // before). Deterministic ids come out final, so no id rewrite is needed at merge time.
         var skippedUnmappedPrograms = 0
         val stageRows = ArrayList<EpgProgramStageEntity>(document.programs.size)
         document.programs.forEach { program ->
-            val channel = externalChannelToLocal[program.channelId]?.let(channelById::get)
-            if (channel == null) {
+            val localChannels = externalChannelToLocals[program.channelId]
+                ?.mapNotNull(channelById::get)
+                .orEmpty()
+            if (localChannels.isEmpty()) {
                 skippedUnmappedPrograms += 1
             } else {
-                stageRows += program.toEntity(
-                    providerId = providerId,
-                    epgSourceId = epgSourceId,
-                    localChannel = channel,
-                    sourceStableKey = sourceStableKey,
-                    now = now,
-                    timeShiftMillis = timeShiftMillis,
-                ).toStage()
+                localChannels.forEach { channel ->
+                    stageRows += program.toEntity(
+                        providerId = providerId,
+                        epgSourceId = epgSourceId,
+                        localChannel = channel,
+                        sourceStableKey = sourceStableKey,
+                        now = now,
+                        timeShiftMillis = timeShiftMillis,
+                    ).toStage()
+                }
             }
         }
 
@@ -409,11 +414,11 @@ class RoomEpgRepository(
         val shiftedStart = startTimeMillis + timeShiftMillis
         val shiftedEnd = endTimeMillis + timeShiftMillis
         return EpgProgramEntity(
-            id = epgProgramId(providerId, epgSourceId, channelId, shiftedStart, shiftedEnd, title),
+            id = epgProgramId(providerId, epgSourceId, channelId, localChannel.id, shiftedStart, shiftedEnd, title),
             providerId = providerId,
             channelId = localChannel.id,
             epgSourceId = epgSourceId,
-            stableKey = epgProgramStableKey(sourceStableKey, channelId, shiftedStart, shiftedEnd, title),
+            stableKey = epgProgramStableKey(sourceStableKey, channelId, localChannel.id, shiftedStart, shiftedEnd, title),
             epgChannelId = channelId,
             title = title,
             normalizedTitle = title.normalize(),
@@ -445,24 +450,28 @@ class RoomEpgRepository(
         fun epgMappingId(providerId: String, epgSourceId: String, channelId: String): String =
             "$providerId:epg-map:${stableHash("$epgSourceId:$channelId")}"
 
+        // #31: localChannelId is part of the key so two local channels sharing a tvg-id (HD/SD) get distinct
+        // programme rows instead of colliding on the UNIQUE (providerId, epgSourceId, epgChannelId, stableKey).
         fun epgProgramId(
             providerId: String,
             epgSourceId: String,
             epgChannelId: String,
+            localChannelId: String,
             startTime: Long,
             endTime: Long,
             title: String,
         ): String =
-            "$providerId:epg-program:${stableHash("$epgSourceId:$epgChannelId:$startTime:$endTime:$title")}"
+            "$providerId:epg-program:${stableHash("$epgSourceId:$epgChannelId:$localChannelId:$startTime:$endTime:$title")}"
 
         fun epgProgramStableKey(
             epgSourceStableKey: String,
             epgChannelId: String,
+            localChannelId: String,
             startTime: Long,
             endTime: Long,
             title: String,
         ): String =
-            stableHash("$epgSourceStableKey:$epgChannelId:$startTime:$endTime:$title")
+            stableHash("$epgSourceStableKey:$epgChannelId:$localChannelId:$startTime:$endTime:$title")
 
         fun epgChannelStableKey(epgChannelId: String): String =
             stableHash(epgChannelId)

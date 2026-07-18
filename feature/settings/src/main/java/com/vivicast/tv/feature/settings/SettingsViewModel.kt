@@ -319,8 +319,8 @@ internal class SettingsViewModel(
     suspend fun deleteEpgSource(sourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.deleteSource(sourceId) }
 
-    suspend fun linkEpgSourceToProvider(providerId: String, sourceId: String, priority: Int): Result<Unit> =
-        runCatching { epgSourceRepository.linkSourceToProvider(providerId, sourceId, priority) }
+    suspend fun linkEpgSourceToProvider(providerId: String, sourceId: String): Result<Unit> =
+        runCatching { epgSourceRepository.linkSourceToProvider(providerId, sourceId) }
 
     suspend fun unlinkEpgSourceFromProvider(providerId: String, sourceId: String): Result<Unit> =
         runCatching { epgSourceRepository.unlinkSourceFromProvider(providerId, sourceId) }

@@ -339,10 +339,10 @@ class SettingsViewModelTest {
         val epgRepo = FakeEpgSourceRepository()
         val vm = newViewModel(scope, FakeUserPreferencesStore(), epgRepo = epgRepo)
 
-        vm.linkEpgSourceToProvider("p1", "s1", 2)
+        vm.linkEpgSourceToProvider("p1", "s1")
         vm.unlinkEpgSourceFromProvider("p1", "s1")
 
-        assertEquals(Triple("p1", "s1", 2), epgRepo.linkCall)
+        assertEquals("p1" to "s1", epgRepo.linkCall)
         assertEquals("p1" to "s1", epgRepo.unlinkCall)
         scope.cancel()
     }
@@ -703,7 +703,7 @@ private class FakeEpgSourceRepository(
         private set
     var deletedSourceId: String? = null
         private set
-    var linkCall: Triple<String, String, Int>? = null
+    var linkCall: Pair<String, String>? = null
         private set
     var unlinkCall: Pair<String, String>? = null
         private set
@@ -747,8 +747,8 @@ private class FakeEpgSourceRepository(
         deletedSourceId = sourceId
     }
 
-    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) {
-        linkCall = Triple(providerId, epgSourceId, priority)
+    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String) {
+        linkCall = providerId to epgSourceId
     }
 
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) {

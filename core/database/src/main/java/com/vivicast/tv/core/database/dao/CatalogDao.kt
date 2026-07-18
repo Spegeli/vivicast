@@ -704,8 +704,12 @@ data class ChannelLogoCandidatesRow(
 private const val EPG_ICON_SUBQUERY =
     "(SELECT ec.iconUrl FROM epg_channel_mappings m " +
         "JOIN epg_channels ec ON ec.epgSourceId = m.epgSourceId AND ec.remoteId = m.epgChannelId " +
-        "WHERE m.channelId = c.id AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
-        "ORDER BY m.isManual DESC LIMIT 1)"
+        // #33: mirror the program-winner (EpgDao.observeProgramsForChannel) — only active sources, ordered by
+        // manual-then-priority — so the logo comes from the same source that wins the guide.
+        "INNER JOIN epg_sources s ON s.id = m.epgSourceId " +
+        "INNER JOIN provider_epg_sources pes ON pes.providerId = m.providerId AND pes.epgSourceId = m.epgSourceId " +
+        "WHERE m.channelId = c.id AND s.isActive = 1 AND ec.iconUrl IS NOT NULL AND TRIM(ec.iconUrl) != '' " +
+        "ORDER BY m.isManual DESC, pes.priority ASC LIMIT 1)"
 
 // "Any remote logo" for channel `c`: the playlist's own logo, else the mapped EPG <icon>. Order-AGNOSTIC
 // on purpose — it feeds only the display produceState key + the logoMissing heuristic. The user-ordered

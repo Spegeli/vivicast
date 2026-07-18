@@ -52,7 +52,7 @@ class AutoXtreamEpgSourceUseCase(
             ).id
         }
 
-        repository.linkSourceToProvider(providerId, sourceId, nextPriority(providerId, sourceId))
+        repository.linkSourceToProvider(providerId, sourceId)
 
         if (match == null) {
             // A NEW source was created — either first-time auto-EPG, or the server changed (same account,
@@ -70,14 +70,6 @@ class AutoXtreamEpgSourceUseCase(
                 .forEach { repository.unlinkSourceFromProvider(providerId, it.epgSourceId) }
         }
         return AutoXtreamEpgResult(epgSourceId = sourceId, reused = match != null)
-    }
-
-    private suspend fun nextPriority(providerId: String, sourceId: String): Int {
-        val links = repository.observeProviderEpgSources(providerId).first()
-        // Already linked (rare reuse case): keep its slot. Else append after the current max — max+1, not
-        // count+1, so a non-contiguous priority set can't collide with the unique (providerId, priority).
-        links.firstOrNull { it.epgSourceId == sourceId }?.let { return it.priority }
-        return (links.maxOfOrNull { it.priority } ?: 0) + 1
     }
 
     private companion object {

@@ -202,7 +202,7 @@ private object EmptyEpgSourceRepository : EpgSourceRepository {
     override suspend fun saveSource(request: EpgSourceEditRequest): EpgSource = error("No EPG source in this test.")
     override suspend fun getSourceUrl(sourceId: String): String? = null
     override suspend fun deleteSource(sourceId: String) = Unit
-    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) = Unit
+    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String) = Unit
     override suspend fun unlinkSourceFromProvider(providerId: String, epgSourceId: String) = Unit
     override suspend fun reorderProviderEpgSources(providerId: String, orderedSourceIds: List<String>) = Unit
 }

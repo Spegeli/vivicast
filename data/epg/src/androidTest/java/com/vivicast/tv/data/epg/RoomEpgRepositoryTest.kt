@@ -545,7 +545,7 @@ class RoomEpgRepositoryTest {
                 isActive = true,
             ),
         )
-        sourceRepository.linkSourceToProvider(PROVIDER_ID, source.id, priority = 1)
+        sourceRepository.linkSourceToProvider(PROVIDER_ID, source.id)
 
         assertEquals("epg-source:epg-source-1:url", source.sourceConfigKey)
         assertEquals("https://epg.example/file.xml?token=secret", secureValueStore.values[source.sourceConfigKey])
@@ -585,7 +585,7 @@ class RoomEpgRepositoryTest {
                     url = "https://epg.example/$id.xml",
                 ),
             )
-            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id)
         }
 
         sourceRepository.unlinkSourceFromProvider(PROVIDER_ID, "three")
@@ -601,7 +601,7 @@ class RoomEpgRepositoryTest {
         val sourceRepository = SecureEpgSourceRepository(database = database, secureValueStore = secureValueStore, delegate = repository)
         listOf("one", "two", "three").forEachIndexed { index, id ->
             sourceRepository.saveSource(EpgSourceEditRequest(sourceId = id, name = "EPG $id", url = "https://epg.example/$id.xml"))
-            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id)
         }
 
         sourceRepository.reorderProviderEpgSources(PROVIDER_ID, listOf("three", "one", "two"))
@@ -617,7 +617,7 @@ class RoomEpgRepositoryTest {
         val sourceRepository = SecureEpgSourceRepository(database = database, secureValueStore = secureValueStore, delegate = repository)
         listOf("s1", "s2").forEachIndexed { index, id ->
             sourceRepository.saveSource(EpgSourceEditRequest(sourceId = id, name = "EPG $id", url = "https://epg.example/$id.xml"))
-            sourceRepository.linkSourceToProvider(PROVIDER_ID, id, priority = index + 1)
+            sourceRepository.linkSourceToProvider(PROVIDER_ID, id)
         }
         seedMapping(PROVIDER_ID, "chA", "s1", manual = false)
         seedMapping(PROVIDER_ID, "chA", "s2", manual = false)

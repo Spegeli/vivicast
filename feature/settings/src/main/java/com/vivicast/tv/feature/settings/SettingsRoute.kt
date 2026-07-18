@@ -481,9 +481,10 @@ fun SettingsRoute(
                             onToggleEpgLink = { providerId, sourceId, link ->
                                 routeScope.launch {
                                     if (link) {
-                                        val priority = (settingsUiState.providerEpgLinks.maxOfOrNull { it.priority } ?: 0) + 1
-                                        viewModel.linkEpgSourceToProvider(providerId, sourceId, priority).onSuccess {
-                                            onLogEpgEvent("source_linked", mapOf("target" to providerId, "source" to sourceId, "priority" to priority.toString()))
+                                        // #32: priority is computed atomically in the repo (fresh DB read), not from
+                                        // this StateFlow snapshot, so two quick presses can't collide + drop a link.
+                                        viewModel.linkEpgSourceToProvider(providerId, sourceId).onSuccess {
+                                            onLogEpgEvent("source_linked", mapOf("target" to providerId, "source" to sourceId))
                                         }
                                     } else {
                                         viewModel.unlinkEpgSourceFromProvider(providerId, sourceId).onSuccess {

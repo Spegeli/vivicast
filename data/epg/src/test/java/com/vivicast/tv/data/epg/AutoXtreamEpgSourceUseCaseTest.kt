@@ -67,7 +67,7 @@ class AutoXtreamEpgSourceUseCaseTest {
         val repo = FakeRepo()
         // Old-server auto-EPG source for the same account, already linked to p1.
         repo.seed(id = "old", name = "alice", url = url("old-host", "alice", "pw"))
-        repo.linkSourceToProvider("p1", "old", priority = 1)
+        repo.linkSourceToProvider("p1", "old")
 
         val result = AutoXtreamEpgSourceUseCase(repo).ensureFor("p1", "alice", url("new-host", "alice", "pw"))
 
@@ -131,7 +131,9 @@ private class FakeRepo : EpgSourceRepository {
         return saved
     }
 
-    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String, priority: Int) {
+    override suspend fun linkSourceToProvider(providerId: String, epgSourceId: String) {
+        val priority = links.firstOrNull { it.providerId == providerId && it.epgSourceId == epgSourceId }?.priority
+            ?: ((links.filter { it.providerId == providerId }.maxOfOrNull { it.priority } ?: 0) + 1)
         links.removeAll { it.providerId == providerId && it.epgSourceId == epgSourceId }
         links.add(
             ProviderEpgSource(
