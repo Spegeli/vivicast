@@ -56,6 +56,7 @@ import com.vivicast.tv.data.playback.PlaybackRequestFactory
 import com.vivicast.tv.data.playback.PlaybackStreamResolver
 import com.vivicast.tv.data.playback.RoomPlaybackRepository
 import com.vivicast.tv.data.playback.StreamReachabilityProbe
+import com.vivicast.tv.core.security.KeystoreCipher
 import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import com.vivicast.tv.data.provider.ProviderConnectionResponseException
 import com.vivicast.tv.data.provider.ProviderInvalidCredentialsException
@@ -151,7 +152,7 @@ class AppContainer(
     // Durable per-provider store for File-mode M3U playlist content. Shared by the provider repository
     // (read/write/delete) and backup export/restore (embed in / restore from the encrypted payload).
     private val m3uFileSourceStore: DiskM3uFileSourceStore by lazy {
-        DiskM3uFileSourceStore(File(appContext.filesDir, "m3u_sources"))
+        DiskM3uFileSourceStore(File(appContext.filesDir, "m3u_sources"), KeystoreCipher())
     }
 
     val pinSecurityStateStore: PinSecurityStateStore by lazy {

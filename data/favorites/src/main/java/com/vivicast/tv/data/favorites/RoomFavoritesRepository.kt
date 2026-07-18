@@ -51,7 +51,8 @@ class RoomFavoritesRepository(
                 mediaId = mediaId,
                 mediaStableKey = mediaStableKey(mediaId),
                 isPending = false,
-                sortOrder = now.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                // #9: real insertion-order key (max+1 per provider/mediaType group), not a constant epoch-clamp.
+                sortOrder = favoritesDao.maxSortOrder(providerId, mediaType.storageValue) + 1,
                 createdAt = now,
                 updatedAt = now,
             ),

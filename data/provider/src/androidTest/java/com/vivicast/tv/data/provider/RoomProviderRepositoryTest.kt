@@ -17,6 +17,7 @@ import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.FavoriteEntity
 import com.vivicast.tv.core.database.model.PlaybackProgressEntity
 import com.vivicast.tv.core.database.model.ProviderEpgSourceEntity
+import com.vivicast.tv.core.security.KeystoreCipher
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.domain.model.ProviderStatus
@@ -50,7 +51,7 @@ class RoomProviderRepositoryTest {
             .build()
         secureValueStore = FakeSecureValueStore()
         m3uSourceDir = File(context.cacheDir, "m3u_sources_test").also { it.deleteRecursively() }
-        m3uFileSourceStore = DiskM3uFileSourceStore(m3uSourceDir)
+        m3uFileSourceStore = DiskM3uFileSourceStore(m3uSourceDir, KeystoreCipher())
         m3uStreamReferenceStore = FakeM3uStreamReferenceStore()
         repository = RoomProviderRepository(database, secureValueStore, m3uFileSourceStore, m3uStreamReferenceStore) { now }
     }
@@ -125,7 +126,7 @@ class RoomProviderRepositoryTest {
         val reopened = RoomProviderRepository(
             database,
             secureValueStore,
-            DiskM3uFileSourceStore(m3uSourceDir),
+            DiskM3uFileSourceStore(m3uSourceDir, KeystoreCipher()),
             FakeM3uStreamReferenceStore(),
         ) { now }
         assertEquals(content, reopened.getProviderM3uInlineContent(result.provider.id))

@@ -29,6 +29,7 @@ import com.vivicast.tv.core.security.PinSecurityState
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureKey
 import com.vivicast.tv.core.security.SecureValueStore
+import com.vivicast.tv.core.security.KeystoreCipher
 import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.domain.model.Provider
@@ -51,6 +52,7 @@ class StandardBackupTest {
     private fun backupM3uStore(): DiskM3uFileSourceStore =
         DiskM3uFileSourceStore(
             File(ApplicationProvider.getApplicationContext<Context>().cacheDir, "m3u_backup_test"),
+            KeystoreCipher(),
         )
 
     @Test
@@ -594,8 +596,8 @@ class StandardBackupTest {
         val targetSecureStore = FakeSecureValueStore()
         val sourceDir = File(context.cacheDir, "m3u_roundtrip_source").also { it.deleteRecursively() }
         val targetDir = File(context.cacheDir, "m3u_roundtrip_target").also { it.deleteRecursively() }
-        val sourceStore = DiskM3uFileSourceStore(sourceDir)
-        val targetStore = DiskM3uFileSourceStore(targetDir)
+        val sourceStore = DiskM3uFileSourceStore(sourceDir, KeystoreCipher())
+        val targetStore = DiskM3uFileSourceStore(targetDir, KeystoreCipher())
         val content = "#EXTM3U\n#EXTINF:-1,ARD\nhttps://stream.example/ard.m3u8"
         try {
             // File-mode provider: no m3u_url secret, raw content lives only on disk.

@@ -30,6 +30,9 @@ class PlaybackProgressRecorder(
         if (request.mediaType == PlaybackMediaType.Channel) {
             if (state.status != PlaybackStatus.Playing && state.status != PlaybackStatus.Paused) return
             val now = clock()
+            // #8: throttle channel-history writes to the movie/episode 10s cadence (record() runs every ~1s);
+            // the decision lives in a helper to keep record()'s cyclomatic complexity under the detekt gate.
+            if (!automaticProgressSaveTimes.shouldWriteChannelHistory(request.playbackId, now, forceSave, state.status)) return
             playbackRepository.saveChannelHistory(
                 ChannelHistory(
                     id = channelHistoryId(request.providerId, request.mediaId),
@@ -41,6 +44,7 @@ class PlaybackProgressRecorder(
                     channelStableKey = request.mediaStableKey,
                 ),
             )
+            automaticProgressSaveTimes[request.playbackId] = now
             return
         }
 
@@ -93,6 +97,19 @@ private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId
 
 private fun channelHistoryId(providerId: String, channelId: String): String =
     "$providerId:history:channel:$channelId"
+
+// #8: channel history is written at most every AUTOMATIC_PROGRESS_SAVE_INTERVAL_MILLIS, but always on a
+// pause/close (force) so the final position/watchedAt is captured. Kept out of record() for its complexity budget.
+private fun MutableMap<String, Long>.shouldWriteChannelHistory(
+    playbackId: String,
+    now: Long,
+    forceSave: Boolean,
+    status: PlaybackStatus,
+): Boolean {
+    val force = forceSave || status == PlaybackStatus.Paused
+    val lastSaved = this[playbackId]
+    return force || lastSaved == null || now - lastSaved >= AUTOMATIC_PROGRESS_SAVE_INTERVAL_MILLIS
+}
 
 private fun PlaybackMediaType.toDomainProgressMediaType(): MediaType? =
     when (this) {

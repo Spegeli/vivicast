@@ -42,6 +42,11 @@ interface FavoritesDao {
     )
     suspend fun getFavorites(): List<FavoriteEntity>
 
+    // #9: next insertion-order sort key for a (provider, mediaType) group. 0 when the group is empty → the
+    // first favorite gets 1. Keeps observeFavorites' `sortOrder ASC` in real insertion order (oldest first).
+    @Query("SELECT COALESCE(MAX(sortOrder), 0) FROM favorites WHERE providerId = :providerId AND mediaType = :mediaType")
+    suspend fun maxSortOrder(providerId: String, mediaType: String): Int
+
     @Upsert
     suspend fun upsertFavorite(favorite: FavoriteEntity)
 
