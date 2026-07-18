@@ -34,6 +34,9 @@ class RoomEpgRepository(
     override fun observeEpgSources(): Flow<List<EpgSource>> =
         epgDao.observeEpgSources().map { sources -> sources.map { it.toDomain() } }
 
+    override suspend fun getEpgSources(): List<EpgSource> =
+        epgDao.getEpgSources().map { it.toDomain() }
+
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         epgDao.observeProviderEpgSources(providerId).map { sources -> sources.map { it.toDomain() } }
 

@@ -281,6 +281,7 @@ private class FakeMediaRepository : MediaRepository {
 
 private class FakeEpgRepository : EpgRepository {
     override fun observeEpgSources(): Flow<List<EpgSource>> = flowOf(emptyList())
+    override suspend fun getEpgSources(): List<EpgSource> = emptyList()
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> = flowOf(emptyList())
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = flowOf(TEST_CHANNELS)
 

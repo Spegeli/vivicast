@@ -701,6 +701,7 @@ private class FakeEpgSourceRepository(
         private set
 
     override fun observeEpgSources(): Flow<List<EpgSource>> = sourcesFlow
+    override suspend fun getEpgSources(): List<EpgSource> = sourcesFlow.value
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> =
         flowOf(links[providerId] ?: emptyList())
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> =

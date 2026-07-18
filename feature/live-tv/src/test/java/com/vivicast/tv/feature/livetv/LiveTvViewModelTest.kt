@@ -287,6 +287,7 @@ private class FakeEpgRepository(
     ): Flow<List<EpgProgram>> = flowOf(programsByChannel[channelId].orEmpty())
 
     override fun observeEpgSources(): Flow<List<EpgSource>> = emptyFlow()
+    override suspend fun getEpgSources(): List<EpgSource> = emptyList()
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> = emptyFlow()
     override fun observeChannelsForProvider(providerId: String): Flow<List<Channel>> = emptyFlow()
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> = emptyFlow()

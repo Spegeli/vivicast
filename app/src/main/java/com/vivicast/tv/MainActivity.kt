@@ -1042,6 +1042,16 @@ private fun VivicastApp(
                     appContainer.diagnosticsStore.log("refresh", "playlist_refresh_triggered", mapOf("target" to providerId))
                     appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(providerId, restart = true)
                 },
+                onXtreamProviderSaved = { providerId ->
+                    // Non-blocking + silent: probe the provider's companion xmltv.php and, if it serves a
+                    // usable guide, create/reuse + link an EPG source (named after the username), then refresh
+                    // it. Failures are ignored — the playlist save already succeeded.
+                    scope.launch {
+                        appContainer.autoDetectXtreamEpg(providerId)?.let { sourceId ->
+                            appContainer.refreshWorkScheduler.enqueueEpgRefresh(sourceId)
+                        }
+                    }
+                },
                 onLogProviderSaved = { descriptor, switchedFrom ->
                     appContainer.diagnosticsStore.log(
                         "provider",

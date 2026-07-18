@@ -33,6 +33,7 @@ import com.vivicast.tv.core.security.AndroidKeystoreSecureValueStore
 import com.vivicast.tv.core.security.PinSecurityStateStore
 import com.vivicast.tv.core.security.SecureValueStore
 import com.vivicast.tv.core.security.SecureValuePinSecurityStateStore
+import com.vivicast.tv.data.epg.AutoXtreamEpgSourceUseCase
 import com.vivicast.tv.data.epg.EpgConnectionResponseException
 import com.vivicast.tv.data.epg.EpgConnectionTestResult
 import com.vivicast.tv.data.epg.EpgImportRepository
@@ -58,6 +59,7 @@ import com.vivicast.tv.data.playback.StreamReachabilityProbe
 import com.vivicast.tv.data.provider.DiskM3uFileSourceStore
 import com.vivicast.tv.data.provider.ProviderConnectionResponseException
 import com.vivicast.tv.data.provider.ProviderInvalidCredentialsException
+import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderCreateRequest
 import com.vivicast.tv.data.provider.RoomProviderRepository
@@ -73,6 +75,7 @@ import com.vivicast.tv.iptv.xtream.DefaultXtreamParser
 import com.vivicast.tv.iptv.xtream.OkHttpXtreamTransport
 import com.vivicast.tv.iptv.xtream.XtreamCredentials
 import com.vivicast.tv.iptv.xtream.XtreamHttpException
+import com.vivicast.tv.iptv.xtream.xtreamXmltvUrl
 import com.vivicast.tv.iptv.xmltv.DefaultXmltvParser
 import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.worker.DefaultCacheCleaner
@@ -99,6 +102,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -470,6 +475,50 @@ class AppContainer(
                 onSuccess = { summary -> EpgConnectionTestResult(errorMessage = null, summary = summary) },
                 onFailure = { EpgConnectionTestResult(errorMessage = it.toEpgConnectionMessage(), summary = null) },
             )
+
+    private val autoXtreamEpgSourceUseCase: AutoXtreamEpgSourceUseCase by lazy {
+        AutoXtreamEpgSourceUseCase(epgSourceRepository)
+    }
+
+    // Serialises auto-detection so two quick Xtream saves can't both create a source for the same account
+    // (the dedup scan + create isn't atomic). Detection is short DB work, so the lock stays uncontended.
+    private val xtreamEpgDetectionMutex = Mutex()
+
+    /**
+     * After an Xtream provider is saved (new / type-switch / credential change), auto-detect its companion
+     * `xmltv.php` EPG: validate it serves usable XMLTV, then create-or-reuse + link an EPG source named
+     * after the username (dedup by server+username). Returns the source id to refresh, or null if nothing
+     * was reachable/written. Non-blocking + silent by contract — callers ignore failures.
+     */
+    suspend fun autoDetectXtreamEpg(providerId: String): String? = xtreamEpgDetectionMutex.withLock {
+        val credentials = providerRepository.getCredentials(providerId) as? ProviderCredentials.Xtream
+            ?: return null
+        val xmltvUrl = xtreamXmltvUrl(credentials.serverUrl, credentials.username, credentials.password)
+        // Full XMLTV validation (reuse the EPG-editor's check): only create a source when the endpoint
+        // actually serves a guide, so a valid account whose xmltv.php is disabled leaves no dead source.
+        // ponytail: this streams the whole guide, which the worker then re-downloads to import — downgrade
+        // to streamReachabilityProbe (status-only) if the double-fetch ever hurts on large feeds.
+        val summary = testEpgSourceConnection(xmltvUrl).summary
+        if (summary == null) {
+            // Opaque diagnostics only: provider id — never the URL/username (both private by guarantee).
+            diagnosticsStore.log("epg", "xtream_source_none", mapOf("target" to providerId))
+            return null
+        }
+        val result = runCatching { autoXtreamEpgSourceUseCase.ensureFor(providerId, credentials.username, xmltvUrl) }
+            .getOrNull() ?: return null
+        diagnosticsStore.log(
+            "epg",
+            "xtream_source_linked",
+            mapOf(
+                "target" to providerId,
+                "source" to result.epgSourceId,
+                "mode" to if (result.reused) "reused" else "created",
+                "channels" to summary.channels.toString(),
+                "programs" to summary.programs.toString(),
+            ),
+        )
+        result.epgSourceId
+    }
 
     private companion object {
         const val DEFAULT_MEDIA_CACHE_SIZE_BYTES = 500L * 1024L * 1024L

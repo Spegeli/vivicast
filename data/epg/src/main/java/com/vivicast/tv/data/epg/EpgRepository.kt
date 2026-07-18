@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 interface EpgRepository {
     fun observeEpgSources(): Flow<List<EpgSource>>
 
+    /** One-shot snapshot of all EPG sources, for dedup/uniqueness scans. Prefer [observeEpgSources] for UI. */
+    suspend fun getEpgSources(): List<EpgSource>
+
     fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>>
 
     fun observeChannelsForProvider(providerId: String): Flow<List<Channel>>

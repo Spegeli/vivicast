@@ -117,6 +117,10 @@ internal fun ProviderSettingsPanel(
     // Per-playlist refresh that RESTARTS an in-flight run (REPLACE): the save + the actions-menu
     // "Aktualisieren". Distinct from onProviderSaved (KEEP), which stays the refresh-all path. See R10.
     onRefreshProvider: (String) -> Unit = {},
+    // Fired once after a save that yields an Xtream provider whose source actually changed (new /
+    // type-switch / credential edit). App-hoisted: probes the companion xmltv.php EPG and auto-creates a
+    // linked EPG source. No-op for M3U or a pure metadata edit (unchanged credentials).
+    onXtreamProviderSaved: (String) -> Unit = {},
     // Group-management state + callbacks (from the ViewModel via SettingsRoute) for "Gruppen verwalten".
     groupsControls: ProviderGroupsControls = ProviderGroupsControls(),
     // Sanitized diagnostics on save: source descriptor ("M3U_URL"/"M3U_FILE"/"XTREAM") + the previous type
@@ -359,6 +363,9 @@ internal fun ProviderSettingsPanel(
     suspend fun persistEditor() {
         // Capture the chosen mode before onSuccess resets the editor (for the diagnostics descriptor).
         val savedMode = editor.m3uSourceMode
+        // Whether the Xtream/M3U source (credentials/URL) actually changed — drives auto-EPG detection.
+        // Captured before onSuccess resets the editor. A pure metadata edit leaves this false.
+        val sourceChanged = !editor.isSourceUnchanged
         val saveResult = if (editor.isEditing) {
             onUpdateProvider(editor.toUpdateRequest())
         } else {
@@ -378,6 +385,10 @@ internal fun ProviderSettingsPanel(
                 // Save RESTARTS the refresh (REPLACE) so the actions menu's group button stays gated until
                 // the import with the just-saved settings finishes. Refresh-all keeps its own KEEP path.
                 onRefreshProvider(saved.provider.id)
+                // Xtream + a changed source → auto-detect the companion xmltv.php EPG (App-hoisted, silent).
+                if (saved.provider.type == ProviderType.Xtream && sourceChanged) {
+                    onXtreamProviderSaved(saved.provider.id)
+                }
                 if (actionsProviderId != null) {
                     // Edited from the actions menu → drop the editor back to it (refresh now in flight).
                     // Park focus first, else it escapes to the top nav (jumps Home) as the editor is removed.

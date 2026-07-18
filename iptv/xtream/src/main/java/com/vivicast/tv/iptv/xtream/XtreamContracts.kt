@@ -41,6 +41,24 @@ data class XtreamCredentials(
     val userAgent: String? = null,
 )
 
+/**
+ * Builds the Xtream companion XMLTV guide URL `<server>/xmltv.php?username=…&password=…`, using the
+ * same base normalisation as [DefaultXtreamClient]'s `player_api.php` URL (`trim().trimEnd('/')`) so a
+ * path-prefixed base like `http://host:8080/xtream/` resolves to `…/xtream/xmltv.php`. Query values are
+ * URL-encoded by OkHttp. Most Xtream providers serve their EPG here; used to auto-detect it at save time.
+ */
+fun xtreamXmltvUrl(serverUrl: String, username: String, password: String): String {
+    require(serverUrl.isNotBlank()) { "Xtream server URL must not be blank." }
+    require(username.isNotBlank()) { "Xtream username must not be blank." }
+    require(password.isNotBlank()) { "Xtream password must not be blank." }
+    val normalized = serverUrl.trim().trimEnd('/')
+    return "$normalized/xmltv.php".toHttpUrl().newBuilder()
+        .addQueryParameter("username", username.trim())
+        .addQueryParameter("password", password.trim())
+        .build()
+        .toString()
+}
+
 class DefaultXtreamClient(
     private val transport: XtreamTransport,
 ) : XtreamClient {

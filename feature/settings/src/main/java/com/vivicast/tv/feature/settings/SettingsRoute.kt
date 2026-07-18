@@ -180,6 +180,8 @@ fun SettingsRoute(
     onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
     onProviderSaved: (String) -> Unit,
     onRefreshProvider: (String) -> Unit = {},
+    // App-hoisted: after an Xtream provider save with a changed source, auto-detect its xmltv.php EPG.
+    onXtreamProviderSaved: (String) -> Unit = {},
     onLogProviderSaved: (descriptor: String, switchedFromType: String?) -> Unit = { _, _ -> },
     // App-layer diagnostics loggers (feature/VM never touch DiagnosticsStore). Provider id / category id go
     // under a "target" key — both are opaque (random-UUID provider id; category id = "<providerId>:...:<hash>"),
@@ -421,6 +423,7 @@ fun SettingsRoute(
                             onPickM3uFile = onPickM3uFile,
                             onProviderSaved = onProviderSaved,
                             onRefreshProvider = onRefreshProvider,
+                            onXtreamProviderSaved = onXtreamProviderSaved,
                             groupsControls = ProviderGroupsControls(
                                 activeType = settingsUiState.manageGroupsType,
                                 groups = settingsUiState.manageGroups,
