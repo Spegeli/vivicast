@@ -605,6 +605,16 @@ interface CatalogDao {
     @Query("SELECT COUNT(*) FROM episodes_stage s WHERE s.providerId = :providerId AND NOT EXISTS (SELECT 1 FROM episodes l WHERE l.id = s.id)")
     suspend fun countNewEpisodesFromStage(providerId: String): Int
 
+    // Aggregate catalog totals (all providers) for the non-personal support export (#4).
+    @Query("SELECT COUNT(*) FROM channels")
+    suspend fun countAllChannels(): Int
+
+    @Query("SELECT COUNT(*) FROM movies")
+    suspend fun countAllMovies(): Int
+
+    @Query("SELECT COUNT(*) FROM series")
+    suspend fun countAllSeries(): Int
+
     // Startup crash-recovery: drop any staged rows a killed import left behind (self-heals on the next
     // import too, since staging clears before use). Provider-agnostic.
     @Query("DELETE FROM channels_stage")

@@ -188,7 +188,7 @@ fun StandardBackupDocument.toJson(): JSONObject =
         .put("searchHistory", JSONArray(searchHistory))
         .put("security", security.toJson())
 
-private fun UserPreferences.toStandardBackupJson(): JSONObject =
+internal fun UserPreferences.toStandardBackupJson(): JSONObject =
     JSONObject()
         .put("selectedProviderId", JSONObject.NULL)
         .put("general", JSONObject()
@@ -202,8 +202,7 @@ private fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("accentColor", appearance.accentColor.name)
             .put("transparency", appearance.transparency.name)
             .put("fontScale", appearance.fontScale.name)
-            .put("language", appearance.language.name)
-            .put("animationSpeed", appearance.animationSpeed.name))
+            .put("language", appearance.language.name))
         .put("playback", JSONObject()
             .put("bufferSize", playback.bufferSize.name)
             .put("audioDecoder", playback.audioDecoder.name)
@@ -252,7 +251,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
             transparency = appearance.enum("transparency", d.appearance.transparency),
             fontScale = appearance.enum("fontScale", d.appearance.fontScale),
             language = appearance.enum("language", d.appearance.language),
-            animationSpeed = appearance.enum("animationSpeed", d.appearance.animationSpeed),
         ),
         playback = PlaybackPreferences(
             bufferSize = playback.enum("bufferSize", d.playback.bufferSize),

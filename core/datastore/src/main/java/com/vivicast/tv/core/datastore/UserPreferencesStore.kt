@@ -47,7 +47,6 @@ data class AppearancePreferences(
     val transparency: TransparencyLevel = TransparencyLevel.Percent20,
     val fontScale: FontScalePreference = FontScalePreference.Medium,
     val language: LanguagePreference = LanguagePreference.System,
-    val animationSpeed: AnimationSpeedPreference = AnimationSpeedPreference.Normal,
 )
 
 data class PlaybackPreferences(
@@ -111,8 +110,6 @@ enum class TransparencyLevel {
 enum class FontScalePreference { Small, Medium, Large }
 
 enum class LanguagePreference { System, German, English }
-
-enum class AnimationSpeedPreference { Off, Slow, Normal, Fast }
 
 enum class BufferSizePreference { Off, Small, Medium, Large }
 

@@ -1,7 +1,6 @@
 package com.vivicast.tv.feature.settings
 
 import com.vivicast.tv.core.datastore.AccentColor
-import com.vivicast.tv.core.datastore.AnimationSpeedPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.DecoderPreference
@@ -65,22 +64,6 @@ internal fun SettingsFontScale.toDataStoreFontScalePreference(): FontScalePrefer
         SettingsFontScale.Small -> FontScalePreference.Small
         SettingsFontScale.Medium -> FontScalePreference.Medium
         SettingsFontScale.Large -> FontScalePreference.Large
-    }
-
-internal fun AnimationSpeedPreference.toSettingsAnimationSpeed(): SettingsAnimationSpeed =
-    when (this) {
-        AnimationSpeedPreference.Off -> SettingsAnimationSpeed.Off
-        AnimationSpeedPreference.Fast -> SettingsAnimationSpeed.Fast
-        AnimationSpeedPreference.Normal -> SettingsAnimationSpeed.Normal
-        AnimationSpeedPreference.Slow -> SettingsAnimationSpeed.Slow
-    }
-
-internal fun SettingsAnimationSpeed.toDataStoreAnimationSpeedPreference(): AnimationSpeedPreference =
-    when (this) {
-        SettingsAnimationSpeed.Off -> AnimationSpeedPreference.Off
-        SettingsAnimationSpeed.Fast -> AnimationSpeedPreference.Fast
-        SettingsAnimationSpeed.Normal -> AnimationSpeedPreference.Normal
-        SettingsAnimationSpeed.Slow -> AnimationSpeedPreference.Slow
     }
 
 internal fun BufferSizePreference.toSettingsBufferSizeMode(): PlaybackBufferSizeMode =

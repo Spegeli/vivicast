@@ -39,7 +39,6 @@ class DataStoreUserPreferencesStore(
                     transparency = preferences.enumValue(Keys.Transparency, TransparencyLevel.Percent20),
                     fontScale = preferences.enumValue(Keys.FontScale, FontScalePreference.Medium),
                     language = preferences.enumValue(Keys.Language, LanguagePreference.System),
-                    animationSpeed = preferences.enumValue(Keys.AnimationSpeed, AnimationSpeedPreference.Normal),
                 ),
                 playback = PlaybackPreferences(
                     bufferSize = preferences.enumValue(Keys.BufferSize, BufferSizePreference.Medium),
@@ -114,7 +113,6 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.Transparency] = appearance.transparency.name
             preferences[Keys.FontScale] = appearance.fontScale.name
             preferences[Keys.Language] = appearance.language.name
-            preferences[Keys.AnimationSpeed] = appearance.animationSpeed.name
         }
     }
 
@@ -206,7 +204,6 @@ class DataStoreUserPreferencesStore(
         val Transparency = stringPreferencesKey("transparency")
         val FontScale = stringPreferencesKey("font_scale")
         val Language = stringPreferencesKey("language")
-        val AnimationSpeed = stringPreferencesKey("animation_speed")
 
         val BufferSize = stringPreferencesKey("buffer_size")
         val AudioDecoder = stringPreferencesKey("audio_decoder")

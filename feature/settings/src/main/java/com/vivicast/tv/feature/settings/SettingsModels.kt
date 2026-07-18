@@ -14,7 +14,6 @@ data class AppearanceSettingsState(
     val accentColor: SettingsAccentColor = SettingsAccentColor.Blue,
     val transparency: SettingsTransparency = SettingsTransparency.Percent20,
     val fontScale: SettingsFontScale = SettingsFontScale.Medium,
-    val animationSpeed: SettingsAnimationSpeed = SettingsAnimationSpeed.Normal,
 )
 
 enum class SettingsLanguage {
@@ -45,13 +44,6 @@ enum class SettingsFontScale {
     Small,
     Medium,
     Large,
-}
-
-enum class SettingsAnimationSpeed {
-    Off,
-    Fast,
-    Normal,
-    Slow,
 }
 
 data class CacheSettingsState(

@@ -349,7 +349,6 @@ internal class SettingsViewModel(
             accentColor = appearance.accentColor.toDataStoreAccentColor(),
             transparency = appearance.transparency.toDataStoreTransparencyLevel(),
             fontScale = appearance.fontScale.toDataStoreFontScalePreference(),
-            animationSpeed = appearance.animationSpeed.toDataStoreAnimationSpeedPreference(),
         )
     }
 
@@ -418,7 +417,6 @@ private fun UserPreferences.toSettingsUiState(): SettingsUiState = SettingsUiSta
         accentColor = appearance.accentColor.toSettingsAccentColor(),
         transparency = appearance.transparency.toSettingsTransparency(),
         fontScale = appearance.fontScale.toSettingsFontScale(),
-        animationSpeed = appearance.animationSpeed.toSettingsAnimationSpeed(),
     ),
     playback = PlaybackSettingsState(
         bufferSize = playback.bufferSize.toSettingsBufferSizeMode(),

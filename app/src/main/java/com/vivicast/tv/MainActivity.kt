@@ -56,7 +56,6 @@ import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.AccentColor
-import com.vivicast.tv.core.datastore.AnimationSpeedPreference
 import com.vivicast.tv.core.datastore.BufferSizePreference
 import com.vivicast.tv.core.datastore.DecoderPreference
 import com.vivicast.tv.core.datastore.ExternalPlayerPreference
@@ -115,7 +114,6 @@ import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
 import com.vivicast.tv.feature.settings.SettingsAccentColor
-import com.vivicast.tv.feature.settings.SettingsAnimationSpeed
 import com.vivicast.tv.feature.settings.SettingsFontScale
 import com.vivicast.tv.feature.settings.SettingsLanguage
 import com.vivicast.tv.feature.settings.SettingsThemeMode
@@ -358,6 +356,7 @@ private fun VivicastApp(
     fun runStandardRestore(restore: PendingStandardRestore) {
         scope.launch {
             restoreInProgress = true
+            val appliedLanguageBefore = LocaleHelper.getSavedLanguage(context)
             val result = try {
                 if (restore.encryptedFull) {
                     appContainer.standardBackupRestorer.restoreFullPayload(jsonText = restore.jsonText)
@@ -395,6 +394,14 @@ private fun VivicastApp(
                         showParentalReactivationHint = true
                     }
                     Toast.makeText(context, context.getString(R.string.main_backup_restored), Toast.LENGTH_SHORT).show()
+                    // #15: restore writes the backed-up language to DataStore, but the active locale lives in
+                    // LocaleHelper's own prefs — sync it and recreate so the WHOLE UI switches, not just the
+                    // Settings label. Skip the recreate when the language is unchanged.
+                    val restoredLanguage = appContainer.userPreferencesStore.values.first().appearance.language.name
+                    if (restoredLanguage != appliedLanguageBefore) {
+                        LocaleHelper.save(context, restoredLanguage)
+                        activity?.recreate()
+                    }
                 }
                 is StandardBackupRestoreValidation.Invalid -> {
                     restoreInProgress = false

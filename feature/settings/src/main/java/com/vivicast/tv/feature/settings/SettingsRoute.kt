@@ -883,13 +883,6 @@ internal fun SettingsRowIcon(key: String, modifier: Modifier = Modifier) {
                 drawPath(p, color, style = stroke)
                 drawLine(color, Offset(w * 0.28f, h * 0.58f), Offset(w * 0.72f, h * 0.58f), strokeWidth = sw, cap = StrokeCap.Round)
             }
-            "animation" -> {
-                for (i in 0..3) {
-                    val x = w * (0.14f + i * 0.20f)
-                    drawArc(color, startAngle = if (i % 2 == 0) 180f else 0f, sweepAngle = 180f, useCenter = false,
-                        topLeft = Offset(x, h * 0.30f), size = Size(w * 0.20f, h * 0.40f), style = stroke)
-                }
-            }
             "key" -> {
                 drawCircle(color, radius = w * 0.22f, center = Offset(w * 0.30f, h * 0.42f), style = stroke)
                 drawLine(color, Offset(w * 0.48f, h * 0.58f), Offset(w * 0.86f, h * 0.58f), strokeWidth = sw, cap = StrokeCap.Round)

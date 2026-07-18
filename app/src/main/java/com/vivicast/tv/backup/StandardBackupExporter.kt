@@ -76,15 +76,29 @@ class StandardBackupExporter(
     suspend fun exportInternalSnapshotJson(indentSpaces: Int = 2): String =
         buildDocument().toJsonString(indentSpaces)
 
-    /** Support/settings export: readable JSON with settings + non-secret metadata, but no source URLs and
-     *  no secrets. Not a restorable backup — for sending to support. */
+    /** Support/settings export (PRD-11): settings + aggregate, non-personal metadata only. NO provider/EPG/
+     *  channel/title names, NO source URLs, NO secrets, and NO personal data (search history, favorites,
+     *  playback progress, channel history) — only counts, provider types, and settings. Not a restorable backup. */
     suspend fun exportSupportSettingsJson(indentSpaces: Int = 2): String {
-        val document = buildDocument()
-        val secretFree = document.copy(
-            providers = document.providers.map { it.copy(source = null) },
-            epgSources = document.epgSources.map { it.copy(url = null) },
-        )
-        return secretFree.toJsonString(indentSpaces)
+        val providers = database.providerDao().getProviders()
+        return JSONObject()
+            .put("exportMode", "SUPPORT")
+            .put("schemaVersion", STANDARD_BACKUP_SCHEMA_VERSION)
+            .put("exportedAtMillis", clock())
+            .put("preferences", userPreferencesStore.values.first().toStandardBackupJson())
+            .put(
+                "counts",
+                JSONObject()
+                    .put("providers", providers.size)
+                    .put("epgSources", database.epgDao().getEpgSources().size)
+                    .put("channels", database.catalogDao().countAllChannels())
+                    .put("movies", database.catalogDao().countAllMovies())
+                    .put("series", database.catalogDao().countAllSeries())
+                    .put("favorites", database.favoritesDao().getFavorites().size),
+            )
+            .put("providerTypes", JSONArray(providers.map { it.type }.distinct()))
+            .put("security", JSONObject().put("parentalProtectionWasActive", pinSecurityStateStore.read().hasPin))
+            .toString(indentSpaces)
     }
 
     suspend fun buildBackupPayloadJson(indentSpaces: Int = 2): String =

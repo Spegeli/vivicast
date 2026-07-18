@@ -139,15 +139,7 @@ private fun SettingsFontScale.label(): String = when (this) {
     SettingsFontScale.Large -> stringResource(R.string.font_large)
 }
 
-@Composable
-private fun SettingsAnimationSpeed.label(): String = when (this) {
-    SettingsAnimationSpeed.Off -> stringResource(R.string.value_off)
-    SettingsAnimationSpeed.Fast -> stringResource(R.string.anim_fast)
-    SettingsAnimationSpeed.Normal -> stringResource(R.string.anim_normal)
-    SettingsAnimationSpeed.Slow -> stringResource(R.string.anim_slow)
-}
-
-private enum class AppearancePicker { Theme, Accent, Transparency, Font, Animation }
+private enum class AppearancePicker { Theme, Accent, Transparency, Font }
 
 @Composable
 internal fun AppearanceSettingsPanel(
@@ -201,16 +193,6 @@ internal fun AppearanceSettingsPanel(
                 modifier = Modifier,
                 icon = { SettingsRowIcon("font") },
                 onClick = { openPicker = AppearancePicker.Font },
-            )
-        }
-        item {
-            VivicastSettingsRow(
-                title = stringResource(R.string.settings_animations),
-                help = stringResource(R.string.settings_help_animation),
-                value = state.animationSpeed.label(),
-                modifier = Modifier,
-                icon = { SettingsRowIcon("animation") },
-                onClick = { openPicker = AppearancePicker.Animation },
             )
         }
         item {
@@ -282,14 +264,6 @@ internal fun AppearanceSettingsPanel(
             selected = state.fontScale,
             label = { it.label() },
             onSelect = { onAppearanceSettingsChanged(state.copy(fontScale = it)); dismiss() },
-            onDismiss = dismiss,
-        )
-        AppearancePicker.Animation -> SettingsChoiceDialog(
-            title = stringResource(R.string.settings_animations),
-            options = SettingsAnimationSpeed.entries,
-            selected = state.animationSpeed,
-            label = { it.label() },
-            onSelect = { onAppearanceSettingsChanged(state.copy(animationSpeed = it)); dismiss() },
             onDismiss = dismiss,
         )
         null -> Unit

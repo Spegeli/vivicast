@@ -73,7 +73,6 @@
     <string name="settings_accent_color">Akzentfarbe</string>
     <string name="settings_transparency">Transparenz</string>
     <string name="settings_font_size">Schriftgröße</string>
-    <string name="settings_animations">Animationen</string>
 
     <!-- Parental settings -->
     <string name="settings_pin_set">PIN setzen</string>
@@ -242,11 +241,6 @@
     <string name="font_small">Klein</string>
     <string name="font_medium">Mittel</string>
     <string name="font_large">Groß</string>
-
-    <!-- Animation speed -->
-    <string name="anim_fast">Schnell</string>
-    <string name="anim_normal">Normal</string>
-    <string name="anim_slow">Langsam</string>
 
     <!-- Buffer / size options -->
     <string name="size_small">Klein</string>
@@ -560,7 +554,6 @@
     <string name="settings_help_accent">Fokus- und Warnkontrast bleiben verbindlich.</string>
     <string name="settings_help_transparency">Panel- und Overlay-Lesbarkeit bleibt begrenzt.</string>
     <string name="settings_help_font_scale">Textgröße ohne Layoutbruch.</string>
-    <string name="settings_help_animation">Fokuswechsel bleiben vorhersehbar.</string>
 
     <!-- Settings - Parental control -->
     <string name="settings_pin_first">PIN zuerst setzen.</string>
