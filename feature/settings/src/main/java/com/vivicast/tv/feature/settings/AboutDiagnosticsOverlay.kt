@@ -40,12 +40,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
-import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
 import com.vivicast.tv.core.designsystem.VivicastCheckbox
 import com.vivicast.tv.core.designsystem.VivicastColors
+import com.vivicast.tv.core.designsystem.VivicastContentCard
 import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
@@ -192,17 +192,32 @@ private fun DiagnosticsRows(
             onClick = onOpenDeleteDialog,
         )
         // Static info (non-focusable): what the toggle records, and the privacy guarantee that no private
-        // data is ever logged. Fills the empty space under the rows.
-        InfoPanel(
+        // data is ever logged. Compact text so both cards fit below the last focusable row (Delete logs) —
+        // the focus-driven scroll rests there and can't reveal anything taller further down.
+        DiagnosticsInfoCard(
             title = stringResource(R.string.about_diagnostics_info_logged_title),
             body = stringResource(R.string.about_diagnostics_info_logged_body),
-            bodyMaxLines = MAX_INFO_LINES,
         )
-        InfoPanel(
+        DiagnosticsInfoCard(
             title = stringResource(R.string.about_diagnostics_info_privacy_title),
             body = stringResource(R.string.about_diagnostics_info_privacy_body),
-            bodyMaxLines = MAX_INFO_LINES,
         )
+    }
+}
+
+// A small tinted hint card — just an informational note, so the text is deliberately smaller than a
+// standard InfoPanel to keep both cards inside the viewport under the last focusable row.
+@Composable
+private fun DiagnosticsInfoCard(title: String, body: String) {
+    VivicastContentCard(modifier = Modifier.fillMaxWidth(), contentPadding = VivicastSpacing.Space3) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+            BasicText(text = title, style = VivicastTypography.LabelMedium)
+            BasicText(
+                text = body,
+                style = VivicastTypography.LabelSmall.copy(color = VivicastColors.TextSecondary),
+                maxLines = MAX_INFO_LINES,
+            )
+        }
     }
 }
 
