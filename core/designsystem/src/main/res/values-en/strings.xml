@@ -671,6 +671,10 @@
     <string name="about_diagnostics_refresh">Refresh</string>
     <string name="about_diagnostics_empty_events">No logs yet.</string>
     <string name="about_diagnostics_empty_crashes">No crash logs yet.</string>
+    <string name="about_diagnostics_info_logged_title">What gets logged?</string>
+    <string name="about_diagnostics_info_logged_body">When logging is on, only technical events are stored: app start, playlist and EPG refreshes, player and network errors, backup and database, and crashes.</string>
+    <string name="about_diagnostics_info_privacy_title">No private data</string>
+    <string name="about_diagnostics_info_privacy_body">Private data is never stored: playlist and stream URLs, Xtream credentials, usernames, passwords, channel or title names, and your search history.</string>
     <string name="settings_legal_privacy_title">Privacy Policy</string>
     <string name="settings_legal_terms_title">Terms of Use</string>
     <string name="settings_help_legal_privacy">How Vivicast handles your data.</string>

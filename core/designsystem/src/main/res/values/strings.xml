@@ -671,6 +671,10 @@
     <string name="about_diagnostics_refresh">Aktualisieren</string>
     <string name="about_diagnostics_empty_events">Keine Logs vorhanden.</string>
     <string name="about_diagnostics_empty_crashes">Keine Crash-Logs vorhanden.</string>
+    <string name="about_diagnostics_info_logged_title">Was wird protokolliert?</string>
+    <string name="about_diagnostics_info_logged_body">Bei aktiver Protokollierung werden nur technische Ereignisse gespeichert: App-Start, Aktualisierung von Wiedergabelisten und EPG, Player- und Netzwerkfehler, Backup und Datenbank sowie Abstürze.</string>
+    <string name="about_diagnostics_info_privacy_title">Keine privaten Daten</string>
+    <string name="about_diagnostics_info_privacy_body">Niemals gespeichert werden private Daten: Playlist- und Stream-URLs, Xtream-Zugangsdaten, Benutzernamen, Passwörter, Sender- oder Titelnamen und dein Suchverlauf.</string>
     <string name="settings_legal_privacy_title">Datenschutzbestimmungen</string>
     <string name="settings_legal_terms_title">Nutzungsbedingungen</string>
     <string name="settings_help_legal_privacy">Wie Vivicast mit deinen Daten umgeht.</string>

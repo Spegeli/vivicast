@@ -2,6 +2,7 @@ package com.vivicast.tv.feature.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,8 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -37,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
+import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.VivicastCardSizes
@@ -187,9 +191,25 @@ private fun DiagnosticsRows(
             forceTextValue = true,
             onClick = onOpenDeleteDialog,
         )
+        // Static info (non-focusable): what the toggle records, and the privacy guarantee that no private
+        // data is ever logged. Fills the empty space under the rows.
+        InfoPanel(
+            title = stringResource(R.string.about_diagnostics_info_logged_title),
+            body = stringResource(R.string.about_diagnostics_info_logged_body),
+            bodyMaxLines = MAX_INFO_LINES,
+        )
+        InfoPanel(
+            title = stringResource(R.string.about_diagnostics_info_privacy_title),
+            body = stringResource(R.string.about_diagnostics_info_privacy_body),
+            bodyMaxLines = MAX_INFO_LINES,
+        )
     }
 }
 
+// Diagnostics info paragraphs run to a few lines at TV width; keep them un-truncated.
+private const val MAX_INFO_LINES = 6
+
+@OptIn(ExperimentalComposeUiApi::class) // FocusProperties.exit (Up-exit redirect to the pills)
 @Composable
 private fun DiagnosticsLogViewer(
     firstFocusModifier: Modifier,
@@ -246,8 +266,21 @@ private fun DiagnosticsLogViewer(
                 ),
             )
         } else {
-            val lines = remember(text) { text.lines() }
-            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            // Newest-first: after a refresh the latest events sit right under the pills, no scroll to the
+            // bottom. Blank lines dropped so a trailing newline doesn't leave an empty top row. The export
+            // keeps chronological order — only this on-screen view is reversed.
+            val lines = remember(text) { text.lines().filter { it.isNotBlank() }.asReversed() }
+            LazyColumn(
+                // UP from the top line must return to the pills. Exiting a lazy list upward to a non-lazy
+                // sibling doesn't resolve reliably on TV, so redirect the Up-exit explicitly to the first pill.
+                modifier = Modifier.fillMaxWidth().weight(1f)
+                    .focusGroup()
+                    .focusProperties {
+                        exit = { direction ->
+                            if (direction == FocusDirection.Up) firstPillFocus else FocusRequester.Default
+                        }
+                    },
+            ) {
                 items(lines) { line -> DiagnosticsLogLine(line) }
             }
         }
