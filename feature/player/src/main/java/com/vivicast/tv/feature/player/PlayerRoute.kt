@@ -139,6 +139,8 @@ fun PlayerRoute(
     }
     val seekable = request?.seekable ?: false
     val progress = controllerState?.progressPercent() ?: fallbackProgress
+    val positionMillis = controllerState?.positionMillis ?: 0L
+    val durationMillis = controllerState?.durationMillis ?: 0L
     val title = request?.title ?: noPlaybackStr
     val badges = controllerState?.badges() ?: emptyList()
     val audioTracks = currentState?.audioTracks ?: emptyList()
@@ -307,6 +309,8 @@ fun PlayerRoute(
                 statusLabel = controllerState?.status?.statusLabel(controllerState, statusIdleStr, statusStartingStr, statusPlaybackStr, statusPausedStr, statusEndedStr, statusErrorStr, statusLiveStr, statusTimeshiftStr) ?: if (playing) statusLiveStr else statusPausedStr,
                 badges = badges,
                 progress = progress,
+                positionMillis = positionMillis,
+                durationMillis = durationMillis,
                 seekable = seekable,
                 focusedTimeline = focusedTimeline,
                 timelineFocusRequester = timelineFocusRequester,

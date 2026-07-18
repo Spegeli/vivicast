@@ -42,7 +42,6 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.Vivicast">
         <activity
@@ -78,10 +77,14 @@
                     android:scheme="vivicast" />
             </intent-filter>
         </activity>
+        <!-- Exported only so the system Android-TV global-search process (which holds GLOBAL_SEARCH) can
+             query suggestions; the permission keeps arbitrary third-party apps from enumerating the catalog. -->
         <provider
             android:name=".search.AndroidTvSearchSuggestionProvider"
             android:authorities="com.vivicast.tv.search"
-            android:exported="true" />
+            android:exported="true"
+            android:permission="android.permission.GLOBAL_SEARCH"
+            android:readPermission="android.permission.GLOBAL_SEARCH" />
         <receiver
             android:name=".BootLaunchReceiver"
             android:exported="true">

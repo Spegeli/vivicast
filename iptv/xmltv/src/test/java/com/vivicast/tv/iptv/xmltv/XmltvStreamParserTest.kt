@@ -73,4 +73,36 @@ class XmltvStreamParserTest {
         assertTrue(out.programs.isEmpty())
         assertEquals(2, skipped)
     }
+
+    @Test
+    fun parses_feed_with_external_doctype() {
+        // A real XMLTV feed commonly carries `<!DOCTYPE tv SYSTEM "xmltv.dtd">`; the external DTD is never
+        // fetched, and with no internal entity declarations the guard must let it through.
+        val xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE tv SYSTEM "xmltv.dtd">
+            <tv>
+              <channel id="c1"><display-name>One</display-name></channel>
+              <programme channel="c1" start="20260101000000 +0000" stop="20260101010000 +0000"><title>A</title></programme>
+            </tv>
+        """.trimIndent()
+        val out = Collector()
+        parser.parseStreaming(ByteArrayInputStream(xml.toByteArray()), out)
+        assertEquals(1, out.channels.size)
+        assertEquals(1, out.programs.size)
+    }
+
+    @Test(expected = UnsafeXmltvEntityException::class)
+    fun rejects_internal_entity_declarations() {
+        // Billion-laughs: internal entity declarations must be rejected before the parser can expand them.
+        val xml = """
+            <?xml version="1.0"?>
+            <!DOCTYPE tv [
+              <!ENTITY lol "lol">
+              <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;">
+            ]>
+            <tv><channel id="c1"><display-name>&lol2;</display-name></channel></tv>
+        """.trimIndent()
+        parser.parseStreaming(ByteArrayInputStream(xml.toByteArray()), Collector())
+    }
 }

@@ -21,6 +21,7 @@ import com.vivicast.tv.domain.model.ProviderStatus
 import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.parseLogoPriorityOrder
 import com.vivicast.tv.iptv.m3u.M3uParser
+import com.vivicast.tv.iptv.xmltv.UnsafeXmltvEntityException
 import com.vivicast.tv.iptv.xmltv.XmltvChannel
 import com.vivicast.tv.iptv.xmltv.XmltvDocument
 import com.vivicast.tv.iptv.xmltv.XmltvParser
@@ -41,11 +42,31 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 
-// A DB constraint failure is deterministic — retrying the same import hits it again and just spins a
-// WorkManager backoff loop (re-downloading the feed each attempt). Fail instead; transient errors
-// (IO/network/timeout, a briefly-locked DB) still retry.
-private fun Throwable.isDeterministicRefreshError(): Boolean =
-    generateSequence(this) { it.cause }.any { it is android.database.sqlite.SQLiteConstraintException }
+// A refresh error is TERMINAL when a retry can only hit the same failure: a deterministic DB constraint,
+// missing/invalid credentials, an empty/invalid feed, a provider-type mismatch, an over-size body, an unsafe
+// XMLTV feed, or a non-transient 4xx (bad request / auth / forbidden / not-found). Retrying those just spins a
+// WorkManager backoff loop (re-downloading the feed each attempt); for auth failures it also risks tripping
+// provider rate-limits / IP-bans. Transient errors (IO/network/timeout, HTTP 429, 5xx, a briefly-locked DB)
+// still retry.
+internal fun Throwable.isTerminalRefreshError(): Boolean =
+    generateSequence(this) { it.cause }.any { cause ->
+        when (cause) {
+            is android.database.sqlite.SQLiteConstraintException,
+            is RefreshAuthenticationException,
+            is RefreshImportException,
+            is IllegalArgumentException,
+            is M3uSourceTooLargeException,
+            is EpgSourceTooLargeException,
+            is UnsafeXmltvEntityException,
+            -> true
+            is RefreshHttpException -> cause.statusCode.isTerminalHttpStatus()
+            is XtreamHttpException -> cause.statusCode.isTerminalHttpStatus()
+            else -> false
+        }
+    }
+
+// 4xx are permanent (bad request / auth / forbidden / not-found) EXCEPT 429 (rate limit → back off and retry).
+internal fun Int.isTerminalHttpStatus(): Boolean = this in 400..499 && this != 429
 
 class DefaultRefreshWorkerRunner(
     private val orchestrator: MaintenanceRefreshOrchestrator,
@@ -101,7 +122,7 @@ class DefaultRefreshWorkerRunner(
                 },
                 onFailure = { error ->
                     recordRefresh(RefreshDiagnosticType.PlaylistRefreshFailed, target.providerId, startedAt, error)
-                    if (error.isDeterministicRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
+                    if (error.isTerminalRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
                 },
             )
     }
@@ -129,7 +150,7 @@ class DefaultRefreshWorkerRunner(
                 },
                 onFailure = { error ->
                     recordRefresh(RefreshDiagnosticType.EpgRefreshFailed, target.epgSourceId, startedAt, error)
-                    if (error.isDeterministicRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
+                    if (error.isTerminalRefreshError()) RefreshWorkerResult.Failure else RefreshWorkerResult.Retry
                 },
             )
     }

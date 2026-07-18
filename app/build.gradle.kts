@@ -1,8 +1,30 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing is loaded from a gitignored keystore.properties (local dev) or, when that is absent,
+// environment variables (CI). If neither provides a complete set, the release signingConfig is skipped so a
+// fresh clone / CI-without-secrets can still configure and build debug. Secrets are never committed.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+fun signingSecret(propertyKey: String, envName: String): String? =
+    (keystoreProperties.getProperty(propertyKey) ?: System.getenv(envName))?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = signingSecret("storeFile", "VIVICAST_KEYSTORE_FILE")
+val releaseStorePassword = signingSecret("storePassword", "VIVICAST_STORE_PASSWORD")
+val releaseKeyAlias = signingSecret("keyAlias", "VIVICAST_KEY_ALIAS")
+val releaseKeyPassword = signingSecret("keyPassword", "VIVICAST_KEY_PASSWORD")
+val hasReleaseSigning = releaseStoreFile != null && releaseStorePassword != null &&
+    releaseKeyAlias != null && releaseKeyPassword != null
 
 android {
     namespace = "com.vivicast.tv"
@@ -15,6 +37,29 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // R8/minify intentionally OFF: open-source, non-Play (sideload / GitHub-release) app, so
+            // obfuscation is pointless and code/resource shrink isn't worth the keep-rule/strip risk.
+            // Retrofittable later if APK size ever matters.
+            isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     buildFeatures {

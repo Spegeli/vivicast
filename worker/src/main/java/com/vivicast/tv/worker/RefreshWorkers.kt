@@ -40,9 +40,15 @@ abstract class DelegatingRefreshWorker(
 ) : CoroutineWorker(appContext, params) {
     final override suspend fun doWork(): Result {
         val runner = RefreshWorkerRegistry.requireRunner() ?: return Result.retry()
-        return runCancellableCatching { runner.runDelegatedWork() }
+        val result = runCancellableCatching { runner.runDelegatedWork() }
             .getOrElse { RefreshWorkerResult.Retry }
-            .toWorkResult()
+        // Backstop: a never-recovering transient error (deterministic ones are already classified terminal in
+        // RefreshExecution) would otherwise retry forever on exponential backoff. Give up after
+        // MAX_REFRESH_ATTEMPTS so it can't loop indefinitely.
+        if (result == RefreshWorkerResult.Retry && runAttemptCount >= MAX_REFRESH_ATTEMPTS) {
+            return Result.failure()
+        }
+        return result.toWorkResult()
     }
 
     protected abstract suspend fun RefreshWorkerRunner.runDelegatedWork(): RefreshWorkerResult
@@ -86,6 +92,11 @@ internal inline fun <T> runCancellableCatching(block: () -> T): Result<T> =
     } catch (throwable: Throwable) {
         Result.failure(throwable)
     }
+
+// Backstop cap for retryable refresh failures. WorkManager's exponential backoff (10s, 20s, 40s, ...) already
+// reaches the multi-hour range by ~10 attempts, so this bounds a never-recovering transient without cutting
+// real outages short. ponytail: fixed cap; make it configurable if field data shows it's too low/high.
+private const val MAX_REFRESH_ATTEMPTS = 10
 
 private fun RefreshWorkerResult.toWorkResult(): ListenableWorkerResult =
     when (this) {

@@ -33,7 +33,10 @@ internal fun maybeGunzip(input: InputStream): InputStream {
 internal fun streamXmltv(input: InputStream, handler: XmltvStreamHandler): Int {
     val parser = saxFactory.newSAXParser()
     val contentHandler = XmltvSaxHandler(handler)
-    maybeGunzip(input).use { stream ->
+    // Buffer the (post-gunzip) stream so we can peek the prolog, reject an entity-declaring DOCTYPE
+    // (billion-laughs) up front, then hand the same stream to SAX.
+    BufferedInputStream(maybeGunzip(input)).use { stream ->
+        rejectInternalEntities(stream)
         parser.parse(stream, contentHandler)
     }
     return contentHandler.finish()
@@ -51,6 +54,39 @@ private val saxFactory: SAXParserFactory = SAXParserFactory.newInstance().apply 
 
 private fun SAXParserFactory.setFeatureIfSupported(feature: String, value: Boolean) {
     runCatching { setFeature(feature, value) }
+}
+
+/** An XMLTV feed declared internal XML entities — the billion-laughs entity-expansion vector. Rejected. */
+class UnsafeXmltvEntityException(message: String) : RuntimeException(message)
+
+// ponytail: scans the first 64 KB of the (decompressed) prolog for a DOCTYPE internal-entity declaration. A
+// payload padding `<!ENTITY` past 64 KB would slip this scan, but modern Expat's own expansion cap is the
+// second layer. Raise the limit if a real feed ever needs a larger prolog.
+private const val ENTITY_SCAN_LIMIT = 64 * 1024
+
+/**
+ * Fail-closed guard against entity-expansion (billion-laughs) DoS. A legit XMLTV DOCTYPE is
+ * `<!DOCTYPE tv SYSTEM "xmltv.dtd">` (an external DTD we never fetch) and declares NO internal entities;
+ * predefined and character references need no declaration. `<!ENTITY ...>` therefore only appears in a
+ * malicious internal subset, so its mere presence in the prolog is grounds to reject the feed. Android's
+ * Expat SAX does not reliably enforce JAXP expansion limits, so this guard — not the parser — is the
+ * guarantee. Requires a mark-supporting stream; peeks the head and rewinds so SAX still sees the full body.
+ */
+private fun rejectInternalEntities(stream: BufferedInputStream) {
+    stream.mark(ENTITY_SCAN_LIMIT + 1)
+    val head = ByteArray(ENTITY_SCAN_LIMIT)
+    var read = 0
+    while (read < head.size) {
+        val count = stream.read(head, read, head.size - read)
+        if (count < 0) break
+        read += count
+    }
+    stream.reset()
+    if (String(head, 0, read, Charsets.UTF_8).contains("<!ENTITY", ignoreCase = true)) {
+        throw UnsafeXmltvEntityException(
+            "XMLTV feed declares internal XML entities; rejected to prevent entity-expansion (billion-laughs) attacks.",
+        )
+    }
 }
 
 private class XmltvSaxHandler(private val out: XmltvStreamHandler) : DefaultHandler() {

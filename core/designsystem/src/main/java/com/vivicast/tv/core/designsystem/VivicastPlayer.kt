@@ -30,8 +30,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import java.util.Locale
 
 fun playerTimelineTag(): String = "player-timeline"
+
+// Formats a playback position/duration as mm:ss (or h:mm:ss past an hour). Locale.ROOT keeps ASCII digits.
+private fun formatPlaybackTime(millis: Long): String {
+    val totalSeconds = millis.coerceAtLeast(0L) / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.ROOT, "%02d:%02d", minutes, seconds)
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -41,6 +55,8 @@ fun VivicastPlayerOverlay(
     statusLabel: String,
     badges: List<String>,
     progress: Int,
+    positionMillis: Long,
+    durationMillis: Long,
     seekable: Boolean,
     focusedTimeline: Boolean,
     timelineFocusRequester: FocusRequester,
@@ -80,6 +96,8 @@ fun VivicastPlayerOverlay(
 
         VivicastPlayerTimeline(
             progress = progress,
+            positionMillis = positionMillis,
+            durationMillis = durationMillis,
             focused = focusedTimeline,
             seekable = seekable,
             focusRequester = timelineFocusRequester,
@@ -104,6 +122,8 @@ fun VivicastPlayerOverlay(
 @Composable
 fun VivicastPlayerTimeline(
     progress: Int,
+    positionMillis: Long,
+    durationMillis: Long,
     focused: Boolean,
     seekable: Boolean,
     modifier: Modifier = Modifier,
@@ -115,8 +135,8 @@ fun VivicastPlayerTimeline(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = modifier) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            BodyText("00:${progress.toString().padStart(2, '0')}", maxLines = 1)
-            BodyText(if (seekable) "01:40" else "LIVE", maxLines = 1)
+            BodyText(if (seekable) formatPlaybackTime(positionMillis) else "", maxLines = 1)
+            BodyText(if (seekable) formatPlaybackTime(durationMillis) else "LIVE", maxLines = 1)
         }
         VivicastFocusSurface(
             modifier = Modifier
