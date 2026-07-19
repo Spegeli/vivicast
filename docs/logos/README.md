@@ -212,23 +212,24 @@ Web-`<text>`), also **vor der APK-Integration Wortmarke → Vektor-Pfade**.
 
 ## 8. Integration erledigt
 
-Umgesetzt im `app`-Modul (`minSdk = 23`), `assembleDebug` grün:
+Umgesetzt im `app`-Modul (`minSdk = 26`), `assembleDebug` grün:
 
 | Was | Wo |
 |---|---|
 | Adaptive-Icon (API 26+) | `app/.../res/mipmap-anydpi-v26/ic_launcher.xml` → `drawable/ic_launcher_foreground.xml` (C+V+Play, Verlauf, Safe-Zone scale .78) + `drawable/ic_launcher_background.xml` (Navy) |
-| Legacy-Icon (API 23–25) | `app/.../res/mipmap-{m,h,x,xx,xxx}dpi/ic_launcher.png` (48/72/96/144/192) |
+| Legacy-Icon (< API 26 — nun unter `minSdk`, moot; als harmloser Fallback belassen) | `app/.../res/mipmap-{m,h,x,xx,xxx}dpi/ic_launcher.png` (48/72/96/144/192) |
 | Banner | `app/.../res/drawable-{x,xx,xxx}hdpi/banner.png` (320×180 / 480×270 / 640×360) — Platzhalter `drawable/banner.xml` entfernt |
 | Manifest | `android:icon="@mipmap/ic_launcher"` + `android:roundIcon="@mipmap/ic_launcher_round"` + `android:banner` auch auf der `MainActivity` (alle Referenz-TV-Apps machen das) |
 | roundIcon | `mipmap-anydpi-v26/ic_launcher_round.xml` (Adaptive) + `mipmap-{m,h,x,xx,xxx}dpi/ic_launcher_round.png` (Legacy-Fallback) |
 | Splash (API 31+) | `app/.../res/values-v31/styles.xml`: `windowSplashScreenBackground=#050914`, `windowSplashScreenAnimatedIcon=@drawable/ic_launcher_foreground` |
 
 **Bewusste Entscheidungen:**
-- Icon-VectorDrawable nutzt **Gradient-Stroke/Fill** fürs Play — erst ab API 24 gerendert.
-  Unkritisch: Adaptive-Vektor lädt eh nur API 26+, darunter greift das Legacy-PNG.
+- Icon-VectorDrawable nutzt **Gradient-Stroke/Fill** fürs Play — ab API 24 gerendert, also auf allen
+  unterstützten Geräten (`minSdk = 26`). Der Adaptive-Vektor lädt ab API 26; das Legacy-PNG darunter ist
+  nun moot (kein Gerät unter `minSdk`).
 - **Kein** `androidx.core:core-splashscreen` hinzugefügt (wäre neue Dependency + Theme-Migration).
   Splash läuft rein über die **native** SplashScreen-API (Theme-Attribute, nur API 31+).
-  API 23–30: unverändertes Verhalten (Default-Splash auf `windowBackground`).
+  API 26–30: unverändertes Verhalten (Default-Splash auf `windowBackground`).
 - Banner als **PNG** (nicht VectorDrawable), weil die Wortmarke sonst als Vektor-Pfad
   vorliegen müsste. PNG bäckt die Segoe-UI-Wortmarke ein — für ein Banner Standard.
 
