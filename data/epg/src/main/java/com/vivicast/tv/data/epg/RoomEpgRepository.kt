@@ -283,6 +283,9 @@ class RoomEpgRepository(
             if (epgChannelRows.isNotEmpty()) {
                 epgDao.upsertEpgChannels(epgChannelRows)
             }
+            // #34: a concurrent catalog refresh may have deleted a channel since the pre-transaction channel
+            // snapshot; purge staged programmes for now-missing channels so none orphan a deleted channel.
+            epgDao.deleteStageProgramsForMissingChannels(providerId, epgSourceId)
             epgDao.deleteChangedProgramsFromStage(providerId, epgSourceId)
             epgDao.insertMissingProgramsFromStage(providerId, epgSourceId)
             epgDao.deleteStaleProgramsFromStage(providerId, epgSourceId)

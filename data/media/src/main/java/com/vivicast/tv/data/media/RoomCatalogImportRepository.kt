@@ -241,6 +241,15 @@ class RoomCatalogImportRepository(
             ) {
                 return@withTransaction XtreamSeriesDetailsImportResult(seasons = zero, episodes = zero)
             }
+            // #18: episodes are delete-then-insert; drop playback_progress for episodes that vanish in the
+            // fresh import (survivors keep the same id → their progress stays) so no orphan progress rows are
+            // left behind — mirrors the provider-wide reconcile path.
+            val newEpisodeIds = episodes.mapTo(HashSet(episodes.size)) { it.id }
+            val removedEpisodeIds = catalogDao.getEpisodeIdsForSeries(providerId, listOf(seriesRowId))
+                .filterNot { it in newEpisodeIds }
+            if (removedEpisodeIds.isNotEmpty()) {
+                playbackDao.deleteProgressForMediaIds(providerId, MEDIA_TYPE_EPISODE, removedEpisodeIds)
+            }
             catalogDao.deleteSeasonsForSeries(providerId, listOf(seriesRowId))
             catalogDao.deleteEpisodesForSeries(providerId, listOf(seriesRowId))
             catalogDao.upsertSeasons(seasons)

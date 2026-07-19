@@ -161,6 +161,15 @@ interface EpgDao {
     @Query("DELETE FROM epg_programs_stage WHERE epgSourceId = :epgSourceId")
     suspend fun clearProgramsStageForSource(epgSourceId: String)
 
+    // #34: purge staged programmes whose local channel vanished since the pre-transaction snapshot (a
+    // concurrent catalog refresh can delete a channel while the EPG import stages against the old snapshot),
+    // so a merged programme never orphans a now-deleted channel. Call inside the merge transaction.
+    @Query(
+        "DELETE FROM epg_programs_stage WHERE providerId = :providerId AND epgSourceId = :epgSourceId " +
+            "AND channelId NOT IN (SELECT id FROM channels WHERE providerId = :providerId)",
+    )
+    suspend fun deleteStageProgramsForMissingChannels(providerId: String, epgSourceId: String)
+
     @Query(
         """
         DELETE FROM epg_programs

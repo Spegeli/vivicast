@@ -74,6 +74,9 @@ class SecureEpgSourceRepository(
             database.epgDao().deleteProviderEpgSourcesForSource(sourceId)
             database.epgDao().deleteMappingsForSource(sourceId)
             database.epgDao().deleteProgramsForSource(sourceId)
+            // #19: the source's epg_channels rows have no FK cascade, so drop them here too — otherwise they
+            // leak (and a re-added source with the same channels could collide/confuse the icon join).
+            database.epgDao().deleteEpgChannelsForSource(sourceId)
             // Stage hygiene: drop any half-staged rows for this source (delete racing a mid-stage refresh).
             database.epgDao().clearProgramsStageForSource(sourceId)
             database.epgDao().deleteEpgSource(sourceId)
