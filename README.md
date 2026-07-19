@@ -51,13 +51,11 @@ Reusable:
 
 ## Architecture Status
 
-- P0–P3 architecture remediation is **complete**.
 - Active architecture references:
-  - `docs/ARCHITECTURE-REMEDIATION-COMPLETION-REPORT.md`
-  - `docs/SETTINGS-APP-HOISTED-DECISIONS.md`
-  - `docs/DETEKT-GATE.md`
-- For detailed mandatory rules, see `CLAUDE.md`. Older remediation plans are archived under
-  `docs/archive/` (historical context only).
+  - `docs/ARCHITECTURE-SETTINGS-HOISTING.md`
+  - `docs/ARCHITECTURE-DETEKT-GATE.md`
+- For detailed mandatory rules, see `CLAUDE.md`. Older docs are archived under `docs/archive/`
+  (historical context only).
 
 ## Repository Rules
 
