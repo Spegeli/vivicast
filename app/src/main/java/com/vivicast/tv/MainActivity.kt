@@ -247,6 +247,14 @@ private fun VivicastApp(
     var lastTopNavigationBackAt by remember { mutableStateOf(0L) }
     var regularStartApplied by remember { mutableStateOf(false) }
     var explicitSystemTargetSeen by remember { mutableStateOf(deepLinkData != null) }
+    // Home "Wiedergabeliste hinzufügen" lands on the Playlists settings section; reset when leaving Settings
+    // so a later nav-in opens Allgemein. (Auto-opening the add-provider FORM is a further follow-up.)
+    var pendingSettingsSection by remember { mutableStateOf<String?>(null) }
+    val playlistsSectionLabel = stringResource(R.string.settings_section_playlists)
+    // A Home content button that switches top-level route must move focus onto the target nav tab. Else
+    // Compose focus falls back to the geometrically nearest Home nav item, whose focus-follows-selection
+    // (focusRoute) yanks the route straight back to Home. Set on such a nav; consumed by the route effect.
+    var focusTopNavPending by remember { mutableStateOf(false) }
     val topNavigationFocusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val activity = context as? Activity
@@ -418,6 +426,15 @@ private fun VivicastApp(
         requestProtectionUnlock(pinSecurityState.protectionAreaForRoute(route), route.protectionTitle(context)) {
             selectedRoute = route
         }
+    }
+
+    // Open Settings landing on the Playlists section — used by the Home "Wiedergabeliste hinzufügen" button
+    // and by the disabled/empty-catalog empty-state "Open Settings" button, so the user sees their playlists
+    // directly (and can enable them). Auto-opening the add-provider FORM (add path) is a further follow-up.
+    fun openPlaylistSettings() {
+        pendingSettingsSection = playlistsSectionLabel
+        focusTopNavPending = true
+        selectRoute("settings")
     }
 
     fun focusRoute(route: String) {
@@ -782,6 +799,17 @@ private fun VivicastApp(
 
     LaunchedEffect(selectedRoute) {
         lastTopNavigationBackAt = 0L
+        // Clear the Home-add-playlist section hint once we leave Settings (so a later nav-in opens Allgemein).
+        if (selectedRoute != ROUTE_SETTINGS) {
+            pendingSettingsSection = null
+        }
+        // A Home CTA switched route: anchor focus on the now-selected nav tab so it doesn't fall back to the
+        // Home tab (which would yank the route back to Home). The route's own content may take focus once
+        // loaded.
+        if (focusTopNavPending) {
+            focusTopNavPending = false
+            runCatching { topNavigationFocusRequester.requestFocus() }
+        }
     }
 
     LaunchedEffect(appContainer) {
@@ -821,13 +849,19 @@ private fun VivicastApp(
             HomeRoute(
                 playbackRepository = appContainer.playbackRepository,
                 mediaRepository = appContainer.mediaRepository,
+                providerRepository = appContainer.providerRepository,
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 resolveMoviePosterModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MoviePoster) },
-                resolveEpisodeImageModel = { episode -> appContainer.resolveEpisodeImageModel(episode) },
+                resolveSeriesPosterModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesPoster) },
                 onOpenMovie = { movie -> openMovie(movie, resumeProgress = true, origin = PlaybackOrigin.Home) },
                 onOpenEpisode = { episode -> openEpisode(episode, origin = PlaybackOrigin.Home) },
                 onOpenChannel = { channel -> openChannel(channel, origin = PlaybackOrigin.Home) },
-                onAddPlaylist = { selectRoute("settings") },
+                onAddPlaylist = { openPlaylistSettings() },
+                onOpenSettings = { pendingSettingsSection = null; focusTopNavPending = true; selectRoute("settings") },
+                onOpenPlaylists = { openPlaylistSettings() },
+                onOpenLiveTv = { focusTopNavPending = true; selectRoute("live-tv") },
+                onOpenMovies = { focusTopNavPending = true; selectRoute("movies") },
+                onOpenSeries = { focusTopNavPending = true; selectRoute("series") },
             )
         },
         AppDestination("Live-TV", "live-tv") {
@@ -969,6 +1003,7 @@ private fun VivicastApp(
                         Toast.makeText(context, context.getString(R.string.main_logos_folder_removed), Toast.LENGTH_SHORT).show()
                     }
                 },
+                initialSelectedSection = pendingSettingsSection,
                 topNavFocusRequester = topNavigationFocusRequester,
                 focusLanguageRowOnEnter = reopenLanguageSettings,
                 onInitialLanguageFocusApplied = { reopenLanguageSettings = false },

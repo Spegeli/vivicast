@@ -2,6 +2,10 @@ package com.vivicast.tv.feature.home
 
 import com.vivicast.tv.data.media.MediaRepository
 import com.vivicast.tv.data.playback.PlaybackRepository
+import com.vivicast.tv.data.provider.ProviderCreateRequest
+import com.vivicast.tv.data.provider.ProviderRepository
+import com.vivicast.tv.data.provider.ProviderSaveResult
+import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
@@ -10,6 +14,9 @@ import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
+import com.vivicast.tv.domain.model.Provider
+import com.vivicast.tv.domain.model.ProviderStatus
+import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.SearchResults
 import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
@@ -22,6 +29,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,74 +40,90 @@ import org.junit.Test
 class HomeViewModelTest {
 
     private fun newViewModel(
-        playback: FakePlaybackRepository,
-        media: FakeMediaRepository,
+        playback: FakePlaybackRepository = FakePlaybackRepository(),
+        media: FakeMediaRepository = FakeMediaRepository(),
+        provider: FakeProviderRepository = FakeProviderRepository(),
         scope: CoroutineScope,
-    ): HomeViewModel = HomeViewModel(playback, media, scope = scope)
+    ): HomeViewModel = HomeViewModel(playback, media, provider, scope = scope)
 
     @Test
-    fun initialState_isEmpty() = runBlocking {
+    fun noProviders_showsNoPlaylistEmptyState() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val vm = newViewModel(FakePlaybackRepository(), FakeMediaRepository(), scope)
+        val vm = newViewModel(scope = scope)
 
         val state = vm.uiState.value
-        assertTrue(state.continueItems.isEmpty())
-        assertTrue(state.recentChannels.isEmpty())
+        assertTrue(state.loaded)
+        assertEquals(HomeEmptyReason.NoPlaylist, state.emptyReason)
         scope.cancel()
     }
 
     @Test
-    fun continueWatching_movieIsResolvedIntoUiState() = runBlocking {
+    fun providersButAllDisabled_showsAllDisabled() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val media = FakeMediaRepository(movies = mapOf("movie-1" to movie("movie-1", "Dune")))
-        val playback = FakePlaybackRepository(
-            continueWatching = listOf(movieProgress("p1", "movie-1")),
+        val vm = newViewModel(
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = false))),
+            scope = scope,
         )
-        val vm = newViewModel(playback, media, scope)
 
-        val items = vm.uiState.value.continueItems
-        assertEquals(1, items.size)
-        val movieItem = items.first() as ContinueHomeItem.MovieItem
-        assertEquals("Dune", movieItem.movie.name)
+        assertEquals(HomeEmptyReason.AllDisabled, vm.uiState.value.emptyReason)
         scope.cancel()
     }
 
     @Test
-    fun continueWatching_episodeIsResolvedIntoUiState() = runBlocking {
+    fun activeProviderButNoCatalog_showsEmptyCatalog() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val media = FakeMediaRepository(episodes = mapOf("ep-1" to episode("ep-1", "Chapter 1")))
-        val playback = FakePlaybackRepository(
-            continueWatching = listOf(episodeProgress("p2", "ep-1")),
+        val vm = newViewModel(
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            media = FakeMediaRepository(hasLive = false, hasMovies = false, hasSeries = false),
+            scope = scope,
         )
-        val vm = newViewModel(playback, media, scope)
 
-        val items = vm.uiState.value.continueItems
-        assertEquals(1, items.size)
-        assertTrue(items.first() is ContinueHomeItem.EpisodeItem)
+        assertEquals(HomeEmptyReason.EmptyCatalog, vm.uiState.value.emptyReason)
         scope.cancel()
     }
 
     @Test
-    fun unresolvableContinueEntries_areDropped() = runBlocking {
+    fun movieInProgress_activeProvider_appearsAndNoEmptyState() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        // Media repository knows no movies -> getMovie returns null -> entry dropped.
-        val playback = FakePlaybackRepository(
-            continueWatching = listOf(movieProgress("p1", "missing")),
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(continueWatching = listOf(movieProgress("p1", "movie-1"))),
+            media = FakeMediaRepository(movies = mapOf("movie-1" to movie("movie-1", "Dune")), hasMovies = true),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
         )
-        val vm = newViewModel(playback, FakeMediaRepository(), scope)
 
-        assertTrue(vm.uiState.value.continueItems.isEmpty())
+        val state = vm.uiState.value
+        assertNull(state.emptyReason)
+        assertEquals(1, state.movieItems.size)
+        assertEquals("Dune", state.movieItems.first().movie.name)
         scope.cancel()
     }
 
     @Test
-    fun recentChannels_areResolvedIntoUiState() = runBlocking {
+    fun disabledProviderContent_isFilteredOut() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val media = FakeMediaRepository(channels = mapOf("ch-1" to channel("ch-1", "ARD")))
-        val playback = FakePlaybackRepository(
-            recentChannels = listOf(channelHistory("h1", "ch-1")),
+        // Movie history exists and the movie resolves, but its provider is DISABLED -> not shown.
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(continueWatching = listOf(movieProgress("p1", "movie-1"))),
+            media = FakeMediaRepository(movies = mapOf("movie-1" to movie("movie-1", "Dune")), hasMovies = false),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = false))),
+            scope = scope,
         )
-        val vm = newViewModel(playback, media, scope)
+
+        assertTrue(vm.uiState.value.movieItems.isEmpty())
+        assertEquals(HomeEmptyReason.AllDisabled, vm.uiState.value.emptyReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun recentChannels_areResolvedAndActiveFiltered() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(recentChannels = listOf(channelHistory("h1", "ch-1"))),
+            media = FakeMediaRepository(channels = mapOf("ch-1" to channel("ch-1", "ARD")), hasLive = true),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
+        )
 
         val recent = vm.uiState.value.recentChannels
         assertEquals(1, recent.size)
@@ -108,33 +132,104 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun emptyRepositories_produceEmptyState() = runBlocking {
+    fun series_inProgressEpisode_appearsAsSeriesItem() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val vm = newViewModel(
-            FakePlaybackRepository(continueWatching = emptyList(), recentChannels = emptyList()),
-            FakeMediaRepository(),
-            scope,
+            playback = FakePlaybackRepository(episodeProgress = listOf(episodeProgress("p1", "ep-1"))),
+            media = FakeMediaRepository(
+                episodes = mapOf("ep-1" to episode("ep-1", "Chapter 1", seriesId = "s1")),
+                series = mapOf("s1" to series("s1", "Foundation")),
+                hasSeries = true,
+            ),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
         )
 
-        assertTrue(vm.uiState.value.continueItems.isEmpty())
-        assertTrue(vm.uiState.value.recentChannels.isEmpty())
+        val items = vm.uiState.value.seriesItems
+        assertEquals(1, items.size)
+        assertEquals("Foundation", items.first().series.name)
+        assertEquals("ep-1", items.first().episode.id)
         scope.cancel()
     }
 
     @Test
-    fun continueWatchingUpdates_areReflected() = runBlocking {
+    fun series_completedEpisodeWithNext_advancesToNext() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Unconfined)
-        val media = FakeMediaRepository(movies = mapOf("movie-1" to movie("movie-1", "Dune")))
-        val playback = FakePlaybackRepository()
-        val vm = newViewModel(playback, media, scope)
-        assertTrue(vm.uiState.value.continueItems.isEmpty())
+        val ep1 = episode("ep-1", "Chapter 1", seriesId = "s1")
+        val ep2 = episode("ep-2", "Chapter 2", seriesId = "s1")
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(episodeProgress = listOf(episodeProgress("p1", "ep-1", completed = true))),
+            media = FakeMediaRepository(
+                episodes = mapOf("ep-1" to ep1, "ep-2" to ep2),
+                series = mapOf("s1" to series("s1", "Foundation")),
+                nextEpisodes = mapOf("ep-1" to ep2),
+                hasSeries = true,
+            ),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
+        )
 
-        playback.continueWatchingFlow.value = listOf(movieProgress("p1", "movie-1"))
+        val items = vm.uiState.value.seriesItems
+        assertEquals(1, items.size)
+        assertEquals("ep-2", items.first().episode.id)
+        assertEquals(0, items.first().progressPercent)
+        scope.cancel()
+    }
 
-        assertEquals(1, vm.uiState.value.continueItems.size)
+    @Test
+    fun series_completedEpisodeNoNext_isDropped() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(episodeProgress = listOf(episodeProgress("p1", "ep-1", completed = true))),
+            media = FakeMediaRepository(
+                episodes = mapOf("ep-1" to episode("ep-1", "Finale", seriesId = "s1")),
+                series = mapOf("s1" to series("s1", "Foundation")),
+                hasSeries = true, // catalog still has the series -> the row shows a CTA, but no card
+            ),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
+        )
+
+        assertTrue(vm.uiState.value.seriesItems.isEmpty())
+        assertNull(vm.uiState.value.emptyReason) // hasSeries=true -> a row (CTA) is shown, not the global empty
+        scope.cancel()
+    }
+
+    @Test
+    fun series_twoInProgressEpisodesSameSeries_dedupedToOne() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        // Newest first: ep-2 is the most-recent activity for series s1 -> that's the resume target.
+        val vm = newViewModel(
+            playback = FakePlaybackRepository(
+                episodeProgress = listOf(
+                    episodeProgress("p2", "ep-2", lastWatchedAt = 2L),
+                    episodeProgress("p1", "ep-1", lastWatchedAt = 1L),
+                ),
+            ),
+            media = FakeMediaRepository(
+                episodes = mapOf(
+                    "ep-1" to episode("ep-1", "Chapter 1", seriesId = "s1"),
+                    "ep-2" to episode("ep-2", "Chapter 2", seriesId = "s1"),
+                ),
+                series = mapOf("s1" to series("s1", "Foundation")),
+                hasSeries = true,
+            ),
+            provider = FakeProviderRepository(listOf(provider("prov", isActive = true))),
+            scope = scope,
+        )
+
+        val items = vm.uiState.value.seriesItems
+        assertEquals(1, items.size)
+        assertEquals("ep-2", items.first().episode.id)
         scope.cancel()
     }
 }
+
+private fun provider(id: String, isActive: Boolean) = Provider(
+    id = id, name = id, type = ProviderType.M3u, sourceConfigKey = id, isActive = isActive,
+    status = ProviderStatus.Active, includeLiveTv = true, includeMovies = true, includeSeries = true,
+    refreshIntervalHours = 0, logoPriority = "", createdAt = 0L, updatedAt = 0L,
+)
 
 private fun movie(id: String, name: String) = Movie(
     id = id, providerId = "prov", categoryId = "cat", remoteId = id, name = name,
@@ -143,8 +238,14 @@ private fun movie(id: String, name: String) = Movie(
     plot = null, trailerUrl = null, addedAt = null,
 )
 
-private fun episode(id: String, name: String) = Episode(
-    id = id, providerId = "prov", seriesId = "series", seasonId = "season", remoteId = id,
+private fun series(id: String, name: String) = Series(
+    id = id, providerId = "prov", categoryId = "cat", remoteId = id, name = name,
+    originalName = null, posterUrl = null, backdropUrl = null, rating = null, year = null,
+    genre = null, director = null, cast = null, plot = null, addedAt = null,
+)
+
+private fun episode(id: String, name: String, seriesId: String = "series") = Episode(
+    id = id, providerId = "prov", seriesId = seriesId, seasonId = "season", remoteId = id,
     episodeNumber = 1, seasonNumber = 1, name = name, plot = null, thumbnailUrl = null,
     containerExtension = "mp4", duration = null, airDate = null,
 )
@@ -160,10 +261,15 @@ private fun movieProgress(id: String, mediaId: String) = PlaybackProgress(
     lastWatchedAt = 1L, createdAt = 1L, updatedAt = 1L,
 )
 
-private fun episodeProgress(id: String, mediaId: String) = PlaybackProgress(
+private fun episodeProgress(
+    id: String,
+    mediaId: String,
+    completed: Boolean = false,
+    lastWatchedAt: Long = 1L,
+) = PlaybackProgress(
     id = id, providerId = "prov", mediaType = MediaType.Episode, mediaId = mediaId,
-    positionMillis = 10L, durationMillis = 100L, progressPercent = 10, isCompleted = false,
-    lastWatchedAt = 1L, createdAt = 1L, updatedAt = 1L,
+    positionMillis = 10L, durationMillis = 100L, progressPercent = 10, isCompleted = completed,
+    lastWatchedAt = lastWatchedAt, createdAt = 1L, updatedAt = 1L,
 )
 
 private fun channelHistory(id: String, channelId: String) = ChannelHistory(
@@ -173,12 +279,15 @@ private fun channelHistory(id: String, channelId: String) = ChannelHistory(
 
 private class FakePlaybackRepository(
     continueWatching: List<PlaybackProgress> = emptyList(),
+    episodeProgress: List<PlaybackProgress> = emptyList(),
     recentChannels: List<ChannelHistory> = emptyList(),
 ) : PlaybackRepository {
     val continueWatchingFlow = MutableStateFlow(continueWatching)
+    val episodeProgressFlow = MutableStateFlow(episodeProgress)
     val recentChannelsFlow = MutableStateFlow(recentChannels)
 
     override fun observeAllContinueWatching(): Flow<List<PlaybackProgress>> = continueWatchingFlow
+    override fun observeAllEpisodeProgress(): Flow<List<PlaybackProgress>> = episodeProgressFlow
     override fun observeAllRecentChannels(limit: Int): Flow<List<ChannelHistory>> = recentChannelsFlow
 
     override fun observeContinueWatching(providerId: String): Flow<List<PlaybackProgress>> = flowOf(emptyList())
@@ -196,11 +305,22 @@ private class FakePlaybackRepository(
 private class FakeMediaRepository(
     private val movies: Map<String, Movie> = emptyMap(),
     private val episodes: Map<String, Episode> = emptyMap(),
+    private val series: Map<String, Series> = emptyMap(),
     private val channels: Map<String, Channel> = emptyMap(),
+    private val nextEpisodes: Map<String, Episode> = emptyMap(),
+    private val hasLive: Boolean = false,
+    private val hasMovies: Boolean = false,
+    private val hasSeries: Boolean = false,
 ) : MediaRepository {
     override suspend fun getMovie(providerId: String, movieId: String): Movie? = movies[movieId]
     override suspend fun getEpisode(providerId: String, episodeId: String): Episode? = episodes[episodeId]
+    override suspend fun getSeries(providerId: String, seriesId: String): Series? = series[seriesId]
     override suspend fun getChannel(providerId: String, channelId: String): Channel? = channels[channelId]
+    override suspend fun getNextEpisode(episode: Episode): Episode? = nextEpisodes[episode.id]
+
+    override fun observeHasLiveContent(): Flow<Boolean> = flowOf(hasLive)
+    override fun observeHasMovieContent(): Flow<Boolean> = flowOf(hasMovies)
+    override fun observeHasSeriesContent(): Flow<Boolean> = flowOf(hasSeries)
 
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
@@ -211,4 +331,22 @@ private class FakeMediaRepository(
     override fun observeSeries(providerId: String, categoryId: String?): Flow<List<Series>> = emptyFlow()
     override fun observeSeasons(providerId: String, seriesId: String): Flow<List<Season>> = emptyFlow()
     override fun observeEpisodes(providerId: String, seasonId: String): Flow<List<Episode>> = emptyFlow()
+}
+
+private class FakeProviderRepository(
+    providers: List<Provider> = emptyList(),
+) : ProviderRepository {
+    val providersFlow = MutableStateFlow(providers)
+    override fun observeProviders(): Flow<List<Provider>> = providersFlow
+
+    override suspend fun getProvider(providerId: String): Provider? = providersFlow.value.firstOrNull { it.id == providerId }
+    override suspend fun getCredentials(providerId: String) = null
+    override suspend fun createProvider(request: ProviderCreateRequest): ProviderSaveResult = TODO("unused")
+    override suspend fun updateProvider(request: ProviderUpdateRequest): ProviderSaveResult = TODO("unused")
+    override suspend fun saveProvider(provider: Provider) = Unit
+    override suspend fun setProviderStatus(providerId: String, status: ProviderStatus) = Unit
+    override suspend fun setProviderActive(providerId: String, isActive: Boolean) = Unit
+    override suspend fun setProviderEnabled(providerId: String, isEnabled: Boolean) = Unit
+    override suspend fun updateXtreamAccountInfo(providerId: String, expiresAtMillis: Long?, maxConnections: Int?) = Unit
+    override suspend fun deleteProvider(providerId: String) = Unit
 }

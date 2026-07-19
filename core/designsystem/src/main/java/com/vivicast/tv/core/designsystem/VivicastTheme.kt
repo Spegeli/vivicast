@@ -191,6 +191,9 @@ object VivicastCardSizes {
     val PosterWidth = 124.dp
     val PosterImageHeight = 112.dp
     const val PosterAspectRatio = 2f / 3f
+    // Home "Zuletzt gesehene Sender" logo tile (logo centered, name below). Compact — the FocusSurface
+    // needs an explicit height or it stretches to fill the row's available height.
+    val HomeChannelTileHeight = 84.dp
     val SearchPosterWidth = 164.dp
     val SearchPosterHeight = 150.dp
     val SearchWideWidth = 320.dp

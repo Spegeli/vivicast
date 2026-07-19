@@ -4,11 +4,15 @@ import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.PlaybackProgress
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 interface PlaybackRepository {
     fun observeContinueWatching(providerId: String): Flow<List<PlaybackProgress>>
 
     fun observeAllContinueWatching(): Flow<List<PlaybackProgress>>
+
+    /** All episode progress (completed and in-progress), newest first — for the series-centric Home row. */
+    fun observeAllEpisodeProgress(): Flow<List<PlaybackProgress>> = flowOf(emptyList())
 
     suspend fun getWatchNextProgress(): List<PlaybackProgress> = emptyList()
 

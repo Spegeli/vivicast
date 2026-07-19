@@ -615,6 +615,16 @@ interface CatalogDao {
     @Query("SELECT COUNT(*) FROM series")
     suspend fun countAllSeries(): Int
 
+    // Per-type catalog presence over ACTIVE providers — drives the Home per-row hide-vs-CTA.
+    @Query("SELECT EXISTS(SELECT 1 FROM channels INNER JOIN providers ON providers.id = channels.providerId WHERE providers.isActive = 1)")
+    fun observeHasActiveChannels(): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM movies INNER JOIN providers ON providers.id = movies.providerId WHERE providers.isActive = 1)")
+    fun observeHasActiveMovies(): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM series INNER JOIN providers ON providers.id = series.providerId WHERE providers.isActive = 1)")
+    fun observeHasActiveSeries(): Flow<Boolean>
+
     // Startup crash-recovery: drop any staged rows a killed import left behind (self-heals on the next
     // import too, since staging clears before use). Provider-agnostic.
     @Query("DELETE FROM channels_stage")

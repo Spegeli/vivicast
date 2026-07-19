@@ -113,6 +113,12 @@ class RoomMediaRepository(
             episodes.map { it.toDomain() }
         }
 
+    override fun observeHasLiveContent(): Flow<Boolean> = catalogDao.observeHasActiveChannels()
+
+    override fun observeHasMovieContent(): Flow<Boolean> = catalogDao.observeHasActiveMovies()
+
+    override fun observeHasSeriesContent(): Flow<Boolean> = catalogDao.observeHasActiveSeries()
+
     override suspend fun getChannel(providerId: String, channelId: String): Channel? =
         catalogDao.getChannel(providerId, channelId)?.toDomain()
 

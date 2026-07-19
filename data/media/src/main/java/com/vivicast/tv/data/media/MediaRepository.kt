@@ -69,6 +69,13 @@ interface MediaRepository {
 
     fun observeEpisodes(providerId: String, seasonId: String): Flow<List<Episode>>
 
+    /** Per-type catalog presence over active providers — drives the Home per-row hide-vs-CTA. */
+    fun observeHasLiveContent(): Flow<Boolean> = flowOf(false)
+
+    fun observeHasMovieContent(): Flow<Boolean> = flowOf(false)
+
+    fun observeHasSeriesContent(): Flow<Boolean> = flowOf(false)
+
     suspend fun getChannel(providerId: String, channelId: String): Channel?
 
     /** The channel's raw remote logo candidates (playlist + mapped EPG icon), or null if unknown. */

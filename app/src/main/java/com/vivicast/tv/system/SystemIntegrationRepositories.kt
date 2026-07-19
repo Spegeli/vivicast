@@ -23,6 +23,9 @@ class SystemIntegrationPlaybackRepository(
     override fun observeAllContinueWatching(): Flow<List<PlaybackProgress>> =
         delegate.observeAllContinueWatching()
 
+    override fun observeAllEpisodeProgress(): Flow<List<PlaybackProgress>> =
+        delegate.observeAllEpisodeProgress()
+
     override suspend fun getWatchNextProgress(): List<PlaybackProgress> =
         delegate.getWatchNextProgress()
 

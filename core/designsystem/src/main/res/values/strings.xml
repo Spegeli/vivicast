@@ -139,8 +139,19 @@
     <string name="home_continue">Fortsetzen</string>
     <string name="home_recent_channels">Zuletzt gesehene Sender</string>
     <string name="home_empty_title">Keine Inhalte</string>
-    <string name="home_empty_body">Füge eine Wiedergabeliste hinzu, um zu starten.</string>
+    <string name="home_no_playlist_title">Noch keine Wiedergabeliste</string>
+    <string name="home_empty_body">Füge deine erste Wiedergabeliste hinzu, um Live-TV, Filme und Serien zu sehen.</string>
     <string name="home_add_playlist">Wiedergabeliste hinzufügen</string>
+    <string name="home_continue_movies">Filme fortsetzen</string>
+    <string name="home_continue_series">Serien fortsetzen</string>
+    <string name="home_go_livetv">Zu Live-TV</string>
+    <string name="home_go_movies">Zu Filme</string>
+    <string name="home_go_series">Zu Serien</string>
+    <string name="home_settings">Einstellungen</string>
+    <string name="home_open_settings">Einstellungen öffnen</string>
+    <string name="home_disabled_title">Wiedergabelisten deaktiviert</string>
+    <string name="home_disabled_body">Deine Wiedergabelisten sind aktuell deaktiviert. Aktiviere sie in den Einstellungen, um wieder Inhalte auf dem Home-Bildschirm zu sehen.</string>
+    <string name="home_empty_check_body">Prüfe deine Wiedergabelisten in den Einstellungen.</string>
     <string name="home_livetv_favorites">Live-TV Favoriten</string>
 
     <!-- Live-TV -->

@@ -53,7 +53,11 @@ fun VivicastStreamInfoBadge(label: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ProgressLine(progressPercent: Int, modifier: Modifier = Modifier) {
+fun ProgressLine(
+    progressPercent: Int,
+    modifier: Modifier = Modifier,
+    color: Color = VivicastColors.Progress,
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -65,7 +69,7 @@ fun ProgressLine(progressPercent: Int, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth(progressPercent.coerceIn(0, 100) / 100f)
                 .height(6.dp)
-                .background(VivicastColors.Progress),
+                .background(color),
         )
     }
 }

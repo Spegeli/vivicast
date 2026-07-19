@@ -346,6 +346,157 @@ fun VivicastChannelCard(
     }
 }
 
+/**
+ * Home "Zuletzt gesehene Sender" card — logo on top, channel name below. Compact per the Home spec:
+ * logo + name only (no program / progress / favorite).
+ */
+@Composable
+fun VivicastHomeChannelCard(
+    channelName: String,
+    logoText: String,
+    logoMissing: Boolean,
+    modifier: Modifier = Modifier,
+    logoResId: Int? = null,
+    logoModel: Any? = null,
+    onFocused: () -> Unit = {},
+    onClick: () -> Unit = {},
+) {
+    Column(
+        modifier = modifier.width(VivicastCardSizes.PosterWidth),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        VivicastFocusSurface(
+            modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.HomeChannelTileHeight),
+            onClick = onClick,
+            onFocused = onFocused,
+            contentPadding = VivicastSpacing.Space3,
+            shape = VivicastShapes.PosterRadius,
+            focusScale = VivicastFocusDefaults.ScaleMedium,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                MiniLogo(logoText, logoMissing, imageResId = logoResId, imageModel = logoModel)
+            }
+        }
+        Text(
+            text = channelName,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelMedium,
+        )
+    }
+}
+
+/**
+ * Home "Filme/Serien fortsetzen" card — poster + title + a thin accent-coloured progress bar (no percent
+ * number, no rating/favorite/seen). See the Home card spec.
+ */
+@Composable
+fun VivicastHomePosterCard(
+    title: String,
+    hasPoster: Boolean,
+    progressPercent: Int,
+    modifier: Modifier = Modifier,
+    imageResId: Int? = null,
+    imageModel: Any? = null,
+    onFocused: () -> Unit = {},
+    onClick: () -> Unit = {},
+) {
+    Column(
+        modifier = modifier.width(VivicastCardSizes.PosterWidth),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+    ) {
+        VivicastFocusSurface(
+            modifier = Modifier.fillMaxWidth().height(VivicastCardSizes.PosterImageHeight),
+            onClick = onClick,
+            onFocused = onFocused,
+            contentPadding = VivicastSpacing.Space0,
+            shape = VivicastShapes.PosterRadius,
+            focusScale = VivicastFocusDefaults.ScaleMedium,
+        ) { focused ->
+            HomePosterArtwork(
+                title = title,
+                hasPoster = hasPoster,
+                imageResId = imageResId,
+                imageModel = imageModel,
+                focused = focused,
+                progressPercent = progressPercent,
+            )
+        }
+        Text(
+            text = title,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.LabelMedium,
+        )
+    }
+}
+
+@Composable
+private fun HomePosterArtwork(
+    title: String,
+    hasPoster: Boolean,
+    imageResId: Int?,
+    imageModel: Any?,
+    focused: Boolean,
+    progressPercent: Int,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                if (hasPoster) {
+                    Brush.verticalGradient(listOf(Color(0xFF405973), Color(0xFF203148), Color(0xFF0D1420)))
+                } else {
+                    Brush.verticalGradient(listOf(Color(0xFF212B3B), Color(0xFF111827), Color(0xFF0A101B)))
+                },
+            ),
+    ) {
+        // Placeholder drawn first (behind); a failed/absent image falls back to it.
+        Text(
+            text = if (hasPoster) initialsFor(title) else stringResource(R.string.card_no_poster),
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = VivicastSpacing.Space4),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = VivicastTypography.TitleSmall.copy(
+                color = if (focused) Color.White else VivicastColors.TextSecondary,
+            ),
+        )
+        if (imageModel != null) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xA8050910)))),
+            )
+        } else if (imageResId != null) {
+            Image(
+                painter = painterResource(imageResId),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xA8050910)))),
+            )
+        }
+        if (progressPercent > 0) {
+            ProgressLine(
+                progressPercent,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(VivicastSpacing.Space3),
+                color = LocalVivicastColors.current.accent,
+            )
+        }
+    }
+}
+
 @Composable
 fun MiniLogo(
     text: String,

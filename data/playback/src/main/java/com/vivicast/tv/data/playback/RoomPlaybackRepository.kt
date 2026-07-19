@@ -24,6 +24,11 @@ class RoomPlaybackRepository(
             progress.map { it.toDomain() }
         }
 
+    override fun observeAllEpisodeProgress(): Flow<List<PlaybackProgress>> =
+        playbackDao.observeAllEpisodeProgress().map { progress ->
+            progress.map { it.toDomain() }
+        }
+
     override suspend fun getWatchNextProgress(): List<PlaybackProgress> =
         playbackDao.getPlaybackProgress()
             .filter { it.mediaType in listOf(MediaType.Movie.storageValue, MediaType.Episode.storageValue) }

@@ -139,8 +139,19 @@
     <string name="home_continue">Continue watching</string>
     <string name="home_recent_channels">Recently watched channels</string>
     <string name="home_empty_title">No content</string>
-    <string name="home_empty_body">Add a playlist to get started.</string>
+    <string name="home_no_playlist_title">No playlist yet</string>
+    <string name="home_empty_body">Add your first playlist to start watching Live TV, movies and series.</string>
     <string name="home_add_playlist">Add playlist</string>
+    <string name="home_continue_movies">Continue movies</string>
+    <string name="home_continue_series">Continue series</string>
+    <string name="home_go_livetv">Go to Live TV</string>
+    <string name="home_go_movies">Go to Movies</string>
+    <string name="home_go_series">Go to Series</string>
+    <string name="home_settings">Settings</string>
+    <string name="home_open_settings">Open Settings</string>
+    <string name="home_disabled_title">Playlists disabled</string>
+    <string name="home_disabled_body">Your playlists are currently disabled. Enable them in Settings to see content on the home screen again.</string>
+    <string name="home_empty_check_body">Check your playlists in Settings.</string>
     <string name="home_livetv_favorites">Live-TV Favorites</string>
 
     <!-- Live-TV -->

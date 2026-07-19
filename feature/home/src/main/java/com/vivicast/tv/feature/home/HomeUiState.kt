@@ -5,46 +5,61 @@ import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.PlaybackProgress
+import com.vivicast.tv.domain.model.Series
 
 /**
- * Immutable presentation state for the home screen. Holds the enriched
- * "continue watching" and "recent channels" data resolved from the repositories.
+ * Immutable presentation state for the home screen. Home is only rows (no hero): per-type "resume" rows for
+ * movies and series plus a recent-channels row. Each row is shown only when its content type exists in an
+ * active playlist; [emptyReason] is set only when no row is shown at all. [loaded] gates the very first
+ * frame so the empty state never flashes before the repositories emit.
+ *
  * Localized strings, image loading and focus/selection handling stay in the UI.
  */
 internal data class HomeUiState(
-    val continueItems: List<ContinueHomeItem> = emptyList(),
+    val loaded: Boolean = false,
+    val movieItems: List<MovieContinueHomeItem> = emptyList(),
+    val seriesItems: List<SeriesContinueHomeItem> = emptyList(),
     val recentChannels: List<RecentChannelHomeItem> = emptyList(),
+    val hasLive: Boolean = false,
+    val hasMovies: Boolean = false,
+    val hasSeries: Boolean = false,
+    val emptyReason: HomeEmptyReason? = null,
 )
 
-internal sealed interface ContinueHomeItem {
-    val id: String
-    val title: String
-    val meta: String
-    val progress: PlaybackProgress
-    val hasImage: Boolean
-    val imageSourceKey: String?
+/** Why Home shows the global empty state (only when no per-type row is shown). */
+internal enum class HomeEmptyReason {
+    /** No playlists at all. */
+    NoPlaylist,
 
-    data class MovieItem(
-        override val progress: PlaybackProgress,
-        val movie: Movie,
-    ) : ContinueHomeItem {
-        override val id: String = "movie:${movie.providerId}:${movie.id}"
-        override val title: String = movie.name
-        override val meta: String = "${progress.progressPercent} %"
-        override val hasImage: Boolean = !movie.posterUrl.isNullOrBlank()
-        override val imageSourceKey: String? = movie.posterUrl
-    }
+    /** Playlists exist but all are disabled. */
+    AllDisabled,
 
-    data class EpisodeItem(
-        override val progress: PlaybackProgress,
-        val episode: Episode,
-    ) : ContinueHomeItem {
-        override val id: String = "episode:${episode.providerId}:${episode.id}"
-        override val title: String = episode.name
-        override val meta: String = "${progress.progressPercent} % | S${episode.seasonNumber}E${episode.episodeNumber}"
-        override val hasImage: Boolean = !episode.thumbnailUrl.isNullOrBlank()
-        override val imageSourceKey: String? = episode.thumbnailUrl
-    }
+    /** At least one active playlist, but no catalog content of any type yet (fresh/empty import). */
+    EmptyCatalog,
+}
+
+/** An in-progress movie to resume. */
+internal data class MovieContinueHomeItem(
+    val progress: PlaybackProgress,
+    val movie: Movie,
+) {
+    val id: String = "movie:${movie.providerId}:${movie.id}"
+    val title: String = movie.name
+    val hasImage: Boolean = !movie.posterUrl.isNullOrBlank()
+}
+
+/**
+ * A series to resume (series-centric): [episode] is the resume target — the in-progress episode, or the
+ * next episode (with [progressPercent] = 0) when the last relevant one was completed.
+ */
+internal data class SeriesContinueHomeItem(
+    val series: Series,
+    val episode: Episode,
+    val progressPercent: Int,
+) {
+    val id: String = "series:${series.providerId}:${series.id}"
+    val title: String = series.name
+    val hasImage: Boolean = !series.posterUrl.isNullOrBlank()
 }
 
 internal data class RecentChannelHomeItem(

@@ -27,6 +27,18 @@ interface PlaybackDao {
     )
     fun observeAllContinueWatching(): Flow<List<PlaybackProgressEntity>>
 
+    // All EPISODE rows, completed AND in-progress, newest first. The Home "Serien fortsetzen" row is
+    // series-centric and advances to the next episode after one completes, so it needs completed rows too
+    // (observeAllContinueWatching is isCompleted=0 only).
+    @Query(
+        """
+        SELECT * FROM playback_progress
+        WHERE mediaType = 'EPISODE'
+        ORDER BY lastWatchedAt DESC
+        """,
+    )
+    fun observeAllEpisodeProgress(): Flow<List<PlaybackProgressEntity>>
+
     @Query(
         """
         SELECT * FROM playback_progress
