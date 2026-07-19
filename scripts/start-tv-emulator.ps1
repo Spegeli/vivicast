@@ -1,9 +1,9 @@
-# Android TV emulator launcher. Parametric API level so we test the supported floor (Android 9 / API 28)
-# and ceiling (API 36), not just one. Bugs that only surface on older scoped-storage/permission paths
-# stay hidden if we only ever run the newest image.
+# Android TV emulator launcher. Parametric API level so we test the supported floor (Android 8 / API 26 =
+# minSdk) and ceiling (API 36), not just one. API 28 (Android 9) mirrors the physical test device. Bugs that
+# only surface on older scoped-storage/permission paths stay hidden if we only ever run the newest image.
 # NOTE: param() must be the first executable statement — keep it above Set-StrictMode.
 param(
-    [ValidateSet(28, 36)]
+    [ValidateSet(26, 28, 36)]
     [int]$Api = 36
 )
 
@@ -20,7 +20,7 @@ $avdName = "ViviCast_AndroidTV_API$Api"
 # List AVDs via the emulator itself (no extra tool dependency) and fail early with a clear hint.
 $known = & $emulator -list-avds 2>$null
 if ($known -notcontains $avdName) {
-    Write-Error "AVD '$avdName' not found. Create it first (API 28 image: system-images;android-28;android-tv;x86)."
+    Write-Error "AVD '$avdName' not found. Create it first (image: system-images;android-$Api;android-tv;x86)."
     exit 1
 }
 

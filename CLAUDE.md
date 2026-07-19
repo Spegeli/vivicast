@@ -182,8 +182,9 @@ Follow these for all new/changed app code (they encode the completed remediation
 ## Android Development
 
 - Use Android TV emulator via `scripts\start-tv-emulator.ps1` as primary test environment
-  (`-Api 36` = Android 16 ceiling, default; `-Api 28` = Android 9 floor, mirrors the physical test
-  device). Test structural / storage / permission changes on **both** floor and ceiling.
+  (`-Api 36` = Android 16 ceiling, default; `-Api 26` = Android 8 floor = `minSdk` (26–27 supported but
+  untested on hardware); `-Api 28` = Android 9, mirrors the physical test device). Test structural /
+  storage / permission changes on **both** floor and ceiling.
 - No APK installs on physical device unless user explicitly requests it
 - Run compile checkpoints after structural or behavior changes
 - Use Android Studio Compose Preview for visual iteration
