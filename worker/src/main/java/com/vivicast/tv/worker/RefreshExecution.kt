@@ -47,8 +47,8 @@ import java.io.InputStream
 // missing/invalid credentials, an empty/invalid feed, a provider-type mismatch, an over-size body, an unsafe
 // XMLTV feed, or a non-transient 4xx (bad request / auth / forbidden / not-found). Retrying those just spins a
 // WorkManager backoff loop (re-downloading the feed each attempt); for auth failures it also risks tripping
-// provider rate-limits / IP-bans. Transient errors (IO/network/timeout, HTTP 429, 5xx, a briefly-locked DB)
-// still retry.
+// provider rate-limits / IP-bans. Transient errors (IO/network/timeout, HTTP 408/423/425/429, 5xx, a
+// briefly-locked DB) still retry.
 internal fun Throwable.isTerminalRefreshError(): Boolean =
     generateSequence(this) { it.cause }.any { cause ->
         when (cause) {
@@ -66,8 +66,11 @@ internal fun Throwable.isTerminalRefreshError(): Boolean =
         }
     }
 
-// 4xx are permanent (bad request / auth / forbidden / not-found) EXCEPT 429 (rate limit → back off and retry).
-internal fun Int.isTerminalHttpStatus(): Boolean = this in 400..499 && this != 429
+// 4xx are permanent (bad request / auth / forbidden / not-found) EXCEPT the transient ones below, which back
+// off and retry: 408 Request Timeout, 423 Locked, 425 Too Early, 429 Too Many Requests (rate limit).
+private val TRANSIENT_HTTP_STATUSES = setOf(408, 423, 425, 429)
+
+internal fun Int.isTerminalHttpStatus(): Boolean = this in 400..499 && this !in TRANSIENT_HTTP_STATUSES
 
 class DefaultRefreshWorkerRunner(
     private val orchestrator: MaintenanceRefreshOrchestrator,

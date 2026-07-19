@@ -47,6 +47,8 @@ internal class SeriesViewModel(
     private val playbackRepository: PlaybackRepository,
     // On-demand season/episode fetch (App-hoisted: Xtream getSeriesInfo -> import). No-op for M3U.
     private val ensureSeriesDetail: suspend (Series) -> Unit = {},
+    // #23: injectable clock (default wall clock) so mark-seen is deterministic in tests, matching LiveTvViewModel.
+    private val nowProvider: () -> Long = { System.currentTimeMillis() },
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -287,7 +289,7 @@ internal class SeriesViewModel(
     fun onMarkEpisodeSeen() {
         val episode = currentSelectedEpisode() ?: return
         coroutineScope.launch {
-            val now = System.currentTimeMillis()
+            val now = nowProvider()
             val completed = episode.completedProgress(selectedEpisodeProgressLoaded, now)
             playbackRepository.saveProgress(completed)
             selectedEpisodeProgressLoaded = completed

@@ -39,6 +39,8 @@ internal class MoviesViewModel(
     private val mediaRepository: MediaRepository,
     private val favoritesRepository: FavoritesRepository,
     private val playbackRepository: PlaybackRepository,
+    // #23: injectable clock (default wall clock) so mark-seen is deterministic in tests, matching LiveTvViewModel.
+    private val nowProvider: () -> Long = { System.currentTimeMillis() },
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -180,7 +182,7 @@ internal class MoviesViewModel(
     fun onMarkSeen(movie: Movie) {
         val providerId = selectedProviderIdFlow.value ?: return
         coroutineScope.launch {
-            val now = System.currentTimeMillis()
+            val now = nowProvider()
             val existing = detailProgressLoaded ?: continueMovieProgress[movie.id]
             val completed = movie.completedProgress(existing, now)
             playbackRepository.saveProgress(completed)

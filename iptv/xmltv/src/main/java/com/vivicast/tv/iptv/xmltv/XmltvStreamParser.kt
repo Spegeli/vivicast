@@ -18,7 +18,15 @@ private const val FALLBACK_TITLE = "Ohne Titel"
 internal fun maybeGunzip(input: InputStream): InputStream {
     val pushback = PushbackInputStream(BufferedInputStream(input), 2)
     val signature = ByteArray(2)
-    val read = pushback.read(signature, 0, 2)
+    // #17: read(...) may return fewer bytes than asked (legal for a slow/chunked stream), so fill both
+    // signature bytes in a loop until 2-or-EOF — otherwise a real .gz whose first read yields 1 byte was
+    // mis-sniffed as plain XML and the parse failed. Unread exactly what was read so the body stays intact.
+    var read = 0
+    while (read < 2) {
+        val n = pushback.read(signature, read, 2 - read)
+        if (n < 0) break
+        read += n
+    }
     if (read > 0) pushback.unread(signature, 0, read)
     val gzipped = read == 2 && signature[0] == 0x1F.toByte() && signature[1] == 0x8B.toByte()
     return if (gzipped) GZIPInputStream(pushback) else pushback
