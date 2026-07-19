@@ -88,7 +88,7 @@ Each call site supplies `items` from its UiState and wires `onCommit` to a VM pe
 - Reorder **interaction** = local composable UI state (in the designsystem component). ✅ allowed.
 - Reorder **persistence** = `:data` repository method → `suspend Result` on the feature ViewModel →
   panel invokes via `scope.launch { … }`, German strings stay panel-side. Matches
-  `SETTINGS-APP-HOISTED-DECISIONS.md` (line 28 "link/unlink/**move**" already sanctioned home).
+  `docs/ARCHITECTURE-SETTINGS-HOISTING.md` (EPG link/unlink/**move** already sanctioned this shape).
 - Persist method mirrors `SecureEpgSourceRepository.rewritePriorities` (renumber in
   `database.withTransaction`, temp-offset to dodge the unique index). One unit/android test for it.
 - Strings ("Sortieren", "An Position ablegen", hints) → **both** designsystem locale files only.
