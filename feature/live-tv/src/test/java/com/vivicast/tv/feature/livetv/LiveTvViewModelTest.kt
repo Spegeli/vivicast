@@ -286,6 +286,15 @@ private class FakeEpgRepository(
         toMillis: Long,
     ): Flow<List<EpgProgram>> = flowOf(programsByChannel[channelId].orEmpty())
 
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>> = flowOf(
+        channelIds.flatMap { programsByChannel[it].orEmpty() }
+            .filter { nowMillis >= it.startTime && nowMillis < it.endTime },
+    )
+
     override fun observeEpgSources(): Flow<List<EpgSource>> = emptyFlow()
     override suspend fun getEpgSources(): List<EpgSource> = emptyList()
     override fun observeProviderEpgSources(providerId: String): Flow<List<ProviderEpgSource>> = emptyFlow()

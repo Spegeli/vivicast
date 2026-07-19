@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.view.SurfaceView
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.vivicast.tv.core.cache.MediaCacheKey
 import com.vivicast.tv.core.cache.MediaCacheType
 import com.vivicast.tv.core.database.VIVICAST_DATABASE_VERSION
@@ -227,6 +230,12 @@ private fun VivicastApp(
     var playerVisible by remember { mutableStateOf(false) }
     var selectedRoute by remember { mutableStateOf(ROUTE_HOME) }
     var livePlaybackChannels by remember { mutableStateOf(emptyList<Channel>()) }
+    // P2: the channel currently streaming into the embedded Live-TV preview (App-hoisted single player).
+    // Non-null == the preview is live; drives the preview surface + the seamless preview<->fullscreen handoff.
+    var committedLiveChannel by remember { mutableStateOf<Channel?>(null) }
+    // Bumped when the fullscreen player closes back to a live preview — tells Live-TV to focus the channel
+    // (grabs focus into the content, so it doesn't bounce to the Home nav / stay on the top bar).
+    var focusLiveChannelSignal by remember { mutableStateOf(0) }
     var liveTvSearchTarget by remember { mutableStateOf<LiveTvSearchTarget?>(null) }
     var movieSearchTarget by remember { mutableStateOf<Movie?>(null) }
     var seriesSearchTarget by remember { mutableStateOf<SeriesTarget?>(null) }
@@ -258,6 +267,11 @@ private fun VivicastApp(
     val topNavigationFocusRequester = remember { FocusRequester() }
     val context = LocalContext.current
     val activity = context as? Activity
+    // P2: the single SurfaceView the embedded Live-TV preview renders into (the App owns it; the shared
+    // player's surface is attached to it when a channel is committed + Live-TV is active + not fullscreen).
+    // setZOrderMediaOverlay so the video draws ABOVE the preview panel's background (a plain SurfaceView sits
+    // behind the window and would be occluded by the GlassPanel fill).
+    val livePreviewSurface = remember { SurfaceView(context).apply { setZOrderMediaOverlay(true) } }
     // Consumed once per Activity instance: recreate() (from a language change) reuses the same Intent,
     // so this is true right after the recreate and false on every normal launch.
     var reopenLanguageSettings by remember {
@@ -511,6 +525,33 @@ private fun VivicastApp(
             (currentIndex + direction).floorMod(livePlaybackChannels.size)
         }
         openChannel(livePlaybackChannels[nextIndex])
+    }
+
+    // P2 — start the embedded Live-TV preview: play the channel on the shared player WITHOUT showing the
+    // fullscreen overlay. The preview surface (attached below) renders it. One connection (play() stops any
+    // previous stream first).
+    fun commitLivePreview(channel: Channel) {
+        committedLiveChannel = channel
+        scope.launch { appContainer.openChannelPlayback(channel, origin = PlaybackOrigin.LiveTv) { } }
+    }
+
+    // Stop the preview + release the connection (leaving Live-TV / clearing the committed channel).
+    fun stopLivePreview() {
+        if (committedLiveChannel != null) {
+            committedLiveChannel = null
+            appContainer.playerController.stop()
+        }
+    }
+
+    // Live-TV "watch" (BACK on the committed channel / OK on the current programme): if that channel is
+    // already streaming in the preview, just raise the fullscreen overlay (surface handoff, NO re-connect);
+    // otherwise start it fresh.
+    fun openLivePlayer(channel: Channel) {
+        if (committedLiveChannel?.id == channel.id) {
+            playerVisible = true
+        } else {
+            openChannel(channel, origin = PlaybackOrigin.LiveTv)
+        }
     }
 
     fun openMovie(
@@ -844,6 +885,24 @@ private fun VivicastApp(
     val strSearch = stringResource(R.string.nav_search_label)
     val strSettings = stringResource(R.string.nav_settings_label)
 
+    // P2 — attach the shared player's video to the embedded preview surface whenever a channel is committed,
+    // Live-TV is the active route, and the fullscreen overlay isn't up. Fullscreen attaches its own surface
+    // (setVideoSurfaceView replaces — no reconnect); on close this re-runs and re-attaches the preview.
+    // Also toggle the surface's visibility: setZOrderMediaOverlay draws it ABOVE the window (incl. the
+    // fullscreen overlay), so it must be hidden while fullscreen, otherwise its last frame freezes on top.
+    DisposableEffect(committedLiveChannel, playerVisible, selectedRoute, livePreviewSurface) {
+        val shouldOwn = committedLiveChannel != null && !playerVisible && selectedRoute == "live-tv"
+        livePreviewSurface.visibility = if (shouldOwn) android.view.View.VISIBLE else android.view.View.INVISIBLE
+        if (shouldOwn) {
+            appContainer.playerController.attachVideoSurface(livePreviewSurface)
+        }
+        onDispose { }
+    }
+    // Leaving Live-TV (to another route, not the fullscreen overlay) stops the preview + releases the stream.
+    LaunchedEffect(selectedRoute) {
+        if (selectedRoute != "live-tv") stopLivePreview()
+    }
+
     val destinations = listOf(
         AppDestination("Home", ROUTE_HOME) {
             HomeRoute(
@@ -877,7 +936,13 @@ private fun VivicastApp(
                     }
                 },
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
-                onOpenPlayer = { channel -> openChannel(channel, origin = PlaybackOrigin.LiveTv) },
+                onOpenPlayer = { channel -> openLivePlayer(channel) },
+                onCommitPreview = { channel -> commitLivePreview(channel) },
+                focusChannelOnReturnSignal = focusLiveChannelSignal,
+                livePreviewActive = committedLiveChannel != null,
+                livePreviewSlot = {
+                    AndroidView(factory = { livePreviewSurface }, modifier = Modifier.matchParentSize())
+                },
                 onPlayableChannelsChanged = { channels -> livePlaybackChannels = channels },
                 onOpenCatchUp = { channel, program -> openCatchUp(channel, program, origin = PlaybackOrigin.LiveTv) },
                 targetProviderId = liveTvSearchTarget?.channel?.providerId,
@@ -1416,7 +1481,20 @@ private fun VivicastApp(
     if (playerVisible) {
         PlayerRoute(
             playerController = appContainer.playerController,
-            onClose = { playerVisible = false },
+            onClose = {
+                playerVisible = false
+                // Closing a live-preview fullscreen returns to Live-TV with focus on the channel (not Home).
+                // Anchor focus on the Live-TV nav tab synchronously first so it can't fall back to the Home
+                // tab (which would yank the route to Home); the Live-TV content then grabs the channel focus.
+                if (committedLiveChannel != null) {
+                    selectedRoute = "live-tv"
+                    runCatching { topNavigationFocusRequester.requestFocus() }
+                    focusLiveChannelSignal += 1
+                }
+            },
+            // Fullscreen opened from a live preview -> closing hands the SAME stream back to the preview
+            // (no reconnect); the preview surface re-attaches. Non-Live-TV playback still stops on close.
+            keepPlayingOnClose = committedLiveChannel != null,
             onChannelUp = { zapChannel(1) },
             onChannelDown = { zapChannel(-1) },
             onChooseAnotherChannel = {

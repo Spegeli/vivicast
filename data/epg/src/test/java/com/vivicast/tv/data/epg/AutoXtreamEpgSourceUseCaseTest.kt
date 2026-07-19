@@ -164,6 +164,11 @@ private class FakeRepo : EpgSourceRepository {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<EpgProgram>> = error("unused")
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>> = error("unused")
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
         error("unused")
     override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping =

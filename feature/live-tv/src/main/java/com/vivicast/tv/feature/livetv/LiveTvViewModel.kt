@@ -15,6 +15,8 @@ import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.Provider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +54,13 @@ internal class LiveTvViewModel(
     private val expandedProviderIdsFlow = MutableStateFlow<Set<String>>(emptySet())
     private val selectedChannelFlow = MutableStateFlow<Channel?>(null)
 
+    // The channels currently visible in the list (browse page or the active-gated favorites) — drives the
+    // per-channel current-programme batch. Set from rebuild(); StateFlow dedups equal lists so it only
+    // re-queries when the visible set actually changes.
+    private val visibleChannelsFlow = MutableStateFlow<List<Channel>>(emptyList())
+    // Wall-clock tick used for the current programme / progress / EPG "Live" badge, updated ~every minute.
+    private val nowTickFlow = MutableStateFlow(nowProvider())
+
     private var providersRaw: List<Provider> = emptyList()
     private var categories: List<Category> = emptyList()
     private var favorites: List<Favorite> = emptyList()
@@ -59,6 +68,7 @@ internal class LiveTvViewModel(
     private var observedChannels: List<Channel> = emptyList()
     private var targetChannelLoaded: Channel? = null
     private var selectedPrograms: List<EpgProgram> = emptyList()
+    private var currentProgramsByChannel: Map<String, EpgProgram> = emptyMap()
     private var nowMillisState: Long = 0L
     private var targetEpgStartTime: Long? = null
     private var lastGuardChannels: List<Channel>? = null
@@ -152,6 +162,40 @@ internal class LiveTvViewModel(
                 rebuild()
             }
         }
+
+        // Channel focus/selection changes must re-emit UI state immediately (drives the preview + EPG to
+        // follow the focused channel). selectedChannelIdFlow is otherwise only read inside rebuild(), so
+        // without this collector the preview/EPG would only catch up on the next tick.
+        coroutineScope.launch { selectedChannelIdFlow.collect { rebuild() } }
+
+        // ~1-minute wall-clock tick: advances the selected channel's current/next + progress + the EPG "Live"
+        // badge without re-querying the (wide) EPG window (S4).
+        coroutineScope.launch {
+            while (true) {
+                delay(NOW_TICK_MILLIS)
+                nowTickFlow.value = nowProvider()
+            }
+        }
+        coroutineScope.launch { nowTickFlow.collect { rebuild() } }
+
+        // Winner-aware CURRENT programme per visible channel (P2), grouped by provider (the favorites list
+        // spans providers). Re-runs on a visible-set change or a tick; keeps the winner + isActive filter.
+        coroutineScope.launch {
+            combine(visibleChannelsFlow, nowTickFlow) { channels, now -> channels to now }
+                .flatMapLatest { (channels, now) -> currentProgramsFlow(channels, now) }
+                .collect { programs ->
+                    currentProgramsByChannel = programs
+                    rebuild()
+                }
+        }
+    }
+
+    private fun currentProgramsFlow(channels: List<Channel>, now: Long): Flow<Map<String, EpgProgram>> {
+        if (channels.isEmpty()) return flowOf(emptyMap())
+        val flows = channels.groupBy { it.providerId }.map { (providerId, providerChannels) ->
+            epgRepository.observeCurrentProgramsForChannels(providerId, providerChannels.map { it.id }, now)
+        }
+        return combine(flows) { results -> results.asList().flatten().associateBy { it.channelId } }
     }
 
     fun onExpandedProvidersChanged(expanded: Set<String>) {
@@ -235,21 +279,33 @@ internal class LiveTvViewModel(
     private fun rebuild() {
         val providerId = selectedProviderIdFlow.value
         val categoryId = selectedCategoryIdFlow.value
-        val favoriteIds = favorites.mapTo(mutableSetOf()) { it.mediaId }
+        // A — hide favorites whose provider is deactivated (consistent with the tree). `getChannel` has no
+        // isActive gate, so a favorite from a disabled provider would otherwise still show/play. Gating here
+        // (in rebuild, which runs on both provider and favorite changes) also drops favorites whose channel
+        // row vanished, keeping the star set + count consistent.
+        val activeFavoriteChannels = favoriteChannels.filter { channel ->
+            providersRaw.any { it.id == channel.providerId && it.isActive }
+        }
+        val favoriteIds = activeFavoriteChannels.mapTo(mutableSetOf()) { it.id }
         val channels = if (categoryId == FAVORITES_CATEGORY_ID) {
-            favoriteChannels.sortedBy { it.name.lowercase(Locale.getDefault()) }
+            activeFavoriteChannels.sortedBy { it.name.lowercase(Locale.getDefault()) }
         } else {
             observedChannels
         }
 
-        // Auto-select the first channel when the previous selection left the (changed) list,
-        // mirroring the original LaunchedEffect(channels) guard incl. the preview reset signal.
-        if (channels != lastGuardChannels) {
+        // Auto-select the first channel when the selection is missing/invalid — whether the list changed OR
+        // the selection was just cleared (e.g. onCategorySelected/onProviderFocused set it null). The
+        // `next != current` guard keeps an empty list from re-bumping the reset signal every rebuild.
+        val currentChannelId = selectedChannelIdFlow.value
+        val selectionValid = currentChannelId != null && channels.any { it.id == currentChannelId }
+        if (channels != lastGuardChannels || !selectionValid) {
             lastGuardChannels = channels
-            val currentChannelId = selectedChannelIdFlow.value
-            if (currentChannelId == null || channels.none { it.id == currentChannelId }) {
-                selectedChannelIdFlow.value = channels.firstOrNull()?.id
-                channelResetSignal += 1
+            if (!selectionValid) {
+                val next = channels.firstOrNull()?.id
+                if (next != currentChannelId) {
+                    selectedChannelIdFlow.value = next
+                    channelResetSignal += 1
+                }
             }
         }
 
@@ -261,9 +317,16 @@ internal class LiveTvViewModel(
         val selectedProvider = providersRaw.firstOrNull { it.id == providerId }
         val channelProvider = selectedChannel?.let { channel -> providersRaw.firstOrNull { it.id == channel.providerId } }
             ?: selectedProvider
-        val now = nowMillisState
+        // Ticking wall-clock (S4) for current/next/progress; the EPG window itself stays anchored at
+        // nowMillisState so a minute tick never re-queries the wide window.
+        val now = nowTickFlow.value
         val currentProgram = selectedPrograms.firstOrNull { now >= it.startTime && now < it.endTime }
         val nextProgram = selectedPrograms.firstOrNull { it.startTime > now }
+
+        // Feed the per-channel current-programme batch (dedups equal lists → only re-queries on a real change).
+        visibleChannelsFlow.value = channels
+        // B — logo config signal: changes when any provider's logoPriority (or the set) changes.
+        val logoConfigSignal = providersRaw.joinToString(separator = ",") { it.id + ":" + it.logoPriority }.hashCode()
 
         _uiState.value = LiveTvUiState(
             // Deactivated playlists are not browsable (refresh/WatchNext/resume already honor isActive).
@@ -274,7 +337,7 @@ internal class LiveTvViewModel(
             channels = channels,
             selectedChannelId = effectiveChannelId,
             favoriteChannelIds = favoriteIds,
-            favoriteChannelCount = favoriteChannels.size,
+            favoriteChannelCount = activeFavoriteChannels.size,
             selectedProvider = selectedProvider,
             selectedCategory = categories.firstOrNull { it.id == categoryId },
             selectedChannel = selectedChannel,
@@ -285,6 +348,8 @@ internal class LiveTvViewModel(
             selectedPrograms = selectedPrograms,
             currentProgram = currentProgram,
             nextProgram = nextProgram,
+            currentProgramsByChannel = currentProgramsByChannel,
+            logoConfigSignal = logoConfigSignal,
             channelResetSignal = channelResetSignal,
         )
     }

@@ -33,6 +33,12 @@ internal data class LiveTvUiState(
     val selectedPrograms: List<EpgProgram> = emptyList(),
     val currentProgram: EpgProgram? = null,
     val nextProgram: EpgProgram? = null,
+    // Winner-resolved CURRENT programme per visible channel (P2) — every channel card shows its own "now",
+    // not just the selected one. Keyed by channel id; absent when the channel's winning source has a gap now.
+    val currentProgramsByChannel: Map<String, EpgProgram> = emptyMap(),
+    // Bumps whenever any provider's logoPriority (or the provider set) changes — folded into each logo
+    // produceState key so a live priority-reorder re-resolves logos immediately (no screen re-entry).
+    val logoConfigSignal: Int = 0,
     val channelResetSignal: Int = 0,
 )
 
@@ -40,3 +46,5 @@ internal const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
 internal const val LIVE_TV_PAGE_SIZE = 80
 internal const val EPG_PAST_WINDOW_MILLIS = 4L * 60L * 60L * 1000L
 internal const val EPG_FUTURE_WINDOW_MILLIS = 8L * 60L * 60L * 1000L
+// Wall-clock re-evaluation cadence for the current programme / progress / EPG "Live" badge (S4).
+internal const val NOW_TICK_MILLIS = 60_000L

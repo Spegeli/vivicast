@@ -56,6 +56,14 @@ class RoomEpgRepository(
         epgDao.observeProgramsForChannel(providerId, channelId, fromMillis, toMillis)
             .map { programs -> programs.map { it.toDomain() } }
 
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>> =
+        epgDao.observeCurrentProgramsForChannels(providerId, channelIds, nowMillis)
+            .map { programs -> programs.map { it.toDomain() } }
+
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
         epgDao.observeMappingsForChannel(providerId, channelId).map { mappings -> mappings.map { it.toDomain() } }
 

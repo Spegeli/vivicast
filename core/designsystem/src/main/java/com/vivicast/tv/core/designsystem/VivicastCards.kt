@@ -298,6 +298,11 @@ private fun SearchPosterThumb(
     }
 }
 
+/**
+ * Live-TV channel row (TV-Mate inspired): logo left; name line = optional channel **number** (dimmer) then
+ * name; current programme below; a thin accent progress bar. Minimal badges — no always-on "Live" badge
+ * (the EPG column carries the Live marker); only a subtle ★ (favorited) and a catch-up chip when available.
+ */
 @Composable
 fun VivicastChannelCard(
     channelName: String,
@@ -308,16 +313,19 @@ fun VivicastChannelCard(
     progressPercent: Int,
     favorite: Boolean,
     catchUp: Boolean,
+    channelNumber: String? = null,
     logoResId: Int? = null,
     logoModel: Any? = null,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     VivicastFocusSurface(
         selected = selected,
         onFocused = onFocused,
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.fillMaxWidth().height(VivicastCardSizes.ChannelItemHeight),
         contentPadding = VivicastSpacing.Space3,
     ) {
@@ -328,18 +336,36 @@ fun VivicastChannelCard(
         ) {
             MiniLogo(logoText, logoMissing, imageResId = logoResId, imageModel = logoModel)
             Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.weight(1f)) {
-                Text(
-                    text = channelName,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = VivicastTypography.LabelLarge,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (!channelNumber.isNullOrBlank()) {
+                        Text(
+                            text = channelNumber,
+                            maxLines = 1,
+                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary),
+                        )
+                    }
+                    Text(
+                        text = channelName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = VivicastTypography.LabelLarge,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (favorite) {
+                        Text(
+                            text = "★",
+                            maxLines = 1,
+                            style = VivicastTypography.LabelLarge.copy(color = VivicastColors.Favorite),
+                        )
+                    }
+                }
                 BodyText(program, maxLines = 1)
-                ProgressLine(progressPercent)
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                    StatusBadge(stringResource(R.string.livetv_live_badge), tone = Color(0xFF6D1D1D))
-                    if (favorite) StatusBadge(stringResource(R.string.favorite_badge), tone = Color(0xFF72520C))
-                    if (catchUp) StatusBadge(stringResource(R.string.livetv_badge_catchup), tone = Color(0xFF4D3A78))
+                ProgressLine(progressPercent, color = LocalVivicastColors.current.accent)
+                if (catchUp) {
+                    StatusBadge(stringResource(R.string.livetv_badge_catchup), tone = Color(0xFF4D3A78))
                 }
             }
         }

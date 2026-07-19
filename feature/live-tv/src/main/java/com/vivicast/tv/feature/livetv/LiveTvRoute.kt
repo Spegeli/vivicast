@@ -5,14 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,9 +26,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +42,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.designsystem.ActionPill
@@ -46,7 +50,8 @@ import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
-import com.vivicast.tv.core.designsystem.SectionTitle
+import com.vivicast.tv.core.designsystem.MiniLogo
+import com.vivicast.tv.core.designsystem.ProgressLine
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastChannelCard
 import com.vivicast.tv.core.designsystem.VivicastColors
@@ -68,8 +73,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class LiveColumnMode { Category, Channel }
-private enum class LiveFocusArea { Provider, ChannelList, Epg, Preview }
+// Focus targets across the (adaptive) columns. Column VISIBILITY is a pure function of [focusedArea] — see
+// RoomLiveTvRoute. The preview is display-only (non-focusable), so focus is never on it.
+private enum class LiveFocusArea { Provider, ChannelList, Epg }
 
 @Composable
 fun LiveTvRoute(
@@ -81,6 +87,13 @@ fun LiveTvRoute(
     onExpandedProviderIdsChanged: (Set<String>) -> Unit = {},
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: (Channel) -> Unit = {},
+    // P2 — start the embedded video preview for a channel (OK/activate). App-hoisted (plays on the shared
+    // player). livePreviewActive == a channel is streaming; livePreviewSlot renders the App's video surface.
+    onCommitPreview: (Channel) -> Unit = {},
+    // Bumped when the fullscreen player closes back to the preview — focus the selected/committed channel.
+    focusChannelOnReturnSignal: Int = 0,
+    livePreviewActive: Boolean = false,
+    livePreviewSlot: @Composable BoxScope.() -> Unit = {},
     onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
     onOpenCatchUp: (Channel, EpgProgram) -> Unit = { _, _ -> },
     targetProviderId: String? = null,
@@ -99,6 +112,10 @@ fun LiveTvRoute(
         onExpandedProviderIdsChanged = onExpandedProviderIdsChanged,
         resolveChannelLogoModel = resolveChannelLogoModel,
         onOpenPlayer = onOpenPlayer,
+        onCommitPreview = onCommitPreview,
+        focusChannelOnReturnSignal = focusChannelOnReturnSignal,
+        livePreviewActive = livePreviewActive,
+        livePreviewSlot = livePreviewSlot,
         onPlayableChannelsChanged = onPlayableChannelsChanged,
         onOpenCatchUp = onOpenCatchUp,
         targetProviderId = targetProviderId,
@@ -110,6 +127,7 @@ fun LiveTvRoute(
     )
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun RoomLiveTvRoute(
     providerRepository: ProviderRepository,
@@ -120,6 +138,10 @@ private fun RoomLiveTvRoute(
     onExpandedProviderIdsChanged: (Set<String>) -> Unit,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: (Channel) -> Unit,
+    onCommitPreview: (Channel) -> Unit,
+    focusChannelOnReturnSignal: Int,
+    livePreviewActive: Boolean,
+    livePreviewSlot: @Composable BoxScope.() -> Unit,
     onPlayableChannelsChanged: (List<Channel>) -> Unit,
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
     targetProviderId: String?,
@@ -139,19 +161,41 @@ private fun RoomLiveTvRoute(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Pure-visual state kept in the composable layer.
-    var mode by remember { mutableStateOf(LiveColumnMode.Category) }
+    // Pure-visual navigation state. Column visibility is FOCUS-DRIVEN (the preview is non-focusable, so focus
+    // is only Provider/ChannelList/Epg): focus K -> [K|S|P], focus S -> [S|E|P] (K collapses, EPG of the
+    // focused channel appears), focus E -> [E|P] (S collapses). `activated` (a channel was OK'd) is orthogonal
+    // to the layout — it only drives BACK -> fullscreen (Phase 2: the running video). P2 splits identity:
+    // EPG + preview metadata follow `selectedChannel` (browse-peek, Model B), but the VIDEO and BACK ->
+    // fullscreen follow `committedChannel` (the actually-streaming one) so BACK enlarges what's playing
+    // (seamless handoff), never reconnecting to a merely-focused channel.
     var focusedArea by remember { mutableStateOf(LiveFocusArea.Provider) }
+    var activated by remember { mutableStateOf(false) }
+    // The channel whose stream is committed to the live preview (App-owned player). Null until first OK.
+    var committedChannel by remember { mutableStateOf<Channel?>(null) }
+    var focusedEpgProgram by remember { mutableStateOf<EpgProgram?>(null) }
     var selectedCategoryFocusRequest by remember { mutableStateOf(0) }
     var selectedChannelFocusRequest by remember { mutableStateOf(0) }
     var epgFocusRequest by remember { mutableStateOf(0) }
-    var previewStarted by remember { mutableStateOf(false) }
     var firstProviderExpansionApplied by remember { mutableStateOf(false) }
+    // Entry focus target: the first provider. Applied via focusProperties { enter } on the content row (NOT a
+    // requestFocus on load — that would steal focus from the top nav as it passes through Live-TV, trapping
+    // navigation on the Live-TV tab). Focus lands here only when D-pad actually enters the content.
+    val firstProviderFocusRequester = remember { FocusRequester() }
 
-    // Feed the App-hoisted expansion into the ViewModel (drives the category default guard).
     LaunchedEffect(expandedProviderIds) { viewModel.onExpandedProvidersChanged(expandedProviderIds) }
-    // Mirror the original "preview off when the channel auto-resets" side effect.
-    LaunchedEffect(uiState.channelResetSignal) { previewStarted = false }
+    // A channel auto-reset (its list changed) drops the activated (Sender-Modus) flag + committed identity.
+    LaunchedEffect(uiState.channelResetSignal) {
+        activated = false
+        committedChannel = null
+    }
+    // Returning from the fullscreen player: focus the (still-committed) channel in the list — grabs focus into
+    // the content so it doesn't fall to the Home nav tab.
+    LaunchedEffect(focusChannelOnReturnSignal) {
+        if (focusChannelOnReturnSignal > 0) {
+            focusedArea = LiveFocusArea.ChannelList
+            selectedChannelFocusRequest += 1
+        }
+    }
 
     val providers = uiState.providers
     val categories = uiState.categories
@@ -168,23 +212,46 @@ private fun RoomLiveTvRoute(
     val nowMillis = uiState.nowMillis
     val selectedPrograms = uiState.selectedPrograms
     val currentProgram = uiState.currentProgram
-    val nextProgram = uiState.nextProgram
+    val currentProgramsByChannel = uiState.currentProgramsByChannel
+    val logoConfigSignal = uiState.logoConfigSignal
 
-    BackHandler(enabled = focusedArea != LiveFocusArea.Provider) {
-        when (focusedArea) {
-            LiveFocusArea.Epg,
-            LiveFocusArea.Preview,
-            -> {
-                focusedArea = LiveFocusArea.ChannelList
-                selectedChannelFocusRequest += 1
+    // Focus-driven adaptive columns: K only while focus is in it; S collapses when focus is deep in the EPG;
+    // E appears the moment focus leaves the category column (channel-list or EPG). P is always shown.
+    val showKategorien = focusedArea == LiveFocusArea.Provider
+    val showChannelList = focusedArea != LiveFocusArea.Epg
+    val showEpg = focusedArea != LiveFocusArea.Provider
+
+    // Phase 1: preview logo + info follow the selected channel. The programme is the focused EPG row (R1)
+    // when in the EPG; while browsing the channel list it's the focused channel's CURRENT programme, taken
+    // from the per-channel batch so it updates instantly on scroll (not the slower single-channel query).
+    val previewChannel = selectedChannel
+    val previewProgram = if (focusedArea == LiveFocusArea.Epg) {
+        focusedEpgProgram ?: currentProgram
+    } else {
+        currentProgramsByChannel[selectedChannelId] ?: currentProgram
+    }
+
+    // BACK: in Sender-Modus jump straight to fullscreen from any column (S6); otherwise step the browse focus
+    // back toward the category column.
+    BackHandler(enabled = activated || focusedArea != LiveFocusArea.Provider) {
+        // Fullscreen the STREAMING channel (committed), not the merely-focused one — else BACK would
+        // reconnect to a browsed channel (2nd connection). Deep-link activation has no committed preview
+        // yet, so fall back to the selected channel (opens it fresh).
+        val target = committedChannel ?: selectedChannel
+        if (activated && target != null) {
+            onOpenPlayer(target)
+        } else {
+            when (focusedArea) {
+                LiveFocusArea.Epg -> {
+                    focusedArea = LiveFocusArea.ChannelList
+                    selectedChannelFocusRequest += 1
+                }
+                LiveFocusArea.ChannelList -> {
+                    focusedArea = LiveFocusArea.Provider
+                    selectedCategoryFocusRequest += 1
+                }
+                LiveFocusArea.Provider -> Unit
             }
-            LiveFocusArea.ChannelList -> {
-                mode = LiveColumnMode.Category
-                previewStarted = false
-                focusedArea = LiveFocusArea.Provider
-                selectedCategoryFocusRequest += 1
-            }
-            LiveFocusArea.Provider -> Unit
         }
     }
 
@@ -195,10 +262,10 @@ private fun RoomLiveTvRoute(
             onExpandedProviderIdsChanged(expandedProviderIds + providerId)
         }
         if (targetChannelId != null) {
-            mode = LiveColumnMode.Channel
+            // Activate + focus the EPG; onEpgFocused collapses to [E|P] once focus lands (avoids a bounce).
+            activated = true
             focusedArea = LiveFocusArea.Epg
             epgFocusRequest += 1
-            previewStarted = true
         }
         if (targetEpgProgramId == null) onTargetConsumed()
     }
@@ -213,29 +280,34 @@ private fun RoomLiveTvRoute(
         onPlayableChannelsChanged(channels)
     }
 
-    fun moveBrowserChannel(key: Key): Boolean {
-        if (focusedArea != LiveFocusArea.ChannelList || channels.isEmpty()) return false
-        val selectedIndex = channels.indexOfFirst { it.id == selectedChannelId }.takeUnless { it < 0 } ?: 0
-        val nextIndex = when (key) {
-            Key.ChannelUp -> (selectedIndex - 1).coerceAtLeast(0)
-            Key.ChannelDown -> (selectedIndex + 1).coerceAtMost(channels.lastIndex)
-            else -> return false
-        }
+    // CH+/- (S2/S3): move the channel selection (in Sender-Modus this zaps; the EPG + preview follow). No
+    // wrap — clamp at the list ends (S7). Phase 2 will also re-`play()` the new channel when activated.
+    val moveChannel: (Key) -> Boolean = moveChannel@{ key ->
+        if (key != Key.ChannelUp && key != Key.ChannelDown || channels.isEmpty()) return@moveChannel false
+        val index = channels.indexOfFirst { it.id == selectedChannelId }.takeUnless { it < 0 } ?: 0
+        val nextIndex = if (key == Key.ChannelUp) index - 1 else index + 1
+        if (nextIndex !in channels.indices) return@moveChannel true
         viewModel.onChannelFocused(channels[nextIndex].id)
-        previewStarted = false
         selectedChannelFocusRequest += 1
-        return true
+        true
     }
 
     VivicastScreen(
         modifier = Modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
-                event.type == KeyEventType.KeyDown && moveBrowserChannel(event.key)
+                event.type == KeyEventType.KeyDown && moveChannel(event.key)
             },
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-            if (mode == LiveColumnMode.Category) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            modifier = Modifier
+                .fillMaxSize()
+                // Entering the content (D-pad DOWN from the top nav) lands focus on the first provider, not
+                // the favorites row — without stealing focus while the nav merely passes through Live-TV.
+                .focusProperties { enter = { firstProviderFocusRequester } },
+        ) {
+            if (showKategorien) {
                 RoomProviderCategoryColumn(
                     providers = providers,
                     selectedProviderId = selectedProviderId,
@@ -245,16 +317,14 @@ private fun RoomLiveTvRoute(
                     favoriteSelected = selectedCategoryId == FAVORITES_CATEGORY_ID,
                     favoriteCount = uiState.favoriteChannelCount,
                     requestSelectedFocusSignal = selectedCategoryFocusRequest,
+                    firstProviderFocusRequester = firstProviderFocusRequester,
                     onGlobalFavoritesFocused = {
                         viewModel.onGlobalFavoritesSelected()
-                        mode = LiveColumnMode.Category
                         focusedArea = LiveFocusArea.Provider
-                        previewStarted = false
                     },
                     onProviderFocused = {
                         viewModel.onProviderFocused(it.id)
                         focusedArea = LiveFocusArea.Provider
-                        previewStarted = false
                     },
                     onProviderToggle = { provider ->
                         val wasExpanded = provider.id in expandedProviderIds
@@ -266,80 +336,97 @@ private fun RoomLiveTvRoute(
                         onExpandedProviderIdsChanged(nextExpandedProviderIds)
                         viewModel.onProviderToggled(provider.id, wasExpanded)
                         focusedArea = LiveFocusArea.Provider
-                        previewStarted = false
                     },
                     onCategoryFocused = {
                         viewModel.onCategorySelected(it.id)
                         focusedArea = LiveFocusArea.Provider
-                        previewStarted = false
                     },
-                    modifier = Modifier.weight(0.25f),
+                    modifier = Modifier.weight(0.24f),
                 )
             }
 
-            RoomChannelColumn(
-                channels = channels,
-                selectedChannelId = selectedChannelId,
-                emptyMessage = emptyChannelMessage(selectedProvider, selectedCategory),
-                resolveChannelLogoModel = resolveChannelLogoModel,
-                nowMillis = nowMillis,
-                selectedCurrentProgram = currentProgram,
-                favoriteChannelIds = favoriteChannelIds,
-                canLoadMore = canLoadMoreChannels,
-                requestSelectedFocusSignal = selectedChannelFocusRequest,
-                onChannelFocused = {
-                    viewModel.onChannelFocused(it.id)
-                    focusedArea = LiveFocusArea.ChannelList
-                    previewStarted = false
-                },
-                onChannelClick = {
-                    viewModel.onChannelFocused(it.id)
-                    mode = LiveColumnMode.Channel
-                    focusedArea = LiveFocusArea.Epg
-                    epgFocusRequest += 1
-                    previewStarted = true
-                },
-                onLoadMore = { viewModel.onLoadMore() },
-                modifier = Modifier.weight(if (mode == LiveColumnMode.Category) 0.33f else 0.32f),
-            )
+            if (showChannelList) {
+                RoomChannelColumn(
+                    channels = channels,
+                    selectedChannelId = selectedChannelId,
+                    emptyMessage = emptyChannelMessage(selectedProvider, selectedCategory),
+                    resolveChannelLogoModel = resolveChannelLogoModel,
+                    logoConfigSignal = logoConfigSignal,
+                    nowMillis = nowMillis,
+                    currentProgramsByChannel = currentProgramsByChannel,
+                    favoriteChannelIds = favoriteChannelIds,
+                    canLoadMore = canLoadMoreChannels,
+                    requestSelectedFocusSignal = selectedChannelFocusRequest,
+                    onChannelFocused = {
+                        viewModel.onChannelFocused(it.id)
+                        focusedArea = LiveFocusArea.ChannelList
+                    },
+                    onChannelClick = {
+                        // Activate + start the embedded video preview (P2) but STAY in [S|E|P] with focus in
+                        // the channel list — the user keeps browsing channels with the preview running. Only a
+                        // deliberate RIGHT into the EPG (default focus traversal -> EpgProgramRow.onFocused ->
+                        // onEpgFocused) collapses to [E|P]. So do NOT bump epgFocusRequest / move focus here.
+                        viewModel.onChannelFocused(it.id)
+                        activated = true
+                        committedChannel = it
+                        onCommitPreview(it)
+                        focusedArea = LiveFocusArea.ChannelList
+                    },
+                    onChannelLongClick = { viewModel.onToggleFavorite() },
+                    onLoadMore = { viewModel.onLoadMore() },
+                    // LEFT from the channel list re-opens the category column ([S|E|P] -> [K|S|P]). Focus in the
+                    // channel list always means K is collapsed, so this is unconditional.
+                    onCollapseLeft = {
+                        focusedArea = LiveFocusArea.Provider
+                        selectedCategoryFocusRequest += 1
+                    },
+                    moveChannel = moveChannel,
+                    modifier = Modifier.weight(if (showEpg) 0.33f else 0.45f),
+                )
+            }
 
-            if (mode == LiveColumnMode.Channel) {
+            if (showEpg) {
+                val epgFocused = focusedArea == LiveFocusArea.Epg
                 RoomEpgColumn(
                     channel = selectedChannel,
+                    channelNumber = selectedChannel?.channelNumber,
                     programs = selectedPrograms,
                     nowMillis = nowMillis,
+                    showChannelHeader = epgFocused,
+                    provider = channelProvider,
+                    resolveChannelLogoModel = resolveChannelLogoModel,
+                    logoConfigSignal = logoConfigSignal,
                     requestInitialFocusSignal = epgFocusRequest,
                     targetProgramId = targetEpgProgramId,
                     onTargetConsumed = onTargetConsumed,
                     onEpgFocused = { focusedArea = LiveFocusArea.Epg },
+                    onProgramFocused = { focusedEpgProgram = it },
+                    onCollapseLeft = {
+                        focusedArea = LiveFocusArea.ChannelList
+                        selectedChannelFocusRequest += 1
+                    },
                     onOpenPlayer = onOpenPlayer,
                     onOpenCatchUp = onOpenCatchUp,
-                    modifier = Modifier.weight(0.31f),
+                    moveChannel = moveChannel,
+                    modifier = Modifier.weight(if (epgFocused) 0.69f else 0.36f),
                 )
             }
 
             RoomPreviewColumn(
-                channel = selectedChannel,
-                previewStarted = previewStarted,
+                channel = previewChannel,
+                program = previewProgram,
+                nowMillis = nowMillis,
                 provider = channelProvider,
-                currentProgram = currentProgram,
-                nextProgram = nextProgram,
-                isFavorite = selectedChannel?.id in favoriteChannelIds,
-                onPreviewFocused = { focusedArea = LiveFocusArea.Preview },
-                onStartPreview = {
-                    if (selectedChannel != null) {
-                        focusedArea = LiveFocusArea.Preview
-                        previewStarted = true
-                    }
-                },
-                onOpenPlayer = { selectedChannel?.let(onOpenPlayer) },
-                onShowCategoryMode = { mode = LiveColumnMode.Category },
-                onToggleFavorite = { viewModel.onToggleFavorite() },
-                modifier = Modifier.weight(0.42f),
+                resolveChannelLogoModel = resolveChannelLogoModel,
+                logoConfigSignal = logoConfigSignal,
+                livePreviewActive = livePreviewActive,
+                livePreviewSlot = livePreviewSlot,
+                modifier = Modifier.weight(0.31f),
             )
         }
     }
 }
+
 @Composable
 private fun RoomProviderCategoryColumn(
     providers: List<Provider>,
@@ -350,6 +437,7 @@ private fun RoomProviderCategoryColumn(
     favoriteSelected: Boolean,
     favoriteCount: Int,
     requestSelectedFocusSignal: Int,
+    firstProviderFocusRequester: FocusRequester,
     onGlobalFavoritesFocused: () -> Unit,
     onProviderFocused: (Provider) -> Unit,
     onProviderToggle: (Provider) -> Unit,
@@ -362,50 +450,63 @@ private fun RoomProviderCategoryColumn(
         if (requestSelectedFocusSignal > 0) selectedFocusRequester.requestFocus()
     }
 
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
-        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-            SectionTitle(stringResource(R.string.livetv_favorites))
-            FocusPanel(
-                selected = favoriteSelected,
-                onClick = onGlobalFavoritesFocused,
-                onFocused = onGlobalFavoritesFocused,
-                contentPadding = VivicastSpacing.Space3,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (favoriteSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
-                    .testTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)),
-            ) {
-                BasicText(
-                    text = "${stringResource(R.string.home_livetv_favorites)} ($favoriteCount)",
-                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                )
+    // No column title (S8). One flat, scrollable list: compact global-favorites entry, then each provider
+    // (expandable) with its categories inline — no "Favoriten"/"Provider" sub-headers (F2).
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space3) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
+            item(key = "global-favorites") {
+                FocusPanel(
+                    selected = favoriteSelected,
+                    onClick = onGlobalFavoritesFocused,
+                    onFocused = onGlobalFavoritesFocused,
+                    contentPadding = VivicastSpacing.Space3,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (favoriteSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                        .testTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)),
+                ) {
+                    BasicText(
+                        text = "${stringResource(R.string.home_livetv_favorites)} ($favoriteCount)",
+                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                    )
+                }
             }
-            SectionTitle(stringResource(R.string.livetv_section_provider))
             if (providers.isEmpty()) {
-                InfoPanel(stringResource(R.string.livetv_no_lists), stringResource(R.string.livetv_add_provider), badge = stringResource(R.string.common_empty_badge))
+                item(key = "no-providers") {
+                    InfoPanel(stringResource(R.string.livetv_no_lists), stringResource(R.string.livetv_add_provider), badge = stringResource(R.string.common_empty_badge))
+                }
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
-                items(providers, key = { it.id }) { provider ->
-                    val selected = provider.id == selectedProviderId
-                    val expanded = provider.id in expandedProviderIds
-                    val selectedProviderFocusTarget = selected && selectedCategoryId == null && !favoriteSelected
+            items(providers, key = { it.id }) { provider ->
+                val selected = provider.id == selectedProviderId
+                val expanded = provider.id in expandedProviderIds
+                val selectedProviderFocusTarget = selected && selectedCategoryId == null && !favoriteSelected
+                val isFirstProvider = provider.id == providers.firstOrNull()?.id
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
                     FocusPanel(
                         selected = selected,
                         onClick = { onProviderToggle(provider) },
                         onFocused = { onProviderFocused(provider) },
-                        contentPadding = VivicastSpacing.Space2,
+                        contentPadding = VivicastSpacing.Space3,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(66.dp)
                             .then(if (selectedProviderFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
+                            .then(if (isFirstProvider) Modifier.focusRequester(firstProviderFocusRequester) else Modifier)
                             .testTag(providerTreeProviderTag(provider.id)),
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+                        // Name left, TV-Mate disclosure chevron right (⌄ collapsed, ⌃ expanded). No status line
+                        // — deactivated providers don't appear in Live-TV at all, so it's redundant.
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             BasicText(
-                                text = "${if (expanded) "v" else ">"} ${provider.name}",
+                                text = provider.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                                modifier = Modifier.weight(1f),
                             )
-                            BodyText(provider.status.localizedLabel(), color = provider.status.color)
+                            BasicText(
+                                text = if (expanded) "⌃" else "⌄",
+                                style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextTertiary),
+                            )
                         }
                     }
 
@@ -427,12 +528,13 @@ private fun RoomProviderCategoryColumn(
                                     contentPadding = VivicastSpacing.Space3,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = VivicastSpacing.Space3)
                                         .then(if (selectedCategoryFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                                         .testTag(providerTreeCategoryTag(category.id)),
                                 ) {
                                     BasicText(
                                         text = category.localizedDisplayName(),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
                                     )
                                 }
@@ -451,82 +553,84 @@ private fun RoomChannelColumn(
     selectedChannelId: String?,
     emptyMessage: String,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
+    logoConfigSignal: Int,
     nowMillis: Long,
-    selectedCurrentProgram: EpgProgram?,
+    currentProgramsByChannel: Map<String, EpgProgram>,
     favoriteChannelIds: Set<String>,
     canLoadMore: Boolean,
     requestSelectedFocusSignal: Int,
     onChannelFocused: (Channel) -> Unit,
     onChannelClick: (Channel) -> Unit,
+    onChannelLongClick: (Channel) -> Unit,
     onLoadMore: () -> Unit,
+    onCollapseLeft: (() -> Unit)?,
+    moveChannel: (Key) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val selectedFocusRequester = remember { FocusRequester() }
-    var channelKeyFocusRequest by remember { mutableStateOf(0) }
+    val listState = rememberLazyListState()
 
-    LaunchedEffect(requestSelectedFocusSignal, channelKeyFocusRequest, selectedChannelId, channels) {
-        if ((requestSelectedFocusSignal > 0 || channelKeyFocusRequest > 0) && selectedChannelId != null && channels.any { it.id == selectedChannelId }) {
-            selectedFocusRequester.requestFocus()
+    // Focus the selected channel ONLY on an explicit request (collapse-back / zap) — NOT on every
+    // selectedChannelId change, or auto-select (e.g. focusing a provider clears+re-picks the channel) would
+    // yank focus back into the list. The channel may be scrolled out of view (the column just re-composed at
+    // the top collapsing [E|P] -> [S|E|P]), so scroll it in first, else requestFocus is a no-op (focus would
+    // stay stuck on the EPG).
+    LaunchedEffect(requestSelectedFocusSignal) {
+        if (requestSelectedFocusSignal > 0 && selectedChannelId != null) {
+            val index = channels.indexOfFirst { it.id == selectedChannelId }
+            if (index >= 0) {
+                listState.scrollToItem(index)
+                runCatching { selectedFocusRequester.requestFocus() }
+            }
         }
     }
 
-    fun moveChannelFocus(key: Key): Boolean {
-        if (channels.isEmpty()) return false
-        val selectedIndex = channels.indexOfFirst { it.id == selectedChannelId }.takeUnless { it < 0 } ?: 0
-        val nextIndex = when (key) {
-            Key.ChannelUp -> (selectedIndex - 1).coerceAtLeast(0)
-            Key.ChannelDown -> (selectedIndex + 1).coerceAtMost(channels.lastIndex)
-            else -> return false
-        }
-        if (nextIndex != selectedIndex) {
-            onChannelFocused(channels[nextIndex])
-            channelKeyFocusRequest += 1
-        }
-        return true
-    }
-
+    // No column title (S8).
     GlassPanel(
         modifier = modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
-                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (moveChannel(event.key)) return@onPreviewKeyEvent true
+                if (onCollapseLeft != null && event.key == Key.DirectionLeft) {
+                    onCollapseLeft()
+                    true
+                } else {
+                    false
+                }
             },
-        contentPadding = VivicastSpacing.Space4,
+        contentPadding = VivicastSpacing.Space3,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-            SectionTitle(stringResource(R.string.livetv_channels))
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             if (channels.isEmpty()) {
                 InfoPanel(stringResource(R.string.livetv_no_channels), emptyMessage, badge = stringResource(R.string.common_empty_badge))
             }
             val strNoProgramInline = stringResource(R.string.livetv_no_program_inline)
-            val strEpgOnFocus = stringResource(R.string.livetv_epg_on_focus)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
+            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
                 items(channels, key = { it.id }) { channel ->
-                    val logoModel by produceState<Any?>(initialValue = null, channel.id, channel.logoUrl) {
+                    val logoModel by produceState<Any?>(initialValue = null, channel.id, channel.logoUrl, logoConfigSignal) {
                         value = resolveChannelLogoModel(channel)
                     }
                     val isSelected = channel.id == selectedChannelId
-                    val program = if (isSelected) selectedCurrentProgram?.title ?: strNoProgramInline else strEpgOnFocus
+                    val current = currentProgramsByChannel[channel.id]
                     VivicastChannelCard(
                         channelName = channel.name,
-                        program = program,
+                        program = current?.title ?: strNoProgramInline,
                         logoText = channel.name,
                         logoMissing = channel.logoUrl.isNullOrBlank() && logoModel == null,
                         selected = isSelected,
+                        channelNumber = channel.channelNumber,
+                        progressPercent = current.progressAt(nowMillis),
+                        favorite = channel.id in favoriteChannelIds,
+                        catchUp = channel.isCatchupAvailable,
+                        logoModel = logoModel,
                         onFocused = { onChannelFocused(channel) },
                         onClick = { onChannelClick(channel) },
-                        progressPercent = if (isSelected) selectedCurrentProgram.progressAt(nowMillis) else 0,
-                        favorite = channel.id in favoriteChannelIds,
-                        catchUp = channel.isCatchupAvailable && isSelected && selectedCurrentProgram != null,
-                        logoModel = logoModel,
+                        onLongClick = { onChannelLongClick(channel) },
                         modifier = Modifier
                             .then(if (isSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
-                            .onPreviewKeyEvent { event ->
-                                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
-                            }
-                            .onKeyEvent { event ->
-                                event.type == KeyEventType.KeyDown && moveChannelFocus(event.key)
-                            }
+                            // Lock UP at the top channel (S7) — don't let focus escape to the top nav.
+                            .then(if (channel.id == channels.firstOrNull()?.id) Modifier.focusProperties { up = FocusRequester.Cancel } else Modifier)
                             .testTag(channelRowTag(channel.id)),
                     )
                 }
@@ -543,14 +647,22 @@ private fun RoomChannelColumn(
 @Composable
 private fun RoomEpgColumn(
     channel: Channel?,
+    channelNumber: String?,
     programs: List<EpgProgram>,
     nowMillis: Long,
+    showChannelHeader: Boolean,
+    provider: Provider?,
+    resolveChannelLogoModel: suspend (Channel) -> Any?,
+    logoConfigSignal: Int,
     requestInitialFocusSignal: Int,
     targetProgramId: String?,
     onTargetConsumed: () -> Unit,
     onEpgFocused: () -> Unit,
+    onProgramFocused: (EpgProgram?) -> Unit,
+    onCollapseLeft: () -> Unit,
     onOpenPlayer: (Channel) -> Unit,
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
+    moveChannel: (Key) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val initialFocusRequester = remember { FocusRequester() }
@@ -566,75 +678,180 @@ private fun RoomEpgColumn(
         if (targetProgramId != null && targetIndex >= 0) onTargetConsumed()
     }
 
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
+    GlassPanel(
+        modifier = modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (moveChannel(event.key)) return@onPreviewKeyEvent true
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        onCollapseLeft()
+                        true
+                    }
+                    // EPG is the rightmost focusable column (the preview is display-only) — swallow RIGHT so
+                    // focus can't escape to the top navigation.
+                    Key.DirectionRight -> true
+                    else -> false
+                }
+            },
+        contentPadding = VivicastSpacing.Space3,
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
-            SectionTitle(stringResource(R.string.livetv_section_epg))
-            when {
-                channel == null -> {
-                    InfoPanel(stringResource(R.string.livetv_no_epg_channel), stringResource(R.string.livetv_no_epg_channel_body), badge = stringResource(R.string.livetv_epg_badge))
-                }
-                showNoCurrentProgramPlaceholder -> {
-                    FocusPanel(
-                        selected = true,
-                        onClick = { onOpenPlayer(channel) },
-                        onFocused = onEpgFocused,
-                        contentPadding = VivicastSpacing.Space3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(initialFocusRequester)
-                            .testTag(noEpgPlaceholderTag(channel.id)),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                            BasicText(
-                                text = stringResource(R.string.livetv_no_program_info),
-                                    style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                            )
-                            BodyText(stringResource(R.string.livetv_no_epg_data, channel.name))
-                            StatusBadge(stringResource(R.string.livetv_badge_no_epg))
-                        }
-                    }
-                }
-                else -> {
-                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
-                        items(programs, key = { it.id }) { program ->
-                            val current = program.isCurrentAt(nowMillis)
-                            val target = program.id == targetProgramId
-                            val catchUpReady = program.isCatchupAvailable && program.endTime <= nowMillis
-                            FocusPanel(
-                                selected = current || target,
-                                onClick = {
-                                    if (current) {
-                                        onOpenPlayer(channel)
-                                    } else if (catchUpReady) {
-                                        onOpenCatchUp(channel, program)
-                                    }
-                                },
-                                onFocused = onEpgFocused,
-                                contentPadding = VivicastSpacing.Space3,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (program.id == focusProgramId) Modifier.focusRequester(initialFocusRequester) else Modifier)
-                                    .testTag(epgProgramRowTag(program.id)),
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                                    BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
-                                    BasicText(
-                                        text = program.title,
-                                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
-                                    )
-                                    program.description?.takeIf { it.isNotBlank() }?.let {
-                                        BodyText(it, color = VivicastColors.TextSecondary)
-                                    }
-                                    if (current || catchUpReady) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
-                                            if (current) StatusBadge(stringResource(R.string.livetv_badge_current))
-                                            if (catchUpReady) StatusBadge(stringResource(R.string.livetv_badge_catchup))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+            // [E|P]: the channel list is hidden, so show a header (logo + number/name + provider/group) so the
+            // user knows whose guide they're scrolling.
+            if (showChannelHeader && channel != null) {
+                EpgChannelHeader(channel, channelNumber, provider, resolveChannelLogoModel, logoConfigSignal)
+            }
+            EpgColumnBody(
+                channel = channel,
+                programs = programs,
+                nowMillis = nowMillis,
+                focusProgramId = focusProgramId,
+                showNoCurrentProgramPlaceholder = showNoCurrentProgramPlaceholder,
+                // Descriptions only in the wide [E|P] view (focus in the EPG); the compact [S|E|P] view shows
+                // just time + title. Same signal as the header — both mark the expanded EPG.
+                showDescription = showChannelHeader,
+                initialFocusRequester = initialFocusRequester,
+                listState = listState,
+                onEpgFocused = onEpgFocused,
+                onProgramFocused = onProgramFocused,
+                onOpenPlayer = onOpenPlayer,
+                onOpenCatchUp = onOpenCatchUp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EpgColumnBody(
+    channel: Channel?,
+    programs: List<EpgProgram>,
+    nowMillis: Long,
+    focusProgramId: String?,
+    showNoCurrentProgramPlaceholder: Boolean,
+    showDescription: Boolean,
+    initialFocusRequester: FocusRequester,
+    listState: LazyListState,
+    onEpgFocused: () -> Unit,
+    onProgramFocused: (EpgProgram?) -> Unit,
+    onOpenPlayer: (Channel) -> Unit,
+    onOpenCatchUp: (Channel, EpgProgram) -> Unit,
+) {
+    when {
+        channel == null -> {
+            InfoPanel(stringResource(R.string.livetv_no_epg_channel), stringResource(R.string.livetv_no_epg_channel_body), badge = stringResource(R.string.livetv_epg_badge))
+        }
+        showNoCurrentProgramPlaceholder -> EpgNoProgramPlaceholder(
+            channel = channel,
+            focusRequester = initialFocusRequester,
+            onOpenPlayer = onOpenPlayer,
+            onFocused = {
+                onEpgFocused()
+                onProgramFocused(null)
+            },
+        )
+        else -> LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(programs, key = { it.id }) { program ->
+                val current = program.isCurrentAt(nowMillis)
+                val catchUpReady = program.isCatchupAvailable && program.endTime <= nowMillis
+                EpgProgramRow(
+                    program = program,
+                    focused = program.id == focusProgramId,
+                    current = current,
+                    catchUpReady = catchUpReady,
+                    showDescription = showDescription,
+                    lockUp = program.id == programs.firstOrNull()?.id,
+                    focusRequesterModifier = if (program.id == focusProgramId) Modifier.focusRequester(initialFocusRequester) else Modifier,
+                    // Current -> fullscreen; catch-up-ready past -> catch-up; future -> info-only (S1).
+                    onClick = {
+                        if (current) onOpenPlayer(channel) else if (catchUpReady) onOpenCatchUp(channel, program)
+                    },
+                    onFocused = {
+                        onEpgFocused()
+                        onProgramFocused(program)
+                    },
+                )
+            }
+        }
+    }
+}
+
+// F3 — compact, bounded height (not a full-column panel). OK -> fullscreen (no catch-up).
+@Composable
+private fun EpgNoProgramPlaceholder(
+    channel: Channel,
+    focusRequester: FocusRequester,
+    onOpenPlayer: (Channel) -> Unit,
+    onFocused: () -> Unit,
+) {
+    FocusPanel(
+        selected = true,
+        onClick = { onOpenPlayer(channel) },
+        onFocused = onFocused,
+        contentPadding = VivicastSpacing.Space3,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(VivicastLiveTvSizes.NoEpgPlaceholderHeight)
+            .focusRequester(focusRequester)
+            // Lock UP (S7) — the sole EPG item must not let focus escape to the top nav.
+            .focusProperties { up = FocusRequester.Cancel }
+            .testTag(noEpgPlaceholderTag(channel.id)),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+            BasicText(
+                text = stringResource(R.string.livetv_no_program_info),
+                style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+            )
+            BodyText(stringResource(R.string.livetv_no_epg_data, channel.name))
+        }
+    }
+}
+
+@Composable
+private fun EpgProgramRow(
+    program: EpgProgram,
+    focused: Boolean,
+    current: Boolean,
+    catchUpReady: Boolean,
+    showDescription: Boolean,
+    lockUp: Boolean,
+    focusRequesterModifier: Modifier,
+    onClick: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    FocusPanel(
+        selected = focused,
+        onClick = onClick,
+        onFocused = onFocused,
+        contentPadding = VivicastSpacing.Space3,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(focusRequesterModifier)
+            // Lock UP at the top programme (S7) — don't let focus escape to the top nav.
+            .then(if (lockUp) Modifier.focusProperties { up = FocusRequester.Cancel } else Modifier)
+            .testTag(epgProgramRowTag(program.id)),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                BodyText("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
+                // R5 — persistent Live badge on the currently-airing programme (by clock), independent of
+                // focus, so scrolling the guide always shows which programme is live now.
+                if (current) StatusBadge(stringResource(R.string.livetv_live_badge), tone = Color(0xFF6D1D1D))
+                if (catchUpReady) StatusBadge(stringResource(R.string.livetv_badge_catchup), tone = Color(0xFF4D3A78))
+            }
+            BasicText(
+                text = program.title,
+                style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+            )
+            // Description only in the wide [E|P] view; [S|E|P] stays compact (time + title only).
+            if (showDescription) {
+                program.description?.takeIf { it.isNotBlank() }?.let {
+                    BodyText(it, color = VivicastColors.TextSecondary, maxLines = 2)
                 }
             }
         }
@@ -642,72 +859,116 @@ private fun RoomEpgColumn(
 }
 
 @Composable
-private fun RoomPreviewColumn(
-    channel: Channel?,
-    previewStarted: Boolean,
+private fun EpgChannelHeader(
+    channel: Channel,
+    channelNumber: String?,
     provider: Provider?,
-    currentProgram: EpgProgram?,
-    nextProgram: EpgProgram?,
-    isFavorite: Boolean,
-    onPreviewFocused: () -> Unit,
-    onStartPreview: () -> Unit,
-    onOpenPlayer: () -> Unit,
-    onShowCategoryMode: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    modifier: Modifier = Modifier,
+    resolveChannelLogoModel: suspend (Channel) -> Any?,
+    logoConfigSignal: Int,
 ) {
-    val strPreviewHint = stringResource(R.string.livetv_preview_hint)
-    val strPreviewRunning = stringResource(R.string.livetv_preview_running)
-    val strNoProvider = stringResource(R.string.livetv_no_provider)
-    val strSelectProvider = stringResource(R.string.livetv_select_provider)
-    val strLiveBadge = stringResource(R.string.livetv_live_badge)
-    val strCatButton = stringResource(R.string.livetv_cat_button)
-    val strDetailsButton = stringResource(R.string.livetv_details_button)
-    val strProviderLabel = stringResource(R.string.livetv_provider_label)
-    val strNowLabel = stringResource(R.string.livetv_now_label)
-    val strNoProgramInline = stringResource(R.string.livetv_no_program_inline)
-    val strProviderError = stringResource(R.string.livetv_provider_error)
-    val strNextProgram = nextProgram?.let { next -> stringResource(R.string.livetv_next_program, next.startTime.hhMm(), next.title) }
-    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space4) {
-        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-            SectionTitle(stringResource(R.string.livetv_preview))
-            FocusPanel(
-                onClick = onStartPreview,
-                onFocused = onPreviewFocused,
-                contentPadding = 0.dp,
-                modifier = Modifier.fillMaxWidth().height(124.dp),
-            ) {
-                PreviewBox(if (previewStarted) strPreviewRunning else strPreviewHint)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxWidth()) {
-                ActionPill(strLiveBadge, modifier = Modifier.weight(1f), onClick = onOpenPlayer)
-                ActionPill(strCatButton, modifier = Modifier.weight(1f), onClick = onShowCategoryMode)
-                ActionPill(
-                    if (isFavorite) "★" else "☆",
-                    modifier = Modifier.weight(1f),
-                    selected = isFavorite,
-                    onClick = onToggleFavorite,
+    val logoModel by produceState<Any?>(initialValue = null, channel.id, channel.logoUrl, logoConfigSignal) {
+        value = resolveChannelLogoModel(channel)
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        MiniLogo(channel.name, channel.logoUrl.isNullOrBlank() && logoModel == null, imageModel = logoModel)
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1), modifier = Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), verticalAlignment = Alignment.CenterVertically) {
+                if (!channelNumber.isNullOrBlank()) {
+                    BasicText(channelNumber, style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextTertiary))
+                }
+                BasicText(
+                    text = channel.name,
+                    style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
                 )
             }
-            InfoPanel(
-                title = channel?.name ?: strNoProvider,
-                body = channel?.let {
-                    buildString {
-                        append("$strProviderLabel${provider?.name.orEmpty()}")
-                        append("\n$strNowLabel${currentProgram?.title ?: strNoProgramInline}")
-                        strNextProgram?.let { append("\n$it") }
+            provider?.name?.takeIf { it.isNotBlank() }?.let { BodyText(it, color = VivicastColors.TextTertiary) }
+        }
+    }
+}
+
+@Composable
+private fun RoomPreviewColumn(
+    channel: Channel?,
+    program: EpgProgram?,
+    nowMillis: Long,
+    provider: Provider?,
+    resolveChannelLogoModel: suspend (Channel) -> Any?,
+    logoConfigSignal: Int,
+    livePreviewActive: Boolean,
+    livePreviewSlot: @Composable BoxScope.() -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val logoModel by produceState<Any?>(initialValue = null, channel?.id, channel?.logoUrl, logoConfigSignal) {
+        value = channel?.let { resolveChannelLogoModel(it) }
+    }
+    GlassPanel(modifier = modifier.fillMaxSize(), contentPadding = VivicastSpacing.Space3) {
+        Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+            // Preview surface — display-only (NON-focusable, so focus never lands here / can't escape right).
+            // P2: when a channel is committed, the App renders the shared player's SurfaceView here (live
+            // video); otherwise the channel logo on a video-shaped box.
+            Box(modifier = Modifier.fillMaxWidth().height(158.dp)) {
+                if (livePreviewActive) {
+                    livePreviewSlot()
+                } else {
+                    PreviewSurface(channel?.name.orEmpty(), logoModel)
+                }
+            }
+            if (channel != null) {
+                BasicText(
+                    text = channel.name,
+                    style = VivicastTypography.LabelLarge.copy(color = VivicastColors.TextPrimary),
+                )
+                if (program != null) {
+                    BasicText(
+                        text = program.title,
+                        style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
+                    )
+                    val live = program.isCurrentAt(nowMillis)
+                    val timeLine = buildString {
+                        append("${program.startTime.hhMm()} - ${program.endTime.hhMm()}")
+                        if (live) {
+                            val remaining = ((program.endTime - nowMillis) / 60_000L).toInt().coerceAtLeast(0)
+                            append("  •  ")
+                            append(stringResource(R.string.livetv_remaining_minutes, remaining))
+                        }
                     }
-                } ?: strSelectProvider,
-                badge = if (previewStarted) strLiveBadge else strDetailsButton,
-            )
+                    BodyText(timeLine)
+                    if (live) ProgressLine(program.progressAt(nowMillis))
+                    program.description?.takeIf { it.isNotBlank() }?.let {
+                        BodyText(it, color = VivicastColors.TextSecondary, maxLines = 4)
+                    }
+                } else {
+                    BodyText(stringResource(R.string.livetv_no_program_inline))
+                }
+            } else {
+                BodyText(stringResource(R.string.livetv_select_provider))
+            }
             if (
                 provider?.status == ProviderStatus.ConnectionError ||
                 provider?.status == ProviderStatus.InvalidCredentials ||
                 provider?.status == ProviderStatus.CredentialsRequired
             ) {
-                InfoPanel(strProviderError, provider.status.localizedLabel(), badge = "Error")
+                InfoPanel(stringResource(R.string.livetv_provider_error), provider.status.localizedLabel(), badge = "Error")
             }
         }
+    }
+}
+
+@Composable
+private fun PreviewSurface(logoText: String, logoModel: Any?) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF16263A), Color(0xFF0B1320))))
+            .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiniLogo(logoText, logoText.isBlank() && logoModel == null, imageModel = logoModel)
     }
 }
 
@@ -741,6 +1002,10 @@ internal fun channelRowTag(channelId: String): String = "live-tv-channel-$channe
 internal fun epgProgramRowTag(programId: String): String = "live-tv-epg-program-$programId"
 internal fun noEpgPlaceholderTag(channelId: String): String = "live-tv-no-epg-$channelId"
 
+private object VivicastLiveTvSizes {
+    val NoEpgPlaceholderHeight = 76.dp
+}
+
 @Composable
 private fun ProviderStatus.localizedLabel(): String = when (this) {
     ProviderStatus.Active -> stringResource(R.string.livetv_status_active)
@@ -751,34 +1016,4 @@ private fun ProviderStatus.localizedLabel(): String = when (this) {
     ProviderStatus.Expired -> stringResource(R.string.livetv_status_expired)
     ProviderStatus.Disabled -> stringResource(R.string.livetv_status_disabled)
     ProviderStatus.CredentialsRequired -> stringResource(R.string.livetv_status_credentials_required)
-}
-
-private val ProviderStatus.color: Color
-    get() = when (this) {
-        ProviderStatus.Active -> VivicastColors.TextTertiary
-        ProviderStatus.ActiveWithPartialErrors -> Color(0xFFFFD166)
-        ProviderStatus.Refreshing -> Color(0xFF93C5FD)
-        ProviderStatus.ConnectionError,
-        ProviderStatus.InvalidCredentials,
-        ProviderStatus.Expired,
-        ProviderStatus.CredentialsRequired,
-        -> Color(0xFFFFB4A8)
-        ProviderStatus.Disabled -> Color(0xFF9CA3AF)
-    }
-
-@Composable
-private fun PreviewBox(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF16263A), Color(0xFF0B1320))))
-            .border(1.dp, Color(0x5538BDF8), RoundedCornerShape(12.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(
-            text = text,
-            style = VivicastTypography.TitleMedium.copy(color = VivicastColors.TextPrimary),
-        )
-    }
 }

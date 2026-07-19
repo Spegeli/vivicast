@@ -24,6 +24,18 @@ interface EpgRepository {
         toMillis: Long,
     ): Flow<List<EpgProgram>>
 
+    /**
+     * The winner-resolved CURRENT programme for each of [channelIds] under one [providerId] at [nowMillis]
+     * (Live-TV list). Winner-aware per channel (manual > lowest priority among active linked sources);
+     * channels with no current programme on their winning source are simply absent from the result. Pass a
+     * non-empty [channelIds].
+     */
+    fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>>
+
     fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>>
 
     suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping

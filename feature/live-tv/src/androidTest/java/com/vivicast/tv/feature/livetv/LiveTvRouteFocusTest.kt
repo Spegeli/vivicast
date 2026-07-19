@@ -84,7 +84,8 @@ class LiveTvRouteFocusTest {
 
         compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).assertIsDisplayed()
         compose.onAllNodesWithTag(channelRowTag(SPORTS_CHANNEL_ID)).assertCountEquals(0)
-        compose.onNodeWithText("OK startet Vorschau").assertIsDisplayed()
+        // No channel activated -> no EPG column (browse [K|S|P]).
+        compose.onAllNodesWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertCountEquals(0)
     }
 
     @Test
@@ -97,7 +98,6 @@ class LiveTvRouteFocusTest {
         compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.waitForIdle()
-        compose.onNodeWithText("Sender-EPG").assertIsDisplayed()
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsDisplayed()
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsFocused()
     }
@@ -157,7 +157,6 @@ class LiveTvRouteFocusTest {
         }
 
         compose.waitUntil(timeoutMillis = 5_000) { consumed }
-        compose.onNodeWithText("Sender-EPG").assertIsDisplayed()
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsFocused()
     }
 
@@ -181,7 +180,7 @@ class LiveTvRouteFocusTest {
     }
 
     @Test
-    fun backStepsFromEpgToChannelListThenProviderTree() {
+    fun leftCollapsesEpgToChannelListThenCategoryColumn() {
         compose.setContent {
             TestLiveTvRoute(expandedProviderIds = setOf(PROVIDER_ID))
         }
@@ -191,15 +190,35 @@ class LiveTvRouteFocusTest {
         compose.waitForIdle()
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsFocused()
 
-        pressBack()
-
+        // LEFT out of the EPG re-opens the channel list ([E|P] -> [S|E|P]).
+        compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.waitForIdle()
         compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).assertIsFocused()
-        compose.onNodeWithText("Sender-EPG").assertIsDisplayed()
 
-        pressBack()
-
+        // LEFT again re-opens the category column ([S|E|P] -> [K|S|P]).
+        compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.waitForIdle()
         compose.onNodeWithTag(providerTreeCategoryTag(NEWS_CATEGORY_ID)).assertIsFocused()
-        compose.onAllNodesWithText("Sender-EPG").assertCountEquals(0)
+    }
+
+    @Test
+    fun backOnActivatedChannelOpensFullscreen() {
+        var openedChannelId: String? = null
+
+        compose.setContent {
+            TestLiveTvRoute(
+                expandedProviderIds = setOf(PROVIDER_ID),
+                onOpenPlayer = { openedChannelId = it.id },
+            )
+        }
+
+        compose.onNodeWithTag(providerTreeCategoryTag(NEWS_CATEGORY_ID)).performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+
+        // A committed channel jumps straight to fullscreen from BACK, regardless of column (S6).
+        pressBack()
+        compose.runOnIdle { check(openedChannelId == NEWS_CHANNEL_ID) }
     }
 
     private fun pressBack() {
@@ -292,6 +311,13 @@ private class FakeEpgRepository : EpgRepository {
         toMillis: Long,
     ): Flow<List<EpgProgram>> =
         flowOf(if (channelId == NEWS_CHANNEL_ID) listOf(TEST_PROGRAM) else emptyList())
+
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>> =
+        flowOf(if (NEWS_CHANNEL_ID in channelIds) listOf(TEST_PROGRAM) else emptyList())
 
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> = flowOf(emptyList())
     override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): EpgChannelMapping =

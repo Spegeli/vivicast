@@ -340,6 +340,7 @@
     <string name="livetv_no_program_info">Keine Programminformationen verfügbar</string>
     <string name="livetv_epg_on_focus">EPG bei Fokus</string>
     <string name="livetv_no_program_inline">Keine Programminformationen</string>
+    <string name="livetv_remaining_minutes">noch %1$d Min</string>
     <string name="livetv_preview_running">Vorschau läuft</string>
     <string name="livetv_provider_label">Provider: </string>
     <string name="livetv_now_label">Jetzt: </string>

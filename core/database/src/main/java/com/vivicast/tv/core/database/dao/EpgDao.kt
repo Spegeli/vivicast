@@ -86,6 +86,39 @@ interface EpgDao {
         toMillis: Long,
     ): Flow<List<EpgProgramEntity>>
 
+    // Batched CURRENT-programme-per-channel for a Live-TV list page (one provider's channels). Same winner
+    // selection as observeProgramsForChannel but CORRELATED per channel (m.channelId = p.channelId) so each
+    // channel resolves its own winning source; keeps s.isActive=1 so a deactivated source's rows never
+    // surface. Returns at most one "now" row per channel (a channel with a feed gap on its winner is simply
+    // absent — no fallback, matching the single-channel query). Callers must pass a non-empty channelIds.
+    @Query(
+        """
+        SELECT p.* FROM epg_programs p
+        WHERE p.providerId = :providerId
+            AND p.channelId IN (:channelIds)
+            AND p.startTime <= :nowMillis
+            AND p.endTime > :nowMillis
+            AND p.epgSourceId = (
+                SELECT m.epgSourceId
+                FROM epg_channel_mappings m
+                INNER JOIN epg_sources s ON s.id = m.epgSourceId
+                INNER JOIN provider_epg_sources pes
+                    ON pes.providerId = m.providerId AND pes.epgSourceId = m.epgSourceId
+                WHERE m.providerId = :providerId
+                    AND m.channelId = p.channelId
+                    AND s.isActive = 1
+                ORDER BY m.isManual DESC, pes.priority ASC
+                LIMIT 1
+            )
+        ORDER BY p.channelId, p.startTime
+        """,
+    )
+    fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgramEntity>>
+
     @Query(
         """
         SELECT * FROM epg_channel_mappings

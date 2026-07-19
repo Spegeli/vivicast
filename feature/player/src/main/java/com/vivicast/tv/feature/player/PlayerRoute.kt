@@ -84,6 +84,10 @@ fun PlayerRoute(
     onChannelDown: () -> Unit = {},
     onChooseAnotherChannel: () -> Unit = {},
     onBeforeStop: (VivicastPlayerState?) -> Unit = {},
+    // When true, closing/leaving the fullscreen player does NOT stop the stream — it hands the SAME running
+    // player back to the embedded Live-TV preview (no reconnect / second connection). The App stops it when
+    // Live-TV is actually left. Normal (Home/Movies) playback closes still stop.
+    keepPlayingOnClose: Boolean = false,
     autoNextEnabled: Boolean = false,
     autoNextCountdownSeconds: Int = 10,
     afrEnabled: Boolean = false,
@@ -157,6 +161,9 @@ fun PlayerRoute(
         (currentState?.status == PlaybackStatus.Ended || countdownSeconds != null)
 
     fun stopPlaybackOnce() {
+        // Hand-off to the embedded preview: keep the stream running (the App owns stop-on-leave). Progress
+        // save is irrelevant for live channels, so skipping onBeforeStop here is fine.
+        if (keepPlayingOnClose) return
         if (stopRequested) return
         stopRequested = true
         latestOnBeforeStop(latestControllerState)
@@ -267,10 +274,13 @@ fun PlayerRoute(
         // renders here; the overlay/dialog chrome below draws on top (later children = higher z-order).
         val playerContext = LocalContext.current
         val videoSurfaceView = remember { SurfaceView(playerContext) }
+        val latestKeepPlaying by rememberUpdatedState(keepPlayingOnClose)
         AndroidView(factory = { videoSurfaceView }, modifier = Modifier.fillMaxSize())
         DisposableEffect(playerController, videoSurfaceView) {
             playerController?.attachVideoSurface(videoSurfaceView)
-            onDispose { playerController?.detachVideoSurface() }
+            // On a preview hand-off, don't clear the surface — the preview re-attaches its own (replacing);
+            // clearing here could race with that and blank the video.
+            onDispose { if (!latestKeepPlaying) playerController?.detachVideoSurface() }
         }
 
         // Auto frame-rate: match the display refresh to the content fps. Seamless-only + API 31+ so a

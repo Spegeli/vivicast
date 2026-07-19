@@ -87,6 +87,7 @@ fun VivicastFocusSurface(
     enabled: Boolean = true,
     showIdleSurface: Boolean = true,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     onFocusChanged: (Boolean) -> Unit = {},
     contentPadding: Dp = VivicastSpacing.CardPadding,
@@ -119,6 +120,7 @@ fun VivicastFocusSurface(
 
     TvSurface(
         onClick = onClick ?: {},
+        onLongClick = onLongClick,
         modifier = modifier.onFocusChanged {
             val nowFocused = it.isFocused || it.hasFocus
             focused = nowFocused

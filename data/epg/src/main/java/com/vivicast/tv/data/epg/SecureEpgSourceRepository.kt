@@ -143,6 +143,13 @@ class SecureEpgSourceRepository(
     ): Flow<List<EpgProgram>> =
         delegate.observeProgramsForChannel(providerId, channelId, fromMillis, toMillis)
 
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<EpgProgram>> =
+        delegate.observeCurrentProgramsForChannels(providerId, channelIds, nowMillis)
+
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<EpgChannelMapping>> =
         delegate.observeMappingsForChannel(providerId, channelId)
 
