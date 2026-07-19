@@ -10,7 +10,6 @@ interface UserPreferencesStore {
     suspend fun updateGeneral(general: GeneralPreferences)
     suspend fun updateAppearance(appearance: AppearancePreferences)
     suspend fun updatePlayback(playback: PlaybackPreferences)
-    suspend fun updateHistory(history: HistoryPreferences)
     suspend fun updateSearchHistory(searchHistory: List<String>)
     suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>)
     suspend fun updateEpg(epg: EpgPreferences)
@@ -25,7 +24,6 @@ data class UserPreferences(
     val general: GeneralPreferences = GeneralPreferences(),
     val appearance: AppearancePreferences = AppearancePreferences(),
     val playback: PlaybackPreferences = PlaybackPreferences(),
-    val history: HistoryPreferences = HistoryPreferences(),
     val searchHistory: List<String> = emptyList(),
     val expandedLiveTvProviderIds: Set<String> = emptySet(),
     val epg: EpgPreferences = EpgPreferences(),
@@ -60,10 +58,6 @@ data class PlaybackPreferences(
     val externalPlayer: ExternalPlayerPreference = ExternalPlayerPreference.Internal,
     val autoNextEnabled: Boolean = false,
     val autoNextCountdownSeconds: Int = 10,
-)
-
-data class HistoryPreferences(
-    val enabled: Boolean = true,
 )
 
 data class EpgPreferences(

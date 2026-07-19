@@ -123,7 +123,6 @@ class StandardBackupRestorer(
             userPreferencesStore.updateGeneral(restored.general)
             userPreferencesStore.updateAppearance(restored.appearance)
             userPreferencesStore.updatePlayback(restored.playback)
-            userPreferencesStore.updateHistory(restored.history)
             userPreferencesStore.updateEpg(restored.epg)
             userPreferencesStore.updateBackup(restored.backup)
             userPreferencesStore.updateExpandedLiveTvProviderIds(restored.expandedLiveTvProviderIds)

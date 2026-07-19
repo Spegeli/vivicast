@@ -4,7 +4,6 @@ import com.vivicast.tv.core.datastore.AppearancePreferences
 import com.vivicast.tv.core.datastore.BackupPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.GeneralPreferences
-import com.vivicast.tv.core.datastore.HistoryPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.data.provider.ProviderCredentials
@@ -214,8 +213,6 @@ internal fun UserPreferences.toStandardBackupJson(): JSONObject =
             .put("externalPlayer", playback.externalPlayer.name)
             .put("autoNextEnabled", playback.autoNextEnabled)
             .put("autoNextCountdownSeconds", playback.autoNextCountdownSeconds))
-        .put("history", JSONObject()
-            .put("enabled", history.enabled))
         .put("expandedLiveTvProviderIds", JSONArray(expandedLiveTvProviderIds.toList()))
         .put("epg", JSONObject()
             .put("refreshIntervalHours", epg.refreshIntervalHours)
@@ -234,7 +231,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
     val general = json.optJSONObject("general")
     val appearance = json.optJSONObject("appearance")
     val playback = json.optJSONObject("playback")
-    val history = json.optJSONObject("history")
     val epg = json.optJSONObject("epg")
     val expanded = json.optJSONArray("expandedLiveTvProviderIds")
     return UserPreferences(
@@ -263,9 +259,6 @@ fun userPreferencesFromStandardBackupJson(json: JSONObject): UserPreferences {
             externalPlayer = playback.enum("externalPlayer", d.playback.externalPlayer),
             autoNextEnabled = playback.bool("autoNextEnabled", d.playback.autoNextEnabled),
             autoNextCountdownSeconds = playback.int("autoNextCountdownSeconds", d.playback.autoNextCountdownSeconds),
-        ),
-        history = HistoryPreferences(
-            enabled = history.bool("enabled", d.history.enabled),
         ),
         expandedLiveTvProviderIds = expanded.toStringSet(),
         epg = EpgPreferences(

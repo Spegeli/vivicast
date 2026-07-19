@@ -18,7 +18,6 @@ import com.vivicast.tv.core.datastore.BackupPreferences
 import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.GeneralPreferences
-import com.vivicast.tv.core.datastore.HistoryPreferences
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.UserPreferences
 import com.vivicast.tv.core.datastore.UserPreferencesStore
@@ -119,7 +118,6 @@ private object EmptyUserPreferencesStore : UserPreferencesStore {
     override suspend fun updateGeneral(general: GeneralPreferences) = Unit
     override suspend fun updateAppearance(appearance: AppearancePreferences) = Unit
     override suspend fun updatePlayback(playback: PlaybackPreferences) = Unit
-    override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
     override suspend fun updateEpg(epg: EpgPreferences) = Unit

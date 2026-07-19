@@ -12,7 +12,6 @@ import com.vivicast.tv.core.datastore.DiagnosticsPreferences
 import com.vivicast.tv.core.datastore.EpgPreferences
 import com.vivicast.tv.core.datastore.FontScalePreference
 import com.vivicast.tv.core.datastore.GeneralPreferences
-import com.vivicast.tv.core.datastore.HistoryPreferences
 import com.vivicast.tv.core.datastore.LanguagePreference
 import com.vivicast.tv.core.datastore.PlaybackPreferences
 import com.vivicast.tv.core.datastore.ThemeColor
@@ -620,7 +619,6 @@ private class FakeUserPreferencesStore(
     }
 
     override suspend fun updateSelectedProviderId(providerId: String?) = Unit
-    override suspend fun updateHistory(history: HistoryPreferences) = Unit
     override suspend fun updateSearchHistory(searchHistory: List<String>) = Unit
     override suspend fun updateExpandedLiveTvProviderIds(providerIds: Set<String>) = Unit
     override suspend fun updateBackup(backup: BackupPreferences) = Unit

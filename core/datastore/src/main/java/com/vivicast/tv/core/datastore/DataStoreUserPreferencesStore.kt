@@ -52,9 +52,6 @@ class DataStoreUserPreferencesStore(
                     autoNextEnabled = preferences[Keys.AutoNextEnabled] ?: false,
                     autoNextCountdownSeconds = preferences[Keys.AutoNextCountdownSeconds].validAutoNextCountdown(),
                 ),
-                history = HistoryPreferences(
-                    enabled = preferences[Keys.HistoryEnabled] ?: true,
-                ),
                 searchHistory = preferences[Keys.SearchHistory].toSearchHistory(),
                 expandedLiveTvProviderIds = preferences[Keys.ExpandedLiveTvProviderIds].toStoredIdSet(),
                 epg = EpgPreferences(
@@ -128,12 +125,6 @@ class DataStoreUserPreferencesStore(
             preferences[Keys.ExternalPlayer] = playback.externalPlayer.name
             preferences[Keys.AutoNextEnabled] = playback.autoNextEnabled
             preferences[Keys.AutoNextCountdownSeconds] = playback.autoNextCountdownSeconds.validAutoNextCountdown()
-        }
-    }
-
-    override suspend fun updateHistory(history: HistoryPreferences) {
-        dataStore.edit { preferences ->
-            preferences[Keys.HistoryEnabled] = history.enabled
         }
     }
 
@@ -216,7 +207,6 @@ class DataStoreUserPreferencesStore(
         val AutoNextEnabled = booleanPreferencesKey("auto_next_enabled")
         val AutoNextCountdownSeconds = intPreferencesKey("auto_next_countdown_seconds")
 
-        val HistoryEnabled = booleanPreferencesKey("history_enabled")
         val SearchHistory = stringPreferencesKey("search_history")
         val ExpandedLiveTvProviderIds = stringPreferencesKey("expanded_live_tv_provider_ids")
 
