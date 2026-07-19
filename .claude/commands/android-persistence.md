@@ -1,0 +1,41 @@
+---
+name: android-persistence
+description: Implement Room schemas and DataStore preferences with proper async patterns in Android. Use when the primary task is storage schema, DAO, migration, or preference isolation; defer auth-token/security storage, any CoroutineWorker/WorkManager task, Hilt graph wiring, and cache-policy design.
+metadata:
+  triggers:
+    files:
+    - '**/*Dao.kt'
+    - '**/*Database.kt'
+    - '**/*Entity.kt'
+    keywords:
+    - "@Dao"
+    - "@Entity"
+    - RoomDatabase
+---
+# Android Persistence Standards
+
+## **Priority: P0 (CRITICAL)**
+
+## 1. Configure Room Database
+
+- Return `Flow<List<T>>` for queries, use `suspend` for Write/Insert.
+- Keep `@Entity` data classes simple. Map to Domain models in Repository.
+- Use `@Transaction` for multi-table queries (Relations).
+
+See [DAO templates](android-persistence/references/implementation.md) for Room DAO patterns.
+
+## 2. Migrate to DataStore
+
+- Replace `SharedPreferences` with `ProtoDataStore` (type-safe) or `PreferencesDataStore`.
+- Inject singleton DataStore instance via Hilt.
+
+See [DAO templates](android-persistence/references/implementation.md) for DataStore migration patterns.
+
+## Anti-Patterns
+
+- **No IO on Main Thread**: Room handles dispatchers, but verify Flow collected off-main.
+- **No @Entity in UI Layer**: Map to Domain or UI models in Repository.
+
+## References
+
+- [DAO Templates](android-persistence/references/implementation.md)
