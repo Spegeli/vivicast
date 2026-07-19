@@ -25,7 +25,7 @@ internal const val MAX_SEARCH_HISTORY = 20
  * production it defaults to [viewModelScope]. [debounceMillis] is injectable so
  * tests can disable debouncing.
  */
-class SearchViewModel(
+internal class SearchViewModel(
     private val mediaRepository: MediaRepository,
     scope: CoroutineScope? = null,
     private val debounceMillis: Long = SEARCH_DEBOUNCE_MS,

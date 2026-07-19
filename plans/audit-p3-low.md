@@ -15,6 +15,31 @@ hygiene, minor robustness. Full evidence in `CODE_REVIEW.md` (`CR #n`). **No cod
 - ⚠ `#30` — raise `minSdk` to 28 vs document/test 23-27 as supported.
 - ⚠ `#21` — wire a `history.enabled` toggle vs remove the unused preference.
 
+## Decisions + validation (2026-07-20) — all re-validated against current code (bug real + fix viable)
+
+| # | Decision |
+|---|---|
+| #16 | **Delete** `createRetrofit` + `implementation(libs.retrofit)` + the `retrofit` catalog alias (0 callers verified; app uses OkHttp directly). |
+| #24 | Mark `SearchViewModel` / `SearchUiState` / `SearchViewModelFactory` **`internal`** (constructed only in `SearchRoute`, same module). |
+| #25 | **Remove** the dead `EpgSourceRepository` / `ProviderRepository` imports — verified **100% import-only in 11 panels** (nonimport count = 0 each). |
+| #23 | Add injectable `nowProvider: () -> Long = { System.currentTimeMillis() }` to Movies/Series VMs + their factories (mirror `LiveTvViewModel`). |
+| #30 | Raise `minSdk` **23 → 26** (Android 8). Also update `scripts/start-tv-emulator.ps1` (`[ValidateSet(28,36)]` → `(26,28,36)` + the "floor API 28" comment/error) and CLAUDE.md's emulator line (add API 26 = Android 8 floor); document 26–27 as supported. Floor-smoke on an API-26 emulator. Check `scripts/check-environment.ps1` too. |
+| #18 | In `importXtreamSeriesDetail`, inside the txn diff old (`getEpisodeIdsForSeries`) vs new episode ids and `deleteProgressForMediaIds(EPISODE, removedIds)` before/around `deleteEpisodesForSeries` (mirrors the provider-wide path). Reuses existing DAO methods. |
+| #19 | Add `epgDao.deleteEpgChannelsForSource(sourceId)` to `SecureEpgSourceRepository.deleteSource`'s transaction (DAO already exists). One line. |
+| #34 | **Lightweight, non-blocking:** keep the heavy auto-mapping OUTSIDE the txn; add a cheap in-txn purge of staged programmes whose local channel vanished (new DAO: `DELETE FROM epg_programs_stage WHERE providerId=? AND epgSourceId=? AND channelId NOT IN (SELECT id FROM channels WHERE providerId=?)`), called in the merge txn before the stage-insert steps. |
+| #17 | Loop-read the 2-byte gzip signature until 2-or-EOF (or `DataInputStream.readFully` / okio `require(2)`), then unread + decide. No perf impact. Verify `PushbackInputStream` buffer ≥ 2. |
+| #20 | **Leave** — cosmetic transient UiState; single-threaded + StateFlow dedups + self-heals. |
+| #35 | Exclude **408, 425, 423** from `isTerminalHttpStatus` (transient → WorkManager backoff-retry); 429 stays transient. |
+| #21 | **Remove** `history.enabled` — it only redundantly gates resume at `MainActivity:654` (`resumeLastChannelOnStart && history.enabled`, always true, no UI). Drop the `HistoryPreferences.enabled` field + DataStore key + backup export/restore field; simplify `MainActivity:654` to `resumeLastChannelOnStart`. No behaviour change. Compiler decides whether `HistoryPreferences`/`updateHistory` plumbing becomes fully empty (then remove) or stays a holder. |
+
+## Implementation (after GO)
+New branch `audit/p3-low`. Cluster-wise, gate (`detekt` + `assembleDebug` + `test`) + commit per cluster. #30 additionally a floor-smoke on an **API-26** emulator. Merge to `main` + push only on the user's separate approval.
+Cluster order: (1) dead-code #16/#24/#25 · (2) data-hygiene #18/#19/#34 · (3) worker #35 · (4) robustness #17 · (5) consistency #23 · (6) config #30 (build.gradle + scripts + CLAUDE.md) · (7) #21.
+
+## Post-implementation (after all fixes + green) — separate passes, NOT part of the fixes
+1. **Diagnostics/Protokoll logging review:** walk every `diagnosticsStore.log(...)` + refresh diagnostics event and reconcile against the P3 rebuilds — does any log need info added / removed / changed? Known touch-points: `#35` (a 408/425 refresh now retries instead of a terminal `Failure` → the recorded refresh outcome shifts), `#34` (a purged-orphan-programmes count could warrant a metadata field), `#19`/`#18` (deleted-row counts). Add/adjust only where a real behaviour changed.
+2. **Docs review:** `CLAUDE.md`, `README.md`, the 3 active architecture docs under `docs/`, **and** `vivicast-docs` — update for P3 changes (minSdk 26 + emulator floor API 26, removed Retrofit, removed `history.enabled`). Propose before editing.
+
 ---
 
 ## Dead code / dependencies

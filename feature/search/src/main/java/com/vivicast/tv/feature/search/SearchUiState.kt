@@ -6,7 +6,7 @@ import com.vivicast.tv.domain.model.SearchResults
  * Immutable presentation state for the search screen. Holds only renderable data;
  * localized strings, navigation and focus handling stay in the composable layer.
  */
-data class SearchUiState(
+internal data class SearchUiState(
     val query: String = "",
     val debouncedQuery: String = "",
     val history: List<String> = emptyList(),

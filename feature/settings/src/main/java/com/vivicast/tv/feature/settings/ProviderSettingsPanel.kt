@@ -73,7 +73,6 @@ import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.EpgSourceRepository
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.CategoryType
 import com.vivicast.tv.domain.model.Channel
@@ -85,7 +84,6 @@ import com.vivicast.tv.data.provider.M3uSourceMode
 import com.vivicast.tv.data.provider.ProviderConnectionTestResult
 import com.vivicast.tv.data.provider.ProviderCredentials
 import com.vivicast.tv.data.provider.ProviderCreateRequest
-import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.data.provider.ProviderSaveResult
 import com.vivicast.tv.data.provider.ProviderUpdateRequest
 import com.vivicast.tv.data.provider.isAutomaticallyRefreshable

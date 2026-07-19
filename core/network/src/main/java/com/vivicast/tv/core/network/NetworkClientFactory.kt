@@ -9,7 +9,6 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import okhttp3.OkHttpClient
-import retrofit2.Retrofit
 
 class NetworkClientFactory {
     /**
@@ -67,12 +66,6 @@ class NetworkClientFactory {
         }
         return builder.build()
     }
-
-    fun createRetrofit(baseUrl: String, client: OkHttpClient): Retrofit =
-        Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .client(client)
-            .build()
 
     // Debug-only: trust every certificate/hostname. Lint's TLS warnings are suppressed on purpose;
     // this is reachable only when a BuildConfig.DEBUG-gated caller opts in.
