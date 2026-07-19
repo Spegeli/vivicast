@@ -1,5 +1,14 @@
 # Audit Remediation — Phase 3: Low Findings
 
+> **STATUS: ✅ COMPLETED + shipped 2026-07-20.** All 11 Low findings resolved (10 fixed; `#20` deliberately
+> left as cosmetic) plus `#35` (surfaced by the P2 review) and a `docs/logos` minSdk follow-up. Cluster-wise
+> commits, gate (`detekt` + `assembleDebug` + `test`, plus androidTest compile for `#21`) green per cluster,
+> **merged to `main` and pushed**; branch `audit/p3-low` deleted. **No schema change** (Room stays v21).
+> Post-implementation: diagnostics/Protokoll logging needed **no** changes; docs — CLAUDE.md (#30 emulator
+> floor API 26) + `docs/logos/README.md` (minSdk) updated, and `#21` removal now aligns with PRD-06
+> ("Verlauf besitzt in v1 keine eigene DataStore-Einstellung"). Emulator-verified: the minSdk-26 build runs
+> on API 36, data preserved, EPG re-import (#34) all SUCCESS, no crash. Decisions below are historical.
+
 Source: `CODE_REVIEW.md` (2026-07-18). Scope = the **11 Low** findings — cleanup, consistency, data
 hygiene, minor robustness. Full evidence in `CODE_REVIEW.md` (`CR #n`). **No code changes until GO.**
 ⚠ = decision needed.
