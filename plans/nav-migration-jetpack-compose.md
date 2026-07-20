@@ -12,11 +12,19 @@
 > - **C1 — Player destination + one-connection handoff** ⬜ **OPEN** — the hardest phase; needs a **physical TV**
 >   (emulator can't decode). §3.4 items 1–8 to settle first.
 > - **C2 — Live-TV focus rebuild** (RIGHT-bug designed out) ⬜ **OPEN** — sits on a green C1 base.
-> - **D — Settings inner NavHost** ✅ DONE (`adeb84c`/`8686931`/`7c054fc` + this session's focus rework — see §5).
+> - **D — Settings inner NavHost** ✅ DONE (`adeb84c`/`8686931`/`7c054fc` + focus rework — see §5).
 >   **Scope deviation:** only **Playlists** sub-views were promoted to inner-nav destinations; **EPG/About kept
 >   their local overlays** (deliberate; "optional later promotion" still open). Went **beyond** the plan: rail
 >   RIGHT scroll-to-first-row via `SettingsDetailList`, off-screen/sub-view focus-recovery, and a debug-logging
 >   module `:core:logging`/`vcLog`.
+>   **Deep-link polish (`927cbeb`):** Home empty-state buttons deep-link into Settings reliably — a generic
+>   **`SettingsEntryAction`** (section + optional sub-view, cross-panel by design) + a **fresh per-entry inner
+>   NavController** (non-saveable) so a deep-link always starts on its target section. Fixes: the add-editor's
+>   Cancel/Save landing on General instead of the Playlists overview, and a stale section rendering under the
+>   deep-linked title for a frame ("General flashes before Playlists"). Return focus preserved (Cancel→Add row,
+>   Save→new provider card). Retired the old route-bounce/remount approach →
+>   `plans/archive/settings-navigation-deeplinks.md`. Residual open: add-editor **open latency** (overview
+>   visible while the heavy editor composes) → `plans/settings-add-editor-open-latency.md`.
 > - **E — cleanup** (typed deep-link finalization, episode resolver bridge, dead-code sweep, detekt-baseline
 >   regen, doc-sync) ⬜ **OPEN**.
 >
@@ -380,6 +388,12 @@ the focus rebuild from the routing swap.
   open). (b) **Beyond the plan:** rail RIGHT now always re-enters on the first row, snapping a scrollable
   destination to the top via a shared `SettingsDetailList` wrapper (guarded so Return/Cancel still lands on the
   origin card); off-screen/sub-view focus-recovery hardened; added a debug-logging module `:core:logging`/`vcLog`.
+  (c) **Deep-link polish (`927cbeb`):** a generic `SettingsEntryAction` (section + optional sub-view, cross-panel)
+  + a **fresh per-entry inner `NavController`** (non-saveable) so a deep-link always starts on its target section
+  — fixed the add-editor's Cancel/Save landing on General instead of the Playlists overview, and a stale section
+  rendering under the deep-linked title for a frame ("General flashes before Playlists"); return focus preserved
+  (Cancel→Add row, Save→new card). Retired the old approach → `plans/archive/settings-navigation-deeplinks.md`;
+  residual add-editor **open latency** → `plans/settings-add-editor-open-latency.md`.
 - **E — cleanup.** ⬜ **OPEN.** Manifest/typed deep-link finalization for system/WatchNext (unprotected) + the episode
   resolver bridge; dead-code sweep (incl. the ~900 copy-paste unused imports in `:feature:settings` — needs a
   proper optimize-imports/ktlint pass, NOT text matching: `getValue`/`setValue`/operators are used implicitly by
