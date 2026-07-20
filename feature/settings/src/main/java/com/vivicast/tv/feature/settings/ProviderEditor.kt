@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -281,10 +282,21 @@ internal fun ProviderEditor(
         }
 
         item(key = "actions") {
-            VivicastButtonRow {
-                ActionPill(label = stringResource(R.string.common_cancel), enabled = !signals.saving, onClick = onCancel)
+            // Match the EPG source editor's button row (centered, Cancel 132 / Save 150) so DOWN from the last
+            // field lands on Save consistently across both editors.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3, Alignment.CenterHorizontally),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ActionPill(
+                    label = stringResource(R.string.common_cancel),
+                    modifier = Modifier.width(132.dp),
+                    enabled = !signals.saving,
+                    onClick = onCancel,
+                )
                 ActionPill(
                     label = stringResource(saveLabelRes(signals.saving)),
+                    modifier = Modifier.width(150.dp),
                     loading = signals.saving,
                     onClick = {
                         // A blocked save jumps focus to the first bad field (name → URL → import) and

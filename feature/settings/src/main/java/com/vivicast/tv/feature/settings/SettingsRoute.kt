@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,7 +39,6 @@ import androidx.compose.ui.focus.FocusEnterExitScope
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -123,6 +123,9 @@ import kotlin.reflect.KClass
 // Nav-result key: a Playlists sub-view (actions/editor) stashes the provider id (or OVERVIEW_FOCUS_ADD) on
 // the entry it pops back to, so the overview re-focuses the originating card. Replaces the old pendingOverviewFocus.
 private const val PROVIDER_FOCUS_KEY = "provider_focus"
+// Nav-result: BACK from the groups screen asks the actions menu to focus its "Gruppen verwalten" row (its
+// origin) instead of the first action. One-shot; the actions destination clears it after re-entry.
+private const val FROM_GROUPS_KEY = "from_groups"
 
 // Rail item OK: re-selecting the current section collapses its open sub-view; a different section
 // switches. Kept top-level so the branch doesn't count toward SettingsRoute's complexity gate.
@@ -299,6 +302,15 @@ fun SettingsRoute(
     val detailFirstFocusModifier = Modifier
         .focusRequester(detailFocusRequester)
         .focusProperties { left = currentSectionFocusRequester }
+    // Invisible focus holder living in the detail pane (below the NavHost). Park focus here before an
+    // inner-NavHost content swap so it can't orphan up to the top nav (whose selection-follows-focus jumps to
+    // Home) during the transition — and, unlike parking on the visible rail, the user sees NO intermediate
+    // focus flash. The target destination's own initial-focus effect then reclaims focus. Replaces the
+    // per-panel onParkFocusBeforeEditor the D2 split dropped.
+    val focusHolder = remember { FocusRequester() }
+    val parkRail: () -> Unit = {
+        runCatching { focusHolder.requestFocus() }
+    }
     // Rail selection-follows-focus: focusing a section navigates the inner nav to it (shallow replace so a
     // section BACK falls through to the rail/gear handlers, not section→section history). Navigates only on
     // an actual change so rapid rail scrolling doesn't thrash.
@@ -321,7 +333,12 @@ fun SettingsRoute(
     val activateSection: (SettingsSection) -> Unit = { section ->
         railSectionActivate(
             isCurrent = currentSection.isSame(section),
-            onCollapse = { collapseSubViewSignal++ },
+            onCollapse = {
+                collapseSubViewSignal++ // Epg/About: collapse their still-local overlays
+                // Playlists: pop its inner-nav sub-views (actions/editor/groups) back to the overview, so OK on
+                // the rail section discards the open sub-view. No-op for sections without nav sub-views.
+                runCatching { innerNav.popBackStack(SecPlaylists, inclusive = false) }
+            },
             onSwitch = { navigateSection(section); pendingDetailFocus = true },
         )
     }
@@ -332,6 +349,7 @@ fun SettingsRoute(
         when {
             openAddPlaylistOnEnter && startSectionEntry.matchesRoute == PlaylistsGraph::class -> {
                 // Deep-link straight into the add-provider form; the editor self-focuses its first field.
+                android.util.Log.d("VCd", "D3 deeplink -> navigate PlaylistEditor(add)")
                 innerNav.navigate(PlaylistEditor())
                 onAddPlaylistApplied()
             }
@@ -372,7 +390,9 @@ fun SettingsRoute(
             ) {
                 Column(
                     // Rail focus bounds: LEFT stops (leftmost pane); UP from the top section exits to the
-                    // top-nav gear. RIGHT (→ detail) is a spatial search into the detail focusRestorer;
+                    // top-nav gear. RIGHT (→ detail) targets the current destination's first row explicitly
+                    // (detailFocusRequester) — without the removed focusRestorer, a plain spatial search would
+                    // land on whichever row happens to be level with the rail item, not the first one.
                     // BACK (→ gear) stays global.
                     modifier = Modifier
                         .fillMaxSize()
@@ -399,6 +419,9 @@ fun SettingsRoute(
                                 // — so RIGHT still works when the first row is scrolled off. See below.
                                 modifier = Modifier
                                     .focusRequester(sectionFocusRequesters.getValue(section.label))
+                                    // RIGHT from a rail item → the detail's first row explicitly (else spatial
+                                    // search lands on whatever detail row is level with the rail item).
+                                    .focusProperties { right = detailFocusRequester }
                                     .fillMaxWidth(),
                                 contentPadding = VivicastSpacing.Space2,
                             ) {
@@ -424,6 +447,7 @@ fun SettingsRoute(
                         onFocused = { navigateSection(aboutSection) },
                         modifier = Modifier
                             .focusRequester(sectionFocusRequesters.getValue(aboutSection.label))
+                            .focusProperties { right = detailFocusRequester }
                             .fillMaxWidth()
                             .wrapContentHeight(unbounded = true),
                         contentPadding = VivicastSpacing.Space2,
@@ -452,10 +476,11 @@ fun SettingsRoute(
                     // Detail focus bounds: LEFT (at the panel's left edge) returns to the current section;
                     // UP/DOWN stop at the ends. Internal navigation (rows, button groups) is unaffected —
                     // an exit target only applies when there's no focus target left inside the group.
-                    // focusRestorer: on RIGHT re-entry restore the last-focused child (so it works when the
-                    // first row is scrolled out of the LazyColumn); fallback = the first row on first entry.
+                    // NO focusRestorer here: its onEnter redirected EVERY programmatic requestFocus (a returning
+                    // card, the "Gruppen verwalten" row, the first row) to its fallback, which broke targeted
+                    // focus-return. RIGHT-from-rail instead enters via the normal spatial search (lands on the
+                    // first/nearest row); each destination requests its own focus target directly.
                     modifier = Modifier
-                        .focusRestorer(detailFocusRequester)
                         .focusGroup()
                         .focusProperties {
                             onExit = { exitDetailPanel(currentSectionFocusRequester) }
@@ -504,8 +529,8 @@ fun SettingsRoute(
                                     epgSources = settingsUiState.epgSources,
                                     onGetProviderCredentials = viewModel::getProviderCredentials,
                                     onProviderSaved = onProviderSaved,
-                                    onAddProvider = { innerNav.navigate(PlaylistEditor()) },
-                                    onOpenProvider = { id -> innerNav.navigate(PlaylistActions(id)) },
+                                    onAddProvider = { parkRail(); innerNav.navigate(PlaylistEditor()) },
+                                    onOpenProvider = { id -> parkRail(); innerNav.navigate(PlaylistActions(id)) },
                                     pendingFocusProviderId = focusProvider,
                                     onFocusHandled = { entry.savedStateHandle[PROVIDER_FOCUS_KEY] = null },
                                     firstFocusModifier = detailFirstFocusModifier,
@@ -514,14 +539,25 @@ fun SettingsRoute(
                             }
                             composable<PlaylistActions> { entry ->
                                 val providerId = entry.toRoute<PlaylistActions>().providerId
+                                // One-shot from-groups flag: read once on (re-)entry via a plain remember (which
+                                // re-inits on pop-back, when the destination re-enters composition) so the
+                                // actions panel's entry-focus effect sees a stable value, then clear it.
+                                val fromGroups = remember { entry.savedStateHandle.get<Boolean>(FROM_GROUPS_KEY) ?: false }
+                                LaunchedEffect(Unit) {
+                                    android.util.Log.d("VCd", "actions entry fromGroups=$fromGroups")
+                                    entry.savedStateHandle[FROM_GROUPS_KEY] = false
+                                }
                                 // BACK from actions → overview, re-focusing the originating card (the inner
                                 // NavHost's auto-pop can't carry a nav result, so intercept + stash it first).
                                 BackHandler {
+                                    android.util.Log.d("VCd", "actions BACK -> stash focus $providerId + pop")
+                                    parkRail()
                                     innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, providerId)
                                     innerNav.popBackStack()
                                 }
                                 ProviderActionsScreen(
                                     providerId = providerId,
+                                    focusGroupsRowOnEntry = fromGroups,
                                     providers = settingsUiState.providers,
                                     epgSources = settingsUiState.epgSources,
                                     providerEpgLinks = settingsUiState.providerEpgLinks,
@@ -532,9 +568,10 @@ fun SettingsRoute(
                                     onDeleteProvider = viewModel::deleteProvider,
                                     onLogProviderDeleted = onLogProviderDeleted,
                                     onSelectEpgProvider = viewModel::onEpgProviderSelected,
-                                    onEdit = { innerNav.navigate(PlaylistEditor(providerId)) },
-                                    onManageGroups = { innerNav.navigate(PlaylistGroups(providerId)) },
+                                    onEdit = { parkRail(); innerNav.navigate(PlaylistEditor(providerId)) },
+                                    onManageGroups = { parkRail(); innerNav.navigate(PlaylistGroups(providerId)) },
                                     onDeleted = { focusId ->
+                                        parkRail()
                                         innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, focusId)
                                         innerNav.popBackStack()
                                     },
@@ -543,8 +580,9 @@ fun SettingsRoute(
                                 )
                             }
                             composable<PlaylistEditor> { entry ->
+                                val editorArgs = entry.toRoute<PlaylistEditor>()
                                 ProviderEditorScreen(
-                                    providerId = entry.toRoute<PlaylistEditor>().providerId,
+                                    providerId = editorArgs.providerId,
                                     providers = settingsUiState.providers,
                                     epgSources = settingsUiState.epgSources,
                                     providerEpgLinks = settingsUiState.providerEpgLinks,
@@ -582,19 +620,39 @@ fun SettingsRoute(
                                         }
                                     },
                                     onSaved = { focusId ->
+                                        android.util.Log.d("VCd", "editor onSaved focus=$focusId + pop")
+                                        parkRail()
                                         innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, focusId)
                                         innerNav.popBackStack()
                                     },
                                     onDeleted = { focusId ->
+                                        android.util.Log.d("VCd", "editor onDeleted focus=$focusId + pop-to-overview")
+                                        parkRail()
                                         innerNav.getBackStackEntry(SecPlaylists).savedStateHandle[PROVIDER_FOCUS_KEY] = focusId
                                         innerNav.popBackStack(SecPlaylists, inclusive = false)
                                     },
-                                    onCancel = { innerNav.popBackStack() },
+                                    onCancel = {
+                                        parkRail()
+                                        // Add (from overview) → focus the Add row on return; edit (from actions)
+                                        // → actions self-focuses on re-entry, so no result needed.
+                                        if (editorArgs.providerId == null) {
+                                            innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, OVERVIEW_FOCUS_ADD)
+                                        }
+                                        innerNav.popBackStack()
+                                    },
                                     entryFocusModifier = detailFirstFocusModifier,
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
                             composable<PlaylistGroups> { entry ->
+                                // BACK from groups → actions; park focus first so the inner NavHost's auto-pop
+                                // can't orphan it to the top nav (→ Home). The from-groups result makes actions
+                                // re-focus its "Gruppen verwalten" origin row instead of the first action.
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(FROM_GROUPS_KEY, true)
+                                    innerNav.popBackStack()
+                                }
                                 ProviderGroupsScreen(
                                     providerId = entry.toRoute<PlaylistGroups>().providerId,
                                     providers = settingsUiState.providers,
@@ -669,9 +727,7 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                             // Park focus on the (always-present) section button before the overview swaps
                             // to the inline editor, so focus can't escape to the top nav bar (jumps Home).
-                            onParkFocusBeforeEditor = {
-                                runCatching { sectionFocusRequesters.getValue(sectionEpg).requestFocus() }
-                            },
+                            onParkFocusBeforeEditor = parkRail,
                             collapseSubViewSignal = collapseSubViewSignal,
                         ) }
                         composable<SecAppearance> { AppearanceSettingsPanel(
@@ -724,6 +780,10 @@ fun SettingsRoute(
                             collapseSubViewSignal = collapseSubViewSignal,
                         ) }
                     }
+                    // Invisible focus holder (see focusHolder) — parked on during inner-nav swaps so focus
+                    // never orphans to the top nav, with no visible flash. It sits below the NavHost and the
+                    // detail's DOWN-exit is cancelled, so it's reachable only via requestFocus, not spatial nav.
+                    Box(modifier = Modifier.size(1.dp).focusRequester(focusHolder).focusable())
                 }
             }
         }

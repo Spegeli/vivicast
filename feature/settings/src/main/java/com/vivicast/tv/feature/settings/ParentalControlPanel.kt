@@ -133,10 +133,14 @@ fun ParentalControlSettingsPanel(
             }
         }
         item {
+            // Carry detailFocusRequester (via firstFocusModifier) onto the first focusable row so
+            // RIGHT from the rail lands here — without it, `right = detailFocusRequester` has no
+            // attached target and focus is stuck on the rail (every other section applies this).
             VivicastSettingsRow(
                 title = if (state.hasPin) stringResource(R.string.settings_pin_change) else stringResource(R.string.settings_pin_set),
                 help = stringResource(R.string.settings_help_pin_entry),
                 value = if (state.hasPin) stringResource(R.string.settings_pin_change_value) else stringResource(R.string.settings_pin_set_value),
+                modifier = firstFocusModifier,
                 icon = { SettingsRowIcon("key") },
                 onClick = { dialog = if (state.hasPin) PinDialogMode.Change else PinDialogMode.Set },
             )

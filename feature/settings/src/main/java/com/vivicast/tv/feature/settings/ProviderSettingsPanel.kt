@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -186,13 +187,17 @@ internal fun ProviderActionsScreen(
     onEdit: () -> Unit,
     onManageGroups: () -> Unit,
     onDeleted: (focusProviderId: String) -> Unit,
+    focusGroupsRowOnEntry: Boolean = false,
     entryFocusModifier: Modifier,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val provider = providers.firstOrNull { it.id == providerId }
     // Observe THIS provider's EPG links so the refresh indicator reflects its own linked EPG refresh.
-    LaunchedEffect(providerId) { onSelectEpgProvider(providerId) }
+    LaunchedEffect(providerId) {
+        android.util.Log.d("VCd", "ActionsScreen shown id=$providerId")
+        onSelectEpgProvider(providerId)
+    }
     var sourceMode by remember { mutableStateOf(M3uSourceMode.Url) }
     LaunchedEffect(providerId) {
         sourceMode = (runCatching { onGetProviderCredentials(providerId) }.getOrNull() as? ProviderCredentials.M3u)
@@ -241,6 +246,7 @@ internal fun ProviderActionsScreen(
         onRefresh = { onRefreshProvider(provider.id) },
         onManageGroups = onManageGroups,
         onDelete = { pendingDelete = true },
+        focusGroupsRowOnEntry = focusGroupsRowOnEntry,
         entryFocusModifier = entryFocusModifier,
         modifier = modifier,
     )
@@ -369,6 +375,7 @@ internal fun ProviderEditorScreen(
     // Existing provider: metadata is set synchronously above; load full credentials async (mirrors the old
     // card-open path). Also point the EPG-link observation at this provider.
     LaunchedEffect(providerId) {
+        android.util.Log.d("VCd", "EditorScreen shown id=$providerId (null=add)")
         if (providerId != null) {
             onSelectEpgProvider(providerId)
             val credentials = runCatching { onGetProviderCredentials(providerId) }.getOrNull()
@@ -414,9 +421,13 @@ internal fun ProviderEditorScreen(
                 // Save RESTARTS the refresh (REPLACE) so the actions group button stays gated until import finishes.
                 onRefreshProvider(saved.provider.id)
                 if (saved.provider.type == ProviderType.Xtream && sourceChanged) onXtreamProviderSaved(saved.provider.id)
+                android.util.Log.d("VCd", "editor persist OK id=${saved.provider.id} isEditing=${editor.isEditing}")
                 onSaved(saved.provider.id)
             }
-            .onFailure { error -> message = strProviderSaveFailed.format(error.message ?: "?") }
+            .onFailure { error ->
+                android.util.Log.d("VCd", "editor persist FAIL: ${error.message}")
+                message = strProviderSaveFailed.format(error.message ?: "?")
+            }
     }
 
     // Same-source edit persists directly; otherwise the source is tested first and only a passing test
@@ -583,18 +594,42 @@ private fun ProviderOverviewPanel(
 ) {
     val addRequester = remember { FocusRequester() }
     val cardRequesters = remember(providers) { providers.associate { it.id to FocusRequester() } }
+    val overviewListState = rememberLazyListState()
     // When returning from the inline editor, move focus onto the requested card (or the add button).
     LaunchedEffect(pendingFocus, providers) {
         val target = pendingFocus ?: return@LaunchedEffect
-        awaitFrame()
-        val requester = when (target) {
-            is OverviewFocusTarget.Card -> cardRequesters[target.providerId] ?: addRequester
-            OverviewFocusTarget.AddButton -> addRequester
+        // If the target card is off-screen, scroll it into view first so the LazyColumn composes it + its
+        // FocusRequester attaches (else requestFocus is a no-op and focus is lost). Header rows before the
+        // cards: Add (+ Refresh when providers exist, + a message row when one is set).
+        if (target is OverviewFocusTarget.Card) {
+            val idx = providers.indexOfFirst { it.id == target.providerId }
+            if (idx >= 0) {
+                val header = 1 + (if (providers.isNotEmpty()) 1 else 0) + (if (message != null) 1 else 0)
+                runCatching { overviewListState.scrollToItem(header + idx) }
+            }
         }
-        runCatching { requester.requestFocus() }
+        // Retry across a few frames: after a pop the LazyColumn may need >1 frame to attach the target card's
+        // FocusRequester, and for a just-saved provider `providers` can lag one emission (which re-launches
+        // this effect with the new card in the map). Clear the pending focus only once focus actually lands.
+        repeat(30) {
+            awaitFrame()
+            val requester = when (target) {
+                is OverviewFocusTarget.Card -> cardRequesters[target.providerId]
+                OverviewFocusTarget.AddButton -> addRequester
+            }
+            if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
+                android.util.Log.d("VCd", "overview focus-return $target -> landed")
+                onFocusHandled()
+                return@LaunchedEffect
+            }
+        }
+        // Target card never rendered in time → add button, so focus can't orphan upward.
+        android.util.Log.d("VCd", "overview focus-return $target -> FALLBACK add (card never rendered)")
+        runCatching { addRequester.requestFocus() }
         onFocusHandled()
     }
     LazyColumn(
+        state = overviewListState,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {

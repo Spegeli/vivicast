@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
@@ -383,20 +384,40 @@ internal fun EpgSettingsPanel(
             val addRequester = remember { FocusRequester() }
             val manualRequester = remember { FocusRequester() }
             val sourceRequesters = remember(sources) { sources.associate { it.id to FocusRequester() } }
+            val overviewListState = rememberLazyListState()
             // Return focus onto the add/manual row or the source card just left, else it escapes to top nav.
             LaunchedEffect(pendingOverviewFocus, sources) {
                 val target = pendingOverviewFocus ?: return@LaunchedEffect
-                awaitFrame()
+                // A source card may be off-screen (the LazyColumn hasn't composed it). Scroll it into view
+                // first so its FocusRequester attaches — else requestFocus is a no-op and focus is lost. Fixed
+                // header rows precede the sources: Global settings, Add source, Refresh (present when sources
+                // exist), Manual mapping = 4.
+                if (target is EpgOverviewFocusTarget.Source) {
+                    val idx = sources.indexOfFirst { it.id == target.sourceId }
+                    if (idx >= 0) runCatching { overviewListState.scrollToItem(idx + 4) }
+                }
                 val requester = when (target) {
                     EpgOverviewFocusTarget.GlobalSettingsButton -> globalSettingsRequester
                     EpgOverviewFocusTarget.AddButton -> addRequester
                     EpgOverviewFocusTarget.ManualButton -> manualRequester
-                    is EpgOverviewFocusTarget.Source -> sourceRequesters[target.sourceId] ?: addRequester
+                    is EpgOverviewFocusTarget.Source -> sourceRequesters[target.sourceId]
                 }
-                runCatching { requester.requestFocus() }
+                // Retry across a few frames: a just-scrolled off-screen source card can need >1 frame to
+                // attach its FocusRequester (same reason as the playlist overview's retry loop). Clear the
+                // pending focus only once focus actually lands.
+                repeat(30) {
+                    awaitFrame()
+                    if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
+                        pendingOverviewFocus = null
+                        return@LaunchedEffect
+                    }
+                }
+                // Target row never rendered in time → add button, so focus can't orphan upward.
+                runCatching { addRequester.requestFocus() }
                 pendingOverviewFocus = null
             }
             LazyColumn(
+                state = overviewListState,
                 modifier = Modifier.fillMaxSize(),
                 // Match the playlist overview's row spacing (Space3); EPG previously used the larger Space4.
                 verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
