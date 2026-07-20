@@ -152,7 +152,7 @@ internal fun AppearanceSettingsPanel(
 ) {
     var openPicker by remember { mutableStateOf<AppearancePicker?>(null) }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_theme),

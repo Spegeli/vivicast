@@ -596,8 +596,6 @@ private fun ProviderOverviewPanel(
     val addRequester = remember { FocusRequester() }
     val cardRequesters = remember(providers) { providers.associate { it.id to FocusRequester() } }
     val overviewListState = rememberLazyListState()
-    // Rail RIGHT snaps this overview back to the top so it always re-enters on the first row (Add).
-    ScrollFirstRowIntoView(overviewListState)
     // When returning from the inline editor, move focus onto the requested card (or the add button).
     LaunchedEffect(pendingFocus, providers) {
         val target = pendingFocus ?: return@LaunchedEffect
@@ -631,10 +629,9 @@ private fun ProviderOverviewPanel(
         runCatching { addRequester.requestFocus() }
         onFocusHandled()
     }
-    LazyColumn(
-        state = overviewListState,
+    SettingsDetailList(
+        listState = overviewListState,
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         item {
             VivicastSettingsRow(

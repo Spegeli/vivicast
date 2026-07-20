@@ -123,7 +123,7 @@ fun ParentalControlSettingsPanel(
         }
     }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList {
         inlineError?.let { message ->
             item {
                 InfoPanel(

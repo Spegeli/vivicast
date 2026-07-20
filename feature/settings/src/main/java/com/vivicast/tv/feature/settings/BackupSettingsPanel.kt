@@ -99,7 +99,7 @@ internal fun BackupSettingsPanel(
     onImportBackup: () -> Unit = {},
     firstFocusModifier: Modifier = Modifier,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_backup_export),

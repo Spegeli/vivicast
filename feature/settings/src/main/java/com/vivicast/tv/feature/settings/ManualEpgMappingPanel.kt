@@ -253,7 +253,7 @@ private fun ManualMappingProviderList(
     }
 
     val firstProviderId = providers.first().id
-    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList(modifier = modifier) {
         items(providers, key = { it.id }) { provider ->
             FocusPanel(
                 selected = provider.id == selectedProviderId,

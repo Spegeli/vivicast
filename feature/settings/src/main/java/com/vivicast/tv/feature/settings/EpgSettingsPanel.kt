@@ -385,8 +385,6 @@ internal fun EpgSettingsPanel(
             val manualRequester = remember { FocusRequester() }
             val sourceRequesters = remember(sources) { sources.associate { it.id to FocusRequester() } }
             val overviewListState = rememberLazyListState()
-            // Rail RIGHT snaps this overview back to the top so it always re-enters on the first row.
-            ScrollFirstRowIntoView(overviewListState)
             // Return focus onto the add/manual row or the source card just left, else it escapes to top nav.
             LaunchedEffect(pendingOverviewFocus, sources) {
                 val target = pendingOverviewFocus ?: return@LaunchedEffect
@@ -418,11 +416,9 @@ internal fun EpgSettingsPanel(
                 runCatching { addRequester.requestFocus() }
                 pendingOverviewFocus = null
             }
-            LazyColumn(
-                state = overviewListState,
+            SettingsDetailList(
+                listState = overviewListState,
                 modifier = Modifier.fillMaxSize(),
-                // Match the playlist overview's row spacing (Space3); EPG previously used the larger Space4.
-                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
             ) {
                 item {
                     VivicastSettingsRow(

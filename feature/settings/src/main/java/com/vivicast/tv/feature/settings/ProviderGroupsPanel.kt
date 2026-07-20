@@ -78,7 +78,7 @@ internal fun ProviderGroupsPanel(
     val canReorder = settings.sortMode == CategorySortMode.Manual && groups.size > 1
     // One LazyColumn for controls + group rows → linear D-Pad focus (up from the first group reaches the
     // bulk buttons; no Column+LazyColumn focus trapping).
-    LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+    SettingsDetailList(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
         item { GroupTypeChips(activeType, onSelectType, firstChipModifier) }
         item { GroupSortChips(settings, onSetSortMode) }
         if (canReorder) {

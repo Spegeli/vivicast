@@ -153,9 +153,8 @@ internal fun AboutSettingsPanel(
     Box(modifier = Modifier.fillMaxSize()) {
         // Hidden (but kept composed, so the focused legal row survives) while a legal page is open — the
         // legal overlay renders transparently over it on the host GlassPanel background.
-        LazyColumn(
+        SettingsDetailList(
             modifier = Modifier.alpha(if (activeLegalPage != null || showTechnical || showDiagnostics) 0f else 1f),
-            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
         ) {
         item {
             VivicastSettingsRow(

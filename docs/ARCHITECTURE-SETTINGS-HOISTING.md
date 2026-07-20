@@ -53,3 +53,16 @@ composable collects Repository flows or calls Repository CRUD directly.
 `manualMappingsForSelectedChannel`, `manageGroupsProviderId`, `manageGroupsType`, `manageGroups`,
 `manageGroupSettings`. `providers` is shared by the EPG area **and** the provider overview
 (deliberately neutral name). No unused fields, no localized strings, no Compose/Android types.
+
+## Detail lists — use `SettingsDetailList`, not raw `LazyColumn`
+
+Every Settings **detail destination's entry list** (the scrollable list rail RIGHT lands in) uses
+`SettingsDetailList { … }` (in `:feature:settings`), **not** a raw `LazyColumn`. It hoists the list
+state and, when the rail's RIGHT bumps `LocalRevealFirstRowSignal`, snaps the list to the top so RIGHT
+always re-enters on the first row — even after the panel grows. It fires **only** on a genuine rail-RIGHT
+signal change while already composed, **never** on (re-)entry, so a Return/Cancel still lands on the
+originating card/row (its own focus-return is untouched). A destination that needs the list state
+elsewhere (an off-screen focus-return, e.g. EPG/Playlists overview and the editors) passes its own
+`listState` in. Non-entry sub-lists (dialogs, choice pickers, the 3-column manual-mapping side columns,
+the diagnostics log viewer with its custom focus handling) stay raw `LazyColumn`. **New panels/sub-views
+must use `SettingsDetailList` for their entry list** so the "RIGHT lands mid-list" bug can't reappear.

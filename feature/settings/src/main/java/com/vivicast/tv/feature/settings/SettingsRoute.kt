@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -191,19 +192,50 @@ private fun FocusEnterExitScope.exitSectionRail(topNav: FocusRequester) {
 // Frames to wait for rail RIGHT focus to land before falling back to a spatial move.
 private const val FOCUS_SETTLE_FRAMES = 3
 
-// Bumped on rail RIGHT so entering the detail always starts at its first row: a scrollable destination
-// snaps its LazyColumn back to the top (ScrollFirstRowIntoView) before that first row is focused.
+// Bumped on rail RIGHT so entering the detail always starts at its first row: a detail list snaps back
+// to the top (SettingsDetailList / ScrollFirstRowIntoView) before that first row is focused.
 internal val LocalRevealFirstRowSignal = compositionLocalOf { 0 }
 
-// A scrollable detail destination calls this so rail RIGHT (which bumps LocalRevealFirstRowSignal) snaps
-// it to the top — the first row is then on-screen and takes the focus. Instant, no animation. Short
-// destinations whose first row is always visible don't need it.
+// Snap [listState] to the top when rail RIGHT bumps LocalRevealFirstRowSignal — but ONLY on a genuine
+// change while this list is already composed, NEVER on (re-)entry. So rail RIGHT re-enters on the first
+// row, while a Return/Cancel (which re-mounts the destination WITHOUT changing the signal) leaves the
+// list where the focus-return put it — the originating card/row. Instant, no animation.
 @Composable
 internal fun ScrollFirstRowIntoView(listState: LazyListState) {
     val signal = LocalRevealFirstRowSignal.current
+    // Init to the current signal so the first pass (mount / Return / section switch) never scrolls; only a
+    // later change (a rail RIGHT arriving while this list is already on screen) snaps to the top.
+    var lastHandled by remember { mutableStateOf(signal) }
     LaunchedEffect(signal) {
-        if (signal > 0) listState.scrollToItem(0)
+        if (signal != lastHandled) {
+            lastHandled = signal
+            listState.scrollToItem(0)
+        }
     }
+}
+
+// Standard scrollable list for a Settings detail destination. Use this instead of a raw LazyColumn so
+// rail RIGHT ALWAYS re-enters on the first row (it snaps to the top) with no per-panel wiring to forget —
+// growing a panel or adding a new one can't reintroduce the "RIGHT lands mid-list" bug. Sub-lists that are
+// NOT the destination's entry list (dialogs, choice pickers, the manual-mapping columns) stay raw
+// LazyColumn. Destinations needing the state elsewhere (an off-screen focus-return) pass their own
+// [listState]; others take the default.
+@Composable
+internal fun SettingsDetailList(
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
+    contentPadding: PaddingValues = PaddingValues(),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(VivicastSpacing.Space3),
+    content: LazyListScope.() -> Unit,
+) {
+    ScrollFirstRowIntoView(listState)
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = contentPadding,
+        verticalArrangement = verticalArrangement,
+        content = content,
+    )
 }
 
 // RIGHT from a rail section → enter the detail pane on its FIRST row: bump the reveal signal (a scrollable

@@ -129,7 +129,7 @@ internal fun MaintenanceSettingsPanel(
         }
     }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList {
 
         item {
             VivicastSettingsRow(

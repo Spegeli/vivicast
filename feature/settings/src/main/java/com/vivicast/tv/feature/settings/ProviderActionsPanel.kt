@@ -79,9 +79,8 @@ internal fun ProviderActionsPanel(
         }.orEmpty()
         ConnectionTestStatus.Idle -> ""
     }
-    LazyColumn(
+    SettingsDetailList(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         item { ProviderActionsHeader(provider, sourceMode) }
         item {

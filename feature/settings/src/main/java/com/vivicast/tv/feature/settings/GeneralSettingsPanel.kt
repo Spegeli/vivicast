@@ -113,7 +113,7 @@ internal fun GeneralSettingsPanel(
     val toggleDoubleBack = { onDoubleBackToExitChanged(!state.doubleBackToExit) }
     var showLanguagePicker by remember { mutableStateOf(false) }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    SettingsDetailList {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_launch_on_boot),

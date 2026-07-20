@@ -138,9 +138,8 @@ internal fun EpgSourceEditor(
         runCatching { (if (target == EpgEditorErrorFocus.Name) firstFocus else urlFocus).requestFocus() }
         pendingErrorFocus = null
     }
-    LazyColumn(
+    SettingsDetailList(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         // Enable/disable toggle above the name (edit only, like the playlist editor). A new source is
         // active by default, so add mode needs no toggle.
