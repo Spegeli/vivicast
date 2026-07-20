@@ -8,12 +8,10 @@ import com.vivicast.tv.data.playback.PlaybackRepository
 import com.vivicast.tv.data.provider.ProviderRepository
 import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.CategoryType
-import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.Favorite
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Provider
-import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,23 +19,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * Presentation-state holder for the series screen. Owns the fachlich screen state
- * (selected provider/category/series/season/episode, page size, opened detail) and
- * combines the provider, media, favorites and playback repositories into an immutable
- * [SeriesUiState]. No Android Context/Resources, no Compose types, no navigation, no
- * localized strings. [scope] lets unit tests inject a controlled scope; production uses
- * [viewModelScope].
+ * Presentation-state holder for the series GRID screen. Owns the fachlich grid state (selected
+ * provider/category/series, page size) and combines the provider, media, favorites and playback repositories
+ * into an immutable [SeriesUiState]. No Android Context/Resources, no Compose types, no navigation, no
+ * localized strings.
  *
- * All original SeriesRoute guards are preserved: provider/category/series/season/episode
- * auto-selection, the detail auto-close guard, page reset on provider/category change and
- * the staged (series -> season -> episode) deep-link target consumption.
+ * Series detail (seasons / episodes / progress / mark-seen) is a separate self-contained destination
+ * ([SeriesDetailViewModel]); this VM holds no detail state. [scope] lets unit tests inject a controlled scope.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class SeriesViewModel(
@@ -45,10 +39,6 @@ internal class SeriesViewModel(
     private val mediaRepository: MediaRepository,
     private val favoritesRepository: FavoritesRepository,
     private val playbackRepository: PlaybackRepository,
-    // On-demand season/episode fetch (App-hoisted: Xtream getSeriesInfo -> import). No-op for M3U.
-    private val ensureSeriesDetail: suspend (Series) -> Unit = {},
-    // #23: injectable clock (default wall clock) so mark-seen is deterministic in tests, matching LiveTvViewModel.
-    private val nowProvider: () -> Long = { System.currentTimeMillis() },
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -57,9 +47,6 @@ internal class SeriesViewModel(
     private val selectedProviderIdFlow = MutableStateFlow<String?>(null)
     private val selectedCategoryIdFlow = MutableStateFlow<String?>(null)
     private val selectedSeriesIdFlow = MutableStateFlow<String?>(null)
-    private val selectedSeasonIdFlow = MutableStateFlow<String?>(null)
-    private val selectedEpisodeIdFlow = MutableStateFlow<String?>(null)
-    private val detailSeriesIdFlow = MutableStateFlow<String?>(null)
     private val pageCountFlow = MutableStateFlow(1)
 
     private var providersRaw: List<Provider> = emptyList()
@@ -70,17 +57,6 @@ internal class SeriesViewModel(
     private var continueSeries: List<Series> = emptyList()
     private var observedSeries: List<Series> = emptyList()
     private var loadedSelectedSeries: Series? = null
-    private var loadedDetailSeries: Series? = null
-    private var seasons: List<Season> = emptyList()
-    private var episodes: List<Episode> = emptyList()
-    private var selectedEpisodeProgressLoaded: PlaybackProgress? = null
-    private var consumedTargetSeriesId: String? = null
-
-    private var targetProvider: String? = null
-    private var targetCategory: String? = null
-    private var targetSeries: String? = null
-    private var targetSeason: String? = null
-    private var targetEpisode: String? = null
 
     private val _uiState = MutableStateFlow(SeriesUiState())
     val uiState: StateFlow<SeriesUiState> = _uiState.asStateFlow()
@@ -129,7 +105,6 @@ internal class SeriesViewModel(
                     .sortedByDescending { it.progress.lastWatchedAt }
                     .mapNotNull { mediaRepository.getSeries(it.episode.providerId, it.episode.seriesId) }
                 ensureCategorySelected()
-                trySeriesTargetStage()
                 rebuild()
             }
         }
@@ -154,7 +129,6 @@ internal class SeriesViewModel(
                 }
                 .collect { series ->
                     observedSeries = series
-                    trySeriesTargetStage()
                     rebuild()
                 }
         }
@@ -164,74 +138,6 @@ internal class SeriesViewModel(
                 .collect { (providerId, seriesId) ->
                     loadedSelectedSeries = if (providerId != null && seriesId != null) {
                         mediaRepository.getSeries(providerId, seriesId)
-                    } else {
-                        null
-                    }
-                    rebuild()
-                }
-        }
-
-        coroutineScope.launch {
-            combine(selectedProviderIdFlow, detailSeriesIdFlow) { p, s -> p to s }
-                .collect { (providerId, seriesId) ->
-                    loadedDetailSeries = if (providerId != null && seriesId != null) {
-                        mediaRepository.getSeries(providerId, seriesId)?.also { detail ->
-                            // On-demand: opening a series detail — from browsing, search, or a deep-link, all
-                            // of which set detailSeriesIdFlow — fetches its season/episode detail if absent.
-                            // Xtream only (ensureSeriesDetail no-ops for M3U); silent on failure; guarded to
-                            // avoid refetch. Launched separately so the network call never blocks this flow.
-                            coroutineScope.launch {
-                                if (mediaRepository.observeSeasons(providerId, seriesId).first().isEmpty()) {
-                                    runCatching { ensureSeriesDetail(detail) }
-                                }
-                            }
-                        }
-                    } else {
-                        null
-                    }
-                    rebuild()
-                }
-        }
-
-        coroutineScope.launch {
-            combine(selectedProviderIdFlow, selectedSeriesIdFlow) { p, s -> p to s }
-                .flatMapLatest { (providerId, seriesId) ->
-                    if (providerId == null || seriesId == null) {
-                        flowOf(emptyList())
-                    } else {
-                        mediaRepository.observeSeasons(providerId, seriesId)
-                    }
-                }
-                .collect { loadedSeasons ->
-                    seasons = loadedSeasons
-                    ensureSeasonSelected()
-                    trySeasonTargetStage()
-                    rebuild()
-                }
-        }
-
-        coroutineScope.launch {
-            combine(selectedProviderIdFlow, selectedSeasonIdFlow) { p, s -> p to s }
-                .flatMapLatest { (providerId, seasonId) ->
-                    if (providerId == null || seasonId == null) {
-                        flowOf(emptyList())
-                    } else {
-                        mediaRepository.observeEpisodes(providerId, seasonId)
-                    }
-                }
-                .collect { loadedEpisodes ->
-                    episodes = loadedEpisodes
-                    ensureEpisodeSelected()
-                    tryEpisodeTargetStage()
-                    rebuild()
-                }
-        }
-
-        coroutineScope.launch {
-            combine(selectedProviderIdFlow, selectedEpisodeIdFlow) { p, e -> p to e }
-                .collect { (providerId, episodeId) ->
-                    selectedEpisodeProgressLoaded = if (providerId != null && episodeId != null) {
-                        playbackRepository.getProgress(providerId, MediaType.Episode, episodeId)
                     } else {
                         null
                     }
@@ -255,82 +161,14 @@ internal class SeriesViewModel(
         selectedSeriesIdFlow.value = seriesId
     }
 
-    fun onOpenSeriesDetail(seriesId: String) {
-        selectedSeriesIdFlow.value = seriesId
-        detailSeriesIdFlow.value = seriesId
-        // The on-demand season/episode fetch is driven by the detailSeriesIdFlow collector above, so it
-        // covers every open path (browse, search, deep-link), not just this one.
-    }
-
-    fun onCloseDetail() {
-        detailSeriesIdFlow.value = null
-    }
-
-    fun onSeasonSelected(seasonId: String) {
-        // Reset the episode first so the reloaded season's episodes auto-select the first one.
-        selectedEpisodeIdFlow.value = null
-        selectedSeasonIdFlow.value = seasonId
-    }
-
-    fun onEpisodeSelected(episodeId: String) {
-        selectedEpisodeIdFlow.value = episodeId
-    }
-
-    fun onContinueEpisode(target: SeriesContinueTarget) {
-        selectedSeasonIdFlow.value = target.episode.seasonId
-        selectedEpisodeIdFlow.value = target.episode.id
-    }
-
     fun onToggleFavorite(seriesId: String) {
         val providerId = selectedProviderIdFlow.value ?: return
         coroutineScope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Series, seriesId) }
     }
 
-    fun onMarkEpisodeSeen() {
-        val episode = currentSelectedEpisode() ?: return
-        coroutineScope.launch {
-            val now = nowProvider()
-            val completed = episode.completedProgress(selectedEpisodeProgressLoaded, now)
-            playbackRepository.saveProgress(completed)
-            selectedEpisodeProgressLoaded = completed
-            rebuild()
-        }
-    }
-
-    fun onMarkEpisodeUnseen() {
-        val providerId = selectedProviderIdFlow.value ?: return
-        val episode = currentSelectedEpisode() ?: return
-        coroutineScope.launch {
-            playbackRepository.deleteProgress(providerId, MediaType.Episode, episode.id)
-            selectedEpisodeProgressLoaded = null
-            rebuild()
-        }
-    }
-
     fun onLoadMore() {
         pageCountFlow.value += 1
     }
-
-    fun onTarget(
-        targetProviderId: String?,
-        targetCategoryId: String?,
-        targetSeriesId: String?,
-        targetSeasonId: String?,
-        targetEpisodeId: String?,
-    ) {
-        if (targetSeriesId == null) return
-        targetProvider = targetProviderId
-        targetCategory = targetCategoryId
-        targetSeries = targetSeriesId
-        targetSeason = targetSeasonId
-        targetEpisode = targetEpisodeId
-        selectedProviderIdFlow.value = targetProviderId
-        selectedCategoryIdFlow.value = targetCategoryId
-        coroutineScope.launch { trySeriesTargetStage() }
-    }
-
-    private fun currentSelectedEpisode(): Episode? =
-        episodes.firstOrNull { it.id == selectedEpisodeIdFlow.value } ?: episodes.firstOrNull()
 
     private fun ensureCategorySelected() {
         if (selectedProviderIdFlow.value == null) return
@@ -343,69 +181,6 @@ internal class SeriesViewModel(
         if (current == null || current !in validIds) {
             selectedCategoryIdFlow.value = categories.firstOrNull()?.id ?: FAVORITES_CATEGORY_ID
         }
-    }
-
-    private fun ensureSeasonSelected() {
-        val current = selectedSeasonIdFlow.value
-        if (current == null || seasons.none { it.id == current }) {
-            selectedSeasonIdFlow.value = seasons.firstOrNull()?.id
-        }
-    }
-
-    private fun ensureEpisodeSelected() {
-        val current = selectedEpisodeIdFlow.value
-        if (current == null || episodes.none { it.id == current }) {
-            selectedEpisodeIdFlow.value = episodes.firstOrNull()?.id
-        }
-    }
-
-    private suspend fun trySeriesTargetStage() {
-        val series = targetSeries ?: return
-        val exists = observedSeries.any { it.id == series } ||
-            (targetProvider?.let { mediaRepository.getSeries(it, series) } != null)
-        if (exists) {
-            selectedSeriesIdFlow.value = series
-            detailSeriesIdFlow.value = series
-            if (targetSeason == null && targetEpisode == null) {
-                consumeTarget()
-                rebuild()
-            } else {
-                // Seasons for this series may already be loaded (series unchanged), so chain directly.
-                trySeasonTargetStage()
-            }
-        }
-    }
-
-    private fun trySeasonTargetStage() {
-        val season = targetSeason ?: return
-        if (seasons.any { it.id == season }) {
-            selectedSeasonIdFlow.value = season
-            if (targetEpisode == null) {
-                consumeTarget()
-                rebuild()
-            } else {
-                // Episodes for this season may already be loaded (season unchanged), so chain directly.
-                tryEpisodeTargetStage()
-            }
-        }
-    }
-
-    private fun tryEpisodeTargetStage() {
-        val episode = targetEpisode ?: return
-        if (episodes.any { it.id == episode }) {
-            selectedEpisodeIdFlow.value = episode
-            consumeTarget()
-            rebuild()
-        }
-    }
-
-    private fun consumeTarget() {
-        consumedTargetSeriesId = targetSeries
-        targetProvider = null
-        targetCategory = null
-        targetSeries = null
-        targetSeason = null
-        targetEpisode = null
     }
 
     private fun rebuild() {
@@ -430,29 +205,12 @@ internal class SeriesViewModel(
             else -> observedSeries
         }
 
-        // Auto-select first series when the current selection is gone (LaunchedEffect(seriesItems)).
+        // Auto-select first series when the current selection is gone (mirrors LaunchedEffect(seriesItems)).
         val currentSeriesId = selectedSeriesIdFlow.value
         if (currentSeriesId == null || seriesItems.none { it.id == currentSeriesId }) {
             selectedSeriesIdFlow.value = seriesItems.firstOrNull()?.id
         }
-        // Auto-close a still-open detail when its series left the current, non-empty list.
-        val currentDetailId = detailSeriesIdFlow.value
-        val detailClosed = currentDetailId != null &&
-            seriesItems.isNotEmpty() &&
-            seriesItems.none { it.id == currentDetailId }
-        if (detailClosed) {
-            detailSeriesIdFlow.value = null
-        }
-
-        val effectiveSeriesId = selectedSeriesIdFlow.value
-        val effectiveDetailId = if (detailClosed) null else detailSeriesIdFlow.value
-        val selectedSeries = seriesItems.firstOrNull { it.id == effectiveSeriesId } ?: loadedSelectedSeries
-        val detailSeries = if (effectiveDetailId == null) {
-            null
-        } else {
-            seriesItems.firstOrNull { it.id == effectiveDetailId } ?: loadedDetailSeries
-        }
-        val selectedEpisode = episodes.firstOrNull { it.id == selectedEpisodeIdFlow.value } ?: episodes.firstOrNull()
+        val selectedSeries = seriesItems.firstOrNull { it.id == selectedSeriesIdFlow.value } ?: loadedSelectedSeries
 
         _uiState.value = SeriesUiState(
             providers = seriesProviders,
@@ -465,35 +223,8 @@ internal class SeriesViewModel(
             continueTargetsBySeriesId = continueTargets,
             selectedProvider = providersRaw.firstOrNull { it.id == providerId },
             selectedSeries = selectedSeries,
-            detailSeriesId = effectiveDetailId,
-            detailSeries = detailSeries,
-            seasons = seasons,
-            selectedSeasonId = selectedSeasonIdFlow.value,
-            episodes = episodes,
-            selectedEpisodeId = selectedEpisodeIdFlow.value,
-            selectedEpisode = selectedEpisode,
-            selectedEpisodeProgress = selectedEpisodeProgressLoaded,
             canLoadMore = categoryId !in SPECIAL_CATEGORY_IDS &&
                 observedSeries.size >= pageCountFlow.value * VOD_PAGE_SIZE,
-            consumedTargetSeriesId = consumedTargetSeriesId,
         )
     }
 }
-
-private fun Episode.completedProgress(existing: PlaybackProgress?, now: Long): PlaybackProgress =
-    PlaybackProgress(
-        id = existing?.id ?: playbackProgressId(providerId, MediaType.Episode, id),
-        providerId = providerId,
-        mediaType = MediaType.Episode,
-        mediaId = id,
-        positionMillis = existing?.durationMillis?.takeIf { it > 0L } ?: existing?.positionMillis?.takeIf { it > 0L } ?: 1L,
-        durationMillis = existing?.durationMillis?.takeIf { it > 0L } ?: 1L,
-        progressPercent = 100,
-        isCompleted = true,
-        lastWatchedAt = now,
-        createdAt = existing?.createdAt ?: now,
-        updatedAt = now,
-    )
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "progress-$providerId-${mediaType.name.lowercase(Locale.getDefault())}-$mediaId"

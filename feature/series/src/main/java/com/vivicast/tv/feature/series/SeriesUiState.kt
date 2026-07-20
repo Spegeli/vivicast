@@ -4,14 +4,13 @@ import com.vivicast.tv.domain.model.Category
 import com.vivicast.tv.domain.model.Episode
 import com.vivicast.tv.domain.model.PlaybackProgress
 import com.vivicast.tv.domain.model.Provider
-import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 
 /**
- * Immutable presentation state for the series screen. Holds the repository-derived data
- * (providers, categories, the resolved+sorted series list, favorites, continue targets,
- * the opened detail and its seasons/episodes/progress). Localized strings, image loading
- * and the special-category name assembly stay in the composable layer.
+ * Immutable presentation state for the series GRID screen. Holds the repository-derived data (providers,
+ * categories, the resolved+sorted series list, favorites, continue targets). Series detail (seasons /
+ * episodes / progress) is now a separate self-contained destination ([SeriesDetailViewModel]) — the grid no
+ * longer carries any detail state. Localized strings and image loading stay in the composable layer.
  */
 internal data class SeriesUiState(
     val providers: List<Provider> = emptyList(),
@@ -24,16 +23,7 @@ internal data class SeriesUiState(
     val continueTargetsBySeriesId: Map<String, SeriesContinueTarget> = emptyMap(),
     val selectedProvider: Provider? = null,
     val selectedSeries: Series? = null,
-    val detailSeriesId: String? = null,
-    val detailSeries: Series? = null,
-    val seasons: List<Season> = emptyList(),
-    val selectedSeasonId: String? = null,
-    val episodes: List<Episode> = emptyList(),
-    val selectedEpisodeId: String? = null,
-    val selectedEpisode: Episode? = null,
-    val selectedEpisodeProgress: PlaybackProgress? = null,
     val canLoadMore: Boolean = false,
-    val consumedTargetSeriesId: String? = null,
 )
 
 internal data class SeriesContinueTarget(

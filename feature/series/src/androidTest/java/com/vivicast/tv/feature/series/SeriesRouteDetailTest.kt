@@ -41,88 +41,75 @@ class SeriesRouteDetailTest {
     val compose = createComposeRule()
 
     @Test
-    fun openSeriesShowsEpisodesAndEpisodeClickStartsPlayback() {
-        var openedEpisodeId: String? = null
-
+    fun posterClickOpensDetailWithStableKeys() {
+        var openedKeys: Pair<String, String>? = null
         compose.setContent {
             SeriesRoute(
                 providerRepository = FakeProviderRepository(),
                 mediaRepository = FakeMediaRepository(),
                 favoritesRepository = FakeFavoritesRepository(),
                 playbackRepository = FakePlaybackRepository(),
+                onOpenDetail = { providerStableKey, seriesStableKey -> openedKeys = providerStableKey to seriesStableKey },
+            )
+        }
+        compose.onNodeWithTag(seriesPosterTag(SERIES_ID)).performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle { assertEquals(PROVIDER_ID to SERIES_ID, openedKeys) }
+    }
+
+    @Test
+    fun detailScreenShowsEpisodesAndMarkSeenToggles() {
+        var openedEpisodeId: String? = null
+        compose.setContent {
+            SeriesDetailScreen(
+                providerStableKey = PROVIDER_ID,
+                seriesStableKey = SERIES_ID,
+                mediaRepository = FakeMediaRepository(),
+                favoritesRepository = FakeFavoritesRepository(),
+                playbackRepository = FakePlaybackRepository(),
                 onOpenPlayer = { openedEpisodeId = it.id },
             )
         }
-
-        compose.onAllNodesWithText("S1E1 Pilot").assertCountEquals(0)
-
-        compose.onNodeWithTag(seriesPosterTag(SERIES_ID)).performSemanticsAction(SemanticsActions.OnClick)
-
         compose.onAllNodesWithText("Staffel 1").assertCountEquals(1)
         compose.onAllNodesWithText("S1E1 Pilot").assertCountEquals(1)
 
         compose.onNodeWithTag(seriesEpisodeTag(EPISODE_ID)).performSemanticsAction(SemanticsActions.OnClick)
-        compose.runOnIdle {
-            assertEquals(EPISODE_ID, openedEpisodeId)
-        }
+        compose.runOnIdle { assertEquals(EPISODE_ID, openedEpisodeId) }
 
         compose.onNodeWithText("Als gesehen markieren").performSemanticsAction(SemanticsActions.OnClick)
         compose.onAllNodesWithText("Gesehen").assertCountEquals(1)
-        compose.onAllNodesWithText("Als ungesehen markieren").assertCountEquals(1)
-
         compose.onNodeWithText("Als ungesehen markieren").performSemanticsAction(SemanticsActions.OnClick)
         compose.onAllNodesWithText("Als gesehen markieren").assertCountEquals(1)
     }
 
     @Test
-    fun continueCategoryStartsStoredEpisodeProgress() {
+    fun detailScreenContinueButtonPlaysStoredEpisode() {
         var openedEpisodeId: String? = null
-
         compose.setContent {
-            SeriesRoute(
-                providerRepository = FakeProviderRepository(),
+            SeriesDetailScreen(
+                providerStableKey = PROVIDER_ID,
+                seriesStableKey = SERIES_ID,
                 mediaRepository = FakeMediaRepository(),
                 favoritesRepository = FakeFavoritesRepository(),
                 playbackRepository = FakePlaybackRepository(TEST_PROGRESS),
                 onOpenPlayer = { openedEpisodeId = it.id },
             )
         }
-
-        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
-        compose.onNodeWithText("Fortsetzen").performSemanticsAction(SemanticsActions.OnClick)
-        compose.onAllNodesWithText("42 % | S1E1 Pilot").assertCountEquals(1)
-
-        compose.onNodeWithTag(seriesPosterTag(SERIES_ID)).performSemanticsAction(SemanticsActions.OnClick)
-        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
         compose.onNodeWithTag(seriesContinueActionTag(SERIES_ID)).performSemanticsAction(SemanticsActions.OnClick)
-
-        compose.runOnIdle {
-            assertEquals(EPISODE_ID, openedEpisodeId)
-        }
+        compose.runOnIdle { assertEquals(EPISODE_ID, openedEpisodeId) }
     }
 
     @Test
-    fun targetSeriesSeasonAndEpisodeOpensExactEpisodeDetail() {
-        var targetConsumed = false
-
+    fun detailScreenPreSelectsEpisodeFromKey() {
         compose.setContent {
-            SeriesRoute(
-                providerRepository = FakeProviderRepository(),
+            SeriesDetailScreen(
+                providerStableKey = PROVIDER_ID,
+                seriesStableKey = SERIES_ID,
+                episodeStableKey = EPISODE_2_ID,
                 mediaRepository = FakeMediaRepository(),
                 favoritesRepository = FakeFavoritesRepository(),
                 playbackRepository = FakePlaybackRepository(),
-                targetProviderId = PROVIDER_ID,
-                targetCategoryId = SERIES_CATEGORY_ID,
-                targetSeriesId = SERIES_ID,
-                targetSeasonId = SEASON_2_ID,
-                targetEpisodeId = EPISODE_2_ID,
-                onTargetConsumed = { targetConsumed = true },
             )
         }
-
-        compose.waitUntil(timeoutMillis = 5_000) { targetConsumed }
-
-        compose.onAllNodesWithText("Staffel 2").assertCountEquals(1)
         compose.onAllNodesWithText("S2E2 Finale").assertCountEquals(1)
         compose.onAllNodesWithText("S1E1 Pilot").assertCountEquals(0)
     }
@@ -170,6 +157,10 @@ private class FakeMediaRepository : MediaRepository {
         TEST_SERIES.firstOrNull { it.providerId == providerId && it.id == seriesId }
     override suspend fun getEpisode(providerId: String, episodeId: String): Episode? =
         TEST_EPISODES.firstOrNull { it.providerId == providerId && it.id == episodeId }
+    override suspend fun getSeriesByStableKeys(providerStableKey: String, seriesStableKey: String): Series? =
+        TEST_SERIES.firstOrNull { it.stableKey == seriesStableKey }
+    override suspend fun getEpisodeByStableKeys(providerStableKey: String, episodeStableKey: String): Episode? =
+        TEST_EPISODES.firstOrNull { it.stableKey == episodeStableKey }
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
 }

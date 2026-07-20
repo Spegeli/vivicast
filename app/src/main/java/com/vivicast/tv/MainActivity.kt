@@ -136,6 +136,7 @@ import com.vivicast.tv.feature.movies.MovieDetailScreen
 import com.vivicast.tv.feature.movies.MoviesRoute
 import com.vivicast.tv.feature.player.PlayerRoute
 import com.vivicast.tv.feature.search.SearchRoute
+import com.vivicast.tv.feature.series.SeriesDetailScreen
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.navigation.Home
@@ -144,6 +145,7 @@ import com.vivicast.tv.navigation.MovieDetail
 import com.vivicast.tv.navigation.MoviesGraph
 import com.vivicast.tv.navigation.MoviesList
 import com.vivicast.tv.navigation.Search
+import com.vivicast.tv.navigation.SeriesDetail
 import com.vivicast.tv.navigation.SeriesGraph
 import com.vivicast.tv.navigation.SeriesList
 import com.vivicast.tv.navigation.Settings
@@ -259,7 +261,6 @@ private fun VivicastApp(
     // (grabs focus into the content, so it doesn't bounce to the Home nav / stay on the top bar).
     var focusLiveChannelSignal by remember { mutableStateOf(0) }
     var liveTvSearchTarget by remember { mutableStateOf<LiveTvSearchTarget?>(null) }
-    var seriesSearchTarget by remember { mutableStateOf<SeriesTarget?>(null) }
     var pendingExternalPlaybackRequest by remember { mutableStateOf<PlaybackRequest?>(null) }
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
     var pendingStandardRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
@@ -641,19 +642,35 @@ private fun VivicastApp(
         }
     }
 
-    fun openSeriesTarget(series: Series) {
-        requestProtectionUnlock(pinSecurityState.protectionAreaForSeries(series), context.getString(R.string.main_unlock_series)) {
-            seriesSearchTarget = series.toSeriesTarget()
-            selectRoute("series")
+    // Resolve the provider's stable key for a series and navigate the typed detail route under the Series
+    // tab; episodeStableKey (episode deep-link / auto-next) pre-selects that episode in the detail.
+    suspend fun navigateSeriesDetail(series: Series, episodeStableKey: String?) {
+        val providerStableKey = appContainer.providerRepository.observeProviders().first()
+            .firstOrNull { it.id == series.providerId }?.stableKey ?: return
+        navigateTab(SeriesGraph)
+        navController.navigate(SeriesDetail(providerStableKey, series.stableKey, episodeStableKey))
+    }
+
+    // Series-tab-gated open (Search) — matches the old selectRoute("series") gate.
+    fun openSeriesDetail(series: Series) {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForRoute("series"), "series".protectionTitle(context)) {
+            scope.launch { navigateSeriesDetail(series, null) }
         }
     }
 
+    // Deep-link series — per-series adult gate, then open the detail.
+    fun openSeriesTarget(series: Series) {
+        requestProtectionUnlock(pinSecurityState.protectionAreaForSeries(series), context.getString(R.string.main_unlock_series)) {
+            scope.launch { navigateSeriesDetail(series, null) }
+        }
+    }
+
+    // Deep-link episode — per-episode adult gate, then open the series detail pre-selected at that episode.
     fun openEpisodeTarget(episode: Episode) {
         requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), context.getString(R.string.main_unlock_generic)) {
             scope.launch {
-                val series = appContainer.mediaRepository.getSeries(episode.providerId, episode.seriesId)
-                seriesSearchTarget = episode.toSeriesTarget(categoryId = series?.categoryId)
-                selectRoute("series")
+                val series = appContainer.mediaRepository.getSeries(episode.providerId, episode.seriesId) ?: return@launch
+                navigateSeriesDetail(series, episode.stableKey)
             }
         }
     }
@@ -1034,14 +1051,9 @@ private fun VivicastApp(
                 playbackRepository = appContainer.playbackRepository,
                 resolveSeriesPosterModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesPoster) },
                 resolveSeriesBackdropModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesBackdrop) },
-                ensureSeriesDetail = appContainer::ensureSeriesDetail,
-                onOpenPlayer = { episode -> openEpisode(episode, origin = PlaybackOrigin.SeriesDetail) },
-                targetProviderId = seriesSearchTarget?.providerId,
-                targetCategoryId = seriesSearchTarget?.categoryId,
-                targetSeriesId = seriesSearchTarget?.seriesId,
-                targetSeasonId = seriesSearchTarget?.seasonId,
-                targetEpisodeId = seriesSearchTarget?.episodeId,
-                onTargetConsumed = { seriesSearchTarget = null },
+                onOpenDetail = { providerStableKey, seriesStableKey ->
+                    navController.navigate(SeriesDetail(providerStableKey, seriesStableKey))
+                },
             )
         },
         AppDestination(strSearch, "search") {
@@ -1053,10 +1065,7 @@ private fun VivicastApp(
                     selectRoute("live-tv")
                 },
                 onOpenMovie = { movie -> openMovieDetail(movie) },
-                onOpenSeries = { series ->
-                    seriesSearchTarget = series.toSeriesTarget()
-                    selectRoute("series")
-                },
+                onOpenSeries = { series -> openSeriesDetail(series) },
                 onOpenEpgProgram = { program ->
                     scope.launch {
                         appContainer.mediaRepository.getChannel(program.providerId, program.channelId)?.let { channel ->
@@ -1532,6 +1541,21 @@ private fun VivicastApp(
                             }
                             navigation<SeriesGraph>(startDestination = SeriesList) {
                                 composable<SeriesList> { destinations[3].content() }
+                                composable<SeriesDetail> { entry ->
+                                    val args = entry.toRoute<SeriesDetail>()
+                                    SeriesDetailScreen(
+                                        providerStableKey = args.providerStableKey,
+                                        seriesStableKey = args.seriesStableKey,
+                                        episodeStableKey = args.episodeStableKey,
+                                        mediaRepository = appContainer.mediaRepository,
+                                        favoritesRepository = appContainer.favoritesRepository,
+                                        playbackRepository = appContainer.playbackRepository,
+                                        ensureSeriesDetail = appContainer::ensureSeriesDetail,
+                                        resolveSeriesBackdropModel = { series -> appContainer.resolveSeriesImageModel(series, MediaCacheType.SeriesBackdrop) },
+                                        onOpenPlayer = { episode -> openEpisode(episode, origin = PlaybackOrigin.SeriesDetail) },
+                                        onBack = { navController.navigateUp() },
+                                    )
+                                }
                             }
                             composable<Search> { destinations[4].content() }
                             composable<Settings> { destinations[5].content() }
@@ -1602,8 +1626,9 @@ private fun VivicastApp(
                         ?.takeIf { it.mediaType == PlaybackMediaType.Episode }
                         ?.let { appContainer.mediaRepository.getEpisode(it.providerId, it.mediaId) }
                     val series = episode?.let { appContainer.mediaRepository.getSeries(it.providerId, it.seriesId) }
-                    seriesSearchTarget = episode?.toSeriesTarget(categoryId = series?.categoryId)
-                    selectRoute("series")
+                    if (episode != null && series != null) {
+                        navigateSeriesDetail(series, episode.stableKey)
+                    }
                     playerVisible = false
                 }
             },
@@ -1784,14 +1809,6 @@ private data class LiveTvSearchTarget(
     val program: EpgProgram? = null,
 )
 
-private data class SeriesTarget(
-    val providerId: String,
-    val categoryId: String?,
-    val seriesId: String,
-    val seasonId: String? = null,
-    val episodeId: String? = null,
-)
-
 private data class PendingProtectionUnlock(
     val area: ParentalProtectionArea,
     val title: String,
@@ -1914,22 +1931,6 @@ private fun String.protectionTitle(context: Context): String =
         "series" -> context.getString(R.string.main_unlock_series)
         else -> context.getString(R.string.main_unlock_generic)
     }
-
-private fun Series.toSeriesTarget(): SeriesTarget =
-    SeriesTarget(
-        providerId = providerId,
-        categoryId = categoryId,
-        seriesId = id,
-    )
-
-private fun Episode.toSeriesTarget(categoryId: String?): SeriesTarget =
-    SeriesTarget(
-        providerId = providerId,
-        categoryId = categoryId,
-        seriesId = seriesId,
-        seasonId = seasonId,
-        episodeId = id,
-    )
 
 
 private fun Int.floorMod(modulus: Int): Int =

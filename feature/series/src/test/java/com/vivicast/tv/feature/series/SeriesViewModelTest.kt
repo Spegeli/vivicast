@@ -72,34 +72,6 @@ class SeriesViewModelTest {
         assertEquals(PROVIDER, state.selectedProviderId)
         assertEquals("cat-1", state.selectedCategoryId)
         assertEquals(listOf("s1"), state.seriesItems.map { it.id })
-        assertEquals("se1", state.selectedSeasonId)
-        assertEquals(listOf("e1"), state.episodes.map { it.id })
-        assertEquals("e1", state.selectedEpisodeId)
-        scope.cancel()
-    }
-
-    @Test
-    fun openAndCloseDetail() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = fullMedia())
-        vm.onOpenSeriesDetail("s1")
-        assertEquals("s1", vm.uiState.value.detailSeries?.id)
-        vm.onCloseDetail()
-        assertNull(vm.uiState.value.detailSeries)
-        scope.cancel()
-    }
-
-    @Test
-    fun onSeasonSelected_loadsEpisodesAndResetsEpisodeSelection() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = fullMedia())
-        vm.onOpenSeriesDetail("s1")
-
-        vm.onSeasonSelected("se2")
-
-        assertEquals("se2", vm.uiState.value.selectedSeasonId)
-        assertEquals(listOf("e2"), vm.uiState.value.episodes.map { it.id })
-        assertEquals("e2", vm.uiState.value.selectedEpisodeId)
         scope.cancel()
     }
 
@@ -130,58 +102,6 @@ class SeriesViewModelTest {
 
         vm.onCategorySelected(CONTINUE_CATEGORY_ID)
         assertEquals(listOf("s1"), vm.uiState.value.seriesItems.map { it.id })
-        scope.cancel()
-    }
-
-    @Test
-    fun markEpisodeSeen_thenUnseen() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val playback = FakePlaybackRepository()
-        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = fullMedia(), playback = playback)
-        vm.onOpenSeriesDetail("s1")
-
-        vm.onMarkEpisodeSeen()
-        assertEquals(true, vm.uiState.value.selectedEpisodeProgress?.isCompleted)
-        assertTrue(playback.saved.any { it.mediaId == "e1" && it.isCompleted })
-
-        vm.onMarkEpisodeUnseen()
-        assertTrue(playback.deleted.contains("e1"))
-        assertNull(vm.uiState.value.selectedEpisodeProgress)
-        scope.cancel()
-    }
-
-    @Test
-    fun target_series_season_episode_isConsumedAndSelected() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = fullMedia())
-
-        vm.onTarget(PROVIDER, "cat-1", "s1", "se2", "e2")
-
-        val state = vm.uiState.value
-        assertEquals("s1", state.consumedTargetSeriesId)
-        assertEquals("s1", state.detailSeries?.id)
-        assertEquals("se2", state.selectedSeasonId)
-        assertEquals("e2", state.selectedEpisodeId)
-        scope.cancel()
-    }
-
-    @Test
-    fun detail_autoClosesWhenSeriesLeavesNonEmptyList() = runBlocking {
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        val media = FakeMediaRepository(
-            categories = mapOf(PROVIDER to listOf(category("cat-1", "Drama"), category("cat-2", "Comedy"))),
-            series = listOf(series("s1", "cat-1", "Alpha"), series("s2", "cat-2", "Beta")),
-            seasonsBySeries = mapOf("s1" to listOf(season("se1", "s1", 1))),
-            episodesBySeason = mapOf("se1" to listOf(episode("e1", "s1", "se1", 1))),
-        )
-        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = media)
-        vm.onOpenSeriesDetail("s1")
-        assertEquals("s1", vm.uiState.value.detailSeries?.id)
-
-        vm.onCategorySelected("cat-2")
-
-        assertNull(vm.uiState.value.detailSeriesId)
-        assertNull(vm.uiState.value.detailSeries)
         scope.cancel()
     }
 

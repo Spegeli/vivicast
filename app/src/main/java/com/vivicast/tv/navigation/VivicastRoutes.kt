@@ -47,9 +47,21 @@ internal object MoviesList
 @Serializable
 internal data class MovieDetail(val providerStableKey: String, val movieStableKey: String)
 
-/** Series tab: nested graph so `SeriesList` (+ later `SeriesDetail`) share one graph-scoped ViewModel. */
+/** Series tab: nested graph holding the grid + the self-contained detail destination. */
 @Serializable
 internal object SeriesGraph
 
 @Serializable
 internal object SeriesList
+
+/**
+ * Series detail = a self-contained destination that loads its series by stable keys. Season/episode stay
+ * in-page (there is no separate episode screen); [episodeStableKey], when set (episode deep-link / continue),
+ * pre-selects the season + episode that contains it. Args are STABLE keys, never Room ids.
+ */
+@Serializable
+internal data class SeriesDetail(
+    val providerStableKey: String,
+    val seriesStableKey: String,
+    val episodeStableKey: String? = null,
+)
