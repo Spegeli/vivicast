@@ -57,13 +57,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.navigation
+import androidx.navigation.compose.rememberNavController
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.designsystem.ActionPill
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
 import com.vivicast.tv.core.designsystem.GlassPanel
-import com.vivicast.tv.core.designsystem.InfoPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
 import com.vivicast.tv.core.designsystem.VivicastBorders
@@ -110,30 +117,33 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
-
-@Composable
-private fun settingsSectionsList() = listOf(
-    stringResource(R.string.settings_section_general),
-    stringResource(R.string.settings_section_playlists),
-    stringResource(R.string.settings_section_epg),
-    stringResource(R.string.settings_section_appearance),
-    stringResource(R.string.settings_section_playback),
-    stringResource(R.string.settings_section_parental),
-    stringResource(R.string.settings_section_cache),
-    stringResource(R.string.settings_section_backup),
-    stringResource(R.string.settings_section_about),
-)
+import kotlin.reflect.KClass
 
 // Rail item OK: re-selecting the current section collapses its open sub-view; a different section
 // switches. Kept top-level so the branch doesn't count toward SettingsRoute's complexity gate.
 private fun railSectionActivate(
-    section: String,
-    selectedSection: String,
+    isCurrent: Boolean,
     onCollapse: () -> Unit,
-    onSwitch: (String) -> Unit,
+    onSwitch: () -> Unit,
 ) {
-    if (section == selectedSection) onCollapse() else onSwitch(section)
+    if (isCurrent) onCollapse() else onSwitch()
 }
+
+/**
+ * A settings section rail entry: where the inner nav goes ([navTarget]), the rail [label], and the route
+ * matched against the current destination's hierarchy ([matchesRoute]) — Playlists matches its whole graph so
+ * an open sub-view still highlights the section.
+ */
+private class SettingsSection(
+    val navTarget: Any,
+    val label: String,
+    val matchesRoute: KClass<*>,
+)
+
+private fun SettingsSection.isSame(other: SettingsSection): Boolean = matchesRoute == other.matchesRoute
+
+private fun NavDestination?.isInSection(route: KClass<*>): Boolean =
+    this?.hierarchy?.any { it.hasRoute(route) } == true
 
 // Right detail panel focus bounds: LEFT (at the left edge) returns to the current section; UP/DOWN and
 // RIGHT stop at the ends (the detail panel is the rightmost pane, so RIGHT must not escape upward to the
@@ -225,8 +235,6 @@ fun SettingsRoute(
     )
     val settingsUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val routeScope = rememberCoroutineScope()
-    val settingsSections = settingsSectionsList()
-    val mainSections = remember(settingsSections) { settingsSections.dropLast(1) }
     val sectionGeneral = stringResource(R.string.settings_section_general)
     val sectionPlaylists = stringResource(R.string.settings_section_playlists)
     val sectionEpg = stringResource(R.string.settings_section_epg)
@@ -236,53 +244,93 @@ fun SettingsRoute(
     val sectionCache = stringResource(R.string.settings_section_cache)
     val sectionBackup = stringResource(R.string.settings_section_backup)
     val sectionAbout = stringResource(R.string.settings_section_about)
-    var selectedSection by remember(initialSelectedSection) {
-        mutableStateOf(initialSelectedSection?.takeIf { it in settingsSections } ?: sectionGeneral)
+    // Rail model (order = rail order). Playlists is a nested graph so its sub-editors can attach under it;
+    // it matches its whole graph in the hierarchy so an open sub-view keeps the section highlighted.
+    val sections = remember(
+        sectionGeneral, sectionPlaylists, sectionEpg, sectionAppearance, sectionPlayback,
+        sectionParental, sectionCache, sectionBackup, sectionAbout,
+    ) {
+        listOf(
+            SettingsSection(SecGeneral, sectionGeneral, SecGeneral::class),
+            SettingsSection(PlaylistsGraph, sectionPlaylists, PlaylistsGraph::class),
+            SettingsSection(SecEpg, sectionEpg, SecEpg::class),
+            SettingsSection(SecAppearance, sectionAppearance, SecAppearance::class),
+            SettingsSection(SecPlayback, sectionPlayback, SecPlayback::class),
+            SettingsSection(SecParental, sectionParental, SecParental::class),
+            SettingsSection(SecCache, sectionCache, SecCache::class),
+            SettingsSection(SecBackup, sectionBackup, SecBackup::class),
+            SettingsSection(SecAbout, sectionAbout, SecAbout::class),
+        )
     }
+    val mainSections = remember(sections) { sections.dropLast(1) }
+    val aboutSection = sections.last()
+
+    val innerNav = rememberNavController()
+    val currentDest = innerNav.currentBackStackEntryAsState().value?.destination
+    val currentSection = sections.firstOrNull { currentDest.isInSection(it.matchesRoute) } ?: sections.first()
+    // The section to land on this entry (deep-linked section, else General). currentSection lags one frame
+    // behind the NavController on entry, so initial focus targets THIS instead of the (still-General) current.
+    val startSectionEntry = remember(initialSelectedSection, sections) {
+        initialSelectedSection
+            ?.let { label -> sections.firstOrNull { it.label == label } }
+            ?: sections.first()
+    }
+
     val detailFocusRequester = remember { FocusRequester() }
     var pendingDetailFocus by remember { mutableStateOf(false) }
-    // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse
-    // any open sub-view (editor / global settings / legal page) back to its overview. Focus stays on
-    // the rail (the collapse touches only the right pane). See settings-ok-collapses-subview plan.
+    // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse any
+    // open sub-view (editor / global settings / legal page) back to its overview. Focus stays on the rail
+    // (the collapse touches only the right pane). Playlists sub-views are nav destinations; EPG/About still
+    // consume this signal for their (still-local) overlays.
     var collapseSubViewSignal by remember { mutableStateOf(0) }
     // True while focus is inside the right detail panel — gates the settings-scoped BACK (detail → rail).
     var detailFocused by remember { mutableStateOf(false) }
-    val sectionFocusRequesters = remember(settingsSections) {
-        settingsSections.associateWith { FocusRequester() }
-    }
-    val selectedSectionFocusRequester = sectionFocusRequesters[selectedSection] ?: FocusRequester.Default
+    val sectionFocusRequesters = remember(sections) { sections.associate { it.label to FocusRequester() } }
+    val currentSectionFocusRequester = sectionFocusRequesters[currentSection.label] ?: FocusRequester.Default
     val detailFirstFocusModifier = Modifier
         .focusRequester(detailFocusRequester)
-        .focusProperties { left = selectedSectionFocusRequester }
-    val selectSection: (String) -> Unit = { section ->
-        // Section selection is local UI state only; Settings always reopens on Allgemein.
-        selectedSection = section
+        .focusProperties { left = currentSectionFocusRequester }
+    // Rail selection-follows-focus: focusing a section navigates the inner nav to it (shallow replace so a
+    // section BACK falls through to the rail/gear handlers, not section→section history). Navigates only on
+    // an actual change so rapid rail scrolling doesn't thrash.
+    val navigateSection: (SettingsSection) -> Unit = { section ->
+        if (!currentSection.isSame(section)) {
+            innerNav.navigate(section.navTarget) {
+                // Clear the whole inner graph so each section is a depth-1 replace — NOT popUpTo the fixed
+                // start (that start gets inclusive-popped on the first switch, then later sections accumulate
+                // and wrongly enable the inner NavHost's own BACK). Depth-1 sections leave the inner NavHost
+                // BACK disabled, so BACK at a section is handled by the rail/gear handlers; only sub-views
+                // (which navigate WITHOUT this clear) stack to depth-2 and let the inner NavHost pop them.
+                popUpTo(innerNav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
     }
     // OK on a rail section: re-selecting the current one collapses its open sub-view (focus stays on the
-    // rail); a different one switches and moves focus into the detail. Shared by every rail item. The
-    // branch lives in the top-level railSectionActivate to keep SettingsRoute under the complexity gate.
-    val activateSection: (String) -> Unit = { section ->
+    // rail); a different one switches and moves focus into the detail. The branch lives in the top-level
+    // railSectionActivate to keep SettingsRoute under the complexity gate.
+    val activateSection: (SettingsSection) -> Unit = { section ->
         railSectionActivate(
-            section = section,
-            selectedSection = selectedSection,
+            isCurrent = currentSection.isSame(section),
             onCollapse = { collapseSubViewSignal++ },
-            onSwitch = { selectSection(it); pendingDetailFocus = true },
+            onSwitch = { navigateSection(section); pendingDetailFocus = true },
         )
     }
 
     LaunchedEffect(Unit) {
         viewModel.onReloadCacheStats()
         awaitFrame()
-        if (focusLanguageRowOnEnter && selectedSection == sectionGeneral) {
+        if (focusLanguageRowOnEnter && startSectionEntry.isSame(sections.first())) {
             // Post language-change entry: land on the language row (detailFirstFocusModifier is moved
             // onto it below) instead of the section rail.
             detailFocusRequester.requestFocus()
             onInitialLanguageFocusApplied()
         } else {
-            selectedSectionFocusRequester.requestFocus()
+            // Target the START section's rail item (currentSection still lags the NavController this frame).
+            (sectionFocusRequesters[startSectionEntry.label] ?: currentSectionFocusRequester).requestFocus()
         }
     }
-    LaunchedEffect(selectedSection, pendingDetailFocus) {
+    LaunchedEffect(currentSection.label, pendingDetailFocus) {
         if (pendingDetailFocus) {
             detailFocusRequester.requestFocus()
             pendingDetailFocus = false
@@ -293,7 +341,7 @@ fun SettingsRoute(
     // only a further BACK from the rail falls through to the global handler (→ top-nav gear). Inline
     // editors/overlays carry their own (more-nested) BackHandler, so they still close first.
     BackHandler(enabled = detailFocused) {
-        selectedSectionFocusRequester.requestFocus()
+        currentSectionFocusRequester.requestFocus()
     }
 
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
@@ -324,15 +372,16 @@ fun SettingsRoute(
                         contentPadding = PaddingValues(top = VivicastSpacing.Space2),
                     ) {
                         items(mainSections) { section ->
+                            val selected = currentSection.isSame(section)
                             FocusPanel(
-                                selected = section == selectedSection,
+                                selected = selected,
                                 onClick = { activateSection(section) },
-                                onFocused = { selectSection(section) },
+                                onFocused = { navigateSection(section) },
                                 // RIGHT → detail: no hard target. A spatial search enters the detail
                                 // focusGroup, whose focusRestorer lands on the last-focused (visible) row
                                 // — so RIGHT still works when the first row is scrolled off. See below.
                                 modifier = Modifier
-                                    .focusRequester(sectionFocusRequesters.getValue(section))
+                                    .focusRequester(sectionFocusRequesters.getValue(section.label))
                                     .fillMaxWidth(),
                                 contentPadding = VivicastSpacing.Space2,
                             ) {
@@ -340,9 +389,9 @@ fun SettingsRoute(
                                     horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    SettingsSectionIcon(section = section, selected = section == selectedSection)
+                                    SettingsSectionIcon(section = section.label, selected = selected)
                                     BasicText(
-                                        text = section,
+                                        text = section.label,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
@@ -351,12 +400,13 @@ fun SettingsRoute(
                             }
                         }
                     }
+                    val aboutSelected = currentSection.isSame(aboutSection)
                     FocusPanel(
-                        selected = sectionAbout == selectedSection,
-                        onClick = { activateSection(sectionAbout) },
-                        onFocused = { selectSection(sectionAbout) },
+                        selected = aboutSelected,
+                        onClick = { activateSection(aboutSection) },
+                        onFocused = { navigateSection(aboutSection) },
                         modifier = Modifier
-                            .focusRequester(sectionFocusRequesters.getValue(sectionAbout))
+                            .focusRequester(sectionFocusRequesters.getValue(aboutSection.label))
                             .fillMaxWidth()
                             .wrapContentHeight(unbounded = true),
                         contentPadding = VivicastSpacing.Space2,
@@ -365,9 +415,9 @@ fun SettingsRoute(
                             horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            SettingsSectionIcon(section = sectionAbout, selected = sectionAbout == selectedSection)
+                            SettingsSectionIcon(section = aboutSection.label, selected = aboutSelected)
                             BasicText(
-                                text = sectionAbout,
+                                text = aboutSection.label,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = VivicastTypography.LabelMedium.copy(color = VivicastColors.TextPrimary),
@@ -390,15 +440,27 @@ fun SettingsRoute(
                     modifier = Modifier
                         .focusRestorer(detailFocusRequester)
                         .focusGroup()
-                        .onFocusChanged { detailFocused = it.hasFocus }
                         .focusProperties {
-                            onExit = { exitDetailPanel(selectedSectionFocusRequester) }
+                            onExit = { exitDetailPanel(currentSectionFocusRequester) }
                         },
                     verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
                 ) {
-                    SettingsPanelTitle(selectedSection)
-                    when (selectedSection) {
-                        sectionGeneral -> GeneralSettingsPanel(
+                    SettingsPanelTitle(currentSection.label)
+                    // Inner Settings NavHost: the detail pane. The section rail drives it; Playlists is a
+                    // nested graph so its editor/actions/groups attach as real destinations (BACK-to-overview),
+                    // replacing the old local-state sub-view flags + focus-park machinery.
+                    NavHost(
+                        navController = innerNav,
+                        startDestination = startSectionEntry.navTarget,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            // Track detail focus HERE (on the NavHost node), not the outer Column: the inner
+                            // NavHost isolates its content's focus from the Column's onFocusChanged, so the
+                            // Column would never see hasFocus=true and the detail→rail BACK would break.
+                            .onFocusChanged { detailFocused = it.hasFocus },
+                    ) {
+                        composable<SecGeneral> { GeneralSettingsPanel(
                             state = settingsUiState.general,
                             onLaunchOnBootChanged = viewModel::onLaunchOnBootChanged,
                             onDoubleBackToExitChanged = viewModel::onDoubleBackToExitChanged,
@@ -414,8 +476,9 @@ fun SettingsRoute(
                             onGlobalUserAgentChanged = viewModel::onGlobalUserAgentChanged,
                             firstFocusModifier = detailFirstFocusModifier,
                             focusLanguageInsteadOfFirst = focusLanguageRowOnEnter,
-                        )
-                        sectionPlaylists -> ProviderSettingsPanel(
+                        ) }
+                        navigation<PlaylistsGraph>(startDestination = SecPlaylists) {
+                            composable<SecPlaylists> { ProviderSettingsPanel(
                             providers = settingsUiState.providers,
                             onGetProviderCredentials = viewModel::getProviderCredentials,
                             onGetProviderM3uContent = viewModel::getProviderM3uInlineContent,
@@ -510,8 +573,9 @@ fun SettingsRoute(
                                 runCatching { sectionFocusRequesters.getValue(sectionPlaylists).requestFocus() }
                             },
                             collapseSubViewSignal = collapseSubViewSignal,
-                        )
-                        sectionEpg -> EpgSettingsPanel(
+                        ) }
+                        }
+                        composable<SecEpg> { EpgSettingsPanel(
                             state = settingsUiState.epg,
                             sources = settingsUiState.epgSources,
                             providers = settingsUiState.providers,
@@ -543,8 +607,8 @@ fun SettingsRoute(
                                 runCatching { sectionFocusRequesters.getValue(sectionEpg).requestFocus() }
                             },
                             collapseSubViewSignal = collapseSubViewSignal,
-                        )
-                        sectionAppearance -> AppearanceSettingsPanel(
+                        ) }
+                        composable<SecAppearance> { AppearanceSettingsPanel(
                             state = settingsUiState.appearance,
                             onAppearanceSettingsChanged = viewModel::onAppearanceSettingsChanged,
                             localLogoFolder = localLogoFolder,
@@ -553,33 +617,33 @@ fun SettingsRoute(
                             rescanningLogos = rescanningLogos,
                             onRemoveLogoFolder = onRemoveLogoFolder,
                             firstFocusModifier = detailFirstFocusModifier,
-                        )
-                        sectionPlayback -> PlaybackSettingsPanel(
+                        ) }
+                        composable<SecPlayback> { PlaybackSettingsPanel(
                             state = settingsUiState.playback,
                             onPlaybackPreferencesChanged = viewModel::onPlaybackSettingsChanged,
                             firstFocusModifier = detailFirstFocusModifier,
-                        )
-                        sectionParental -> ParentalControlSettingsPanel(
+                        ) }
+                        composable<SecParental> { ParentalControlSettingsPanel(
                             state = parentalControlSettingsState,
                             onSetPin = onSetPin,
                             onChangePin = onChangePin,
                             onDisablePin = onDisablePin,
                             onProtectionChanged = onProtectionChanged,
                             firstFocusModifier = detailFirstFocusModifier,
-                        )
-                        sectionCache -> MaintenanceSettingsPanel(
+                        ) }
+                        composable<SecCache> { MaintenanceSettingsPanel(
                             cacheSettingsState = settingsUiState.cache,
                             onClearCache = viewModel::onClearCache,
                             onClearHistory = onClearHistory,
                             onReloadCacheStats = viewModel::onReloadCacheStats,
                             firstFocusModifier = detailFirstFocusModifier,
-                        )
-                        sectionBackup -> BackupSettingsPanel(
+                        ) }
+                        composable<SecBackup> { BackupSettingsPanel(
                             onExportBackup = onExportBackup,
                             onImportBackup = onImportBackup,
                             firstFocusModifier = detailFirstFocusModifier,
-                        )
-                        sectionAbout -> AboutSettingsPanel(
+                        ) }
+                        composable<SecAbout> { AboutSettingsPanel(
                             state = aboutAppState,
                             diagnosticsSettingsState = settingsUiState.diagnostics,
                             onDiagnosticsSettingsChanged = { diagnostics ->
@@ -592,12 +656,7 @@ fun SettingsRoute(
                             exporting = diagnosticsExporting,
                             firstFocusModifier = detailFirstFocusModifier,
                             collapseSubViewSignal = collapseSubViewSignal,
-                        )
-                        else -> InfoPanel(
-                            title = selectedSection,
-                            body = stringResource(R.string.settings_no_options),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        ) }
                     }
                 }
             }
