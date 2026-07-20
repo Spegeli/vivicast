@@ -42,13 +42,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -100,8 +96,6 @@ import com.vivicast.tv.core.logging.vcLog
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.text.DateFormat
-import java.util.Date
 
 // ---------------------------------------------------------------------------------------------------------
 // Playlists sub-views as self-contained inner-nav destination screens (D2). Split out of the former single

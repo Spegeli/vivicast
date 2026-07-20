@@ -59,11 +59,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -130,8 +127,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.text.DateFormat
-import java.util.Date
 import kotlin.reflect.KClass
 
 // Nav-result key: a Playlists sub-view (actions/editor) stashes the provider id (or OVERVIEW_FOCUS_ADD) on
@@ -406,7 +401,8 @@ fun SettingsRoute(
     // inner-NavHost content swap so it can't orphan up to the top nav (whose selection-follows-focus jumps to
     // Home) during the transition — and, unlike parking on the visible rail, the user sees NO intermediate
     // focus flash. The target destination's own initial-focus effect then reclaims focus. Replaces the
-    // per-panel onParkFocusBeforeEditor the D2 split dropped.
+    // Playlists' per-panel onParkFocusBeforeEditor that the D2 split dropped; EPG's still-local overlays
+    // keep calling their own onParkFocusBeforeEditor.
     val focusHolder = remember { FocusRequester() }
     val parkRail: () -> Unit = {
         runCatching { focusHolder.requestFocus() }
@@ -577,9 +573,10 @@ fun SettingsRoute(
                     // an exit target only applies when there's no focus target left inside the group.
                     // NO focusRestorer here: its onEnter redirected EVERY programmatic requestFocus (a returning
                     // card, the "Gruppen verwalten" row, the first row) to its fallback, which broke targeted
-                    // focus-return. RIGHT-from-rail is handled on the rail side (enterDetailFromRail): first row
-                    // when composed, else a spatial move INTO this group as the fallback — so this focusGroup
-                    // only needs onExit. Each destination requests its own focus target directly.
+                    // focus-return. RIGHT-from-rail is handled on the rail side (enterDetailFromRail): it snaps a
+                    // scrollable destination to its top (SettingsDetailList) then focuses the first row, else a
+                    // spatial move INTO this group as the fallback — so this focusGroup only needs onExit. Each
+                    // destination requests its own focus target directly.
                     modifier = Modifier
                         .focusGroup()
                         .focusProperties {
