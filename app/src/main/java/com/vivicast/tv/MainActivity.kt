@@ -24,6 +24,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.navigation
+import androidx.navigation.compose.rememberNavController
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,6 +136,15 @@ import com.vivicast.tv.feature.player.PlayerRoute
 import com.vivicast.tv.feature.search.SearchRoute
 import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
+import com.vivicast.tv.navigation.Home
+import com.vivicast.tv.navigation.LiveTv
+import com.vivicast.tv.navigation.MoviesGraph
+import com.vivicast.tv.navigation.MoviesList
+import com.vivicast.tv.navigation.Search
+import com.vivicast.tv.navigation.SeriesGraph
+import com.vivicast.tv.navigation.SeriesList
+import com.vivicast.tv.navigation.Settings
+import com.vivicast.tv.navigation.ShellGraph
 import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.data.playback.PlaybackStreamRequest
 import com.vivicast.tv.data.playback.PlaybackStreamResult
@@ -228,7 +245,9 @@ private fun VivicastApp(
     onDeepLinkConsumed: () -> Unit,
 ) {
     var playerVisible by remember { mutableStateOf(false) }
-    var selectedRoute by remember { mutableStateOf(ROUTE_HOME) }
+    val navController = rememberNavController()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = currentBackStackEntry?.destination
     var livePlaybackChannels by remember { mutableStateOf(emptyList<Channel>()) }
     // P2: the channel currently streaming into the embedded Live-TV preview (App-hoisted single player).
     // Non-null == the preview is live; drives the preview surface + the seamless preview<->fullscreen handoff.
@@ -435,10 +454,31 @@ private fun VivicastApp(
         }
     }
 
+    // A1 bridge: the legacy string-keyed nav funnel now drives the NavController. Callers (top nav, Search,
+    // deep links, Home CTAs, resume/language) are unchanged; the typed-route rewire lands per-area in B/C/E.
+    fun navigateTab(route: Any) {
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+        }
+    }
+
+    fun routeObjectForKey(key: String): Any? = when (key) {
+        ROUTE_HOME -> Home
+        "live-tv" -> LiveTv
+        "movies" -> MoviesGraph
+        "series" -> SeriesGraph
+        "search" -> Search
+        ROUTE_SETTINGS -> Settings
+        else -> null
+    }
+
     fun selectRoute(route: String) {
         if (!pinSecurityLoaded && route.canBeProtected()) return
+        val target = routeObjectForKey(route) ?: return
         requestProtectionUnlock(pinSecurityState.protectionAreaForRoute(route), route.protectionTitle(context)) {
-            selectedRoute = route
+            navigateTab(target)
         }
     }
 
@@ -451,11 +491,13 @@ private fun VivicastApp(
         selectRoute("settings")
     }
 
+    // Focus-follows-selection (top-nav hover switches route). A1 shim — kept behaviour-identical; the clean
+    // focus-ownership rebuild that removes the bounce lands in A2.
     fun focusRoute(route: String) {
         if (!pinSecurityLoaded && route.canBeProtected()) return
         val area = pinSecurityState.protectionAreaForRoute(route)
         if (area == null || !pinSecurityState.hasPin || area in unlockedProtectionAreas) {
-            selectedRoute = route
+            routeObjectForKey(route)?.let { navigateTab(it) }
         }
     }
 
@@ -697,12 +739,11 @@ private fun VivicastApp(
         val currentPreferences = loadedPreferences ?: return@LaunchedEffect
         if (regularStartApplied || explicitSystemTargetSeen || !pinSecurityLoaded) return@LaunchedEffect
         regularStartApplied = true
-        if (reopenLanguageSettings) {
-            // Language just changed: go back into Settings (protection still enforced by selectRoute)
-            // instead of the default Home start. SettingsRoute focuses the language row on entry.
-            selectRoute(ROUTE_SETTINGS)
-        } else {
-            selectRoute(ROUTE_HOME)
+        // Language just changed: the NavController restores its back stack (→ Settings, where the change was
+        // made) on this post-recreate composition, so no explicit navigate is needed (an explicit one would
+        // also race the not-yet-attached graph). SettingsRoute focuses the language row (focusLanguageRowOnEnter).
+        // Normal start stays on the Home start destination — no navigate either.
+        if (!reopenLanguageSettings) {
             // "Resume last watched channel on startup": open the last channel over Home when the option
             // is on and it still resolves + its endpoint probes reachable (dead/removed → null → stay on
             // Home, no error flash). The reachability probe runs off the main thread; Home is already
@@ -838,15 +879,16 @@ private fun VivicastApp(
         appContainer.updatePlaybackTuning(preferences.playback.toPlaybackTuning())
     }
 
-    LaunchedEffect(selectedRoute) {
+    LaunchedEffect(currentDestination) {
         lastTopNavigationBackAt = 0L
         // Clear the Home-add-playlist section hint once we leave Settings (so a later nav-in opens Allgemein).
-        if (selectedRoute != ROUTE_SETTINGS) {
+        val onSettings = currentDestination?.hierarchy?.any { it.hasRoute<Settings>() } == true
+        if (!onSettings) {
             pendingSettingsSection = null
         }
         // A Home CTA switched route: anchor focus on the now-selected nav tab so it doesn't fall back to the
-        // Home tab (which would yank the route back to Home). The route's own content may take focus once
-        // loaded.
+        // Home tab (focus-follows-selection would yank the route back to Home). The route's own content may
+        // take focus once loaded. (A1 shim; removed in A2 with the top-nav focus rebuild.)
         if (focusTopNavPending) {
             focusTopNavPending = false
             runCatching { topNavigationFocusRequester.requestFocus() }
@@ -890,8 +932,9 @@ private fun VivicastApp(
     // (setVideoSurfaceView replaces — no reconnect); on close this re-runs and re-attaches the preview.
     // Also toggle the surface's visibility: setZOrderMediaOverlay draws it ABOVE the window (incl. the
     // fullscreen overlay), so it must be hidden while fullscreen, otherwise its last frame freezes on top.
-    DisposableEffect(committedLiveChannel, playerVisible, selectedRoute, livePreviewSurface) {
-        val shouldOwn = committedLiveChannel != null && !playerVisible && selectedRoute == "live-tv"
+    DisposableEffect(committedLiveChannel, playerVisible, currentDestination, livePreviewSurface) {
+        val onLiveTv = currentDestination?.hierarchy?.any { it.hasRoute<LiveTv>() } == true
+        val shouldOwn = committedLiveChannel != null && !playerVisible && onLiveTv
         livePreviewSurface.visibility = if (shouldOwn) android.view.View.VISIBLE else android.view.View.INVISIBLE
         if (shouldOwn) {
             appContainer.playerController.attachVideoSurface(livePreviewSurface)
@@ -899,8 +942,9 @@ private fun VivicastApp(
         onDispose { }
     }
     // Leaving Live-TV (to another route, not the fullscreen overlay) stops the preview + releases the stream.
-    LaunchedEffect(selectedRoute) {
-        if (selectedRoute != "live-tv") stopLivePreview()
+    LaunchedEffect(currentDestination) {
+        val onLiveTv = currentDestination?.hierarchy?.any { it.hasRoute<LiveTv>() } == true
+        if (!onLiveTv) stopLivePreview()
     }
 
     val destinations = listOf(
@@ -1425,9 +1469,60 @@ private fun VivicastApp(
             )
         },
     )
-    val selectedDestination = destinations.first { it.route == selectedRoute }
-    val selectedIndex = destinations.indexOf(selectedDestination)
+    // Which top-level tab is active — Movies/Series match their nested graph via the destination hierarchy.
+    val tabRoutes = listOf<Any>(Home, LiveTv, MoviesGraph, SeriesGraph, Search, Settings)
+    val selectedIndex = tabRoutes
+        .indexOfFirst { route -> currentDestination?.hierarchy?.any { it.hasRoute(route::class) } == true }
+        .coerceAtLeast(0)
 
+    VivicastScreenBackground(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = VivicastSpacing.ScreenHorizontal, vertical = VivicastSpacing.ScreenVertical),
+            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+        ) {
+            // Language-change handoff: the NavController restores to Settings on the post-recreate
+            // composition. Render nothing focusable for that frame so no Home content / nav item flashes
+            // or steals focus before Settings appears.
+            if (!(reopenLanguageSettings && !regularStartApplied)) {
+                VivicastTopNavigation(
+                    brand = "VIVICAST",
+                    items = destinations.map { it.label },
+                    selectedIndex = selectedIndex,
+                    selectedFocusRequester = topNavigationFocusRequester,
+                    onItemFocusChanged = { focused -> topNavigationFocused = focused },
+                    onSelected = { index -> selectRoute(destinations[index].route) },
+                    onFocused = { index -> focusRoute(destinations[index].route) },
+                )
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = ShellGraph,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        navigation<ShellGraph>(startDestination = Home) {
+                            composable<Home> { destinations[0].content() }
+                            composable<LiveTv> { destinations[1].content() }
+                            navigation<MoviesGraph>(startDestination = MoviesList) {
+                                composable<MoviesList> { destinations[2].content() }
+                            }
+                            navigation<SeriesGraph>(startDestination = SeriesList) {
+                                composable<SeriesList> { destinations[3].content() }
+                            }
+                            composable<Search> { destinations[4].content() }
+                            composable<Settings> { destinations[5].content() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Tab-root BACK: composed AFTER the NavHost so it out-prioritises NavHost's own pop-to-start. In A1 there
+    // are no sub-destinations yet, so every BACK is at a tab root → run the focus-nav / double-back-exit
+    // policy (NOT pop-to-Home). Sub-destination phases (B/D) gate this on an empty tab-internal back stack.
     BackHandler(enabled = !playerVisible) {
         if (!topNavigationFocused) {
             topNavigationFocusRequester.requestFocus()
@@ -1450,34 +1545,6 @@ private fun VivicastApp(
         Toast.makeText(context, context.getString(R.string.main_exit_confirmation), Toast.LENGTH_SHORT).show()
     }
 
-    VivicastScreenBackground(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = VivicastSpacing.ScreenHorizontal, vertical = VivicastSpacing.ScreenVertical),
-            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
-        ) {
-            // Language-change handoff: selectedRoute is still Home until the start effect routes to
-            // Settings (through the protection gate). Render nothing focusable for that frame so neither
-            // Home content nor the Home nav item flashes/steals focus before Settings appears.
-            if (!(reopenLanguageSettings && !regularStartApplied)) {
-                VivicastTopNavigation(
-                    brand = "VIVICAST",
-                    items = destinations.map { it.label },
-                    selectedIndex = selectedIndex,
-                    selectedFocusRequester = topNavigationFocusRequester,
-                    onItemFocusChanged = { focused -> topNavigationFocused = focused },
-                    onSelected = { index -> selectRoute(destinations[index].route) },
-                    onFocused = { index -> focusRoute(destinations[index].route) },
-                )
-
-                Box(modifier = Modifier.fillMaxSize()) {
-                    selectedDestination.content()
-                }
-            }
-        }
-    }
-
     if (playerVisible) {
         PlayerRoute(
             playerController = appContainer.playerController,
@@ -1487,7 +1554,7 @@ private fun VivicastApp(
                 // Anchor focus on the Live-TV nav tab synchronously first so it can't fall back to the Home
                 // tab (which would yank the route to Home); the Live-TV content then grabs the channel focus.
                 if (committedLiveChannel != null) {
-                    selectedRoute = "live-tv"
+                    navigateTab(LiveTv)
                     runCatching { topNavigationFocusRequester.requestFocus() }
                     focusLiveChannelSignal += 1
                 }
