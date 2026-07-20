@@ -39,7 +39,15 @@ import androidx.compose.ui.focus.FocusEnterExitScope
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -114,6 +122,7 @@ import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import com.vivicast.tv.core.logging.vcLog
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -174,6 +183,43 @@ private fun FocusEnterExitScope.exitSectionRail(topNav: FocusRequester) {
         FocusDirection.Up -> topNav.requestFocus()
         else -> {}
     }
+}
+
+// Frames to wait for rail RIGHT focus to land before falling back to a spatial move.
+private const val FOCUS_SETTLE_FRAMES = 3
+
+// RIGHT from a rail section → enter the detail pane. Prefer the destination's first row
+// (detailFirstRow); if that row is not composed right now — a LazyColumn scrolled it off, or an About
+// overlay / Playlists editor replaced the overview — fall back to a spatial move so focus still ENTERS
+// the detail instead of stranding on the rail. Handled as a key event (not focusProperties.right) so it
+// touches ONLY the D-pad RIGHT path: programmatic focus-returns (a saved card, the language row, a
+// section switch) still target their own requester and are never intercepted.
+private fun enterDetailFromRail(
+    event: KeyEvent,
+    scope: CoroutineScope,
+    detailFirstRow: FocusRequester,
+    focusManager: FocusManager,
+    isDetailFocused: () -> Boolean,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionRight) return false
+    // requestFocus() on an off-screen LazyColumn first row returns WITHOUT throwing yet WITHOUT moving
+    // focus, so its result can't be trusted. Try it, wait a frame, then check whether focus actually
+    // entered the detail (isDetailFocused, driven by the NavHost onFocusChanged); if not, fall back to a
+    // spatial move onto the nearest visible detail row so RIGHT is never stranded on the rail.
+    scope.launch {
+        runCatching { detailFirstRow.requestFocus() }
+        // Give focus a few frames to actually land before deciding it failed (onFocusChanged drives
+        // isDetailFocused). Only fall back if it genuinely never entered the detail — otherwise a lagging
+        // frame would spuriously moveFocus off a first row that DID get focus.
+        var entered = false
+        repeat(FOCUS_SETTLE_FRAMES) {
+            awaitFrame()
+            if (!entered && isDetailFocused()) entered = true
+        }
+        if (!entered) focusManager.moveFocus(FocusDirection.Right)
+        vcLog("settings-focus") { "rail RIGHT -> detail (firstRow=$entered)" }
+    }
+    return true
 }
 
 @Composable
@@ -290,6 +336,8 @@ fun SettingsRoute(
     }
 
     val detailFocusRequester = remember { FocusRequester() }
+    // Fallback for rail RIGHT when the detail's first row isn't composed (scrolled off / sub-view open).
+    val focusManager = LocalFocusManager.current
     var pendingDetailFocus by remember { mutableStateOf(false) }
     // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse any
     // open sub-view (editor / global settings / legal page) back to its overview. Focus stays on the rail
@@ -415,14 +463,13 @@ fun SettingsRoute(
                                 selected = selected,
                                 onClick = { activateSection(section) },
                                 onFocused = { navigateSection(section) },
-                                // RIGHT → detail: no hard target. A spatial search enters the detail
-                                // focusGroup, whose focusRestorer lands on the last-focused (visible) row
-                                // — so RIGHT still works when the first row is scrolled off. See below.
                                 modifier = Modifier
                                     .focusRequester(sectionFocusRequesters.getValue(section.label))
-                                    // RIGHT from a rail item → the detail's first row explicitly (else spatial
-                                    // search lands on whatever detail row is level with the rail item).
-                                    .focusProperties { right = detailFocusRequester }
+                                    // RIGHT → detail: prefer the first row, else fall back to a spatial move so
+                                    // focus still enters when that row is scrolled off or replaced by a sub-view.
+                                    // A key handler (not focusProperties.right) so an uncomposed first row can't
+                                    // strand focus on the rail. See enterDetailFromRail.
+                                    .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager) { detailFocused } }
                                     .fillMaxWidth(),
                                 contentPadding = VivicastSpacing.Space2,
                             ) {
@@ -448,7 +495,7 @@ fun SettingsRoute(
                         onFocused = { navigateSection(aboutSection) },
                         modifier = Modifier
                             .focusRequester(sectionFocusRequesters.getValue(aboutSection.label))
-                            .focusProperties { right = detailFocusRequester }
+                            .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager) { detailFocused } }
                             .fillMaxWidth()
                             .wrapContentHeight(unbounded = true),
                         contentPadding = VivicastSpacing.Space2,
@@ -479,8 +526,9 @@ fun SettingsRoute(
                     // an exit target only applies when there's no focus target left inside the group.
                     // NO focusRestorer here: its onEnter redirected EVERY programmatic requestFocus (a returning
                     // card, the "Gruppen verwalten" row, the first row) to its fallback, which broke targeted
-                    // focus-return. RIGHT-from-rail instead enters via the normal spatial search (lands on the
-                    // first/nearest row); each destination requests its own focus target directly.
+                    // focus-return. RIGHT-from-rail is handled on the rail side (enterDetailFromRail): first row
+                    // when composed, else a spatial move INTO this group as the fallback — so this focusGroup
+                    // only needs onExit. Each destination requests its own focus target directly.
                     modifier = Modifier
                         .focusGroup()
                         .focusProperties {
