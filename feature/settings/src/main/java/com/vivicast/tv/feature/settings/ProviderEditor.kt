@@ -148,6 +148,8 @@ internal fun ProviderEditor(
     val passFocus = remember { FocusRequester() }
     val toggleFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
+    // Rail RIGHT snaps the editor back to the top so it always re-enters on the first field.
+    ScrollFirstRowIntoView(listState)
     // Wait one frame before requesting focus, else it escapes to the top nav bar. Add starts on the
     // name field; edit starts on the enable toggle (the first item).
     LaunchedEffect(Unit) {

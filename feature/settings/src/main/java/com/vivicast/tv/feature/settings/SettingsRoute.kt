@@ -30,6 +30,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -188,29 +191,42 @@ private fun FocusEnterExitScope.exitSectionRail(topNav: FocusRequester) {
 // Frames to wait for rail RIGHT focus to land before falling back to a spatial move.
 private const val FOCUS_SETTLE_FRAMES = 3
 
-// RIGHT from a rail section → enter the detail pane. Prefer the destination's first row
-// (detailFirstRow); if that row is not composed right now — a LazyColumn scrolled it off, or an About
-// overlay / Playlists editor replaced the overview — fall back to a spatial move so focus still ENTERS
-// the detail instead of stranding on the rail. Handled as a key event (not focusProperties.right) so it
-// touches ONLY the D-pad RIGHT path: programmatic focus-returns (a saved card, the language row, a
-// section switch) still target their own requester and are never intercepted.
+// Bumped on rail RIGHT so entering the detail always starts at its first row: a scrollable destination
+// snaps its LazyColumn back to the top (ScrollFirstRowIntoView) before that first row is focused.
+internal val LocalRevealFirstRowSignal = compositionLocalOf { 0 }
+
+// A scrollable detail destination calls this so rail RIGHT (which bumps LocalRevealFirstRowSignal) snaps
+// it to the top — the first row is then on-screen and takes the focus. Instant, no animation. Short
+// destinations whose first row is always visible don't need it.
+@Composable
+internal fun ScrollFirstRowIntoView(listState: LazyListState) {
+    val signal = LocalRevealFirstRowSignal.current
+    LaunchedEffect(signal) {
+        if (signal > 0) listState.scrollToItem(0)
+    }
+}
+
+// RIGHT from a rail section → enter the detail pane on its FIRST row: bump the reveal signal (a scrollable
+// destination snaps to the top), then focus the first row. If it still isn't reachable (a sub-view/overlay
+// replaced the overview) fall back to a spatial move so focus is never stranded on the rail. Handled as a
+// key event (not focusProperties.right) so ONLY the D-pad RIGHT path is touched — programmatic
+// focus-returns (a saved card, the language row, a section switch) still target their own requester.
 private fun enterDetailFromRail(
     event: KeyEvent,
     scope: CoroutineScope,
     detailFirstRow: FocusRequester,
     focusManager: FocusManager,
     isDetailFocused: () -> Boolean,
+    revealFirstRow: () -> Unit,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionRight) return false
-    // requestFocus() on an off-screen LazyColumn first row returns WITHOUT throwing yet WITHOUT moving
-    // focus, so its result can't be trusted. Try it, wait a frame, then check whether focus actually
-    // entered the detail (isDetailFocused, driven by the NavHost onFocusChanged); if not, fall back to a
-    // spatial move onto the nearest visible detail row so RIGHT is never stranded on the rail.
     scope.launch {
+        revealFirstRow()   // scrollable destinations snap their list to the top before we focus
+        awaitFrame()       // let that scroll + recomposition bring the first row on-screen
         runCatching { detailFirstRow.requestFocus() }
-        // Give focus a few frames to actually land before deciding it failed (onFocusChanged drives
-        // isDetailFocused). Only fall back if it genuinely never entered the detail — otherwise a lagging
-        // frame would spuriously moveFocus off a first row that DID get focus.
+        // Give focus a few frames to actually land (onFocusChanged drives isDetailFocused). Only fall back
+        // if it genuinely never entered the detail — otherwise a lagging frame would spuriously moveFocus
+        // off a first row that DID get focus. After the scroll-to-top the spatial fallback also lands row 0.
         var entered = false
         repeat(FOCUS_SETTLE_FRAMES) {
             awaitFrame()
@@ -338,6 +354,9 @@ fun SettingsRoute(
     val detailFocusRequester = remember { FocusRequester() }
     // Fallback for rail RIGHT when the detail's first row isn't composed (scrolled off / sub-view open).
     val focusManager = LocalFocusManager.current
+    // Bumped on rail RIGHT; a scrollable detail destination reads it (LocalRevealFirstRowSignal) to snap
+    // its list back to the top so RIGHT always lands on the first row.
+    var revealFirstRowSignal by remember { mutableStateOf(0) }
     var pendingDetailFocus by remember { mutableStateOf(false) }
     // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse any
     // open sub-view (editor / global settings / legal page) back to its overview. Focus stays on the rail
@@ -469,7 +488,7 @@ fun SettingsRoute(
                                     // focus still enters when that row is scrolled off or replaced by a sub-view.
                                     // A key handler (not focusProperties.right) so an uncomposed first row can't
                                     // strand focus on the rail. See enterDetailFromRail.
-                                    .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager) { detailFocused } }
+                                    .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager, { detailFocused }, { revealFirstRowSignal++ }) }
                                     .fillMaxWidth(),
                                 contentPadding = VivicastSpacing.Space2,
                             ) {
@@ -495,7 +514,7 @@ fun SettingsRoute(
                         onFocused = { navigateSection(aboutSection) },
                         modifier = Modifier
                             .focusRequester(sectionFocusRequesters.getValue(aboutSection.label))
-                            .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager) { detailFocused } }
+                            .onPreviewKeyEvent { enterDetailFromRail(it, routeScope, detailFocusRequester, focusManager, { detailFocused }, { revealFirstRowSignal++ }) }
                             .fillMaxWidth()
                             .wrapContentHeight(unbounded = true),
                         contentPadding = VivicastSpacing.Space2,
@@ -540,6 +559,9 @@ fun SettingsRoute(
                     // Inner Settings NavHost: the detail pane. The section rail drives it; Playlists is a
                     // nested graph so its editor/actions/groups attach as real destinations (BACK-to-overview),
                     // replacing the old local-state sub-view flags + focus-park machinery.
+                    // Rail RIGHT bumps revealFirstRowSignal; scrollable destinations read it (via
+                    // LocalRevealFirstRowSignal + ScrollFirstRowIntoView) to snap their list back to the top.
+                    CompositionLocalProvider(LocalRevealFirstRowSignal provides revealFirstRowSignal) {
                     NavHost(
                         navController = innerNav,
                         startDestination = startSectionEntry.navTarget,
@@ -828,6 +850,7 @@ fun SettingsRoute(
                             firstFocusModifier = detailFirstFocusModifier,
                             collapseSubViewSignal = collapseSubViewSignal,
                         ) }
+                    }
                     }
                     // Invisible focus holder (see focusHolder) — parked on during inner-nav swaps so focus
                     // never orphans to the top nav, with no visible flash. It sits below the NavHost and the

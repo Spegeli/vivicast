@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,8 +110,11 @@ fun PlaybackSettingsPanel(
     var openPicker by remember { mutableStateOf<PlaybackPicker?>(null) }
     // AFR needs the seamless setFrameRate overload (API 31+); older systems can't switch → row disabled.
     val afrSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val listState = rememberLazyListState()
+    // Rail RIGHT snaps this list back to the top so it always re-enters on the first row.
+    ScrollFirstRowIntoView(listState)
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
+    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3)) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.settings_buffer_size),
