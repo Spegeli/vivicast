@@ -51,6 +51,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -69,11 +70,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.DialogNavigator
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
@@ -281,10 +284,11 @@ fun SettingsRoute(
     onRemoveLogoFolder: () -> Unit = {},
     topNavFocusRequester: FocusRequester,
     initialSelectedSection: String? = null,
-    // D3: deep-link straight into the add-provider form (Home "add playlist" CTA) rather than just landing on
-    // the Playlists section. Consumed once on entry; the host resets its flag via onAddPlaylistApplied.
-    openAddPlaylistOnEnter: Boolean = false,
-    onAddPlaylistApplied: () -> Unit = {},
+    // Deep-link: open a section-specific sub-view on entry (e.g. Home "add playlist" CTA → the add-provider
+    // form) on top of landing on the section. Consumed once on entry; the host resets it via
+    // onEntryActionApplied. Generic across panels — extend SettingsEntryAction + the entry effect's branch.
+    entryAction: SettingsEntryAction = SettingsEntryAction.None,
+    onEntryActionApplied: () -> Unit = {},
     focusLanguageRowOnEnter: Boolean = false,
     onInitialLanguageFocusApplied: () -> Unit = {},
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
@@ -367,7 +371,19 @@ fun SettingsRoute(
     val mainSections = remember(sections) { sections.dropLast(1) }
     val aboutSection = sections.last()
 
-    val innerNav = rememberNavController()
+    // A fresh (non-saved) inner controller per Settings entry, so it always starts on startDestination (the
+    // deep-linked section, else General). rememberNavController() persists the back stack via rememberSaveable,
+    // which would restore whatever section was open last (often General) and render it for a frame under the
+    // deep-linked title before any correction — the "General flashes before Playlists" glitch. A per-entry
+    // controller has no stale base to correct. Trade-off: the last-open section isn't restored across a Settings
+    // exit/return, which is the desired behaviour anyway (manual entry lands on General, deep-links on target).
+    val innerNavContext = LocalContext.current
+    val innerNav = remember {
+        NavHostController(innerNavContext).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            navigatorProvider.addNavigator(DialogNavigator())
+        }
+    }
     val currentDest = innerNav.currentBackStackEntryAsState().value?.destination
     val currentSection = sections.firstOrNull { currentDest.isInSection(it.matchesRoute) } ?: sections.first()
     // The section to land on this entry (deep-linked section, else General). currentSection lags one frame
@@ -439,16 +455,25 @@ fun SettingsRoute(
         )
     }
 
+    // The inner nav starts on startSectionEntry (the deep-linked section, else General) because innerNav is
+    // recreated per Settings entry (see its declaration) — no stale retained base to correct, so no flash of a
+    // previous section under the deep-linked title.
+    val openAddEditorOnEnter = entryAction == SettingsEntryAction.AddPlaylist &&
+        startSectionEntry.matchesRoute == PlaylistsGraph::class
     LaunchedEffect(Unit) {
+        // Deep-linked add: push the editor onto the Playlists overview base FIRST — before onReloadCacheStats /
+        // awaitFrame — so the overview base doesn't draw an extra frame before the editor. The editor self-
+        // focuses its first field; Cancel/Save pop back to the overview (previousBackStackEntry == SecPlaylists)
+        // so the existing focus-return lands correctly.
+        if (openAddEditorOnEnter) {
+            vcLog("playlists") { "deeplink AddPlaylist -> editor on overview" }
+            innerNav.navigate(PlaylistEditor())
+            onEntryActionApplied()
+        }
         viewModel.onReloadCacheStats()
         awaitFrame()
         when {
-            openAddPlaylistOnEnter && startSectionEntry.matchesRoute == PlaylistsGraph::class -> {
-                // Deep-link straight into the add-provider form; the editor self-focuses its first field.
-                vcLog("playlists") { "D3 deeplink -> navigate PlaylistEditor(add)" }
-                innerNav.navigate(PlaylistEditor())
-                onAddPlaylistApplied()
-            }
+            openAddEditorOnEnter -> Unit // editor self-focuses its first field; nothing to do here
             focusLanguageRowOnEnter && startSectionEntry.isSame(sections.first()) -> {
                 // Post language-change entry: land on the language row (detailFirstFocusModifier is moved
                 // onto it below) instead of the section rail.

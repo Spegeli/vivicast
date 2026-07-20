@@ -6,10 +6,19 @@
 > movies/series analog), recent-channels row with the compact channel card. Content-row cards for Filme/
 > Serien not yet visually verified (the Movies/Series pages are being finished separately).
 >
+> **Empty-state buttons + deep-links — DONE (all three empty states):**
+> - `[Wiedergabeliste hinzufügen]` (no-playlist) now **opens the add-provider form directly** — not just the
+>   Playlists section. Cancel/Save return to the Playlists overview with the Add row / the newly-created card
+>   focused.
+> - `[Einstellungen öffnen]` (disabled / empty-catalog) lands on the **Playlists overview**; `[Einstellungen]`
+>   (no-playlist) lands on Settings **General**.
+> - Built on the inner Settings NavHost via a generic `SettingsEntryAction` deep-link + a fresh per-entry
+>   inner controller (no stale section flashing under the deep-linked title). Full resolution + the retired
+>   route-bounce/remount approach: `plans/archive/settings-navigation-deeplinks.md`.
+> - _Residual (own plan):_ the add-editor's brief **open latency** (Playlists overview visible while the heavy
+>   `ProviderEditorScreen` composes) → `plans/settings-add-editor-open-latency.md`.
+>
 > **Open follow-ups (tracked, not blocking):**
-> - **Add-playlist form deep-link:** the Home "Wiedergabeliste hinzufügen" button lands on the Playlists
->   settings **section** (reliable). Auto-opening the add-provider **form** was built + reverted (fights the
->   Settings focus/remount flow) → see `plans/settings-navigation-deeplinks.md`.
 > - **Channel card aesthetics:** height fixed (was stretching); the logo-tile look is not final — refine later.
 > - **Filme/Serien rows:** verify the poster cards + series-centric resume/advancement once those pages are done.
 >
@@ -120,9 +129,12 @@ to `providers.isActive = 1` (actual catalog presence, not just the `includeLiveT
 | Providers exist, 0 active | "Wiedergabeliste deaktiviert" / "Aktiviere sie in den Einstellungen." + `[Einstellungen öffnen]` |
 | ≥1 active, but **no** type has any content (empty/fresh import) | "Noch keine Inhalte" / "Prüfe deine Wiedergabelisten in den Einstellungen." + `[Einstellungen öffnen]` |
 
-**Navigation targets.** `[Wiedergabeliste hinzufügen]`: `initialSelectedSection="Wiedergabelisten"`
-(exists) + a **new signal** to auto-open the add-provider form (`SettingsRoute` → `ProviderSettingsPanel`
-→ add flow; small, in scope). `[Einstellungen]` / `[Einstellungen öffnen]`: Settings, no section (general).
+**Navigation targets** (implemented). `[Wiedergabeliste hinzufügen]` (no-playlist):
+`openPlaylistSettings(addNew=true)` → `initialSelectedSection="Wiedergabelisten"` +
+`entryAction=SettingsEntryAction.AddPlaylist` → the inner Settings NavHost opens `PlaylistEditor` on the
+Playlists overview (the old `ProviderSettingsPanel` add-flow was replaced by the inner-NavHost rebuild).
+`[Einstellungen öffnen]` (disabled / empty-catalog): `openPlaylistSettings()` → Playlists overview.
+`[Einstellungen]` (no-playlist): `onOpenSettings` → Settings General.
 `[Zu Live-TV/Filme/Serien]`: `selectRoute("live-tv"/"movies"/"series")`.
 
 ## Content structure (rows + hero) — Soll vs. user's open questions
@@ -202,8 +214,13 @@ correctly bound.
    `onOpenSettings` (general), and `onAddPlaylist` (opens Settings **with the add-playlist form**).
    `HomeViewModelFactory` gains `ProviderRepository`; MainActivity passes `appContainer.providerRepository`
    and wires the callbacks (`selectRoute(...)`, settings-general, settings-add-form).
-6. **Settings add-form auto-open** — new signal param through `SettingsRoute` → `ProviderSettingsPanel` →
-   add flow (small); `[Wiedergabeliste hinzufügen]` uses `initialSelectedSection="Wiedergabelisten"` + this.
+6. **Settings add-form auto-open — DONE (later, via the inner-NavHost rebuild, not this step's approach).**
+   Shipped as a generic `SettingsEntryAction` deep-link: `[Wiedergabeliste hinzufügen]` sends
+   `initialSelectedSection="Wiedergabelisten"` + `entryAction=AddPlaylist`; SettingsRoute's inner NavHost opens
+   `PlaylistEditor` on the Playlists overview. Cancel/Save return there with the Add row / new card focused.
+   (The originally-scoped `ProviderSettingsPanel` signal was superseded — see
+   `plans/archive/settings-navigation-deeplinks.md`; residual open-latency in
+   `plans/settings-add-editor-open-latency.md`.)
 7. **Strings** — `:core:designsystem` (`values` + `values-en`): row titles, the three empty-state variants,
    the buttons. Retire now-unused hero strings (`home_hero_*`) if nothing else uses them.
 8. **Docs** — update `../vivicast-docs/design/screens/01-home.md` + `wireframes/00-home.md` to the new model

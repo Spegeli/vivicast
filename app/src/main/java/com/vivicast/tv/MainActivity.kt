@@ -126,6 +126,7 @@ import com.vivicast.tv.feature.settings.PlaybackExternalPlayerMode
 import com.vivicast.tv.feature.settings.PlaybackSettingsState
 import com.vivicast.tv.feature.settings.PlaybackSubtitleLanguage
 import com.vivicast.tv.feature.settings.SettingsAccentColor
+import com.vivicast.tv.feature.settings.SettingsEntryAction
 import com.vivicast.tv.feature.settings.SettingsFontScale
 import com.vivicast.tv.feature.settings.SettingsLanguage
 import com.vivicast.tv.feature.settings.SettingsThemeMode
@@ -281,9 +282,10 @@ private fun VivicastApp(
     // Home "Wiedergabeliste hinzufügen" lands on the Playlists settings section; reset when leaving Settings
     // so a later nav-in opens Allgemein. (Auto-opening the add-provider FORM is a further follow-up.)
     var pendingSettingsSection by remember { mutableStateOf<String?>(null) }
-    // D3: a Home "add playlist" CTA also asks Settings to open the add-provider FORM directly (not just land on
-    // the Playlists section). Consumed once on Settings entry; reset on leaving Settings like the section hint.
-    var pendingSettingsAddPlaylist by remember { mutableStateOf(false) }
+    // Deep-link into a section-specific Settings sub-view (e.g. Home "add playlist" CTA → the add-provider
+    // FORM, not just the Playlists section). Consumed once on Settings entry; reset on leaving Settings like
+    // the section hint. Generic across panels via SettingsEntryAction.
+    var pendingSettingsEntryAction by remember { mutableStateOf(SettingsEntryAction.None) }
     val playlistsSectionLabel = stringResource(R.string.settings_section_playlists)
     // A Home content button that switches top-level route must move focus onto the target nav tab. Else
     // Compose focus falls back to the geometrically nearest Home nav item, whose focus-follows-selection
@@ -490,10 +492,10 @@ private fun VivicastApp(
 
     // Open Settings landing on the Playlists section — used by the Home "Wiedergabeliste hinzufügen" button
     // and by the disabled/empty-catalog empty-state "Open Settings" button, so the user sees their playlists
-    // directly (and can enable them). Auto-opening the add-provider FORM (add path) is a further follow-up.
+    // directly (and can enable them). addNew also opens the add-provider FORM on top of the overview.
     fun openPlaylistSettings(addNew: Boolean = false) {
         pendingSettingsSection = playlistsSectionLabel
-        pendingSettingsAddPlaylist = addNew
+        pendingSettingsEntryAction = if (addNew) SettingsEntryAction.AddPlaylist else SettingsEntryAction.None
         focusTopNavPending = true
         selectRoute("settings")
     }
@@ -922,7 +924,7 @@ private fun VivicastApp(
         val onSettings = currentDestination?.hierarchy?.any { it.hasRoute<Settings>() } == true
         if (!onSettings) {
             pendingSettingsSection = null
-            pendingSettingsAddPlaylist = false
+            pendingSettingsEntryAction = SettingsEntryAction.None
         }
         // A Home CTA switched route: anchor focus on the now-selected nav tab so it doesn't fall back to the
         // Home tab (focus-follows-selection would yank the route back to Home). The route's own content may
@@ -1132,8 +1134,8 @@ private fun VivicastApp(
                     }
                 },
                 initialSelectedSection = pendingSettingsSection,
-                openAddPlaylistOnEnter = pendingSettingsAddPlaylist,
-                onAddPlaylistApplied = { pendingSettingsAddPlaylist = false },
+                entryAction = pendingSettingsEntryAction,
+                onEntryActionApplied = { pendingSettingsEntryAction = SettingsEntryAction.None },
                 topNavFocusRequester = topNavigationFocusRequester,
                 focusLanguageRowOnEnter = reopenLanguageSettings,
                 onInitialLanguageFocusApplied = { reopenLanguageSettings = false },

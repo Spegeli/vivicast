@@ -1,9 +1,40 @@
-# Settings Navigation & Deep-Links — Problem Notes + Plan (reference only)
+# Settings Navigation & Deep-Links — Problem Notes + Plan (ARCHIVED — resolved)
 
-> Status: **NOT started — reference/scoping only.** Captured after the Home rework, where a Home button
-> was meant to deep-link straight into the Settings *add-playlist form*. Section-landing works; opening a
-> sub-view (the add-provider editor) does not, because it fights the Settings focus/remount flow. To be
-> tackled in a dedicated pass. No code until then.
+> Status: **RESOLVED & ARCHIVED.** Everything this file scoped is solved by the Jetpack Navigation Compose
+> rebuild (D1–D3) plus the deep-link polish that followed. The "What does NOT work" / "Fix directions"
+> sections below describe the OLD `selectedRoute` + `ProviderSettingsPanel`-remount model and no longer
+> reflect the code — kept for history only.
+
+## RESOLVED — what we actually built
+
+Deep-linking into any Settings target now works reliably, regardless of prior focus:
+
+- **Inner Settings NavHost** (`feature/settings/.../SettingsRoute.kt`): the rail drives a real
+  `androidx.navigation` graph; each section is a typed `@Serializable` destination and Playlists is a nested
+  graph (`PlaylistsGraph → SecPlaylists` + `PlaylistEditor` / `PlaylistActions` / `PlaylistGroups`). This
+  replaced the old `selectedRoute` + `showEditor` + panel-remount model, so the route-bounce /
+  reset-wipes-intent / panel-remount / collapse-effect failure modes below are structurally gone.
+- **Section-landing:** `SettingsRoute(initialSelectedSection = <label>)` → the inner NavHost's
+  `startDestination` is that section. Driven by MainActivity `pendingSettingsSection` / `openPlaylistSettings()`.
+- **Sub-view deep-link** (the thing that "did NOT work" — opening the add-provider form on entry): now via a
+  generic **`SettingsEntryAction`** enum (`None | AddPlaylist`, extensible per section). MainActivity forwards
+  it as `pendingSettingsEntryAction`; SettingsRoute's entry effect opens the sub-view
+  (`innerNav.navigate(PlaylistEditor())`) on top of the section. The host never needs a section's internal
+  routes → cross-panel by design (add EPG/Appearance sub-views later with one enum case + one branch).
+- **Fresh inner controller per entry** (non-saveable `remember { NavHostController(...) }`): the NavHost
+  always starts on the deep-linked section, so a retained prior section can't render under the wrong title
+  (killed the "General flashes before Playlists" glitch) and the editor always has the overview beneath it.
+- **Return focus:** Cancel/Save from the deep-linked editor pop to the Playlists overview with the Add row /
+  the new provider card focused (`PROVIDER_FOCUS_KEY` on `previousBackStackEntry`).
+
+Verified on emulator via `adb logcat -s VCd` (compose/nav/focus traces) + physical TV. Gates green.
+
+**Open residual (its own plan):** the add-editor's *open latency* — the Playlists overview is briefly visible
+while the heavy `ProviderEditorScreen` composes → see `plans/settings-add-editor-open-latency.md`.
+
+---
+
+_Everything below is the ORIGINAL pre-rebuild scoping — historical context only, does not reflect the code._
 
 ## Goal
 
