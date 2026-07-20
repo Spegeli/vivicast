@@ -33,12 +33,19 @@ internal object Search
 @Serializable
 internal object Settings
 
-/** Movies tab: nested graph so `MoviesList` (+ later `MovieDetail`) share one graph-scoped ViewModel. */
+/** Movies tab: nested graph holding the grid + the self-contained detail destination. */
 @Serializable
 internal object MoviesGraph
 
 @Serializable
 internal object MoviesList
+
+/**
+ * Movie detail = a self-contained destination that loads its movie by stable keys (works on direct entry /
+ * deep-link, no loaded grid required). Args are STABLE keys, never Room ids (survive process death / re-import).
+ */
+@Serializable
+internal data class MovieDetail(val providerStableKey: String, val movieStableKey: String)
 
 /** Series tab: nested graph so `SeriesList` (+ later `SeriesDetail`) share one graph-scoped ViewModel. */
 @Serializable

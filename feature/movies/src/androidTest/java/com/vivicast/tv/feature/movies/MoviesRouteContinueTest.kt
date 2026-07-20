@@ -32,6 +32,7 @@ import com.vivicast.tv.domain.model.Season
 import com.vivicast.tv.domain.model.Series
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -42,36 +43,25 @@ class MoviesRouteContinueTest {
     val compose = createComposeRule()
 
     @Test
-    fun openMovieProgressAddsContinueCategoryAndCardProgress() {
+    fun continueCategoryAndCardProgress_posterClickOpensDetail() {
+        var openedKeys: Pair<String, String>? = null
         compose.setContent {
             MoviesRoute(
                 providerRepository = FakeProviderRepository(),
                 mediaRepository = FakeMediaRepository(),
                 favoritesRepository = FakeFavoritesRepository(),
                 playbackRepository = FakePlaybackRepository(),
-                openTrailer = { false },
+                onOpenDetail = { providerStableKey, movieStableKey -> openedKeys = providerStableKey to movieStableKey },
             )
         }
 
+        // The grid shows the Continue category pill and the movie (hero title + poster card).
         compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
         compose.onAllNodesWithText("Continue Movie").assertCountEquals(2)
-        compose.onAllNodesWithText("Von Anfang an").assertCountEquals(0)
 
+        // Clicking a poster navigates to the detail destination with the movie's stable keys (default = id).
         compose.onNodeWithTag(moviePosterTag(MOVIE_ID)).performSemanticsAction(SemanticsActions.OnClick)
-
-        compose.onAllNodesWithText("Fortsetzen").assertCountEquals(1)
-        compose.onAllNodesWithText("Filmdetails").assertCountEquals(1)
-        compose.onAllNodesWithText("Von Anfang an").assertCountEquals(1)
-        compose.onAllNodesWithText("42 %").assertCountEquals(1)
-        compose.onAllNodesWithText("Trailer").assertCountEquals(1)
-
-        compose.onNodeWithText("Trailer").performSemanticsAction(SemanticsActions.OnClick)
-        compose.onAllNodesWithText("Für Trailer wird die YouTube-App benötigt.").assertCountEquals(1)
-
-        compose.onNodeWithText("Als gesehen markieren").performSemanticsAction(SemanticsActions.OnClick)
-
-        compose.onAllNodesWithText("Gesehen").assertCountEquals(2)
-        compose.onAllNodesWithText("Als ungesehen markieren").assertCountEquals(1)
+        assertEquals(PROVIDER_ID to MOVIE_ID, openedKeys)
     }
 
     @Test

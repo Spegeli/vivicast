@@ -25,13 +25,14 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * Presentation-state holder for the movies screen. Owns the fachlich screen state
- * (selected provider/category, page size, opened detail) and combines the provider,
- * media, favorites and playback repositories into an immutable [MoviesUiState].
- * No Android Context/Resources, no Compose types, no navigation, no localized strings.
+ * Presentation-state holder for the movies GRID screen. Owns the fachlich grid state (selected
+ * provider/category, page size) and combines the provider, media, favorites and playback repositories into
+ * an immutable [MoviesUiState]. No Android Context/Resources, no Compose types, no navigation, no localized
+ * strings.
  *
- * The pure-visual hero highlight and the trailer hint remain in the composable layer.
- * [scope] lets unit tests inject a controlled scope; production uses [viewModelScope].
+ * Movie detail is a separate self-contained destination ([MovieDetailViewModel]); this VM holds no detail
+ * state. The pure-visual hero highlight remains in the composable layer. [scope] lets unit tests inject a
+ * controlled scope; production uses [viewModelScope].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class MoviesViewModel(
@@ -39,8 +40,6 @@ internal class MoviesViewModel(
     private val mediaRepository: MediaRepository,
     private val favoritesRepository: FavoritesRepository,
     private val playbackRepository: PlaybackRepository,
-    // #23: injectable clock (default wall clock) so mark-seen is deterministic in tests, matching LiveTvViewModel.
-    private val nowProvider: () -> Long = { System.currentTimeMillis() },
     scope: CoroutineScope? = null,
 ) : ViewModel() {
 
@@ -49,7 +48,6 @@ internal class MoviesViewModel(
     private val selectedProviderIdFlow = MutableStateFlow<String?>(null)
     private val selectedCategoryIdFlow = MutableStateFlow<String?>(null)
     private val pageCountFlow = MutableStateFlow(1)
-    private val detailMovieIdFlow = MutableStateFlow<String?>(null)
 
     private var allProviders: List<Provider> = emptyList()
     private var categories: List<Category> = emptyList()
@@ -58,9 +56,6 @@ internal class MoviesViewModel(
     private var continueMovieProgress: Map<String, PlaybackProgress> = emptyMap()
     private var continueMovies: List<Movie> = emptyList()
     private var observedMovies: List<Movie> = emptyList()
-    private var detailMovieLoaded: Movie? = null
-    private var detailProgressLoaded: PlaybackProgress? = null
-    private var consumedTargetMovieId: String? = null
 
     private val _uiState = MutableStateFlow(MoviesUiState())
     val uiState: StateFlow<MoviesUiState> = _uiState.asStateFlow()
@@ -133,24 +128,6 @@ internal class MoviesViewModel(
                     rebuild()
                 }
         }
-
-        coroutineScope.launch {
-            combine(selectedProviderIdFlow, detailMovieIdFlow) { providerId, movieId ->
-                providerId to movieId
-            }.collect { (providerId, movieId) ->
-                detailMovieLoaded = if (providerId != null && movieId != null) {
-                    mediaRepository.getMovie(providerId, movieId)
-                } else {
-                    null
-                }
-                detailProgressLoaded = if (providerId != null && movieId != null) {
-                    playbackRepository.getProgress(providerId, MediaType.Movie, movieId)
-                } else {
-                    null
-                }
-                rebuild()
-            }
-        }
     }
 
     fun onProviderSelected(providerId: String) {
@@ -166,53 +143,9 @@ internal class MoviesViewModel(
         pageCountFlow.value += 1
     }
 
-    fun onOpenDetail(movieId: String) {
-        detailMovieIdFlow.value = movieId
-    }
-
-    fun onCloseDetail() {
-        detailMovieIdFlow.value = null
-    }
-
     fun onToggleFavorite(movieId: String) {
         val providerId = selectedProviderIdFlow.value ?: return
         coroutineScope.launch { favoritesRepository.toggleFavorite(providerId, MediaType.Movie, movieId) }
-    }
-
-    fun onMarkSeen(movie: Movie) {
-        val providerId = selectedProviderIdFlow.value ?: return
-        coroutineScope.launch {
-            val now = nowProvider()
-            val existing = detailProgressLoaded ?: continueMovieProgress[movie.id]
-            val completed = movie.completedProgress(existing, now)
-            playbackRepository.saveProgress(completed)
-            detailProgressLoaded = completed
-            rebuild()
-        }
-    }
-
-    fun onMarkUnseen(movie: Movie) {
-        val providerId = selectedProviderIdFlow.value ?: return
-        coroutineScope.launch {
-            playbackRepository.deleteProgress(providerId, MediaType.Movie, movie.id)
-            detailProgressLoaded = null
-            rebuild()
-        }
-    }
-
-    fun onTarget(targetProviderId: String?, targetCategoryId: String?, targetMovieId: String?) {
-        if (targetMovieId == null) return
-        selectedProviderIdFlow.value = targetProviderId
-        selectedCategoryIdFlow.value = targetCategoryId
-        coroutineScope.launch {
-            val exists = observedMovies.any { it.id == targetMovieId } ||
-                (targetProviderId?.let { mediaRepository.getMovie(it, targetMovieId) } != null)
-            if (exists) {
-                detailMovieIdFlow.value = targetMovieId
-                consumedTargetMovieId = targetMovieId
-                rebuild()
-            }
-        }
     }
 
     private fun ensureCategorySelected() {
@@ -249,18 +182,6 @@ internal class MoviesViewModel(
             )
             else -> observedMovies
         }
-        // Auto-close a still-open detail when its movie left the current, non-empty list
-        // (mirrors the original MoviesRoute LaunchedEffect(movies) guard).
-        val currentDetailId = detailMovieIdFlow.value
-        val detailClosed = currentDetailId != null &&
-            movies.isNotEmpty() &&
-            movies.none { it.id == currentDetailId }
-        if (detailClosed) {
-            detailMovieIdFlow.value = null
-        }
-        val detailId = if (detailClosed) null else currentDetailId
-        val detailMovie = if (detailId == null) null else movies.firstOrNull { it.id == detailId } ?: detailMovieLoaded
-        val detailProgress = if (detailMovie == null) null else detailProgressLoaded ?: continueMovieProgress[detailMovie.id]
         _uiState.value = MoviesUiState(
             providers = movieProviders,
             selectedProviderId = providerId,
@@ -273,28 +194,6 @@ internal class MoviesViewModel(
             selectedProvider = allProviders.firstOrNull { it.id == providerId },
             canLoadMore = categoryId !in SPECIAL_CATEGORY_IDS &&
                 observedMovies.size >= pageCountFlow.value * VOD_PAGE_SIZE,
-            detailMovieId = detailId,
-            detailMovie = detailMovie,
-            detailProgress = detailProgress,
-            consumedTargetMovieId = consumedTargetMovieId,
         )
     }
 }
-
-private fun Movie.completedProgress(existing: PlaybackProgress?, now: Long): PlaybackProgress =
-    PlaybackProgress(
-        id = existing?.id ?: playbackProgressId(providerId, MediaType.Movie, id),
-        providerId = providerId,
-        mediaType = MediaType.Movie,
-        mediaId = id,
-        positionMillis = existing?.durationMillis?.takeIf { it > 0L } ?: existing?.positionMillis?.takeIf { it > 0L } ?: 1L,
-        durationMillis = existing?.durationMillis?.takeIf { it > 0L } ?: 1L,
-        progressPercent = 100,
-        isCompleted = true,
-        lastWatchedAt = now,
-        createdAt = existing?.createdAt ?: now,
-        updatedAt = now,
-    )
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "progress-$providerId-${mediaType.name.lowercase(Locale.getDefault())}-$mediaId"

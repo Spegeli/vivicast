@@ -1,6 +1,5 @@
 package com.vivicast.tv.feature.movies
 
-import androidx.activity.compose.BackHandler
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -25,7 +24,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -61,17 +59,11 @@ fun MoviesRoute(
     playbackRepository: PlaybackRepository? = null,
     resolveMoviePosterModel: suspend (Movie) -> Any? = { null },
     resolveMovieBackdropModel: suspend (Movie) -> Any? = { null },
-    openTrailer: ((Movie) -> Boolean)? = null,
-    onOpenPlayer: (Movie, Boolean) -> Unit = { _, _ -> },
-    targetProviderId: String? = null,
-    targetCategoryId: String? = null,
-    targetMovieId: String? = null,
-    onTargetConsumed: () -> Unit = {},
+    onOpenDetail: (providerStableKey: String, movieStableKey: String) -> Unit = { _, _ -> },
 ) {
     if (providerRepository == null || mediaRepository == null || favoritesRepository == null || playbackRepository == null) {
         MoviesUnavailableState()
     } else {
-        val context = LocalContext.current
         RoomMoviesRoute(
             providerRepository = providerRepository,
             mediaRepository = mediaRepository,
@@ -79,12 +71,7 @@ fun MoviesRoute(
             playbackRepository = playbackRepository,
             resolveMoviePosterModel = resolveMoviePosterModel,
             resolveMovieBackdropModel = resolveMovieBackdropModel,
-            openTrailer = openTrailer ?: { movie -> openMovieTrailer(context, movie) },
-            onOpenPlayer = onOpenPlayer,
-            targetProviderId = targetProviderId,
-            targetCategoryId = targetCategoryId,
-            targetMovieId = targetMovieId,
-            onTargetConsumed = onTargetConsumed,
+            onOpenDetail = onOpenDetail,
         )
     }
 }
@@ -109,12 +96,7 @@ private fun RoomMoviesRoute(
     playbackRepository: PlaybackRepository,
     resolveMoviePosterModel: suspend (Movie) -> Any?,
     resolveMovieBackdropModel: suspend (Movie) -> Any?,
-    openTrailer: (Movie) -> Boolean,
-    onOpenPlayer: (Movie, Boolean) -> Unit,
-    targetProviderId: String?,
-    targetCategoryId: String?,
-    targetMovieId: String?,
-    onTargetConsumed: () -> Unit,
+    onOpenDetail: (providerStableKey: String, movieStableKey: String) -> Unit,
 ) {
     val viewModel: MoviesViewModel = viewModel(
         factory = MoviesViewModelFactory(
@@ -126,25 +108,12 @@ private fun RoomMoviesRoute(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val trailerHintStr = stringResource(R.string.movies_trailer_hint)
     val strFavorites = stringResource(R.string.common_favorites)
     val strContinue = stringResource(R.string.movies_continue)
     val strMovieTypeBadge = stringResource(R.string.movies_type_badge)
 
-    // Pure-visual state kept in the composable layer.
+    // Pure-visual hero highlight kept in the composable layer.
     var selectedMovieId by remember { mutableStateOf<String?>(null) }
-    var trailerHint by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(targetProviderId, targetCategoryId, targetMovieId) {
-        viewModel.onTarget(targetProviderId, targetCategoryId, targetMovieId)
-    }
-    LaunchedEffect(uiState.consumedTargetMovieId) {
-        val consumed = uiState.consumedTargetMovieId
-        if (consumed != null && consumed == targetMovieId) {
-            selectedMovieId = consumed
-            onTargetConsumed()
-        }
-    }
 
     val categoriesWithSpecials = remember(uiState.selectedProviderId, uiState.categories, uiState.hasContinueMovies, strFavorites, strContinue) {
         val providerId = uiState.selectedProviderId
@@ -175,115 +144,90 @@ private fun RoomMoviesRoute(
     val selectedProvider = uiState.selectedProvider
     val selectedCategory = categoriesWithSpecials.firstOrNull { it.id == uiState.selectedCategoryId }
     val selectedProgress = selectedMovie?.let { continueMovieProgress[it.id] }
-    val detailMovie = uiState.detailMovie
-    val detailProgress = uiState.detailProgress
     val backdropModel by produceState<Any?>(initialValue = null, selectedMovie?.id, selectedMovie?.backdropUrl) {
         value = selectedMovie?.let { resolveMovieBackdropModel(it) }
     }
     val canLoadMoreMovies = uiState.canLoadMore
 
-    BackHandler(enabled = uiState.detailMovieId != null) {
-        viewModel.onCloseDetail()
-    }
-
     VivicastScreen(modifier = Modifier.fillMaxSize()) {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.fillMaxSize()) {
-            if (detailMovie != null) {
-                MovieDetailPage(
-                    movie = detailMovie,
-                    provider = selectedProvider,
-                    backdropModel = backdropModel,
-                    isFavorite = detailMovie.id in favoriteMovieIds,
-                    progress = detailProgress,
-                    onOpenPlayer = { resumeProgress -> onOpenPlayer(detailMovie, resumeProgress) },
-                    onToggleFavorite = { viewModel.onToggleFavorite(detailMovie.id) },
-                    onMarkSeen = { viewModel.onMarkSeen(detailMovie) },
-                    onMarkUnseen = { viewModel.onMarkUnseen(detailMovie) },
-                    onOpenTrailer = {
-                        trailerHint = if (openTrailer(detailMovie)) null else trailerHintStr
+            Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
+                MovieCategoryColumn(
+                    providers = uiState.providers,
+                    selectedProviderId = uiState.selectedProviderId,
+                    categories = categoriesWithSpecials,
+                    selectedCategoryId = uiState.selectedCategoryId,
+                    onProviderSelected = {
+                        viewModel.onProviderSelected(it.id)
+                        selectedMovieId = null
                     },
-                    onClose = { viewModel.onCloseDetail() },
-                    trailerHint = trailerHint,
+                    onCategorySelected = {
+                        viewModel.onCategorySelected(it.id)
+                        selectedMovieId = null
+                    },
                 )
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-                    MovieCategoryColumn(
-                        providers = uiState.providers,
-                        selectedProviderId = uiState.selectedProviderId,
-                        categories = categoriesWithSpecials,
-                        selectedCategoryId = uiState.selectedCategoryId,
-                        onProviderSelected = {
-                            viewModel.onProviderSelected(it.id)
-                            selectedMovieId = null
-                        },
-                        onCategorySelected = {
-                            viewModel.onCategorySelected(it.id)
-                            selectedMovieId = null
-                        },
+                Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.weight(1f)) {
+                    MovieHero(
+                        movie = selectedMovie,
+                        provider = selectedProvider,
+                        backdropModel = backdropModel,
+                        isFavorite = selectedMovie?.id in favoriteMovieIds,
+                        progress = selectedProgress,
+                        showActions = false,
+                        onOpenPlayer = { },
+                        onToggleFavorite = { selectedMovie?.id?.let { viewModel.onToggleFavorite(it) } },
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3), modifier = Modifier.weight(1f)) {
-                        MovieHero(
-                            movie = selectedMovie,
-                            provider = selectedProvider,
-                            backdropModel = backdropModel,
-                            isFavorite = selectedMovie?.id in favoriteMovieIds,
-                            progress = selectedProgress,
-                            showActions = false,
-                            onOpenPlayer = { resumeProgress -> selectedMovie?.let { onOpenPlayer(it, resumeProgress) } },
-                            onToggleFavorite = { selectedMovie?.id?.let { viewModel.onToggleFavorite(it) } },
+                    SectionTitle(stringResource(R.string.nav_movies))
+                    if (movies.isEmpty()) {
+                        InfoPanel(
+                            title = emptyTitle(selectedProvider, selectedCategory),
+                            body = emptyBody(selectedProvider, selectedCategory),
+                            badge = stringResource(R.string.common_empty_badge),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        SectionTitle(stringResource(R.string.nav_movies))
-                        if (movies.isEmpty()) {
-                            InfoPanel(
-                                title = emptyTitle(selectedProvider, selectedCategory),
-                                body = emptyBody(selectedProvider, selectedCategory),
-                                badge = stringResource(R.string.common_empty_badge),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = 150.dp),
-                                horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space5),
-                                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
-                                modifier = Modifier.fillMaxSize(),
-                            ) {
-                                items(movies, key = { it.id }) { movie ->
-                                    val posterModel by produceState<Any?>(initialValue = null, movie.id, movie.posterUrl) {
-                                        value = resolveMoviePosterModel(movie)
-                                    }
-                                    PosterCard(
-                                        title = movie.name,
-                                        rating = movie.rating?.takeIf { it.isNotBlank() } ?: "-",
-                                        meta = continueMovieProgress[movie.id]?.let { "${it.progressPercent} %" } ?: movie.cardMeta(strMovieTypeBadge),
-                                        hasPoster = !movie.posterUrl.isNullOrBlank() || posterModel != null,
-                                        progressPercent = continueMovieProgress[movie.id]?.progressPercent ?: 0,
-                                        favorite = movie.id in favoriteMovieIds,
-                                        seen = false,
-                                        imageModel = posterModel,
-                                        surfaceModifier = Modifier
-                                            .testTag(moviePosterTag(movie.id))
-                                            .semantics {
-                                                onClick {
-                                                    selectedMovieId = movie.id
-                                                    viewModel.onOpenDetail(movie.id)
-                                                    true
-                                                }
-                                            },
-                                        onFocused = { selectedMovieId = movie.id },
-                                        onClick = {
-                                            selectedMovieId = movie.id
-                                            viewModel.onOpenDetail(movie.id)
-                                        },
-                                    )
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 150.dp),
+                            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space5),
+                            verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(movies, key = { it.id }) { movie ->
+                                val posterModel by produceState<Any?>(initialValue = null, movie.id, movie.posterUrl) {
+                                    value = resolveMoviePosterModel(movie)
                                 }
-                                if (canLoadMoreMovies) {
-                                    item(span = { GridItemSpan(maxLineSpan) }, key = "load-more-movies") {
-                                        ActionPill(
-                                            stringResource(R.string.common_load_more),
-                                            modifier = Modifier.fillMaxWidth(),
-                                            onClick = { viewModel.onLoadMore() },
-                                        )
-                                    }
+                                PosterCard(
+                                    title = movie.name,
+                                    rating = movie.rating?.takeIf { it.isNotBlank() } ?: "-",
+                                    meta = continueMovieProgress[movie.id]?.let { "${it.progressPercent} %" } ?: movie.cardMeta(strMovieTypeBadge),
+                                    hasPoster = !movie.posterUrl.isNullOrBlank() || posterModel != null,
+                                    progressPercent = continueMovieProgress[movie.id]?.progressPercent ?: 0,
+                                    favorite = movie.id in favoriteMovieIds,
+                                    seen = false,
+                                    imageModel = posterModel,
+                                    surfaceModifier = Modifier
+                                        .testTag(moviePosterTag(movie.id))
+                                        .semantics {
+                                            onClick {
+                                                selectedMovieId = movie.id
+                                                selectedProvider?.stableKey?.let { onOpenDetail(it, movie.stableKey) }
+                                                true
+                                            }
+                                        },
+                                    onFocused = { selectedMovieId = movie.id },
+                                    onClick = {
+                                        selectedMovieId = movie.id
+                                        selectedProvider?.stableKey?.let { onOpenDetail(it, movie.stableKey) }
+                                    },
+                                )
+                            }
+                            if (canLoadMoreMovies) {
+                                item(span = { GridItemSpan(maxLineSpan) }, key = "load-more-movies") {
+                                    ActionPill(
+                                        stringResource(R.string.common_load_more),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { viewModel.onLoadMore() },
+                                    )
                                 }
                             }
                         }
@@ -328,7 +272,7 @@ private fun MovieCategoryColumn(
 }
 
 @Composable
-private fun MovieHero(
+internal fun MovieHero(
     movie: Movie?,
     provider: Provider?,
     backdropModel: Any?,
@@ -359,75 +303,6 @@ private fun MovieHero(
             }
         },
     )
-}
-
-@Composable
-private fun MovieDetailPage(
-    movie: Movie,
-    provider: Provider?,
-    backdropModel: Any?,
-    isFavorite: Boolean,
-    progress: PlaybackProgress?,
-    onOpenPlayer: (Boolean) -> Unit,
-    onToggleFavorite: () -> Unit,
-    onMarkSeen: () -> Unit,
-    onMarkUnseen: () -> Unit,
-    onOpenTrailer: () -> Unit,
-    onClose: () -> Unit,
-    trailerHint: String?,
-) {
-    MovieHero(
-        movie = movie,
-        provider = provider,
-        backdropModel = backdropModel,
-        isFavorite = isFavorite,
-        progress = progress,
-        showActions = false,
-        onOpenPlayer = onOpenPlayer,
-        onToggleFavorite = onToggleFavorite,
-    )
-    val playFromStartStr = stringResource(R.string.movies_play_from_start)
-    val watchedStr = stringResource(R.string.movies_watched)
-    val trailerStr = stringResource(R.string.movies_trailer)
-    val detailsTitleStr = stringResource(R.string.movies_details_title)
-    val typeBadgeStr = stringResource(R.string.movies_type_badge)
-    val noDescStr = stringResource(R.string.movies_no_description)
-    val labelDirector = stringResource(R.string.movies_label_director)
-    val labelCast = stringResource(R.string.movies_label_cast)
-    val labelProgress = stringResource(R.string.movies_label_progress)
-    Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
-        if (progress?.isCompleted == true) {
-            ActionPill(watchedStr, selected = true)
-            ActionPill(playFromStartStr, onClick = { onOpenPlayer(false) })
-        } else if (progress != null) {
-            ActionPill(stringResource(R.string.movies_continue), onClick = { onOpenPlayer(true) })
-            ActionPill(playFromStartStr, onClick = { onOpenPlayer(false) })
-        } else {
-            ActionPill(stringResource(R.string.movies_play), onClick = { onOpenPlayer(false) })
-        }
-        ActionPill(trailerStr, onClick = onOpenTrailer)
-        ActionPill(if (isFavorite) stringResource(R.string.common_favorites) else stringResource(R.string.movies_add_favorite), selected = isFavorite, onClick = onToggleFavorite)
-        if (progress?.isCompleted == true) {
-            ActionPill(stringResource(R.string.movies_mark_unwatched), onClick = onMarkUnseen)
-        } else {
-            ActionPill(stringResource(R.string.movies_mark_watched), onClick = onMarkSeen)
-        }
-        ActionPill(stringResource(R.string.movies_back), onClick = onClose)
-    }
-    InfoPanel(
-        title = detailsTitleStr,
-        body = movie.detailBody(progress, noDescStr, labelDirector, labelCast, labelProgress),
-        badge = if (progress?.isCompleted == true) watchedStr else progress?.let { "${it.progressPercent} %" } ?: typeBadgeStr,
-        modifier = Modifier.fillMaxWidth(),
-    )
-    if (trailerHint != null) {
-        InfoPanel(
-            title = trailerStr,
-            body = trailerHint,
-            badge = "YouTube",
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
 }
 
 private fun specialCategory(providerId: String, id: String, name: String): Category =
@@ -475,7 +350,7 @@ private fun Movie.localizedHeroMeta(): String? = listOfNotNull(
     duration?.takeIf { it > 0L }?.let { stringResource(R.string.movies_duration_min, it / 60L) },
 ).joinToString(" | ").ifBlank { null }
 
-private fun Movie.detailBody(
+internal fun Movie.detailBody(
     progress: PlaybackProgress?,
     noDescFallback: String,
     labelDirector: String = "Regie",
@@ -492,7 +367,7 @@ private fun Movie.detailBody(
         if (progress != null) append("\n$labelProgress: ${progress.progressPercent} %")
     }
 
-private fun openMovieTrailer(context: Context, movie: Movie): Boolean {
+internal fun openMovieTrailer(context: Context, movie: Movie): Boolean {
     val trailerUri = movie.trailerUrl
         ?.takeIf { it.isYouTubeUrl() }
         ?.let(Uri::parse)

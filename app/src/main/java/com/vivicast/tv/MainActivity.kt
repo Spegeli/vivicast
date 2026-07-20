@@ -32,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -131,6 +132,7 @@ import com.vivicast.tv.feature.settings.SettingsThemeMode
 import com.vivicast.tv.feature.settings.SettingsTransparency
 import com.vivicast.tv.feature.home.HomeRoute
 import com.vivicast.tv.feature.livetv.LiveTvRoute
+import com.vivicast.tv.feature.movies.MovieDetailScreen
 import com.vivicast.tv.feature.movies.MoviesRoute
 import com.vivicast.tv.feature.player.PlayerRoute
 import com.vivicast.tv.feature.search.SearchRoute
@@ -138,6 +140,7 @@ import com.vivicast.tv.feature.series.SeriesRoute
 import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.navigation.Home
 import com.vivicast.tv.navigation.LiveTv
+import com.vivicast.tv.navigation.MovieDetail
 import com.vivicast.tv.navigation.MoviesGraph
 import com.vivicast.tv.navigation.MoviesList
 import com.vivicast.tv.navigation.Search
@@ -256,7 +259,6 @@ private fun VivicastApp(
     // (grabs focus into the content, so it doesn't bounce to the Home nav / stay on the top bar).
     var focusLiveChannelSignal by remember { mutableStateOf(0) }
     var liveTvSearchTarget by remember { mutableStateOf<LiveTvSearchTarget?>(null) }
-    var movieSearchTarget by remember { mutableStateOf<Movie?>(null) }
     var seriesSearchTarget by remember { mutableStateOf<SeriesTarget?>(null) }
     var pendingExternalPlaybackRequest by remember { mutableStateOf<PlaybackRequest?>(null) }
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
@@ -501,6 +503,20 @@ private fun VivicastApp(
         }
     }
 
+    // Open a movie's detail destination from an intra-app entry (Search / Home). The Movie carries only its
+    // own stable key, so resolve the provider's; apply the Movies-area protection gate (as the old
+    // selectRoute("movies")), then navigate to the typed detail route under the Movies tab.
+    fun openMovieDetail(movie: Movie) {
+        scope.launch {
+            val providerStableKey = appContainer.providerRepository.observeProviders().first()
+                .firstOrNull { it.id == movie.providerId }?.stableKey ?: return@launch
+            requestProtectionUnlock(pinSecurityState.protectionAreaForRoute("movies"), "movies".protectionTitle(context)) {
+                navigateTab(MoviesGraph)
+                navController.navigate(MovieDetail(providerStableKey, movie.stableKey))
+            }
+        }
+    }
+
     fun launchExternalPlayback(request: PlaybackRequest): Boolean {
         return try {
             appContainer.playerController.stop()
@@ -704,8 +720,8 @@ private fun VivicastApp(
                     .getMovieByStableKeys(providerStableKey, mediaStableKey)
                     ?.let { movie ->
                         requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), context.getString(R.string.main_unlock_movies)) {
-                            movieSearchTarget = movie
-                            selectRoute("movies")
+                            navigateTab(MoviesGraph)
+                            navController.navigate(MovieDetail(providerStableKey, mediaStableKey))
                         }
                         true
                     } == true
@@ -1005,17 +1021,9 @@ private fun VivicastApp(
                 playbackRepository = appContainer.playbackRepository,
                 resolveMoviePosterModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MoviePoster) },
                 resolveMovieBackdropModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MovieBackdrop) },
-                onOpenPlayer = { movie, resumeProgress ->
-                    openMovie(
-                        movie = movie,
-                        resumeProgress = resumeProgress,
-                        origin = PlaybackOrigin.MovieDetail,
-                    )
+                onOpenDetail = { providerStableKey, movieStableKey ->
+                    navController.navigate(MovieDetail(providerStableKey, movieStableKey))
                 },
-                targetProviderId = movieSearchTarget?.providerId,
-                targetCategoryId = movieSearchTarget?.categoryId,
-                targetMovieId = movieSearchTarget?.id,
-                onTargetConsumed = { movieSearchTarget = null },
             )
         },
         AppDestination(strSeries, "series") {
@@ -1044,10 +1052,7 @@ private fun VivicastApp(
                     liveTvSearchTarget = LiveTvSearchTarget(channel = channel)
                     selectRoute("live-tv")
                 },
-                onOpenMovie = { movie ->
-                    movieSearchTarget = movie
-                    selectRoute("movies")
-                },
+                onOpenMovie = { movie -> openMovieDetail(movie) },
                 onOpenSeries = { series ->
                     seriesSearchTarget = series.toSeriesTarget()
                     selectRoute("series")
@@ -1474,6 +1479,10 @@ private fun VivicastApp(
     val selectedIndex = tabRoutes
         .indexOfFirst { route -> currentDestination?.hierarchy?.any { it.hasRoute(route::class) } == true }
         .coerceAtLeast(0)
+    // A tab ROOT (leaf) — detail / sub destinations (MovieDetail, …) are NOT roots, so BACK there pops via
+    // the NavHost (detail → grid) instead of running the tab-root focus-nav / exit policy.
+    val tabRootRoutes = listOf<Any>(Home, LiveTv, MoviesList, SeriesList, Search, Settings)
+    val atTabRoot = tabRootRoutes.any { route -> currentDestination?.hasRoute(route::class) == true }
 
     VivicastScreenBackground(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -1507,6 +1516,19 @@ private fun VivicastApp(
                             composable<LiveTv> { destinations[1].content() }
                             navigation<MoviesGraph>(startDestination = MoviesList) {
                                 composable<MoviesList> { destinations[2].content() }
+                                composable<MovieDetail> { entry ->
+                                    val args = entry.toRoute<MovieDetail>()
+                                    MovieDetailScreen(
+                                        providerStableKey = args.providerStableKey,
+                                        movieStableKey = args.movieStableKey,
+                                        mediaRepository = appContainer.mediaRepository,
+                                        favoritesRepository = appContainer.favoritesRepository,
+                                        playbackRepository = appContainer.playbackRepository,
+                                        resolveMovieBackdropModel = { movie -> appContainer.resolveMovieImageModel(movie, MediaCacheType.MovieBackdrop) },
+                                        onOpenPlayer = { movie, resumeProgress -> openMovie(movie, resumeProgress, origin = PlaybackOrigin.MovieDetail) },
+                                        onBack = { navController.navigateUp() },
+                                    )
+                                }
                             }
                             navigation<SeriesGraph>(startDestination = SeriesList) {
                                 composable<SeriesList> { destinations[3].content() }
@@ -1520,10 +1542,10 @@ private fun VivicastApp(
         }
     }
 
-    // Tab-root BACK: composed AFTER the NavHost so it out-prioritises NavHost's own pop-to-start. In A1 there
-    // are no sub-destinations yet, so every BACK is at a tab root → run the focus-nav / double-back-exit
-    // policy (NOT pop-to-Home). Sub-destination phases (B/D) gate this on an empty tab-internal back stack.
-    BackHandler(enabled = !playerVisible) {
+    // Tab-root BACK: composed AFTER the NavHost so it out-prioritises NavHost's own pop-to-start. It runs the
+    // focus-nav / double-back-exit policy (NOT pop-to-Home) ONLY at a tab root; on a sub-destination
+    // (MovieDetail, …) it is disabled so the NavHost pops detail → grid.
+    BackHandler(enabled = !playerVisible && atTabRoot) {
         if (!topNavigationFocused) {
             topNavigationFocusRequester.requestFocus()
             lastTopNavigationBackAt = 0L
