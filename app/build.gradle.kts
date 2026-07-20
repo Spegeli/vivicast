@@ -80,6 +80,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:logging"))
     implementation(project(":core:network"))
     implementation(project(":core:player"))
     implementation(project(":core:security"))

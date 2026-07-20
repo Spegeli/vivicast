@@ -113,6 +113,7 @@ import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
+import com.vivicast.tv.core.logging.vcLog
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -349,7 +350,7 @@ fun SettingsRoute(
         when {
             openAddPlaylistOnEnter && startSectionEntry.matchesRoute == PlaylistsGraph::class -> {
                 // Deep-link straight into the add-provider form; the editor self-focuses its first field.
-                android.util.Log.d("VCd", "D3 deeplink -> navigate PlaylistEditor(add)")
+                vcLog("playlists") { "D3 deeplink -> navigate PlaylistEditor(add)" }
                 innerNav.navigate(PlaylistEditor())
                 onAddPlaylistApplied()
             }
@@ -544,13 +545,13 @@ fun SettingsRoute(
                                 // actions panel's entry-focus effect sees a stable value, then clear it.
                                 val fromGroups = remember { entry.savedStateHandle.get<Boolean>(FROM_GROUPS_KEY) ?: false }
                                 LaunchedEffect(Unit) {
-                                    android.util.Log.d("VCd", "actions entry fromGroups=$fromGroups")
+                                    vcLog("playlists") { "actions entry fromGroups=$fromGroups" }
                                     entry.savedStateHandle[FROM_GROUPS_KEY] = false
                                 }
                                 // BACK from actions → overview, re-focusing the originating card (the inner
                                 // NavHost's auto-pop can't carry a nav result, so intercept + stash it first).
                                 BackHandler {
-                                    android.util.Log.d("VCd", "actions BACK -> stash focus $providerId + pop")
+                                    vcLog("playlists") { "actions BACK -> stash focus $providerId + pop" }
                                     parkRail()
                                     innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, providerId)
                                     innerNav.popBackStack()
@@ -620,13 +621,13 @@ fun SettingsRoute(
                                         }
                                     },
                                     onSaved = { focusId ->
-                                        android.util.Log.d("VCd", "editor onSaved focus=$focusId + pop")
+                                        vcLog("playlists") { "editor onSaved focus=$focusId + pop" }
                                         parkRail()
                                         innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, focusId)
                                         innerNav.popBackStack()
                                     },
                                     onDeleted = { focusId ->
-                                        android.util.Log.d("VCd", "editor onDeleted focus=$focusId + pop-to-overview")
+                                        vcLog("playlists") { "editor onDeleted focus=$focusId + pop-to-overview" }
                                         parkRail()
                                         innerNav.getBackStackEntry(SecPlaylists).savedStateHandle[PROVIDER_FOCUS_KEY] = focusId
                                         innerNav.popBackStack(SecPlaylists, inclusive = false)

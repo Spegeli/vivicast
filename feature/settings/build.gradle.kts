@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:cache"))
     implementation(project(":core:datastore"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:logging"))
     implementation(project(":data:epg"))
     implementation(project(":data:media"))
     implementation(project(":data:provider"))

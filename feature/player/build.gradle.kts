@@ -30,6 +30,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:designsystem"))
+    implementation(project(":core:logging"))
     implementation(project(":core:player"))
     implementation(project(":data:media"))
     implementation(platform(libs.androidx.compose.bom))

@@ -30,6 +30,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:designsystem"))
+    implementation(project(":core:logging"))
     implementation(project(":data:media"))
     implementation(project(":data:playback"))
     implementation(project(":data:provider"))

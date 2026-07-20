@@ -96,6 +96,7 @@ import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
+import com.vivicast.tv.core.logging.vcLog
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -195,7 +196,7 @@ internal fun ProviderActionsScreen(
     val provider = providers.firstOrNull { it.id == providerId }
     // Observe THIS provider's EPG links so the refresh indicator reflects its own linked EPG refresh.
     LaunchedEffect(providerId) {
-        android.util.Log.d("VCd", "ActionsScreen shown id=$providerId")
+        vcLog("playlists") { "ActionsScreen shown id=$providerId" }
         onSelectEpgProvider(providerId)
     }
     var sourceMode by remember { mutableStateOf(M3uSourceMode.Url) }
@@ -375,7 +376,7 @@ internal fun ProviderEditorScreen(
     // Existing provider: metadata is set synchronously above; load full credentials async (mirrors the old
     // card-open path). Also point the EPG-link observation at this provider.
     LaunchedEffect(providerId) {
-        android.util.Log.d("VCd", "EditorScreen shown id=$providerId (null=add)")
+        vcLog("playlists") { "EditorScreen shown id=$providerId (null=add)" }
         if (providerId != null) {
             onSelectEpgProvider(providerId)
             val credentials = runCatching { onGetProviderCredentials(providerId) }.getOrNull()
@@ -421,11 +422,11 @@ internal fun ProviderEditorScreen(
                 // Save RESTARTS the refresh (REPLACE) so the actions group button stays gated until import finishes.
                 onRefreshProvider(saved.provider.id)
                 if (saved.provider.type == ProviderType.Xtream && sourceChanged) onXtreamProviderSaved(saved.provider.id)
-                android.util.Log.d("VCd", "editor persist OK id=${saved.provider.id} isEditing=${editor.isEditing}")
+                vcLog("playlists") { "editor persist OK id=${saved.provider.id} isEditing=${editor.isEditing}" }
                 onSaved(saved.provider.id)
             }
             .onFailure { error ->
-                android.util.Log.d("VCd", "editor persist FAIL: ${error.message}")
+                vcLog("playlists") { "editor persist FAIL: ${error.message}" }
                 message = strProviderSaveFailed.format(error.message ?: "?")
             }
     }
@@ -618,13 +619,13 @@ private fun ProviderOverviewPanel(
                 OverviewFocusTarget.AddButton -> addRequester
             }
             if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
-                android.util.Log.d("VCd", "overview focus-return $target -> landed")
+                vcLog("playlists") { "overview focus-return $target -> landed" }
                 onFocusHandled()
                 return@LaunchedEffect
             }
         }
         // Target card never rendered in time → add button, so focus can't orphan upward.
-        android.util.Log.d("VCd", "overview focus-return $target -> FALLBACK add (card never rendered)")
+        vcLog("playlists") { "overview focus-return $target -> FALLBACK add (card never rendered)" }
         runCatching { addRequester.requestFocus() }
         onFocusHandled()
     }
