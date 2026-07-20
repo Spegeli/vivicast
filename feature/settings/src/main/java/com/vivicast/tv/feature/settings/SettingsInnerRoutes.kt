@@ -19,10 +19,20 @@ import kotlinx.serialization.Serializable
 
 @Serializable internal object SecGeneral
 
-/** Playlists section: nested graph holding the overview + (later) the provider editor/actions/groups. */
+/** Playlists section: nested graph holding the overview + the provider actions / editor / groups screens. */
 @Serializable internal object PlaylistsGraph
 
+/** Playlists overview (provider list + add / refresh-all). */
 @Serializable internal object SecPlaylists
+
+/** Per-provider actions menu (edit / test / refresh / manage groups / delete). */
+@Serializable internal data class PlaylistActions(val providerId: String)
+
+/** Provider add/edit form. [providerId] null = add a new provider. Self-contained: loads its own draft. */
+@Serializable internal data class PlaylistEditor(val providerId: String? = null)
+
+/** Category-group management ("Gruppen verwalten") for a provider. */
+@Serializable internal data class PlaylistGroups(val providerId: String)
 
 @Serializable internal object SecEpg
 

@@ -65,6 +65,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.vivicast.tv.core.cache.MediaCacheStore
 import com.vivicast.tv.core.datastore.UserPreferencesStore
 import com.vivicast.tv.core.designsystem.ActionPill
@@ -118,6 +119,10 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 import kotlin.reflect.KClass
+
+// Nav-result key: a Playlists sub-view (actions/editor) stashes the provider id (or OVERVIEW_FOCUS_ADD) on
+// the entry it pops back to, so the overview re-focuses the originating card. Replaces the old pendingOverviewFocus.
+private const val PROVIDER_FOCUS_KEY = "provider_focus"
 
 // Rail item OK: re-selecting the current section collapses its open sub-view; a different section
 // switches. Kept top-level so the branch doesn't count toward SettingsRoute's complexity gate.
@@ -478,102 +483,151 @@ fun SettingsRoute(
                             focusLanguageInsteadOfFirst = focusLanguageRowOnEnter,
                         ) }
                         navigation<PlaylistsGraph>(startDestination = SecPlaylists) {
-                            composable<SecPlaylists> { ProviderSettingsPanel(
-                            providers = settingsUiState.providers,
-                            onGetProviderCredentials = viewModel::getProviderCredentials,
-                            onGetProviderM3uContent = viewModel::getProviderM3uInlineContent,
-                            onCreateProvider = viewModel::createProvider,
-                            onUpdateProvider = viewModel::updateProvider,
-                            onSetProviderEnabled = viewModel::setProviderEnabled,
-                            onDeleteProvider = { id ->
-                                val start = System.currentTimeMillis()
-                                viewModel.deleteProvider(id).also {
-                                    if (it.isSuccess) onLogProviderDeleted(id, System.currentTimeMillis() - start)
+                            composable<SecPlaylists> { entry ->
+                                val focusProvider by entry.savedStateHandle
+                                    .getStateFlow<String?>(PROVIDER_FOCUS_KEY, null)
+                                    .collectAsStateWithLifecycle()
+                                ProviderOverviewScreen(
+                                    providers = settingsUiState.providers,
+                                    epgSources = settingsUiState.epgSources,
+                                    onGetProviderCredentials = viewModel::getProviderCredentials,
+                                    onProviderSaved = onProviderSaved,
+                                    onAddProvider = { innerNav.navigate(PlaylistEditor()) },
+                                    onOpenProvider = { id -> innerNav.navigate(PlaylistActions(id)) },
+                                    pendingFocusProviderId = focusProvider,
+                                    onFocusHandled = { entry.savedStateHandle[PROVIDER_FOCUS_KEY] = null },
+                                    firstFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<PlaylistActions> { entry ->
+                                val providerId = entry.toRoute<PlaylistActions>().providerId
+                                // BACK from actions → overview, re-focusing the originating card (the inner
+                                // NavHost's auto-pop can't carry a nav result, so intercept + stash it first).
+                                BackHandler {
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, providerId)
+                                    innerNav.popBackStack()
                                 }
-                            },
-                            onTestProviderConnection = onTestProviderConnection,
-                            onPickM3uFile = onPickM3uFile,
-                            onProviderSaved = onProviderSaved,
-                            onRefreshProvider = onRefreshProvider,
-                            onXtreamProviderSaved = onXtreamProviderSaved,
-                            groupsControls = ProviderGroupsControls(
-                                activeType = settingsUiState.manageGroupsType,
-                                groups = settingsUiState.manageGroups,
-                                settings = settingsUiState.manageGroupSettings,
-                                onOpen = viewModel::onManageGroups,
-                                onClose = viewModel::onCloseManageGroups,
-                                onSelectType = viewModel::onManageGroupsTypeSelected,
-                                onToggleHidden = { categoryId, hidden ->
-                                    onLogGroupEvent(if (hidden) "group_hidden" else "group_shown", mapOf("target" to categoryId))
-                                    routeScope.launch { viewModel.setGroupHidden(categoryId, hidden) }
-                                },
-                                onSetAllHidden = { providerId, type, hidden ->
-                                    onLogGroupEvent(
-                                        if (hidden) "groups_bulk_hidden" else "groups_bulk_shown",
-                                        mapOf("type" to type.name, "count" to settingsUiState.manageGroups.size.toString()),
-                                    )
-                                    routeScope.launch { viewModel.setAllGroupsHidden(providerId, type, hidden) }
-                                },
-                                onReorder = { ids ->
-                                    onLogGroupEvent(
-                                        "group_reordered",
-                                        mapOf("type" to settingsUiState.manageGroupsType.name, "count" to ids.size.toString()),
-                                    )
-                                    routeScope.launch { viewModel.reorderGroups(ids) }
-                                },
-                                onResetOrder = { providerId, type ->
-                                    onLogGroupEvent("group_order_reset", mapOf("type" to type.name))
-                                    routeScope.launch { viewModel.resetGroupOrder(providerId, type) }
-                                },
-                                onSetSortMode = { providerId, type, mode ->
-                                    onLogGroupEvent("sort_mode_changed", mapOf("type" to type.name, "mode" to mode.name))
-                                    routeScope.launch { viewModel.setGroupSortMode(providerId, type, mode) }
-                                },
-                                onSetHideNewGroups = { providerId, type, hidden ->
-                                    onLogGroupEvent(
-                                        "new_groups_policy_changed",
-                                        mapOf("type" to type.name, "policy" to if (hidden) "hidden" else "shown"),
-                                    )
-                                    routeScope.launch { viewModel.setHideNewGroups(providerId, type, hidden) }
-                                },
-                            ),
-                            onLogProviderSaved = onLogProviderSaved,
-                            epgSources = settingsUiState.epgSources,
-                            providerEpgLinks = settingsUiState.providerEpgLinks,
-                            onSelectEpgProvider = viewModel::onEpgProviderSelected,
-                            onToggleEpgLink = { providerId, sourceId, link ->
-                                routeScope.launch {
-                                    if (link) {
-                                        // #32: priority is computed atomically in the repo (fresh DB read), not from
-                                        // this StateFlow snapshot, so two quick presses can't collide + drop a link.
-                                        viewModel.linkEpgSourceToProvider(providerId, sourceId).onSuccess {
-                                            onLogEpgEvent("source_linked", mapOf("target" to providerId, "source" to sourceId))
+                                ProviderActionsScreen(
+                                    providerId = providerId,
+                                    providers = settingsUiState.providers,
+                                    epgSources = settingsUiState.epgSources,
+                                    providerEpgLinks = settingsUiState.providerEpgLinks,
+                                    onGetProviderCredentials = viewModel::getProviderCredentials,
+                                    onGetProviderM3uContent = viewModel::getProviderM3uInlineContent,
+                                    onTestProviderConnection = onTestProviderConnection,
+                                    onRefreshProvider = onRefreshProvider,
+                                    onDeleteProvider = viewModel::deleteProvider,
+                                    onLogProviderDeleted = onLogProviderDeleted,
+                                    onSelectEpgProvider = viewModel::onEpgProviderSelected,
+                                    onEdit = { innerNav.navigate(PlaylistEditor(providerId)) },
+                                    onManageGroups = { innerNav.navigate(PlaylistGroups(providerId)) },
+                                    onDeleted = { focusId ->
+                                        innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, focusId)
+                                        innerNav.popBackStack()
+                                    },
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<PlaylistEditor> { entry ->
+                                ProviderEditorScreen(
+                                    providerId = entry.toRoute<PlaylistEditor>().providerId,
+                                    providers = settingsUiState.providers,
+                                    epgSources = settingsUiState.epgSources,
+                                    providerEpgLinks = settingsUiState.providerEpgLinks,
+                                    onGetProviderCredentials = viewModel::getProviderCredentials,
+                                    onGetProviderM3uContent = viewModel::getProviderM3uInlineContent,
+                                    onCreateProvider = viewModel::createProvider,
+                                    onUpdateProvider = viewModel::updateProvider,
+                                    onSetProviderEnabled = viewModel::setProviderEnabled,
+                                    onDeleteProvider = viewModel::deleteProvider,
+                                    onTestProviderConnection = onTestProviderConnection,
+                                    onPickM3uFile = onPickM3uFile,
+                                    onRefreshProvider = onRefreshProvider,
+                                    onXtreamProviderSaved = onXtreamProviderSaved,
+                                    onLogProviderSaved = onLogProviderSaved,
+                                    onLogProviderDeleted = onLogProviderDeleted,
+                                    onSelectEpgProvider = viewModel::onEpgProviderSelected,
+                                    onToggleEpgLink = { pid, sourceId, link ->
+                                        routeScope.launch {
+                                            if (link) {
+                                                viewModel.linkEpgSourceToProvider(pid, sourceId).onSuccess {
+                                                    onLogEpgEvent("source_linked", mapOf("target" to pid, "source" to sourceId))
+                                                }
+                                            } else {
+                                                viewModel.unlinkEpgSourceFromProvider(pid, sourceId).onSuccess {
+                                                    onLogEpgEvent("source_unlinked", mapOf("target" to pid, "source" to sourceId))
+                                                }
+                                            }
                                         }
-                                    } else {
-                                        viewModel.unlinkEpgSourceFromProvider(providerId, sourceId).onSuccess {
-                                            onLogEpgEvent("source_unlinked", mapOf("target" to providerId, "source" to sourceId))
+                                    },
+                                    onReorderEpgLink = { pid, orderedIds ->
+                                        routeScope.launch {
+                                            viewModel.reorderEpgSourcesForProvider(pid, orderedIds).onSuccess {
+                                                onLogEpgEvent("priority_reordered", mapOf("target" to pid, "count" to orderedIds.size.toString(), "order" to orderedIds.joinToString(",")))
+                                            }
                                         }
-                                    }
-                                }
-                            },
-                            onReorderEpgLink = { providerId, orderedIds ->
-                                routeScope.launch {
-                                    viewModel.reorderEpgSourcesForProvider(providerId, orderedIds).onSuccess {
-                                        onLogEpgEvent(
-                                            "priority_reordered",
-                                            mapOf("target" to providerId, "count" to orderedIds.size.toString(), "order" to orderedIds.joinToString(",")),
-                                        )
-                                    }
-                                }
-                            },
-                            firstFocusModifier = detailFirstFocusModifier,
-                            // Park focus on the (always-present) section button before the overview
-                            // swaps to the inline editor, so focus can't escape to the top nav bar.
-                            onParkFocusBeforeEditor = {
-                                runCatching { sectionFocusRequesters.getValue(sectionPlaylists).requestFocus() }
-                            },
-                            collapseSubViewSignal = collapseSubViewSignal,
-                        ) }
+                                    },
+                                    onSaved = { focusId ->
+                                        innerNav.previousBackStackEntry?.savedStateHandle?.set(PROVIDER_FOCUS_KEY, focusId)
+                                        innerNav.popBackStack()
+                                    },
+                                    onDeleted = { focusId ->
+                                        innerNav.getBackStackEntry(SecPlaylists).savedStateHandle[PROVIDER_FOCUS_KEY] = focusId
+                                        innerNav.popBackStack(SecPlaylists, inclusive = false)
+                                    },
+                                    onCancel = { innerNav.popBackStack() },
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<PlaylistGroups> { entry ->
+                                ProviderGroupsScreen(
+                                    providerId = entry.toRoute<PlaylistGroups>().providerId,
+                                    providers = settingsUiState.providers,
+                                    groupsControls = ProviderGroupsControls(
+                                        activeType = settingsUiState.manageGroupsType,
+                                        groups = settingsUiState.manageGroups,
+                                        settings = settingsUiState.manageGroupSettings,
+                                        onOpen = viewModel::onManageGroups,
+                                        onClose = viewModel::onCloseManageGroups,
+                                        onSelectType = viewModel::onManageGroupsTypeSelected,
+                                        onToggleHidden = { categoryId, hidden ->
+                                            onLogGroupEvent(if (hidden) "group_hidden" else "group_shown", mapOf("target" to categoryId))
+                                            routeScope.launch { viewModel.setGroupHidden(categoryId, hidden) }
+                                        },
+                                        onSetAllHidden = { pid, type, hidden ->
+                                            onLogGroupEvent(
+                                                if (hidden) "groups_bulk_hidden" else "groups_bulk_shown",
+                                                mapOf("type" to type.name, "count" to settingsUiState.manageGroups.size.toString()),
+                                            )
+                                            routeScope.launch { viewModel.setAllGroupsHidden(pid, type, hidden) }
+                                        },
+                                        onReorder = { ids ->
+                                            onLogGroupEvent("group_reordered", mapOf("type" to settingsUiState.manageGroupsType.name, "count" to ids.size.toString()))
+                                            routeScope.launch { viewModel.reorderGroups(ids) }
+                                        },
+                                        onResetOrder = { pid, type ->
+                                            onLogGroupEvent("group_order_reset", mapOf("type" to type.name))
+                                            routeScope.launch { viewModel.resetGroupOrder(pid, type) }
+                                        },
+                                        onSetSortMode = { pid, type, mode ->
+                                            onLogGroupEvent("sort_mode_changed", mapOf("type" to type.name, "mode" to mode.name))
+                                            routeScope.launch { viewModel.setGroupSortMode(pid, type, mode) }
+                                        },
+                                        onSetHideNewGroups = { pid, type, hidden ->
+                                            onLogGroupEvent(
+                                                "new_groups_policy_changed",
+                                                mapOf("type" to type.name, "policy" to if (hidden) "hidden" else "shown"),
+                                            )
+                                            routeScope.launch { viewModel.setHideNewGroups(pid, type, hidden) }
+                                        },
+                                    ),
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                         composable<SecEpg> { EpgSettingsPanel(
                             state = settingsUiState.epg,

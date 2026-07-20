@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,78 +101,239 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
+
+// ---------------------------------------------------------------------------------------------------------
+// Playlists sub-views as self-contained inner-nav destination screens (D2). Split out of the former single
+// ProviderSettingsPanel: each owns its own state; the inner NavHost's back stack replaces the old shared
+// showEditor/showGroups/actionsProviderId booleans + focus-park + collapseSubViewSignal. Focus-return to the
+// originating overview card is carried as a nav result (see SettingsRoute's PlaylistsGraph wiring).
+// ---------------------------------------------------------------------------------------------------------
+
+/** Nav-result sentinel: overview should focus the "Add playlist" row (after an add, or deleting the last). */
+internal const val OVERVIEW_FOCUS_ADD = "__add_button__"
+
 @Composable
-internal fun ProviderSettingsPanel(
+internal fun ProviderOverviewScreen(
     providers: List<Provider>,
+    epgSources: List<EpgSource>,
     onGetProviderCredentials: suspend (String) -> ProviderCredentials?,
-    onGetProviderM3uContent: suspend (String) -> String? = { null },
+    onProviderSaved: (String) -> Unit,
+    onAddProvider: () -> Unit,
+    onOpenProvider: (String) -> Unit,
+    pendingFocusProviderId: String?,
+    onFocusHandled: () -> Unit,
+    firstFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    var providerSourceModes by remember { mutableStateOf<Map<String, M3uSourceMode>>(emptyMap()) }
+    LaunchedEffect(providers) {
+        providerSourceModes = providers
+            .associateWith { runCatching { onGetProviderCredentials(it.id) }.getOrNull() }
+            .mapNotNull { (provider, credentials) ->
+                (credentials as? ProviderCredentials.M3u)?.let { provider.id to it.sourceMode }
+            }
+            .toMap()
+    }
+    // Focus-return target when popping back from actions/editor (null on a fresh section entry, so focus stays
+    // on the rail until RIGHT). OVERVIEW_FOCUS_ADD => the add row; any other id => that provider's card.
+    val pendingFocus = remember(pendingFocusProviderId) {
+        when (pendingFocusProviderId) {
+            null -> null
+            OVERVIEW_FOCUS_ADD -> OverviewFocusTarget.AddButton
+            else -> OverviewFocusTarget.Card(pendingFocusProviderId)
+        }
+    }
+    ProviderOverviewPanel(
+        providers = providers,
+        providerSourceModes = providerSourceModes,
+        message = null,
+        firstFocusModifier = firstFocusModifier,
+        onAddProvider = onAddProvider,
+        onRefreshAll = {
+            scope.launch {
+                providers
+                    .filter { it.isActive && onGetProviderCredentials(it.id) != null }
+                    .forEach { onProviderSaved(it.id) }
+            }
+        },
+        globalRefreshLabel = when {
+            providers.any { it.status == ProviderStatus.Refreshing } ->
+                stringResource(R.string.settings_provider_action_refreshing_playlist)
+            epgSources.any { it.isRefreshing } ->
+                stringResource(R.string.settings_provider_action_refreshing_epg)
+            else -> null
+        },
+        onOpenProvider = { onOpenProvider(it.id) },
+        pendingFocus = pendingFocus,
+        onFocusHandled = onFocusHandled,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun ProviderActionsScreen(
+    providerId: String,
+    providers: List<Provider>,
+    epgSources: List<EpgSource>,
+    providerEpgLinks: List<ProviderEpgSource>,
+    onGetProviderCredentials: suspend (String) -> ProviderCredentials?,
+    onGetProviderM3uContent: suspend (String) -> String?,
+    onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
+    onRefreshProvider: (String) -> Unit,
+    onDeleteProvider: suspend (String) -> Result<Unit>,
+    onLogProviderDeleted: (String, Long) -> Unit,
+    onSelectEpgProvider: (String) -> Unit,
+    onEdit: () -> Unit,
+    onManageGroups: () -> Unit,
+    onDeleted: (focusProviderId: String) -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    val provider = providers.firstOrNull { it.id == providerId }
+    // Observe THIS provider's EPG links so the refresh indicator reflects its own linked EPG refresh.
+    LaunchedEffect(providerId) { onSelectEpgProvider(providerId) }
+    var sourceMode by remember { mutableStateOf(M3uSourceMode.Url) }
+    LaunchedEffect(providerId) {
+        sourceMode = (runCatching { onGetProviderCredentials(providerId) }.getOrNull() as? ProviderCredentials.M3u)
+            ?.sourceMode ?: M3uSourceMode.Url
+    }
+    var testStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    var testSummary by remember { mutableStateOf<ContentSummary?>(null) }
+    var testError by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf(false) }
+    if (provider == null) return
+    ProviderActionsPanel(
+        provider = provider,
+        sourceMode = sourceMode,
+        isRefreshing = provider.status == ProviderStatus.Refreshing ||
+            providerEpgLinks.any { link ->
+                link.providerId == provider.id && epgSources.any { it.id == link.epgSourceId && it.isRefreshing }
+            },
+        refreshingLabel = if (provider.status == ProviderStatus.Refreshing) {
+            stringResource(R.string.settings_provider_action_refreshing_playlist)
+        } else {
+            stringResource(R.string.settings_provider_action_refreshing_epg)
+        },
+        testStatus = testStatus,
+        testSummary = testSummary,
+        testError = testError,
+        onEdit = onEdit,
+        onTestConnection = {
+            if (testStatus != ConnectionTestStatus.Testing) {
+                testStatus = ConnectionTestStatus.Testing
+                testSummary = null
+                testError = null
+                scope.launch {
+                    val creds = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
+                    val request = ProviderEditorState.from(provider, creds).resolveTestRequest(onGetProviderM3uContent)
+                    val result = onTestProviderConnection(request)
+                    if (result.errorMessage == null) {
+                        testStatus = ConnectionTestStatus.Passed
+                        testSummary = result.summary
+                    } else {
+                        testStatus = ConnectionTestStatus.Failed
+                        testError = result.errorMessage
+                    }
+                }
+            }
+        },
+        onRefresh = { onRefreshProvider(provider.id) },
+        onManageGroups = onManageGroups,
+        onDelete = { pendingDelete = true },
+        entryFocusModifier = entryFocusModifier,
+        modifier = modifier,
+    )
+    if (pendingDelete) {
+        DeleteProviderDialog(
+            provider = provider,
+            onCancel = { pendingDelete = false },
+            onDelete = {
+                scope.launch {
+                    val start = System.currentTimeMillis()
+                    val index = providers.indexOfFirst { it.id == provider.id }
+                    val neighborId = providers.getOrNull(index + 1)?.id ?: providers.getOrNull(index - 1)?.id
+                    onDeleteProvider(provider.id)
+                        .onSuccess {
+                            onLogProviderDeleted(provider.id, System.currentTimeMillis() - start)
+                            pendingDelete = false
+                            onDeleted(neighborId ?: OVERVIEW_FOCUS_ADD)
+                        }
+                        // ponytail: on the rare delete failure just close the dialog; the playlist stays in
+                        // the list (nothing removed) — no toast plumbing in this screen.
+                        .onFailure { pendingDelete = false }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+internal fun ProviderGroupsScreen(
+    providerId: String,
+    providers: List<Provider>,
+    groupsControls: ProviderGroupsControls,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    // Open group management for this provider while shown; close when it leaves composition (BACK/pop).
+    DisposableEffect(providerId) {
+        groupsControls.onOpen(providerId)
+        onDispose { groupsControls.onClose() }
+    }
+    val provider = providers.firstOrNull { it.id == providerId } ?: return
+    ProviderGroupsPanel(
+        activeType = groupsControls.activeType,
+        groups = groupsControls.groups,
+        settings = groupsControls.settings,
+        typeIncluded = when (groupsControls.activeType) {
+            CategoryType.LiveTv -> provider.includeLiveTv
+            CategoryType.Movies -> provider.includeMovies
+            CategoryType.Series -> provider.includeSeries
+        },
+        onSelectType = groupsControls.onSelectType,
+        onToggleGroupHidden = groupsControls.onToggleHidden,
+        onSetAllHidden = { hidden -> groupsControls.onSetAllHidden(provider.id, groupsControls.activeType, hidden) },
+        onReorder = groupsControls.onReorder,
+        onResetOrder = { groupsControls.onResetOrder(provider.id, groupsControls.activeType) },
+        onSetSortMode = { mode -> groupsControls.onSetSortMode(provider.id, groupsControls.activeType, mode) },
+        onSetHideNewGroups = { hidden -> groupsControls.onSetHideNewGroups(provider.id, groupsControls.activeType, hidden) },
+        entryFocusModifier = entryFocusModifier,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun ProviderEditorScreen(
+    providerId: String?,
+    providers: List<Provider>,
+    epgSources: List<EpgSource>,
+    providerEpgLinks: List<ProviderEpgSource>,
+    onGetProviderCredentials: suspend (String) -> ProviderCredentials?,
+    onGetProviderM3uContent: suspend (String) -> String?,
     onCreateProvider: suspend (ProviderCreateRequest) -> Result<ProviderSaveResult>,
     onUpdateProvider: suspend (ProviderUpdateRequest) -> Result<ProviderSaveResult>,
     onSetProviderEnabled: suspend (String, Boolean) -> Result<Unit>,
     onDeleteProvider: suspend (String) -> Result<Unit>,
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
-    onPickM3uFile: ((String, String) -> Unit) -> Unit = {},
-    onProviderSaved: (String) -> Unit,
-    // Per-playlist refresh that RESTARTS an in-flight run (REPLACE): the save + the actions-menu
-    // "Aktualisieren". Distinct from onProviderSaved (KEEP), which stays the refresh-all path. See R10.
-    onRefreshProvider: (String) -> Unit = {},
-    // Fired once after a save that yields an Xtream provider whose source actually changed (new /
-    // type-switch / credential edit). App-hoisted: probes the companion xmltv.php EPG and auto-creates a
-    // linked EPG source. No-op for M3U or a pure metadata edit (unchanged credentials).
-    onXtreamProviderSaved: (String) -> Unit = {},
-    // Group-management state + callbacks (from the ViewModel via SettingsRoute) for "Gruppen verwalten".
-    groupsControls: ProviderGroupsControls = ProviderGroupsControls(),
-    // Sanitized diagnostics on save: source descriptor ("M3U_URL"/"M3U_FILE"/"XTREAM") + the previous type
-    // name if the edit switched type (null otherwise). No secrets/URLs.
-    onLogProviderSaved: (descriptor: String, switchedFromType: String?) -> Unit = { _, _ -> },
-    epgSources: List<EpgSource> = emptyList(),
-    providerEpgLinks: List<ProviderEpgSource> = emptyList(),
-    onSelectEpgProvider: (String) -> Unit = {},
-    onToggleEpgLink: (providerId: String, sourceId: String, link: Boolean) -> Unit = { _, _, _ -> },
-    onReorderEpgLink: (providerId: String, orderedSourceIds: List<String>) -> Unit = { _, _ -> },
-    firstFocusModifier: Modifier = Modifier,
-    onParkFocusBeforeEditor: () -> Unit = {},
-    // Bumped when OK is pressed on the already-selected rail section: collapse the open editor back to
-    // the overview. Focus stays on the rail (no park / overview-focus); the draft is discarded.
-    collapseSubViewSignal: Int = 0,
+    onPickM3uFile: (((String, String) -> Unit)) -> Unit,
+    onRefreshProvider: (String) -> Unit,
+    onXtreamProviderSaved: (String) -> Unit,
+    onLogProviderSaved: (String, String?) -> Unit,
+    onLogProviderDeleted: (String, Long) -> Unit,
+    onSelectEpgProvider: (String) -> Unit,
+    onToggleEpgLink: (String, String, Boolean) -> Unit,
+    onReorderEpgLink: (String, List<String>) -> Unit,
+    onSaved: (focusProviderId: String) -> Unit,
+    onDeleted: (focusProviderId: String) -> Unit,
+    onCancel: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var selectedProviderId by remember { mutableStateOf<String?>(null) }
-    var editor by remember { mutableStateOf(ProviderEditorState.newProvider(ProviderType.M3u)) }
-    var showEditor by remember { mutableStateOf(false) }
-    // Intermediate "Playlist-Aktionen" view (design screen 08). Layered under showEditor: clicking a card
-    // opens actions; "Bearbeiten" raises the editor over it; Save/Back drops the editor back to actions.
-    // null = not in the actions/editor stack for a specific playlist (the add flow keeps this null).
-    var actionsProviderId by remember { mutableStateOf<String?>(null) }
-    // Layered over actions: "Gruppen verwalten" opens the group panel (a peer of the editor under actions).
-    var showGroups by remember { mutableStateOf(false) }
-    // True only right after Back from group management → the actions menu re-focuses its "Gruppen verwalten"
-    // row (the origin) instead of the first action. Reset on every other actions entry.
-    var returnedFromGroups by remember { mutableStateOf(false) }
-    // Actions-menu "Verbindung prüfen" result (independent of the editor's own test state).
-    var actionsTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
-    var actionsTestSummary by remember { mutableStateOf<ContentSummary?>(null) }
-    var actionsTestError by remember { mutableStateOf<String?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var pendingDelete by remember { mutableStateOf<Provider?>(null) }
-    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
-    // M3U content breakdown from the last passed test — previews the URL just like the file check.
-    var connectionSummary by remember { mutableStateOf<ContentSummary?>(null) }
-    // Reason a test failed, shown as a red hint under the source fields (never a note).
-    var connectionError by remember { mutableStateOf<String?>(null) }
-    // Where focus should land once the overview returns after leaving the inline editor.
-    var pendingOverviewFocus by remember { mutableStateOf<OverviewFocusTarget?>(null) }
-    // Save-time test failure → confirm dialog ("Korrigieren" / force-save). Only on Save, never a note.
-    var pendingSaveTestFailure by remember { mutableStateOf(false) }
-    // Source confirmation on Save: add mode ("saved as X") or an edit that switches type/mode.
-    var pendingSourceConfirm by remember { mutableStateOf(false) }
-    // Bumped to make ProviderEditor jump focus to the source field (manual-test fail / "Korrigieren").
-    var focusSourceSignal by remember { mutableStateOf(0) }
-    // Save in progress (test + write): drives the Save-button spinner; the test button stays idle.
-    var saving by remember { mutableStateOf(false) }
     val strProviderSaveFailed = stringResource(R.string.settings_provider_msg_save_failed)
     val strProviderDeleteFailed = stringResource(R.string.settings_provider_msg_delete_failed)
-    val strProviderSectionBody = stringResource(R.string.settings_provider_section_body)
     val strValidationNameMissing = stringResource(R.string.validation_name_missing)
     val strValidationContentType = stringResource(R.string.validation_content_type_required)
     val strValidationXtreamServer = stringResource(R.string.validation_xtream_server_missing)
@@ -189,37 +351,45 @@ internal fun ProviderSettingsPanel(
         strValidationM3uUrl, strValidationM3uFile,
     )
 
-    LaunchedEffect(providers) {
-        val selectedProvider = selectedProviderId?.let { id -> providers.firstOrNull { it.id == id } }
-        if (selectedProvider == null && selectedProviderId != null) {
-            selectedProviderId = null
-            actionsProviderId = null
-            showGroups = false
-            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-            showEditor = false
+    var editor by remember(providerId) {
+        mutableStateOf(
+            providers.firstOrNull { it.id == providerId }?.let { ProviderEditorState.from(it) }
+                ?: ProviderEditorState.newProvider(ProviderType.M3u),
+        )
+    }
+    var message by remember { mutableStateOf<String?>(null) }
+    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    var connectionSummary by remember { mutableStateOf<ContentSummary?>(null) }
+    var connectionError by remember { mutableStateOf<String?>(null) }
+    var pendingSaveTestFailure by remember { mutableStateOf(false) }
+    var pendingSourceConfirm by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf(false) }
+    var focusSourceSignal by remember { mutableStateOf(0) }
+    var saving by remember { mutableStateOf(false) }
+
+    // Existing provider: metadata is set synchronously above; load full credentials async (mirrors the old
+    // card-open path). Also point the EPG-link observation at this provider.
+    LaunchedEffect(providerId) {
+        if (providerId != null) {
+            onSelectEpgProvider(providerId)
+            val credentials = runCatching { onGetProviderCredentials(providerId) }.getOrNull()
+            val provider = providers.firstOrNull { it.id == providerId }
+            if (provider != null) editor = ProviderEditorState.from(provider, credentials)
         }
     }
-
-    val duplicateName = isDuplicateNameOf(editor.name, editor.providerId, providers, { it.id }, { it.name })
-
+    // Duplicate-URL index (other M3U-URL providers) for the inline hint.
     var existingM3uUrls by remember { mutableStateOf<List<ProviderUrlEntry>>(emptyList()) }
-    // Per-provider M3U source mode, for the overview badge ("M3U URL" vs "M3U Datei"). Loaded from the
-    // (now cheap) credentials in the same pass as the duplicate-URL index.
-    var providerSourceModes by remember { mutableStateOf<Map<String, M3uSourceMode>>(emptyMap()) }
     LaunchedEffect(providers) {
-        val credentialsById = providers.associateWith { runCatching { onGetProviderCredentials(it.id) }.getOrNull() }
-        existingM3uUrls = credentialsById.mapNotNull { (provider, credentials) ->
-            (credentials as? ProviderCredentials.M3u)
-                ?.takeIf { it.sourceMode == M3uSourceMode.Url }
-                ?.url
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?.let { ProviderUrlEntry(provider.id, normalizeSourceUrl(it), provider.name) }
-        }
-        providerSourceModes = credentialsById.mapNotNull { (provider, credentials) ->
-            (credentials as? ProviderCredentials.M3u)?.let { provider.id to it.sourceMode }
-        }.toMap()
+        existingM3uUrls = providers
+            .associateWith { runCatching { onGetProviderCredentials(it.id) }.getOrNull() }
+            .mapNotNull { (provider, credentials) ->
+                (credentials as? ProviderCredentials.M3u)
+                    ?.takeIf { it.sourceMode == M3uSourceMode.Url }
+                    ?.url?.trim()?.takeIf { it.isNotBlank() }
+                    ?.let { ProviderUrlEntry(provider.id, normalizeSourceUrl(it), provider.name) }
+            }
     }
+    val duplicateName = isDuplicateNameOf(editor.name, editor.providerId, providers, { it.id }, { it.name })
     val duplicateUrlName = if (editor.type == ProviderType.M3u &&
         editor.m3uSourceMode == M3uSourceMode.Url && editor.m3uUrl.isNotBlank()
     ) {
@@ -229,147 +399,11 @@ internal fun ProviderSettingsPanel(
         null
     }
 
-    if (!showEditor && actionsProviderId == null) Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4), modifier = Modifier.fillMaxSize()) {
-        ProviderOverviewPanel(
-            providers = providers,
-            providerSourceModes = providerSourceModes,
-            message = message,
-            firstFocusModifier = firstFocusModifier,
-            onAddProvider = {
-                // Park focus on the (always-present) section button before the overview — and with it
-                // the focused add row — is removed, else focus escapes to the top nav bar (jumps Home).
-                onParkFocusBeforeEditor()
-                selectedProviderId = null
-                editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                showEditor = true
-                message = null
-                connectionTestStatus = ConnectionTestStatus.Idle
-                connectionSummary = null
-                connectionError = null
-                focusSourceSignal = 0
-                saving = false
-            },
-            onRefreshAll = {
-                scope.launch {
-                    // No "any refreshing → skip" guard: enqueuePlaylistRefresh uses KEEP, so a genuinely
-                    // in-flight provider coalesces (no-op) while a stuck/idle one still starts. A single
-                    // stuck-"Refreshing" provider must not block refreshing everything else.
-                    // Every active provider with resolvable credentials — including File playlists, which
-                    // re-import their stored content (rebuilds catalog + EPG mappings).
-                    val refreshableProviders = providers.filter { provider ->
-                        provider.isActive && onGetProviderCredentials(provider.id) != null
-                    }
-                    refreshableProviders.forEach { provider -> onProviderSaved(provider.id) }
-                }
-            },
-            // Cross-lock: any playlist OR EPG refresh locks the button. Playlist-first label priority —
-            // during the auto-chain the playlist refresh leads, then the EPG refresh it enqueues.
-            globalRefreshLabel = when {
-                providers.any { it.status == ProviderStatus.Refreshing } ->
-                    stringResource(R.string.settings_provider_action_refreshing_playlist)
-                epgSources.any { it.isRefreshing } ->
-                    stringResource(R.string.settings_provider_action_refreshing_epg)
-                else -> null
-            },
-            onOpenProvider = { provider ->
-                // Card click opens the intermediate actions menu (not the editor). Editing is a separate
-                // action from there, so the menu — and group management — never sees an unsaved source draft.
-                // Park focus off the card (about to be removed) so focus doesn't escape to the top nav bar.
-                onParkFocusBeforeEditor()
-                selectedProviderId = provider.id
-                actionsProviderId = provider.id
-                returnedFromGroups = false
-                // Observe THIS provider's EPG links so the actions-menu refresh indicator reflects its own
-                // linked EPG refresh (providerEpgLinks is otherwise scoped to the EPG section's selection,
-                // usually null here → the refresh row would ignore the EPG refresh).
-                onSelectEpgProvider(provider.id)
-                message = null
-                connectionTestStatus = ConnectionTestStatus.Idle
-                connectionSummary = null
-                connectionError = null
-                actionsTestStatus = ConnectionTestStatus.Idle
-                actionsTestSummary = null
-                actionsTestError = null
-            },
-            pendingFocus = pendingOverviewFocus,
-            onFocusHandled = { pendingOverviewFocus = null },
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-
-    // OK on the rail section collapses the editor to the overview. Focus stays on the rail (the user is
-    // focused there), so unlike dismissEditor this does NOT park / set an overview-focus target. The
-    // draft is discarded, matching Cancel/BACK. Initial fire (showEditor == false) is a no-op.
-    LaunchedEffect(collapseSubViewSignal) {
-        if (showEditor || actionsProviderId != null) {
-            selectedProviderId = null
-            actionsProviderId = null
-            showGroups = false
-            groupsControls.onClose()
-            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-            showEditor = false
-            message = null
-            connectionTestStatus = ConnectionTestStatus.Idle
-        }
-    }
-
-    // Raises the edit form for a saved provider from the actions menu: metadata synchronously, then the
-    // credentials async (mirrors the old card-open path). selectedProviderId is already set by openActions.
-    val openEditorFor: (Provider) -> Unit = { provider ->
-        onParkFocusBeforeEditor()
-        selectedProviderId = provider.id
-        onSelectEpgProvider(provider.id)
-        editor = ProviderEditorState.from(provider)
-        showEditor = true
-        message = null
-        connectionTestStatus = ConnectionTestStatus.Idle
-        connectionSummary = null
-        connectionError = null
-        focusSourceSignal = 0
-        saving = false
-        scope.launch {
-            val credentials = runCatching { onGetProviderCredentials(provider.id) }.getOrNull()
-            if (selectedProviderId == provider.id) {
-                editor = ProviderEditorState.from(provider, credentials)
-            }
-        }
-    }
-
-    val dismissEditor: () -> Unit = {
-        if (actionsProviderId != null) {
-            // Editor was raised from the actions menu → drop it back to the menu (which re-focuses its first
-            // action on re-entry). Park focus first, else it escapes to the top nav (jumps Home) while the
-            // editor is removed. Keep selectedProviderId/actionsProviderId; discard the draft.
-            onParkFocusBeforeEditor()
-            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-            showEditor = false
-            message = null
-            connectionTestStatus = ConnectionTestStatus.Idle
-        } else {
-            // Add flow (or a legacy direct edit): park focus and return to the overview card / add button.
-            onParkFocusBeforeEditor()
-            pendingOverviewFocus = editor.providerId?.let(OverviewFocusTarget::Card) ?: OverviewFocusTarget.AddButton
-            selectedProviderId = null
-            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-            showEditor = false
-            message = null
-            connectionTestStatus = ConnectionTestStatus.Idle
-        }
-    }
-
-    // Writes the editor (update/create), applies the active toggle, closes. Shared by the passed-test
-    // save path and the "trotzdem speichern" force-save; assumes the source is already decided.
+    // Writes the editor (update/create), applies the active toggle, restarts refresh, then pops (onSaved).
     suspend fun persistEditor() {
-        // Capture the chosen mode before onSuccess resets the editor (for the diagnostics descriptor).
         val savedMode = editor.m3uSourceMode
-        // Whether the Xtream/M3U source (credentials/URL) actually changed — drives auto-EPG detection.
-        // Captured before onSuccess resets the editor. A pure metadata edit leaves this false.
         val sourceChanged = !editor.isSourceUnchanged
-        val saveResult = if (editor.isEditing) {
-            onUpdateProvider(editor.toUpdateRequest())
-        } else {
-            onCreateProvider(editor.toCreateRequest())
-        }
+        val saveResult = if (editor.isEditing) onUpdateProvider(editor.toUpdateRequest()) else onCreateProvider(editor.toCreateRequest())
         saveResult
             .onSuccess { saved ->
                 val descriptor = when (saved.provider.type) {
@@ -377,53 +411,20 @@ internal fun ProviderSettingsPanel(
                     ProviderType.M3u -> if (savedMode == M3uSourceMode.File) "M3U_FILE" else "M3U_URL"
                 }
                 onLogProviderSaved(descriptor, saved.switchedFromType?.name)
-                // Apply the deferred active toggle only if it changed.
-                if (editor.isActive != saved.provider.isActive) {
-                    onSetProviderEnabled(saved.provider.id, editor.isActive)
-                }
-                // Save RESTARTS the refresh (REPLACE) so the actions menu's group button stays gated until
-                // the import with the just-saved settings finishes. Refresh-all keeps its own KEEP path.
+                if (editor.isActive != saved.provider.isActive) onSetProviderEnabled(saved.provider.id, editor.isActive)
+                // Save RESTARTS the refresh (REPLACE) so the actions group button stays gated until import finishes.
                 onRefreshProvider(saved.provider.id)
-                // Xtream + a changed source → auto-detect the companion xmltv.php EPG (App-hoisted, silent).
-                if (saved.provider.type == ProviderType.Xtream && sourceChanged) {
-                    onXtreamProviderSaved(saved.provider.id)
-                }
-                if (actionsProviderId != null) {
-                    // Edited from the actions menu → drop the editor back to it (refresh now in flight).
-                    // Park focus first, else it escapes to the top nav (jumps Home) as the editor is removed.
-                    onParkFocusBeforeEditor()
-                    actionsProviderId = saved.provider.id
-                    selectedProviderId = saved.provider.id
-                    editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                    showEditor = false
-                    connectionTestStatus = ConnectionTestStatus.Idle
-                    message = null
-                } else {
-                    // Add flow → return to the overview, focus the new card.
-                    onParkFocusBeforeEditor()
-                    pendingOverviewFocus = OverviewFocusTarget.Card(saved.provider.id)
-                    selectedProviderId = null
-                    editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                    showEditor = false
-                    connectionTestStatus = ConnectionTestStatus.Idle
-                    message = null
-                }
+                if (saved.provider.type == ProviderType.Xtream && sourceChanged) onXtreamProviderSaved(saved.provider.id)
+                onSaved(saved.provider.id)
             }
-            .onFailure { error ->
-                message = strProviderSaveFailed.format(error.message ?: "?")
-            }
+            .onFailure { error -> message = strProviderSaveFailed.format(error.message ?: "?") }
     }
 
-    // Runs after validation (+ any source confirmation): a same-source edit persists directly, otherwise
-    // the source is tested first and only a passing test persists; a failing test opens the fix/force dialog.
+    // Same-source edit persists directly; otherwise the source is tested first and only a passing test
+    // persists — a failing test opens the fix/force dialog.
     fun proceedSave() {
         if (editor.isSourceUnchanged) {
-            scope.launch {
-                message = null
-                saving = true
-                persistEditor()
-                saving = false
-            }
+            scope.launch { message = null; saving = true; persistEditor(); saving = false }
         } else {
             scope.launch {
                 message = null
@@ -444,117 +445,18 @@ internal fun ProviderSettingsPanel(
         }
     }
 
-    val actionProvider = actionsProviderId?.let { id -> providers.firstOrNull { it.id == id } }
-    if (!showEditor && !showGroups && actionProvider != null) {
-        BackHandler(onBack = {
-            // Back from the actions menu → overview, focus the originating card.
-            onParkFocusBeforeEditor()
-            pendingOverviewFocus = OverviewFocusTarget.Card(actionProvider.id)
-            selectedProviderId = null
-            actionsProviderId = null
-            message = null
-            connectionTestStatus = ConnectionTestStatus.Idle
-        })
-        ProviderActionsPanel(
-            provider = actionProvider,
-            sourceMode = providerSourceModes[actionProvider.id] ?: M3uSourceMode.Url,
-            // Per-playlist freshness gate: lock only while THIS playlist's own refresh runs — its playlist
-            // refresh, or one of ITS OWN linked EPG sources. A foreign playlist's EPG refresh doesn't touch
-            // this playlist's groups (writes only serialize briefly behind the EPG write transaction on
-            // SQLite's single writer), so it stays editable — owner decision. The label says which refresh.
-            isRefreshing = actionProvider.status == ProviderStatus.Refreshing ||
-                providerEpgLinks.any { link ->
-                    link.providerId == actionProvider.id &&
-                        epgSources.any { it.id == link.epgSourceId && it.isRefreshing }
-                },
-            refreshingLabel = if (actionProvider.status == ProviderStatus.Refreshing) {
-                stringResource(R.string.settings_provider_action_refreshing_playlist)
-            } else {
-                stringResource(R.string.settings_provider_action_refreshing_epg)
-            },
-            testStatus = actionsTestStatus,
-            testSummary = actionsTestSummary,
-            testError = actionsTestError,
-            onEdit = { returnedFromGroups = false; openEditorFor(actionProvider) },
-            onTestConnection = {
-                if (actionsTestStatus != ConnectionTestStatus.Testing) {
-                    actionsTestStatus = ConnectionTestStatus.Testing
-                    actionsTestSummary = null
-                    actionsTestError = null
-                    scope.launch {
-                        // Build the same test request the editor uses, from the saved provider + its creds.
-                        val creds = runCatching { onGetProviderCredentials(actionProvider.id) }.getOrNull()
-                        val request = ProviderEditorState.from(actionProvider, creds)
-                            .resolveTestRequest(onGetProviderM3uContent)
-                        val result = onTestProviderConnection(request)
-                        if (result.errorMessage == null) {
-                            actionsTestStatus = ConnectionTestStatus.Passed
-                            actionsTestSummary = result.summary
-                        } else {
-                            actionsTestStatus = ConnectionTestStatus.Failed
-                            actionsTestError = result.errorMessage
-                        }
-                    }
-                }
-            },
-            onRefresh = { onRefreshProvider(actionProvider.id) },
-            onManageGroups = {
-                // Park focus before the actions panel is removed, else it escapes to the top nav (Home).
-                onParkFocusBeforeEditor()
-                groupsControls.onOpen(actionProvider.id)
-                showGroups = true
-            },
-            onDelete = { pendingDelete = actionProvider },
-            entryFocusModifier = firstFocusModifier,
-            focusGroupsRowOnEntry = returnedFromGroups,
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-    if (!showEditor && showGroups && actionProvider != null) {
-        BackHandler(onBack = {
-            // Back from the group panel → the actions menu (re-focuses its first action on re-entry). Park
-            // focus first, else it escapes to the top nav (Home) as the group panel is removed.
-            onParkFocusBeforeEditor()
-            showGroups = false
-            returnedFromGroups = true
-            groupsControls.onClose()
-        })
-        ProviderGroupsPanel(
-            activeType = groupsControls.activeType,
-            groups = groupsControls.groups,
-            settings = groupsControls.settings,
-            typeIncluded = when (groupsControls.activeType) {
-                CategoryType.LiveTv -> actionProvider.includeLiveTv
-                CategoryType.Movies -> actionProvider.includeMovies
-                CategoryType.Series -> actionProvider.includeSeries
-            },
-            onSelectType = groupsControls.onSelectType,
-            onToggleGroupHidden = groupsControls.onToggleHidden,
-            onSetAllHidden = { hidden -> groupsControls.onSetAllHidden(actionProvider.id, groupsControls.activeType, hidden) },
-            onReorder = groupsControls.onReorder,
-            onResetOrder = { groupsControls.onResetOrder(actionProvider.id, groupsControls.activeType) },
-            onSetSortMode = { mode -> groupsControls.onSetSortMode(actionProvider.id, groupsControls.activeType, mode) },
-            onSetHideNewGroups = { hidden -> groupsControls.onSetHideNewGroups(actionProvider.id, groupsControls.activeType, hidden) },
-            entryFocusModifier = firstFocusModifier,
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
-
-    if (showEditor) {
-        BackHandler(onBack = dismissEditor)
-        ProviderEditor(
-            editor = editor,
-            duplicates = ProviderDuplicateInfo(duplicateName, duplicateUrlName),
-            isDuplicateName = { candidate ->
-                isDuplicateNameOf(candidate, editor.providerId, providers, { it.id }, { it.name })
-            },
-            message = message,
-            connectionTestStatus = connectionTestStatus,
-            connectionSummary = connectionSummary,
-            connectionError = connectionError.takeIf { connectionTestStatus == ConnectionTestStatus.Failed },
-            signals = ProviderEditorSignals(focusSource = focusSourceSignal, saving = saving),
-            entryFocusModifier = firstFocusModifier,
-            actions = ProviderEditorActions(
+    BackHandler(onBack = onCancel)
+    ProviderEditor(
+        editor = editor,
+        duplicates = ProviderDuplicateInfo(duplicateName, duplicateUrlName),
+        isDuplicateName = { candidate -> isDuplicateNameOf(candidate, editor.providerId, providers, { it.id }, { it.name }) },
+        message = message,
+        connectionTestStatus = connectionTestStatus,
+        connectionSummary = connectionSummary,
+        connectionError = connectionError.takeIf { connectionTestStatus == ConnectionTestStatus.Failed },
+        signals = ProviderEditorSignals(focusSource = focusSourceSignal, saving = saving),
+        entryFocusModifier = entryFocusModifier,
+        actions = ProviderEditorActions(
             onEditorChange = {
                 editor = it
                 message = null
@@ -562,8 +464,6 @@ internal fun ProviderSettingsPanel(
                 connectionSummary = null
             },
             onTestConnection = {
-                // Test only checks the connection — name/URL duplicates are irrelevant here (they are
-                // flagged inline on the fields and enforced at Save). Ignore repeat taps while running.
                 if (connectionTestStatus != ConnectionTestStatus.Testing) {
                     val validationMessage = editor.connectionTestRequestMessageResolved()
                     if (validationMessage != null) {
@@ -573,8 +473,7 @@ internal fun ProviderSettingsPanel(
                         connectionTestStatus = ConnectionTestStatus.Testing
                         val editorSnapshot = editor
                         scope.launch {
-                            val request = editorSnapshot.resolveTestRequest(onGetProviderM3uContent)
-                            val result = onTestProviderConnection(request)
+                            val result = onTestProviderConnection(editorSnapshot.resolveTestRequest(onGetProviderM3uContent))
                             if (result.errorMessage == null) {
                                 connectionTestStatus = ConnectionTestStatus.Passed
                                 connectionSummary = result.summary
@@ -585,7 +484,6 @@ internal fun ProviderSettingsPanel(
                                 connectionSummary = null
                                 connectionError = result.errorMessage
                                 message = null
-                                // Manual test: jump focus to the source field (save uses a dialog instead).
                                 focusSourceSignal++
                             }
                         }
@@ -593,115 +491,76 @@ internal fun ProviderSettingsPanel(
                 }
             },
             onSave = {
-                // Duplicates are guarded in ProviderEditor. After validation, a confirmation is shown when
-                // adding (informational "saved as X") or when an edit switches the source type/mode
-                // (destructive warning). Same-type/mode edits skip straight to proceedSave. Ignore while testing.
                 when {
                     saving || connectionTestStatus == ConnectionTestStatus.Testing -> Unit
                     else -> {
                         val validationMessage = editor.validationMessageResolved()
                         when {
                             validationMessage != null -> message = validationMessage
-                            !editor.isEditing || editor.sourceSwitched -> {
-                                message = null
-                                pendingSourceConfirm = true
-                            }
+                            !editor.isEditing || editor.sourceSwitched -> { message = null; pendingSourceConfirm = true }
                             else -> proceedSave()
                         }
                     }
                 }
             },
-            onCancel = dismissEditor,
-            onToggleEnabled = {
-                // Draft only — the active state is applied on Save, not immediately.
-                editor = editor.copy(isActive = !editor.isActive)
-            },
-            onDelete = {
-                pendingDelete = providers.firstOrNull { it.id == editor.providerId }
-            },
+            onCancel = onCancel,
+            onToggleEnabled = { editor = editor.copy(isActive = !editor.isActive) },
+            onDelete = { pendingDelete = true },
             onPickM3uFile = onPickM3uFile,
-            onToggleEpgLink = { sourceId, link ->
-                selectedProviderId?.let { onToggleEpgLink(it, sourceId, link) }
-            },
-            onReorderEpg = { orderedIds ->
-                selectedProviderId?.let { onReorderEpgLink(it, orderedIds) }
-            },
-            ),
-            epgLinks = ProviderEpgLinkInfo(
-                sources = epgSources,
-                linkedIds = providerEpgLinks.mapTo(mutableSetOf()) { it.epgSourceId },
-                // providerEpgLinks is ORDER BY priority → assigned section + reorder list use this order.
-                linkedInOrder = providerEpgLinks.mapNotNull { link -> epgSources.firstOrNull { it.id == link.epgSourceId } },
-            ),
-            modifier = Modifier.fillMaxSize(),
-        )
-    }
+            onToggleEpgLink = { sourceId, link -> editor.providerId?.let { onToggleEpgLink(it, sourceId, link) } },
+            onReorderEpg = { orderedIds -> editor.providerId?.let { onReorderEpgLink(it, orderedIds) } },
+        ),
+        epgLinks = ProviderEpgLinkInfo(
+            sources = epgSources,
+            linkedIds = providerEpgLinks.mapTo(mutableSetOf()) { it.epgSourceId },
+            linkedInOrder = providerEpgLinks.mapNotNull { link -> epgSources.firstOrNull { it.id == link.epgSourceId } },
+        ),
+        modifier = modifier,
+    )
 
-    pendingDelete?.let { provider ->
-        DeleteProviderDialog(
-            provider = provider,
-            onCancel = { pendingDelete = null },
-            onDelete = {
-                scope.launch {
-                    onDeleteProvider(provider.id)
-                        .onSuccess {
-                            onParkFocusBeforeEditor()
-                            // Focus the next playlist (or the previous one), or the add button if none remain.
-                            val deletedIndex = providers.indexOfFirst { it.id == provider.id }
-                            val neighborId = providers.getOrNull(deletedIndex + 1)?.id
-                                ?: providers.getOrNull(deletedIndex - 1)?.id
-                            pendingOverviewFocus = neighborId?.let(OverviewFocusTarget::Card)
-                                ?: OverviewFocusTarget.AddButton
-                            pendingDelete = null
-                            selectedProviderId = null
-                            actionsProviderId = null
-                            showGroups = false
-                            editor = ProviderEditorState.newProvider(ProviderType.M3u)
-                            showEditor = false
-                            // No "deleted" note — the playlist disappearing is feedback enough.
-                            message = null
-                        }
-                        .onFailure { error ->
-                            pendingDelete = null
-                            message = strProviderDeleteFailed.format(error.message ?: "?")
-                        }
-                }
-            },
-        )
+    if (pendingDelete) {
+        val deletingProvider = providers.firstOrNull { it.id == editor.providerId }
+        if (deletingProvider == null) {
+            pendingDelete = false
+        } else {
+            DeleteProviderDialog(
+                provider = deletingProvider,
+                onCancel = { pendingDelete = false },
+                onDelete = {
+                    scope.launch {
+                        val start = System.currentTimeMillis()
+                        val index = providers.indexOfFirst { it.id == deletingProvider.id }
+                        val neighborId = providers.getOrNull(index + 1)?.id ?: providers.getOrNull(index - 1)?.id
+                        onDeleteProvider(deletingProvider.id)
+                            .onSuccess {
+                                onLogProviderDeleted(deletingProvider.id, System.currentTimeMillis() - start)
+                                pendingDelete = false
+                                onDeleted(neighborId ?: OVERVIEW_FOCUS_ADD)
+                            }
+                            .onFailure { error -> pendingDelete = false; message = strProviderDeleteFailed.format(error.message ?: "?") }
+                    }
+                },
+            )
+        }
     }
-
     if (pendingSourceConfirm) {
         ProviderSourceConfirmDialog(
             isSwitch = editor.sourceSwitched,
             targetLabel = providerSourceLabel(editor.type, editor.m3uSourceMode),
-            originalLabel = editor.originalType?.let {
-                providerSourceLabel(it, editor.originalSourceMode ?: M3uSourceMode.Url)
-            },
-            onConfirm = {
-                pendingSourceConfirm = false
-                proceedSave()
-            },
+            originalLabel = editor.originalType?.let { providerSourceLabel(it, editor.originalSourceMode ?: M3uSourceMode.Url) },
+            onConfirm = { pendingSourceConfirm = false; proceedSave() },
             onCancel = { pendingSourceConfirm = false },
         )
     }
-
     if (pendingSaveTestFailure) {
         ProviderConnectionFailedDialog(
             reason = connectionError,
             isActive = editor.isActive,
-            onCorrect = {
-                pendingSaveTestFailure = false
-                focusSourceSignal++
-            },
+            onCorrect = { pendingSaveTestFailure = false; focusSourceSignal++ },
             onSaveAnyway = {
                 pendingSaveTestFailure = false
-                // A broken source is never saved active — force-save always deactivates.
                 editor = editor.copy(isActive = false)
-                scope.launch {
-                    saving = true
-                    persistEditor()
-                    saving = false
-                }
+                scope.launch { saving = true; persistEditor(); saving = false }
             },
         )
     }
