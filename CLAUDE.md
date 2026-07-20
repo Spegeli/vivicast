@@ -148,6 +148,7 @@ core/
   datastore/  ← UserPreferencesStore
   designsystem/ ← VivicastTheme + grouped components: VivicastSurfaces / Layout / Badges / Panels /
                 Dialogs / Inputs / Cards / Navigation / Player (no VivicastComponents.kt)
+  logging/    ← vcLog() debug tracing — one tag `VCd`, BuildConfig.DEBUG-gated (:core:logging)
   network/    ← NetworkClientFactory
   player/     ← VivicastPlayerController (PlaybackRequest, VivicastPlayerState)
   security/   ← Keystore SecureValueStore, PinSecurity
@@ -220,8 +221,11 @@ Follow these for all new/changed app code:
   the evaluation. Every single time, no exceptions: visual test or not, big change or a trivial one. Never
   debug focus / key-event / runtime behaviour from screenshots alone.** Start logcat before the interaction
   (e.g. `adb -s <device> logcat -c` then `adb -s <device> logcat` filtered to the app / relevant tags), and
-  actually inspect the trace before drawing conclusions. When a focus/event path is unclear, add a temporary
-  `Log.d` at the handler + state callback and confirm via logcat what fired — do not guess.
+  actually inspect the trace before drawing conclusions. When a focus/event/navigation path is unclear, add a
+  `vcLog("<area>") { … }` trace at the handler + state callback and confirm via `adb logcat -s VCd` what fired
+  — do not guess. **Prefer `vcLog` (from `:core:logging`) over raw `Log.d`**: one shared `VCd` tag, already
+  wired into `app` + every `feature/*` module, and `BuildConfig.DEBUG`-gated so it never reaches release
+  logcat (R8/minify is off, so a raw `Log.d` would). Leave useful traces in (debug-only); don't strip them.
 - No APK installs on physical device unless user explicitly requests it
 - Run compile checkpoints after structural or behavior changes
 - Use Android Studio Compose Preview for visual iteration

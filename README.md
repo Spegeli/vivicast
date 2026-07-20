@@ -47,6 +47,7 @@ Reusable:
 - Playback orchestration in `:data:playback` (`PlaybackRequestFactory` / `PlaybackProgressRecorder`)
 - Provider connection testing in `:data:provider` (`TestProviderConnectionUseCase`)
 - detekt size/complexity gate
+- debug-only dev logging (`:core:logging` `vcLog`, one tag `VCd`, `BuildConfig.DEBUG`-gated)
 - Room/DataStore/security/cache/parser/worker foundations
 
 ## Architecture Status
