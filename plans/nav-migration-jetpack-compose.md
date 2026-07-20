@@ -1,8 +1,27 @@
 # Navigation Rebuild → Jetpack Navigation Compose (type-safe), state-of-the-art / greenfield
 
-> Status: **RESEARCH + PLAN ONLY — NOT started, no GO, no code.** Whole-app navigation rebuild off the
+> Status: **GO'd + IN PROGRESS** on branch `nav-rebuild-jetpack`. Whole-app navigation rebuild off the
 > custom `selectedRoute` solution onto **Jetpack Navigation Compose, type-safe `@Serializable` routes** (NOT
 > Nav3, NOT custom), plus a clean-rebuilt, **separate** TV D-pad focus layer.
+>
+> **Phase status (2026-07-20; details + commit refs in §5):**
+> - **A1 — nav spine** ✅ DONE (`4fc5246`) — NavHost + ShellGraph + tabs + tab-root BACK shadow, verified.
+> - **A2 — top-nav focus rebuild** ⏸ DEFERRED — A1's selection-follows-focus works cleanly (no Home-bounce to
+>   fix); the top-nav focus-ownership polish is folded into A1 where verifiable. Revisit only if a bounce appears.
+> - **B — Movies + Series detail as destinations** ✅ DONE (`a13600f` movies, `6934286` series).
+> - **C1 — Player destination + one-connection handoff** ⬜ **OPEN** — the hardest phase; needs a **physical TV**
+>   (emulator can't decode). §3.4 items 1–8 to settle first.
+> - **C2 — Live-TV focus rebuild** (RIGHT-bug designed out) ⬜ **OPEN** — sits on a green C1 base.
+> - **D — Settings inner NavHost** ✅ DONE (`adeb84c`/`8686931`/`7c054fc` + this session's focus rework — see §5).
+>   **Scope deviation:** only **Playlists** sub-views were promoted to inner-nav destinations; **EPG/About kept
+>   their local overlays** (deliberate; "optional later promotion" still open). Went **beyond** the plan: rail
+>   RIGHT scroll-to-first-row via `SettingsDetailList`, off-screen/sub-view focus-recovery, and a debug-logging
+>   module `:core:logging`/`vcLog`.
+> - **E — cleanup** (typed deep-link finalization, episode resolver bridge, dead-code sweep, detekt-baseline
+>   regen, doc-sync) ⬜ **OPEN**.
+>
+> **Still open: C1, C2, E** (+ the deferred A2 decision + the optional EPG/About inner-nav promotion). C1 is the
+> gating next step (C2 depends on it; needs physical-TV verification).
 >
 > **Governing principle (user, 2026-07-20): build it the way a greenfield app modeled on AOSP JetStream +
 > current android.com best practice would be built. Parity-first is DROPPED; rework/risk explicitly
@@ -329,7 +348,7 @@ Movies/Series detail `BackHandler` toggles. **Corrections:** (a) `playerVisible`
 The nav-spine swap is **atomic** (every `selectedRoute` reader flips together), so Phase A is split to isolate
 the focus rebuild from the routing swap.
 
-- **A1 — nav spine.** Catalog deps (nav 2.9.8, serialization plugin 2.2.21, json 1.x) + route ownership in
+- **A1 — nav spine.** ✅ **DONE** (`4fc5246`). Catalog deps (nav 2.9.8, serialization plugin 2.2.21, json 1.x) + route ownership in
   `app`. Outer `NavHost` + `Scaffold` chrome (`hasRoute<Player>()` suppression) + `ShellGraph` with
   `MoviesGraph`/`SeriesGraph` **nesting present now** (List-only child, VMs **graph-scoped from the start**,
   review 2c). Tab pattern + `saveState`/`restoreState` + the **tab-root BACK shadow handler** (§3.5, review
@@ -339,24 +358,32 @@ the focus rebuild from the routing swap.
   callers whose typed forms aren't ready (Search, deep-link resolve) — keep `*SearchTarget` alive as the
   payload for now (review 2a). Keep `focusTopNavPending` as a shim. **Gate:** VM survives tab switch (init-
   count log) AND re-entry lands on area-initial focus (focus logcat).
-- **A2 — top-nav focus rebuild.** Delete `focusTopNavPending`/`focusRoute` bounce; add `focusRestorer` +
+- **A2 — top-nav focus rebuild.** ⏸ **DEFERRED** (A1's selection-follows-focus works cleanly, no bounce to fix; revisit only if one appears). Delete `focusTopNavPending`/`focusRoute` bounce; add `focusRestorer` +
   `onEnter=active` (receiver form). Isolated so a focus regression isn't confused with a routing regression.
-- **B — Movies + Series detail as destinations.** `MovieDetail`/`SeriesDetail` typed **stable-key** args;
+- **B — Movies + Series detail as destinations.** ✅ **DONE** (`a13600f` movies, `6934286` series). `MovieDetail`/`SeriesDetail` typed **stable-key** args;
   **VM surgery** (remove `detail*Flow`/`onOpenDetail`/staged latch; match by **stableKey**, rewrite the
   `toSeriesTarget`/`toEpisodeTarget` mappers — review Gap A/B); graph-scoped shared VM; detail focus
   initial+restorer. **Delete `movieSearchTarget`/`seriesSearchTarget` here** and rewire Search + the movie/
   series deep-link branch to typed navigation in the same phase (review 2b). Rewrite the broken tests (§8).
-- **C1 — Player destination + one-connection handoff.** Resolve §3.4 items 1–6 first. Player → top-level
+- **C1 — Player destination + one-connection handoff.** ⬜ **OPEN — gating next step; needs a physical TV.** Resolve §3.4 items 1–6 first. Player → top-level
   full-screen destination (chrome suppressed) with **decomposed primitive args**; surface-owner rule keyed on
   nav state; adopt-not-replay; process-death re-resolve. **Live-TV focus untouched** (old model still commits
   a channel). Verify one-connection preview↔fullscreen on **hardware**.
-- **C2 — Live-TV focus rebuild** (RIGHT-bug designed out) on a green base where the handoff already works.
+- **C2 — Live-TV focus rebuild** ⬜ **OPEN** (RIGHT-bug designed out) on a green base where the handoff already works.
   Player-pop focus carve-out (§3.4-7). **Delete `liveTvSearchTarget`** + rewire live-tv Search/deep-link here.
-- **D — Settings inner NavHost.** Section panels + editors + About sub-pages as destinations (Back-to-parent);
-  delete focus-park/`collapseSubViewSignal`/manual back-stack; **preserve `pendingOverviewFocus` specific-item
-  return** (review Risk C). Depends on the A1 tab-root back shadow (section-root BACK → gear, not Home).
-- **E — cleanup.** Manifest/typed deep-link finalization for system/WatchNext (unprotected) + the episode
-  resolver bridge; dead-code sweep; final detekt-baseline regen; full regression + the §10 doc-sync pass prep.
+- **D — Settings inner NavHost.** ✅ **DONE** (`adeb84c` D1, `8686931` D2, `7c054fc` D3, + this session's focus
+  rework `2d0255f`/`e76c97a`/`f90053b`/`b31cdeb` + cleanup `8043ad9`). Section panels + editors + About sub-pages
+  as destinations (Back-to-parent); **`pendingOverviewFocus` specific-item return preserved** (review Risk C).
+  Depends on the A1 tab-root back shadow (section-root BACK → gear, not Home). **Deviations from the plan:**
+  (a) only **Playlists** sub-views became inner-nav destinations; **EPG/About kept their local overlays** +
+  `collapseSubViewSignal`/`onParkFocusBeforeEditor` (deliberate scope cut — "optional later promotion" still
+  open). (b) **Beyond the plan:** rail RIGHT now always re-enters on the first row, snapping a scrollable
+  destination to the top via a shared `SettingsDetailList` wrapper (guarded so Return/Cancel still lands on the
+  origin card); off-screen/sub-view focus-recovery hardened; added a debug-logging module `:core:logging`/`vcLog`.
+- **E — cleanup.** ⬜ **OPEN.** Manifest/typed deep-link finalization for system/WatchNext (unprotected) + the episode
+  resolver bridge; dead-code sweep (incl. the ~900 copy-paste unused imports in `:feature:settings` — needs a
+  proper optimize-imports/ktlint pass, NOT text matching: `getValue`/`setValue`/operators are used implicitly by
+  `by`-delegates/operators); final detekt-baseline regen; full regression + the §10 doc-sync pass prep.
 
 Riskiest single steps (C1 player handoff; D Settings focus) each land alone on a green, hardware-verified base;
 no phase builds a bridge a later phase discards (targets deleted per-area, not batched in E).
