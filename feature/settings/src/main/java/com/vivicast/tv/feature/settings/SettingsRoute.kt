@@ -188,6 +188,10 @@ fun SettingsRoute(
     onRemoveLogoFolder: () -> Unit = {},
     topNavFocusRequester: FocusRequester,
     initialSelectedSection: String? = null,
+    // D3: deep-link straight into the add-provider form (Home "add playlist" CTA) rather than just landing on
+    // the Playlists section. Consumed once on entry; the host resets its flag via onAddPlaylistApplied.
+    openAddPlaylistOnEnter: Boolean = false,
+    onAddPlaylistApplied: () -> Unit = {},
     focusLanguageRowOnEnter: Boolean = false,
     onInitialLanguageFocusApplied: () -> Unit = {},
     onTestProviderConnection: suspend (ProviderCreateRequest) -> ProviderConnectionTestResult,
@@ -325,14 +329,22 @@ fun SettingsRoute(
     LaunchedEffect(Unit) {
         viewModel.onReloadCacheStats()
         awaitFrame()
-        if (focusLanguageRowOnEnter && startSectionEntry.isSame(sections.first())) {
-            // Post language-change entry: land on the language row (detailFirstFocusModifier is moved
-            // onto it below) instead of the section rail.
-            detailFocusRequester.requestFocus()
-            onInitialLanguageFocusApplied()
-        } else {
-            // Target the START section's rail item (currentSection still lags the NavController this frame).
-            (sectionFocusRequesters[startSectionEntry.label] ?: currentSectionFocusRequester).requestFocus()
+        when {
+            openAddPlaylistOnEnter && startSectionEntry.matchesRoute == PlaylistsGraph::class -> {
+                // Deep-link straight into the add-provider form; the editor self-focuses its first field.
+                innerNav.navigate(PlaylistEditor())
+                onAddPlaylistApplied()
+            }
+            focusLanguageRowOnEnter && startSectionEntry.isSame(sections.first()) -> {
+                // Post language-change entry: land on the language row (detailFirstFocusModifier is moved
+                // onto it below) instead of the section rail.
+                detailFocusRequester.requestFocus()
+                onInitialLanguageFocusApplied()
+            }
+            else -> {
+                // Target the START section's rail item (currentSection still lags the NavController this frame).
+                (sectionFocusRequesters[startSectionEntry.label] ?: currentSectionFocusRequester).requestFocus()
+            }
         }
     }
     LaunchedEffect(currentSection.label, pendingDetailFocus) {
