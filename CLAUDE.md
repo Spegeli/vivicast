@@ -31,6 +31,8 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 ## Current Architecture Status
 
 The architecture invariants are the **Mandatory Architecture Rules** below; the Room schema is at **v21**.
+Navigation runs on **Jetpack Navigation Compose (type-safe routes, single NavHost)** — the whole-app nav +
+TV-focus rebuild is complete (see `plans/nav-migration-jetpack-compose.md`).
 
 ## Active App Architecture References
 
@@ -129,15 +131,18 @@ Routing (task area → skill):
 | Compose Styles API | `styles` |
 | Compose animations | `compose-animations` |
 
-**Standing note:** the upcoming Jetpack Navigation Compose rebuild always loads `android-navigation` +
-`android-navigation-type-safe`; anything TV-focus-related always loads `compose-focus-navigation`.
+**Standing note:** the app runs on **Jetpack Navigation Compose (type-safe routes)** — any navigation work
+always loads `android-navigation` + `android-navigation-type-safe`; anything TV-focus-related always loads
+`compose-focus-navigation`.
 
 ## Module Structure
 
 ```
 app/          ← MainActivity + AppContainer wiring, AppDialogs, SettingsPreferenceMappers
-                (App/Context-only mappers), PlaybackOrchestration (thin App host: image resolvers +
-                open*/save delegation + clearHistory), Backup, Diagnostics, WatchNext, AndroidTV
+                (App/Context-only mappers), navigation/ (type-safe @Serializable routes for the single
+                Jetpack Navigation Compose NavHost), player/ (activity-scoped PlayerViewModel — playback
+                orchestration), PlaybackOrchestration (thin App host: image resolvers + resume-channel
+                resolve + save progress + clearHistory), Backup, Diagnostics, WatchNext, AndroidTV
                 Search, in-app file picker (FilePickerDialog + StorageAccess), other app-hoisted
                 effects (PIN, scheduler, locale/recreate)
 core/
@@ -185,6 +190,12 @@ Follow these for all new/changed app code:
 - **No** Repository Flows collected directly in Composables.
 - **No** Repository CRUD calls directly in Composables.
 - Navigation lives outside ViewModels.
+- **Navigation = Jetpack Navigation Compose, type-safe `@Serializable` routes** (`app/navigation/VivicastRoutes.kt`),
+  ONE NavHost in `MainActivity`. Tabs live in a shell graph; Movies/Series detail = nested typed destinations
+  IN the shell (top nav stays); the **Player is a top-level destination outside the shell** (full-screen).
+  Settings owns a **feature-internal inner NavHost** for its detail pane (deliberate exception to
+  "nav only in `:app`"). Deep-links (`vivicast://…`, stable keys not Room ids) resolve via a PIN-aware bridge.
+  New cross-screen targets = typed nav-args, NOT shared-state `*Target` latches.
 - Local UI state may stay in Composables: focus, D-Pad, dialog open/closed, input draft, local
   localized messages, scroll/focus requesters.
 - ViewModels contain **no** Compose types, Context, Activity, Resources, localized strings, or navigation.

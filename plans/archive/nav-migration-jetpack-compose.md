@@ -1,8 +1,11 @@
 # Navigation Rebuild → Jetpack Navigation Compose (type-safe), state-of-the-art / greenfield
 
-> Status: **GO'd + IN PROGRESS** on branch `nav-rebuild-jetpack`. Whole-app navigation rebuild off the
+> Status: **✅ COMPLETE (2026-07-22)** on branch `nav-rebuild-jetpack`. Whole-app navigation rebuild off the
 > custom `selectedRoute` solution onto **Jetpack Navigation Compose, type-safe `@Serializable` routes** (NOT
-> Nav3, NOT custom), plus a clean-rebuilt, **separate** TV D-pad focus layer.
+> Nav3, NOT custom), plus a clean-rebuilt, **separate** TV D-pad focus layer. All phases A–E done + TV-verified;
+> migration verified clean (no `selectedRoute` / old-focus-signal machinery remains in source; single NavHost).
+> **This plan is closed — archive candidate.** Commit refs: A1 `4fc5246`, B-movies `a13600f`, B-series `6934286`,
+> D `adeb84c`/`8686931`/`7c054fc`/`2d0255f`/`927cbeb`, B(player)+C1+C2-core `9660191`, nav-audit fixes `79952a1`.
 >
 > **Phase status (updated 2026-07-22; details + commit refs in §5):**
 > - **A1 — nav spine** ✅ DONE (`4fc5246`) — NavHost + ShellGraph + tabs + tab-root BACK shadow, verified.
@@ -48,16 +51,21 @@
 >   Save→new provider card). Retired the old route-bounce/remount approach →
 >   `plans/archive/settings-navigation-deeplinks.md`. Residual open: add-editor **open latency** (overview
 >   visible while the heavy editor composes) → `plans/settings-add-editor-open-latency.md`.
-> - **E — cleanup** (typed deep-link finalization, episode resolver bridge, dead-code sweep, ktlint unused-imports,
->   detekt-baseline regen, doc-sync + close-out) ⬜ **OPEN** — the last remaining nav-migration phase.
+> - **E — cleanup / close-out** ✅ **DONE (2026-07-22).** Reality was ~90% already done: **deep-links** are
+>   complete + typed (AndroidManifest intent-filters for `vivicast://channel|movie|series|episode` + a PIN-aware
+>   handler resolving STABLE keys → typed routes, incl. the **episode resolver**; Watch-Next uses the same URIs).
+>   **Dead code** = none (old `selectedRoute` nav fully gone; Movies/Series `*SearchTarget` deleted; the
+>   "~900 unused imports" was a text-match false-positive — `getValue`/`setValue` are used by `by`-delegates —
+>   and detekt, which validates imports, is green). **detekt-baseline regen** = skipped as cosmetic (baseline
+>   green; a blind regen could mask new issues). **Doc-sync** = DONE: 8 `vivicast-docs` synced (interaction
+>   `nav`/`focus`/`01-live-tv-adaptive-columns`; screens `01-home`/`02-live-tv`/`03-player`/`07-settings`;
+>   `ADR-013` amended) + `CLAUDE.md`/`README.md`/the 2 arch docs.
 >
-> **A–D + C1 + C2 are all DONE + TV-verified; Live-TV is functionally complete (nav audit fixes shipped).**
-> **The ONLY remaining nav-migration work is Phase E (cleanup/close-out)** + optional EPG/About inner-nav
-> promotion. Commit state: B(player)+C1+C2-core committed as `9660191`; the nav-audit fixes (RIGHT/LEFT focus,
-> Sender-Modus-on-return, cold-load loading, Favoriten text, preview bg, Home focus — 9 files) are **staged/
-> uncommitted, awaiting the commit**. Two Live-TV micro-polish items were **discarded** by the user (provider-
-> expand ~100ms flash; provider-focus-with-favorites). Physical-TV device note: `.12` (SHIELD) is the sanctioned
-> autonomous test device; `.40` is the user's.
+> **ALL PHASES A–E DONE + TV-verified. This nav rebuild is COMPLETE.** Optional-later (NOT part of this plan):
+> EPG/About inner-nav promotion. Commit state: A1/B/D committed earlier; B(player)+C1+C2-core `9660191`;
+> nav-audit fixes `79952a1`. Two Live-TV micro-polish items **discarded** by the user (provider-expand ~100ms
+> flash; provider-focus-with-favorites). Physical-TV device note: `.12` (SHIELD) is the sanctioned autonomous
+> test device; `.40` is the user's.
 >
 > **Governing principle (user, 2026-07-20): build it the way a greenfield app modeled on AOSP JetStream +
 > current android.com best practice would be built. Parity-first is DROPPED; rework/risk explicitly

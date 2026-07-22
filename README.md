@@ -43,8 +43,13 @@ Reusable:
 - multi-module Gradle structure
 - Kotlin + Jetpack Compose for TV
 - ViewModel + immutable UiState per main feature, with lifecycle-aware UI state collection
+- Jetpack Navigation Compose (type-safe `@Serializable` routes, single NavHost; Movies/Series detail =
+  in-shell destinations; player = top-level full-screen destination; Settings = feature-owned inner NavHost)
+  + a rebuilt TV D-pad focus layer
 - split `:core:designsystem` (grouped `Vivicast*.kt` components and tokens)
-- Playback orchestration in `:data:playback` (`PlaybackRequestFactory` / `PlaybackProgressRecorder`)
+- playback orchestration split: `PlaybackRequestFactory` / `PlaybackProgressRecorder` in `:data:playback`;
+  build+play / auto-save / auto-next / zap in an activity-scoped `PlayerViewModel` (`:app`); the ExoPlayer
+  connection stays an `AppContainer` singleton
 - Provider connection testing in `:data:provider` (`TestProviderConnectionUseCase`)
 - detekt size/complexity gate
 - debug-only dev logging (`:core:logging` `vcLog`, one tag `VCd`, `BuildConfig.DEBUG`-gated)

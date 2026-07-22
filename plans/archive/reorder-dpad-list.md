@@ -1,5 +1,21 @@
 # D-Pad List Reorder — Reusable Component (Research + Plan)
 
+> Status: **✅ COMPLETE (2026-07-22).** The reusable D-pad reorder component shipped and is now used in THREE
+> Settings dialogs, all `VivicastDialog` overlays with the built-in "OK pick up · ▲▼ move · OK drop · Back
+> cancel" model:
+> - **Logo-source priority** — `ProviderEditor` (`settings_provider_logo_priority`; Playlist/EPG/Local order via
+>   `parseLogoPriorityOrder`, committed as a CSV).
+> - **EPG-source priority** — `ProviderEditor` (`settings_provider_epg_priority`; which linked EPG source wins
+>   for the provider).
+> - **Category-group order** — `ProviderGroupsPanel` (`settings_groups_reorder`; D10 group management).
+>
+> Component: `VivicastReorderList` / `VivicastReorderItem` in `:core:designsystem` (`VivicastReorder.kt`), each
+> drop commits, Back cancels; bounded height (it's a LazyColumn) so the dialog + hint stay visible. The
+> post-drop focus-yank was fixed (P2 note below). **Verified on the physical TV** as part of the Settings focus
+> audit (committed `2d0255f`) which swept every Settings sub-view incl. the reorder dialogs. The plan below is
+> the original research/design record — kept for context; nothing outstanding. **Archive candidate.**
+>
+> --- original status (historical) ---
 > Status: **implemented (logo priority) — static gates green, pending emulator verification**. No commit.
 > Built: `LogoSource`/CSV model (domain) + `normalizeLogoPriority`; SQL order-agnostic `effectiveLogoUrl`
 > + `getLogoCandidates` + worker candidate row (core/database); App resolver order-walk + skip-empty
