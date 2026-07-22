@@ -1,26 +1,13 @@
-﻿package com.vivicast.tv.feature.settings
+package com.vivicast.tv.feature.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.annotation.StringRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -33,38 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.BodyText
 import com.vivicast.tv.core.designsystem.FocusPanel
-import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.InfoPanel
-import com.vivicast.tv.core.designsystem.SectionTitle
 import com.vivicast.tv.core.designsystem.StatusBadge
-import com.vivicast.tv.core.designsystem.VivicastBorders
-import com.vivicast.tv.core.designsystem.VivicastCardSizes
-import com.vivicast.tv.core.designsystem.VivicastButtonRow
-import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastColors
-import com.vivicast.tv.core.designsystem.VivicastDialog
-import com.vivicast.tv.core.designsystem.VivicastDialogActions
-import com.vivicast.tv.core.designsystem.VivicastDialogError
-import com.vivicast.tv.core.designsystem.VivicastDialogWidth
-import com.vivicast.tv.core.designsystem.VivicastTextField
-import com.vivicast.tv.core.designsystem.VivicastScreen
+import com.vivicast.tv.core.designsystem.LocalVivicastColors
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
-import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
 import com.vivicast.tv.data.epg.EpgConnectionTestResult
@@ -73,69 +37,49 @@ import com.vivicast.tv.data.epg.EpgSourceEditRequest
 import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.EpgChannelMapping
-import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
-import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
-import com.vivicast.tv.data.provider.M3uSourceMode
-import com.vivicast.tv.data.provider.ProviderCredentials
-import com.vivicast.tv.data.provider.ProviderCreateRequest
-import com.vivicast.tv.data.provider.ProviderUpdateRequest
-import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
 import com.vivicast.tv.domain.model.Provider
 import com.vivicast.tv.domain.model.ProviderEpgSource
 import com.vivicast.tv.domain.model.ProviderStatus
-import com.vivicast.tv.domain.model.ProviderType
 import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
+// ---------------------------------------------------------------------------------------------------------
+// EPG sub-views as self-contained inner-nav destination screens. Split out of the former single
+// EpgSettingsPanel (mirrors the Playlists D2 split): each owns its own state; the inner NavHost's back stack
+// replaces the old shared showEditor/showManualMapping/showGlobalSettings booleans + focus-park +
+// collapseSubViewSignal. Focus-return to the originating overview row/card is carried as a nav result
+// (EPG_FOCUS_KEY, see SettingsRoute's EpgGraph wiring).
+// ---------------------------------------------------------------------------------------------------------
+
+/** Nav-result sentinels: which overview row to focus after a sub-view pops. Any OTHER token = a source id. */
+internal const val EPG_FOCUS_GLOBAL = "__epg_global__"
+internal const val EPG_FOCUS_ADD = "__epg_add__"
+internal const val EPG_FOCUS_MANUAL = "__epg_manual__"
+
 @Composable
-internal fun EpgSettingsPanel(
-    state: EpgSettingsState,
+internal fun EpgOverviewScreen(
     sources: List<EpgSource>,
     providers: List<Provider>,
-    selectedProviderId: String?,
-    providerLinks: List<ProviderEpgSource>,
-    manualMappingChannels: List<Channel>,
-    manualMappings: List<EpgChannelMapping>,
-    selectedManualMappingChannelId: String?,
-    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
     onRefreshEpgSource: (sourceId: String) -> Unit,
-    onSelectProvider: (String) -> Unit,
-    onSaveEpgSource: suspend (EpgSourceEditRequest) -> Result<EpgSource>,
-    onDeleteEpgSource: suspend (String) -> Result<Unit>,
-    onSelectManualMappingChannel: (String) -> Unit,
-    onResetManualMappingChannel: () -> Unit,
-    onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
-    onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
-    onGetEpgSourceUrl: suspend (String) -> String? = { null },
-    onTestEpgConnection: suspend (String) -> EpgConnectionTestResult = { EpgConnectionTestResult(null, null) },
-    firstFocusModifier: Modifier = Modifier,
-    onParkFocusBeforeEditor: () -> Unit = {},
-    // Bumped when OK is pressed on the already-selected rail section: collapse any open sub-view (source
-    // editor / manual mapping / global settings) back to the overview. Focus stays on the rail; drafts
-    // are discarded (matches Cancel/BACK).
-    collapseSubViewSignal: Int = 0,
+    onOpenGlobalSettings: () -> Unit,
+    onOpenAddSource: () -> Unit,
+    onOpenSource: (String) -> Unit,
+    onOpenManualMapping: () -> Unit,
+    // Focus-return target when popping back from a sub-view (null on a fresh section entry, so focus stays on
+    // the rail until RIGHT). A sentinel => the matching header row; any other id => that source's card.
+    pendingFocusToken: String?,
+    onFocusHandled: () -> Unit,
+    firstFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
-    var selectedSourceId by remember { mutableStateOf<String?>(null) }
-    var editor by remember { mutableStateOf(EpgSourceEditorState.newSource()) }
-    var showEditor by remember { mutableStateOf(false) }
-    var showManualMapping by remember { mutableStateOf(false) }
-    var showGlobalSettings by remember { mutableStateOf(false) }
-    // Drives the editor Save spinner while the async save + auto-refresh runs (mirrors the playlist editor).
-    var epgSaving by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var pendingDelete by remember { mutableStateOf<EpgSource?>(null) }
-    // Where focus lands once the overview returns after leaving the inline editor / manual mapping.
-    var pendingOverviewFocus by remember { mutableStateOf<EpgOverviewFocusTarget?>(null) }
-    // EPG-source URL connection test (fetch + XMLTV parse), mirroring the playlist editor test.
-    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
-    var connectionSummary by remember { mutableStateOf<EpgContentSummary?>(null) }
-    var connectionError by remember { mutableStateOf<String?>(null) }
-    val strEpgScheduled = stringResource(R.string.settings_epg_msg_scheduled)
+    val globalSettingsRequester = remember { FocusRequester() }
+    val addRequester = remember { FocusRequester() }
+    val manualRequester = remember { FocusRequester() }
+    val sourceRequesters = remember(sources) { sources.associate { it.id to FocusRequester() } }
+    val overviewListState = rememberLazyListState()
     // Cross-lock "Refresh EPG now" while ANY refresh runs (playlist or EPG): a playlist refresh with
     // "refresh on playlist change" auto-chains an EPG refresh, so re-triggering here would stack a second
     // chain. Non-null = the label naming which refresh is active; null = idle/clickable. Playlist-first.
@@ -146,26 +90,151 @@ internal fun EpgSettingsPanel(
             stringResource(R.string.settings_provider_action_refreshing_epg)
         else -> null
     }
-    val strEpgSourceSaved = stringResource(R.string.settings_epg_msg_source_saved)
-    val strEpgSourceDeleted = stringResource(R.string.settings_epg_msg_source_deleted)
+    // Return focus onto the header row or the source card just left, else it escapes to the top nav. A source
+    // card may be off-screen (the LazyColumn hasn't composed it) — scroll it into view first so its
+    // FocusRequester attaches. Fixed header rows precede the sources: Global settings, Add source, Refresh
+    // (present when sources exist), Manual mapping = 4.
+    LaunchedEffect(pendingFocusToken, sources) {
+        val token = pendingFocusToken ?: return@LaunchedEffect
+        val sourceIndex = sources.indexOfFirst { it.id == token }
+        if (sourceIndex >= 0) runCatching { overviewListState.scrollToItem(sourceIndex + 4) }
+        val requester = when (token) {
+            EPG_FOCUS_GLOBAL -> globalSettingsRequester
+            EPG_FOCUS_ADD -> addRequester
+            EPG_FOCUS_MANUAL -> manualRequester
+            else -> sourceRequesters[token]
+        }
+        // Retry across a few frames: a just-scrolled off-screen source card can need >1 frame to attach its
+        // FocusRequester. Clear the pending focus only once focus actually lands.
+        repeat(30) {
+            awaitFrame()
+            if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
+                onFocusHandled()
+                return@LaunchedEffect
+            }
+        }
+        // Target row never rendered in time → add button, so focus can't orphan upward.
+        runCatching { addRequester.requestFocus() }
+        onFocusHandled()
+    }
+    SettingsDetailList(
+        listState = overviewListState,
+        modifier = modifier,
+    ) {
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_epg_global_settings),
+                help = stringResource(R.string.settings_epg_help_global_settings),
+                value = stringResource(R.string.about_open_value),
+                modifier = firstFocusModifier.focusRequester(globalSettingsRequester),
+                onClick = onOpenGlobalSettings,
+            )
+        }
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_epg_add_source),
+                help = stringResource(R.string.settings_epg_help_add_source),
+                value = stringResource(R.string.about_open_value),
+                modifier = Modifier.focusRequester(addRequester),
+                onClick = onOpenAddSource,
+            )
+        }
+        // Nothing to refresh without an EPG source, so hide the action until one exists.
+        if (sources.isNotEmpty()) {
+            item {
+                VivicastSettingsRow(
+                    title = stringResource(R.string.settings_epg_now),
+                    help = stringResource(R.string.settings_epg_help_run_now),
+                    value = epgRefreshLabel ?: stringResource(R.string.settings_epg_now_value),
+                    valueLoading = epgRefreshLabel != null,
+                    // Kept enabled/focusable (disabling a focused row drops focus to the top nav); the onClick
+                    // is gated instead. Enqueue is KEEP, so an in-flight source coalesces.
+                    onClick = {
+                        if (epgRefreshLabel == null) {
+                            sources.filter { it.isActive }.forEach { onRefreshEpgSource(it.id) }
+                        }
+                    },
+                )
+            }
+        }
+        item {
+            VivicastSettingsRow(
+                title = stringResource(R.string.settings_epg_manual_mapping),
+                help = stringResource(R.string.settings_epg_manual_mapping_body),
+                value = stringResource(R.string.about_open_value),
+                modifier = Modifier.focusRequester(manualRequester),
+                onClick = onOpenManualMapping,
+            )
+        }
+        if (sources.isEmpty()) {
+            item {
+                InfoPanel(
+                    title = stringResource(R.string.settings_epg_no_sources),
+                    body = stringResource(R.string.settings_epg_no_sources_body),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else {
+            items(sources, key = { it.id }) { source ->
+                EpgSourceOverviewCard(
+                    source = source,
+                    modifier = Modifier.focusRequester(sourceRequesters.getValue(source.id)),
+                    onClick = { onOpenSource(source.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun EpgSourceEditorScreen(
+    sourceId: String?,
+    sources: List<EpgSource>,
+    onSaveEpgSource: suspend (EpgSourceEditRequest) -> Result<EpgSource>,
+    onDeleteEpgSource: suspend (String) -> Result<Unit>,
+    onRefreshEpgSource: (sourceId: String) -> Unit,
+    onGetEpgSourceUrl: suspend (String) -> String?,
+    onTestEpgConnection: suspend (String) -> EpgConnectionTestResult,
+    onSaved: (focusToken: String) -> Unit,
+    onDeleted: (focusToken: String) -> Unit,
+    onCancel: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    // Self-load the draft from sourceId (null = add). Metadata is set synchronously; the stored (secure) URL
+    // is fetched async below and re-applied, mirroring the playlist editor.
+    var editor by remember(sourceId) {
+        mutableStateOf(
+            sources.firstOrNull { it.id == sourceId }?.let { EpgSourceEditorState.from(it) }
+                ?: EpgSourceEditorState.newSource(),
+        )
+    }
+    var message by remember { mutableStateOf<String?>(null) }
+    // Drives the editor Save spinner while the async save + auto-refresh runs (mirrors the playlist editor).
+    var epgSaving by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf(false) }
+    // EPG-source URL connection test (fetch + XMLTV parse), mirroring the playlist editor test.
+    var connectionTestStatus by remember { mutableStateOf(ConnectionTestStatus.Idle) }
+    var connectionSummary by remember { mutableStateOf<EpgContentSummary?>(null) }
+    var connectionError by remember { mutableStateOf<String?>(null) }
+    val strUnknownError = stringResource(R.string.common_unknown_error)
     val strValidationEpgNameMissing = stringResource(R.string.validation_name_missing)
     val strValidationEpgUrlMissing = stringResource(R.string.validation_epg_url_missing)
-    val strUnknownError = stringResource(R.string.common_unknown_error)
     val strEpgSrcSaveFailed = stringResource(R.string.settings_epg_source_save_failed)
     val strEpgDeleteFailed = stringResource(R.string.settings_epg_msg_source_delete_failed)
     val strEpgTestUrlMissing = stringResource(R.string.validation_epg_url_missing)
 
-    LaunchedEffect(sources) {
-        val selectedSource = selectedSourceId?.let { id -> sources.firstOrNull { it.id == id } }
-        if (selectedSource == null && selectedSourceId != null) {
-            selectedSourceId = null
-            editor = EpgSourceEditorState.newSource()
-            showEditor = false
+    LaunchedEffect(sourceId) {
+        if (sourceId != null) {
+            val url = runCatching { onGetEpgSourceUrl(sourceId) }.getOrNull().orEmpty()
+            val source = sources.firstOrNull { it.id == sourceId }
+            if (source != null) editor = EpgSourceEditorState.from(source, url)
         }
     }
 
-    // Existing source URLs (from the secure store) for duplicate detection. The .gz/.xz compression
-    // suffix is ignored so the same file with a different extension counts as a duplicate.
+    // Existing source URLs (from the secure store) for duplicate detection over ALL sources. The .gz/.xz
+    // compression suffix is ignored so the same file with a different extension counts as a duplicate.
     var existingEpgUrls by remember { mutableStateOf<List<EpgUrlEntry>>(emptyList()) }
     LaunchedEffect(sources) {
         existingEpgUrls = sources.mapNotNull { source ->
@@ -183,360 +252,188 @@ internal fun EpgSettingsPanel(
         connectionSummary = null
         connectionError = null
     }
-    val openEditorForNew: () -> Unit = {
-        onParkFocusBeforeEditor()
-        selectedSourceId = null
-        editor = EpgSourceEditorState.newSource()
-        showEditor = true
-        showManualMapping = false
-        showGlobalSettings = false
-        message = null
-        resetConnectionTest()
-    }
-    val openGlobalSettings: () -> Unit = {
-        onParkFocusBeforeEditor()
-        showGlobalSettings = true
-        showEditor = false
-        showManualMapping = false
-        message = null
-    }
-    // OK on the rail section collapses any open sub-view to the overview. Focus stays on the rail (the
-    // user is focused there), so unlike the dismiss* helpers this does NOT park / set an overview-focus
-    // target. Drafts are discarded, matching Cancel/BACK. Initial fire (nothing open) is a no-op.
-    LaunchedEffect(collapseSubViewSignal) {
-        if (showEditor || showManualMapping || showGlobalSettings) {
-            selectedSourceId = null
-            editor = EpgSourceEditorState.newSource()
-            showEditor = false
-            showManualMapping = false
-            showGlobalSettings = false
-            message = null
-        }
-    }
 
-    val dismissGlobalSettings: () -> Unit = {
-        onParkFocusBeforeEditor()
-        pendingOverviewFocus = EpgOverviewFocusTarget.GlobalSettingsButton
-        showGlobalSettings = false
-        message = null
-    }
-    val dismissEditor: () -> Unit = {
-        // Park focus before the inline editor is removed, else focus escapes to the top nav bar (Home).
-        onParkFocusBeforeEditor()
-        pendingOverviewFocus = editor.sourceId?.let(EpgOverviewFocusTarget::Source) ?: EpgOverviewFocusTarget.AddButton
-        selectedSourceId = null
-        editor = EpgSourceEditorState.newSource()
-        showEditor = false
-        message = null
-    }
-    val dismissManualMapping: () -> Unit = {
-        onParkFocusBeforeEditor()
-        pendingOverviewFocus = EpgOverviewFocusTarget.ManualButton
-        showManualMapping = false
-        message = null
-    }
-
-    // Full-width infill swap (like the Playlists panel): overview, source editor and manual mapping
-    // are mutually exclusive, so none can be pushed off-screen by a shared column.
-    when {
-        showEditor -> {
-            BackHandler(onBack = dismissEditor)
-            EpgSourceEditor(
-                editor = editor,
-                message = message,
-                onEditorChange = {
-                    editor = it
-                    // Any field edit invalidates a previous test result (mirrors the playlist editor).
-                    connectionTestStatus = ConnectionTestStatus.Idle
-                    connectionSummary = null
-                    connectionError = null
-                },
-                onSave = {
-                    val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
-                    if (validationMessage != null) {
-                        message = validationMessage
-                        return@EpgSourceEditor
-                    }
-                    scope.launch {
-                        epgSaving = true
-                        try {
-                            onSaveEpgSource(editor.toEditRequest())
-                                .onSuccess { source ->
-                                    // Auto-refresh the saved source (like a playlist refreshes on save). An
-                                    // inactive source is a no-op in the worker, so this is always safe.
-                                    onRefreshEpgSource(source.id)
-                                    // Close the editor and return to the overview focused on the saved
-                                    // source (like the playlist editor), instead of leaving focus on a
-                                    // control that recomposition removes → escaping to the top nav (Home).
-                                    onParkFocusBeforeEditor()
-                                    pendingOverviewFocus = EpgOverviewFocusTarget.Source(source.id)
-                                    selectedSourceId = null
-                                    editor = EpgSourceEditorState.newSource()
-                                    showEditor = false
-                                    resetConnectionTest()
-                                    message = strEpgSourceSaved
-                                }
-                                .onFailure { error ->
-                                    message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
-                                }
-                        } finally {
-                            epgSaving = false
-                        }
-                    }
-                },
-                onCancel = dismissEditor,
-                onDelete = {
-                    pendingDelete = sources.firstOrNull { it.id == editor.sourceId }
-                },
-                duplicateName = isDuplicateNameOf(editor.name, editor.sourceId, sources, { it.id }, { it.name }),
-                isDuplicateName = { candidate ->
-                    isDuplicateNameOf(candidate, editor.sourceId, sources, { it.id }, { it.name })
-                },
-                duplicateUrlName = duplicateEpgUrl,
-                connectionTestStatus = connectionTestStatus,
-                connectionSummary = connectionSummary,
-                connectionError = connectionError,
-                onTestConnection = {
-                    if (connectionTestStatus != ConnectionTestStatus.Testing) {
-                        val url = editor.url.trim()
-                        if (url.isBlank()) {
-                            connectionSummary = null
-                            connectionError = strEpgTestUrlMissing
-                            connectionTestStatus = ConnectionTestStatus.Failed
-                        } else {
-                            connectionTestStatus = ConnectionTestStatus.Testing
-                            connectionError = null
-                            connectionSummary = null
-                            scope.launch {
-                                val result = onTestEpgConnection(url)
-                                if (result.summary != null) {
-                                    connectionSummary = result.summary
-                                    connectionError = null
-                                    connectionTestStatus = ConnectionTestStatus.Passed
-                                } else {
-                                    connectionSummary = null
-                                    connectionError = result.errorMessage
-                                    connectionTestStatus = ConnectionTestStatus.Failed
-                                }
-                            }
-                        }
-                    }
-                },
-                saving = epgSaving,
-                entryFocusModifier = firstFocusModifier,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        showManualMapping -> {
-            BackHandler(onBack = dismissManualMapping)
-            ManualEpgMappingPanel(
-                providers = providers,
-                sources = sources,
-                selectedProviderId = selectedProviderId,
-                providerLinks = providerLinks,
-                channels = manualMappingChannels,
-                mappings = manualMappings,
-                selectedChannelId = selectedManualMappingChannelId,
-                message = message,
-                onSelectProvider = onSelectProvider,
-                onSelectChannel = onSelectManualMappingChannel,
-                onSetManualMapping = onSetManualMapping,
-                onClearManualMapping = onClearManualMapping,
-                onMessage = { message = it },
-                firstFocusModifier = firstFocusModifier,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        showGlobalSettings -> {
-            BackHandler(onBack = dismissGlobalSettings)
-            // Land focus on the first row after the swap, else it escapes to the top nav (mirrors editor).
-            val globalFirstFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) {
-                awaitFrame()
-                runCatching { globalFirstFocus.requestFocus() }
+    BackHandler(onBack = onCancel)
+    EpgSourceEditor(
+        editor = editor,
+        message = message,
+        onEditorChange = {
+            editor = it
+            // Any field edit invalidates a previous test result (mirrors the playlist editor).
+            resetConnectionTest()
+        },
+        onSave = {
+            val validationMessage = editor.validationMessage(strValidationEpgNameMissing, strValidationEpgUrlMissing)
+            if (validationMessage != null) {
+                message = validationMessage
+                return@EpgSourceEditor
             }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
-            ) {
-                item {
-                    EpgGlobalSettings(
-                        preferences = state,
-                        onEpgPreferencesChanged = onEpgPreferencesChanged,
-                        // Carry detailFocusRequester (from firstFocusModifier) onto the sub-panel's first
-                        // row too, so RIGHT from the section rail re-enters it (not only the overview).
-                        firstFocusModifier = firstFocusModifier.focusRequester(globalFirstFocus),
-                    )
-                }
-            }
-        }
-
-        else -> {
-            val globalSettingsRequester = remember { FocusRequester() }
-            val addRequester = remember { FocusRequester() }
-            val manualRequester = remember { FocusRequester() }
-            val sourceRequesters = remember(sources) { sources.associate { it.id to FocusRequester() } }
-            val overviewListState = rememberLazyListState()
-            // Return focus onto the add/manual row or the source card just left, else it escapes to top nav.
-            LaunchedEffect(pendingOverviewFocus, sources) {
-                val target = pendingOverviewFocus ?: return@LaunchedEffect
-                // A source card may be off-screen (the LazyColumn hasn't composed it). Scroll it into view
-                // first so its FocusRequester attaches — else requestFocus is a no-op and focus is lost. Fixed
-                // header rows precede the sources: Global settings, Add source, Refresh (present when sources
-                // exist), Manual mapping = 4.
-                if (target is EpgOverviewFocusTarget.Source) {
-                    val idx = sources.indexOfFirst { it.id == target.sourceId }
-                    if (idx >= 0) runCatching { overviewListState.scrollToItem(idx + 4) }
-                }
-                val requester = when (target) {
-                    EpgOverviewFocusTarget.GlobalSettingsButton -> globalSettingsRequester
-                    EpgOverviewFocusTarget.AddButton -> addRequester
-                    EpgOverviewFocusTarget.ManualButton -> manualRequester
-                    is EpgOverviewFocusTarget.Source -> sourceRequesters[target.sourceId]
-                }
-                // Retry across a few frames: a just-scrolled off-screen source card can need >1 frame to
-                // attach its FocusRequester (same reason as the playlist overview's retry loop). Clear the
-                // pending focus only once focus actually lands.
-                repeat(30) {
-                    awaitFrame()
-                    if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
-                        pendingOverviewFocus = null
-                        return@LaunchedEffect
-                    }
-                }
-                // Target row never rendered in time → add button, so focus can't orphan upward.
-                runCatching { addRequester.requestFocus() }
-                pendingOverviewFocus = null
-            }
-            SettingsDetailList(
-                listState = overviewListState,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                item {
-                    VivicastSettingsRow(
-                        title = stringResource(R.string.settings_epg_global_settings),
-                        help = stringResource(R.string.settings_epg_help_global_settings),
-                        value = stringResource(R.string.about_open_value),
-                        modifier = firstFocusModifier.focusRequester(globalSettingsRequester),
-                        onClick = openGlobalSettings,
-                    )
-                }
-                item {
-                    VivicastSettingsRow(
-                        title = stringResource(R.string.settings_epg_add_source),
-                        help = stringResource(R.string.settings_epg_help_add_source),
-                        value = stringResource(R.string.about_open_value),
-                        modifier = Modifier.focusRequester(addRequester),
-                        onClick = openEditorForNew,
-                    )
-                }
-                // Nothing to refresh without an EPG source, so hide the action until one exists.
-                if (sources.isNotEmpty()) {
-                    item {
-                        VivicastSettingsRow(
-                            title = stringResource(R.string.settings_epg_now),
-                            help = stringResource(R.string.settings_epg_help_run_now),
-                            value = epgRefreshLabel ?: stringResource(R.string.settings_epg_now_value),
-                            valueLoading = epgRefreshLabel != null,
-                            // Kept enabled/focusable (disabling a focused row drops focus to the top nav);
-                            // the onClick is gated instead. Enqueue is KEEP, so an in-flight source coalesces.
-                            onClick = {
-                                if (epgRefreshLabel == null) {
-                                    sources.filter { it.isActive }.forEach { onRefreshEpgSource(it.id) }
-                                    message = strEpgScheduled
-                                }
-                            },
-                        )
-                    }
-                }
-                item {
-                    VivicastSettingsRow(
-                        title = stringResource(R.string.settings_epg_manual_mapping),
-                        help = stringResource(R.string.settings_epg_manual_mapping_body),
-                        value = stringResource(R.string.about_open_value),
-                        modifier = Modifier.focusRequester(manualRequester),
-                        onClick = {
-                            onParkFocusBeforeEditor()
-                            onResetManualMappingChannel()
-                            showManualMapping = true
-                            showEditor = false
-                            message = null
-                        },
-                    )
-                }
-                if (sources.isEmpty()) {
-                    item {
-                        InfoPanel(
-                            title = stringResource(R.string.settings_epg_no_sources),
-                            body = stringResource(R.string.settings_epg_no_sources_body),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                } else {
-                    items(sources, key = { it.id }) { source ->
-                        EpgSourceOverviewCard(
-                            source = source,
-                            modifier = Modifier.focusRequester(sourceRequesters.getValue(source.id)),
-                            onClick = {
-                                onParkFocusBeforeEditor()
-                                selectedSourceId = source.id
-                                editor = EpgSourceEditorState.from(source)
-                                showEditor = true
-                                showManualMapping = false
-                                message = null
-                                resetConnectionTest()
-                                // Pre-fill the URL field with the stored (secure) URL, mirroring the
-                                // playlist editor. Fetched async, so re-apply only if still editing this source.
-                                scope.launch {
-                                    val url = runCatching { onGetEpgSourceUrl(source.id) }.getOrNull().orEmpty()
-                                    if (selectedSourceId == source.id) {
-                                        editor = EpgSourceEditorState.from(source, url)
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    pendingDelete?.let { source ->
-        DeleteEpgSourceDialog(
-            source = source,
-            onCancel = { pendingDelete = null },
-            onDelete = {
-                scope.launch {
-                    onDeleteEpgSource(source.id)
-                        .onSuccess {
-                            // Return focus to the next (or previous) source, or the add button if none
-                            // remain — else focus escapes to the top nav (Home). Mirrors the playlist editor.
-                            onParkFocusBeforeEditor()
-                            val deletedIndex = sources.indexOfFirst { it.id == source.id }
-                            val neighborId = sources.getOrNull(deletedIndex + 1)?.id
-                                ?: sources.getOrNull(deletedIndex - 1)?.id
-                            pendingOverviewFocus = neighborId?.let(EpgOverviewFocusTarget::Source)
-                                ?: EpgOverviewFocusTarget.AddButton
-                            pendingDelete = null
-                            selectedSourceId = null
-                            editor = EpgSourceEditorState.newSource()
-                            showEditor = false
-                            resetConnectionTest()
-                            message = strEpgSourceDeleted
+            scope.launch {
+                epgSaving = true
+                try {
+                    onSaveEpgSource(editor.toEditRequest())
+                        .onSuccess { source ->
+                            // Auto-refresh the saved source (like a playlist refreshes on save). An inactive
+                            // source is a no-op in the worker, so this is always safe.
+                            onRefreshEpgSource(source.id)
+                            onSaved(source.id)
                         }
                         .onFailure { error ->
-                            pendingDelete = null
-                            message = strEpgDeleteFailed.format(error.message ?: strUnknownError)
+                            message = strEpgSrcSaveFailed.format(error.message ?: strUnknownError)
                         }
+                } finally {
+                    epgSaving = false
                 }
-            },
-        )
+            }
+        },
+        onCancel = onCancel,
+        onDelete = { pendingDelete = true },
+        duplicateName = isDuplicateNameOf(editor.name, editor.sourceId, sources, { it.id }, { it.name }),
+        isDuplicateName = { candidate ->
+            isDuplicateNameOf(candidate, editor.sourceId, sources, { it.id }, { it.name })
+        },
+        duplicateUrlName = duplicateEpgUrl,
+        connectionTestStatus = connectionTestStatus,
+        connectionSummary = connectionSummary,
+        connectionError = connectionError,
+        onTestConnection = {
+            if (connectionTestStatus != ConnectionTestStatus.Testing) {
+                val url = editor.url.trim()
+                if (url.isBlank()) {
+                    connectionSummary = null
+                    connectionError = strEpgTestUrlMissing
+                    connectionTestStatus = ConnectionTestStatus.Failed
+                } else {
+                    connectionTestStatus = ConnectionTestStatus.Testing
+                    connectionError = null
+                    connectionSummary = null
+                    scope.launch {
+                        val result = onTestEpgConnection(url)
+                        if (result.summary != null) {
+                            connectionSummary = result.summary
+                            connectionError = null
+                            connectionTestStatus = ConnectionTestStatus.Passed
+                        } else {
+                            connectionSummary = null
+                            connectionError = result.errorMessage
+                            connectionTestStatus = ConnectionTestStatus.Failed
+                        }
+                    }
+                }
+            }
+        },
+        saving = epgSaving,
+        entryFocusModifier = entryFocusModifier,
+        modifier = modifier,
+    )
+
+    if (pendingDelete) {
+        val source = sources.firstOrNull { it.id == editor.sourceId }
+        if (source == null) {
+            pendingDelete = false
+        } else {
+            DeleteEpgSourceDialog(
+                source = source,
+                onCancel = { pendingDelete = false },
+                onDelete = {
+                    scope.launch {
+                        onDeleteEpgSource(source.id)
+                            .onSuccess {
+                                // Return focus to the next (or previous) source, or the add row if none remain.
+                                val deletedIndex = sources.indexOfFirst { it.id == source.id }
+                                val neighborId = sources.getOrNull(deletedIndex + 1)?.id
+                                    ?: sources.getOrNull(deletedIndex - 1)?.id
+                                pendingDelete = false
+                                onDeleted(neighborId ?: EPG_FOCUS_ADD)
+                            }
+                            .onFailure { error ->
+                                pendingDelete = false
+                                message = strEpgDeleteFailed.format(error.message ?: strUnknownError)
+                            }
+                    }
+                },
+            )
+        }
     }
 }
 
-/** A single EPG-source card in the overview list; opening it swaps in the full-width editor. */
+@Composable
+internal fun EpgManualMappingScreen(
+    providers: List<Provider>,
+    sources: List<EpgSource>,
+    selectedProviderId: String?,
+    providerLinks: List<ProviderEpgSource>,
+    channels: List<Channel>,
+    mappings: List<EpgChannelMapping>,
+    selectedChannelId: String?,
+    onSelectProvider: (String) -> Unit,
+    onSelectChannel: (String) -> Unit,
+    onSetManualMapping: suspend (ManualEpgChannelMappingRequest) -> Result<Unit>,
+    onClearManualMapping: suspend (providerId: String, channelId: String, epgSourceId: String) -> Result<Unit>,
+    onResetManualMappingChannel: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    // Reset the VM channel selection on open (was done at the click site before the flag flip).
+    LaunchedEffect(Unit) { onResetManualMappingChannel() }
+    var message by remember { mutableStateOf<String?>(null) }
+    // Land focus on the first provider row after the nav swap, else it escapes to the top nav.
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
+    ManualEpgMappingPanel(
+        providers = providers,
+        sources = sources,
+        selectedProviderId = selectedProviderId,
+        providerLinks = providerLinks,
+        channels = channels,
+        mappings = mappings,
+        selectedChannelId = selectedChannelId,
+        message = message,
+        onSelectProvider = onSelectProvider,
+        onSelectChannel = onSelectChannel,
+        onSetManualMapping = onSetManualMapping,
+        onClearManualMapping = onClearManualMapping,
+        onMessage = { message = it },
+        // Carry the detail panel's entry requester (rail RIGHT re-entry) AND the local first-focus requester
+        // onto the first provider row, so both the rail RIGHT and the nav-in initial focus land there.
+        firstFocusModifier = entryFocusModifier.focusRequester(firstFocus),
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun EpgGlobalSettingsScreen(
+    state: EpgSettingsState,
+    onEpgPreferencesChanged: (EpgSettingsState) -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    // Land focus on the first row after the nav swap, else it escapes to the top nav (mirrors the editor).
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4),
+    ) {
+        item {
+            EpgGlobalSettings(
+                preferences = state,
+                onEpgPreferencesChanged = onEpgPreferencesChanged,
+                // Carry the entry requester onto the sub-panel's first row too, so RIGHT from the section
+                // rail re-enters it (not only the overview).
+                firstFocusModifier = entryFocusModifier.focusRequester(firstFocus),
+            )
+        }
+    }
+}
+
+/** A single EPG-source card in the overview list; opening it navigates to the full-width editor. */
 @Composable
 private fun EpgSourceOverviewCard(
     source: EpgSource,
@@ -587,13 +484,4 @@ private fun EpgSourceOverviewCard(
     }
 }
 
-private sealed interface EpgOverviewFocusTarget {
-    data object GlobalSettingsButton : EpgOverviewFocusTarget
-    data object AddButton : EpgOverviewFocusTarget
-    data object ManualButton : EpgOverviewFocusTarget
-    data class Source(val sourceId: String) : EpgOverviewFocusTarget
-}
-
 private data class EpgUrlEntry(val sourceId: String, val normalizedUrl: String, val name: String)
-
-

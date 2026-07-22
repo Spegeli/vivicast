@@ -34,7 +34,21 @@ import kotlinx.serialization.Serializable
 /** Category-group management ("Gruppen verwalten") for a provider. */
 @Serializable internal data class PlaylistGroups(val providerId: String)
 
+/** EPG section: nested graph holding the overview + the source-editor / manual-mapping / global-settings
+ *  screens (mirrors [PlaylistsGraph] so the sub-views are real destinations with proper BACK). */
+@Serializable internal object EpgGraph
+
+/** EPG overview (source list + preferences + the sub-view entry rows). Graph start. */
 @Serializable internal object SecEpg
+
+/** EPG source add/edit form. [sourceId] null = add a new source. Self-contained: loads its own draft. */
+@Serializable internal data class EpgSourceEditor(val sourceId: String? = null)
+
+/** Manual channel→EPG-id mapping (3-column master-detail). Selection is VM-keyed; no route arg. */
+@Serializable internal object EpgManualMapping
+
+/** Global EPG settings (auto-refresh interval / retention days / on-start + on-change toggles). */
+@Serializable internal object EpgGlobalSettings
 
 @Serializable internal object SecAppearance
 
@@ -46,4 +60,21 @@ import kotlinx.serialization.Serializable
 
 @Serializable internal object SecBackup
 
+/** About section: nested graph holding the overview + legal / technical / diagnostics / log screens. */
+@Serializable internal object AboutGraph
+
+/** About overview (info rows + the sub-view entry rows). Graph start. */
 @Serializable internal object SecAbout
+
+/** A legal document page. [pageKey] = "privacy" | "terms" (String arg — matches the String-only route-arg
+ *  precedent; mapped to the AboutLegalPage enum inside the screen). */
+@Serializable internal data class AboutLegal(val pageKey: String)
+
+/** Technical details (read-only build / player / DB / device rows). */
+@Serializable internal object AboutTechnical
+
+/** Diagnostics overview (logging toggle / export / delete / view-log). */
+@Serializable internal object AboutDiagnostics
+
+/** Diagnostics log viewer (Events/Crashes tabs + reversed log tail). Own destination (D1 = a). */
+@Serializable internal object AboutDiagnosticsLog

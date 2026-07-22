@@ -1,154 +1,95 @@
-﻿package com.vivicast.tv.feature.settings
+package com.vivicast.tv.feature.settings
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.vivicast.tv.core.designsystem.BodyText
-import com.vivicast.tv.core.designsystem.FocusPanel
-import com.vivicast.tv.core.designsystem.GlassPanel
 import com.vivicast.tv.core.designsystem.SectionTitle
-import com.vivicast.tv.core.designsystem.StatusBadge
-import com.vivicast.tv.core.designsystem.VivicastBorders
-import com.vivicast.tv.core.designsystem.VivicastCardSizes
-import com.vivicast.tv.core.designsystem.VivicastColors
-import com.vivicast.tv.core.designsystem.VivicastTextField
-import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSettingsRow
 import com.vivicast.tv.core.designsystem.VivicastShapes
 import com.vivicast.tv.core.designsystem.VivicastSpacing
-import com.vivicast.tv.core.designsystem.VivicastTypography
-import com.vivicast.tv.data.epg.EpgSourceEditRequest
-import com.vivicast.tv.data.epg.ManualEpgChannelMappingRequest
-import com.vivicast.tv.domain.model.Channel
-import com.vivicast.tv.domain.model.EpgChannelMapping
-import com.vivicast.tv.data.provider.DEFAULT_REFRESH_INTERVAL_HOURS
-import com.vivicast.tv.data.provider.MAX_M3U_INLINE_SOURCE_CHARS
-import com.vivicast.tv.data.provider.M3uSourceMode
-import com.vivicast.tv.data.provider.ProviderCredentials
-import com.vivicast.tv.data.provider.ProviderCreateRequest
-import com.vivicast.tv.data.provider.ProviderUpdateRequest
-import com.vivicast.tv.data.provider.isAutomaticallyRefreshable
-import com.vivicast.tv.domain.model.Provider
-import com.vivicast.tv.domain.model.ProviderEpgSource
-import com.vivicast.tv.domain.model.ProviderStatus
-import com.vivicast.tv.domain.model.ProviderType
-import com.vivicast.tv.domain.model.EpgSource
 import androidx.compose.ui.res.stringResource
 import com.vivicast.tv.core.designsystem.R
 import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
+
+// ---------------------------------------------------------------------------------------------------------
+// About sub-views as self-contained inner-nav destination screens (mirrors the Playlists / EPG split). Split
+// out of the former single AboutSettingsPanel: the old Box-stack + alpha-0 overlay scaffold (which kept the
+// About list composed so a destroyed-focused-row couldn't jump to Home) + closeLegal/closeTechnical/
+// closeDiagnostics refocus-opener machinery + the shared collapseSubViewSignal are replaced by real
+// destinations with proper BACK and a nav-result focus-return (ABOUT_FOCUS_KEY, see SettingsRoute's
+// AboutGraph wiring).
+// ---------------------------------------------------------------------------------------------------------
+
+/** Legal page keys — the [AboutLegal] route arg (String, no enum-NavType risk). Also the overview
+ *  focus-return token so the correct Privacy-vs-Terms row is refocused on BACK. */
+internal const val ABOUT_LEGAL_PRIVACY = "privacy"
+internal const val ABOUT_LEGAL_TERMS = "terms"
+
+/** Nav-result sentinels: which overview row to focus after a sub-view pops (legal uses its page key). */
+internal const val ABOUT_FOCUS_TECHNICAL = "__about_technical__"
+internal const val ABOUT_FOCUS_DIAGNOSTICS = "__about_diagnostics__"
 
 @Composable
-internal fun AboutSettingsPanel(
+internal fun AboutOverviewScreen(
     state: AboutAppState,
-    diagnosticsSettingsState: DiagnosticsSettingsState,
-    onDiagnosticsSettingsChanged: (DiagnosticsSettingsState) -> Unit,
-    onExportDiagnostics: () -> Unit,
-    onDeleteLogs: suspend (Set<DiagnosticsLogKind>) -> Unit,
-    onReadLog: suspend (DiagnosticsLogKind) -> String?,
-    exporting: Boolean = false,
-    firstFocusModifier: Modifier = Modifier,
-    // Bumped when OK is pressed on the already-selected rail section: collapse the open legal page back
-    // to the About overview. Focus stays on the rail (which holds it), so no row-refocus is needed.
-    collapseSubViewSignal: Int = 0,
+    onOpenTechnical: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenLegal: (pageKey: String) -> Unit,
+    // Focus-return target when popping back from a sub-view (null on a fresh section entry). A sentinel or a
+    // legal page key => the matching row.
+    pendingFocusToken: String?,
+    onFocusHandled: () -> Unit,
+    firstFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    val toggleDiagnostics = {
-        onDiagnosticsSettingsChanged(
-            diagnosticsSettingsState.copy(
-                diagnosticsLoggingEnabled = !diagnosticsSettingsState.diagnosticsLoggingEnabled,
-            ),
-        )
-    }
-    var legalPage by remember { mutableStateOf<AboutLegalPage?>(null) }
-    val activeLegalPage = legalPage
-    val legalBackFocus = remember { FocusRequester() }
+    val technicalRowFocus = remember { FocusRequester() }
+    val diagnosticsRowFocus = remember { FocusRequester() }
     val legalRowFocus = remember { FocusRequester() }
     val legalTermsRowFocus = remember { FocusRequester() }
-    var showTechnical by remember { mutableStateOf(false) }
-    val technicalRowFocus = remember { FocusRequester() }
-    val technicalBackFocus = remember { FocusRequester() }
-    var showDiagnostics by remember { mutableStateOf(false) }
-    val diagnosticsRowFocus = remember { FocusRequester() }
-    val diagnosticsBackFocus = remember { FocusRequester() }
-    val legalTitle = activeLegalPage?.let { stringResource(it.titleRes) }.orEmpty()
-    val legalParagraphs = activeLegalPage?.let { stringResource(it.bodyRes).split("\n\n") }.orEmpty()
-    // Close: move focus back to the row that OPENED the overlay FIRST, then drop the overlay. Removing the
-    // overlay while it holds focus would reset focus to the top nav and navigate Home.
-    val closeLegal = {
-        val target = if (legalPage == AboutLegalPage.Terms) legalTermsRowFocus else legalRowFocus
-        runCatching { target.requestFocus() }
-        legalPage = null
-    }
-    // OK on the rail section collapses the open legal page to the overview. Focus is on the rail (not the
-    // overlay), so unlike closeLegal this just drops the page without a row-refocus. No-op if none open.
-    val closeTechnical = {
+    // Return focus onto the row that opened the sub-view, else it escapes to the top nav (which navigates on
+    // focus → Home). All five rows are always composed (no scroll), so the first attempt lands; the retry is
+    // frame-timing safety, mirroring the other overviews.
+    LaunchedEffect(pendingFocusToken) {
+        val token = pendingFocusToken ?: return@LaunchedEffect
+        val requester = when (token) {
+            ABOUT_FOCUS_TECHNICAL -> technicalRowFocus
+            ABOUT_FOCUS_DIAGNOSTICS -> diagnosticsRowFocus
+            ABOUT_LEGAL_TERMS -> legalTermsRowFocus
+            ABOUT_LEGAL_PRIVACY -> legalRowFocus
+            else -> null
+        }
+        repeat(30) {
+            awaitFrame()
+            if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
+                onFocusHandled()
+                return@LaunchedEffect
+            }
+        }
         runCatching { technicalRowFocus.requestFocus() }
-        showTechnical = false
+        onFocusHandled()
     }
-    // Back from the Diagnose sub-page: refocus its opener row first, then drop the overlay (same order as
-    // closeLegal, so removing the overlay can't reset focus to the top nav → Home).
-    val closeDiagnostics = {
-        runCatching { diagnosticsRowFocus.requestFocus() }
-        showDiagnostics = false
-    }
-    LaunchedEffect(collapseSubViewSignal) {
-        if (legalPage != null) legalPage = null
-        if (showTechnical) showTechnical = false
-        if (showDiagnostics) showDiagnostics = false
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Hidden (but kept composed, so the focused legal row survives) while a legal page is open — the
-        // legal overlay renders transparently over it on the host GlassPanel background.
-        SettingsDetailList(
-            modifier = Modifier.alpha(if (activeLegalPage != null || showTechnical || showDiagnostics) 0f else 1f),
-        ) {
+    SettingsDetailList(modifier = modifier) {
         item {
             VivicastSettingsRow(
                 title = stringResource(R.string.about_app_version_title),
@@ -163,17 +104,16 @@ internal fun AboutSettingsPanel(
                 help = stringResource(R.string.about_help_technical_details),
                 value = stringResource(R.string.about_open_value),
                 modifier = Modifier.focusRequester(technicalRowFocus),
-                onClick = { showTechnical = true },
+                onClick = onOpenTechnical,
             )
         }
         item {
-            // Diagnostic logging + export + delete + view now live behind this row (its own sub-page).
             VivicastSettingsRow(
                 title = stringResource(R.string.about_diagnostics_section),
                 help = stringResource(R.string.about_help_diagnostics_section),
                 value = stringResource(R.string.about_open_value),
                 modifier = Modifier.focusRequester(diagnosticsRowFocus),
-                onClick = { showDiagnostics = true },
+                onClick = onOpenDiagnostics,
             )
         }
         item {
@@ -182,7 +122,7 @@ internal fun AboutSettingsPanel(
                 help = stringResource(R.string.settings_help_legal_privacy),
                 value = stringResource(R.string.about_open_value),
                 modifier = Modifier.focusRequester(legalRowFocus),
-                onClick = { legalPage = AboutLegalPage.Privacy },
+                onClick = { onOpenLegal(ABOUT_LEGAL_PRIVACY) },
             )
         }
         item {
@@ -191,79 +131,41 @@ internal fun AboutSettingsPanel(
                 help = stringResource(R.string.settings_help_legal_terms),
                 value = stringResource(R.string.about_open_value),
                 modifier = Modifier.focusRequester(legalTermsRowFocus),
-                onClick = { legalPage = AboutLegalPage.Terms },
-            )
-        }
-        }
-
-        // Legal document as a focus-capturing overlay: the About list stays composed underneath so the
-        // focused row is not destroyed (destroying it resets focus to the top nav, which navigates on
-        // focus and would jump to Home). The overlay covers the list and grabs focus on entry.
-        if (activeLegalPage != null) {
-            AboutLegalOverlay(
-                title = legalTitle,
-                paragraphs = legalParagraphs,
-                backFocus = legalBackFocus,
-                firstFocusModifier = firstFocusModifier,
-                onClose = closeLegal,
-            )
-        }
-        if (showTechnical) {
-            TechnicalDetailsOverlay(
-                state = state,
-                backFocus = technicalBackFocus,
-                firstFocusModifier = firstFocusModifier,
-                onClose = closeTechnical,
-            )
-        }
-        if (showDiagnostics) {
-            AboutDiagnosticsOverlay(
-                loggingEnabled = diagnosticsSettingsState.diagnosticsLoggingEnabled,
-                exporting = exporting,
-                backFocus = diagnosticsBackFocus,
-                firstFocusModifier = firstFocusModifier,
-                onToggleLogging = toggleDiagnostics,
-                onExportDiagnostics = onExportDiagnostics,
-                onDeleteLogs = onDeleteLogs,
-                onReadLog = onReadLog,
-                onClose = closeDiagnostics,
+                onClick = { onOpenLegal(ABOUT_LEGAL_TERMS) },
             )
         }
     }
 }
 
-// Full-panel legal document, drawn over the (still-composed) About list so the focused list row is not
-// destroyed. Paragraphs are focusable so the D-pad scrolls the LazyColumn through the full text.
+// Full-panel legal document. Paragraphs are focusable so the D-pad scrolls through the full text; the first
+// carries the entry requester (rail RIGHT re-entry + nav-in focus) and blocks Up so focus can't escape to
+// the top nav (which navigates on focus → Home). A scrollable Column (not a LazyColumn) so the first
+// paragraph stays composed even scrolled off.
 @Composable
-private fun AboutLegalOverlay(
-    title: String,
-    paragraphs: List<String>,
-    backFocus: FocusRequester,
-    firstFocusModifier: Modifier,
-    onClose: () -> Unit,
+internal fun AboutLegalScreen(
+    pageKey: String,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    // No visible back button: the system Back/Return key closes the overlay (BackHandler).
-    BackHandler(onBack = onClose)
-    LaunchedEffect(title) { runCatching { backFocus.requestFocus() } }
-    // No own background: the About list underneath is hidden via alpha(0) (kept composed so the focused row
-    // survives), so the legal text renders directly on the host GlassPanel — same fill + transparency, no
-    // colour seam, and the panel's normal padding/border instead of a mismatched inner rectangle + stripes.
-    // A scrollable Column (not a LazyColumn) so every paragraph stays composed even when scrolled off — the
-    // first paragraph carries the detail focus requester (the section rail's RIGHT re-entry target), and if
-    // it were disposed on scroll that RIGHT would land nowhere.
+    val page = if (pageKey == ABOUT_LEGAL_TERMS) AboutLegalPage.Terms else AboutLegalPage.Privacy
+    val title = stringResource(page.titleRes)
+    val paragraphs = stringResource(page.bodyRes).split("\n\n")
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(pageKey) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         SectionTitle(text = title)
         paragraphs.forEachIndexed { index, paragraph ->
             FocusableLegalParagraph(
                 text = paragraph,
-                // First paragraph is the focus entry: it carries the detail requester + entry focus and
-                // blocks Up so focus can't escape to the top nav (which navigates on focus).
                 modifier = if (index == 0) {
-                    firstFocusModifier
-                        .focusRequester(backFocus)
+                    entryFocusModifier
+                        .focusRequester(firstFocus)
                         .focusProperties { up = FocusRequester.Cancel }
                 } else {
                     Modifier
@@ -273,22 +175,22 @@ private fun AboutLegalOverlay(
     }
 }
 
-// Technical-details sub-page: mirrors AboutLegalOverlay (alpha-hides the About list, renders over the host
-// GlassPanel, Back closes + refocuses the opening row). Read-only info rows; the first blocks Up so focus
-// can't escape to the top nav (which navigates on focus).
+// Technical-details sub-page: read-only info rows. A scrollable Column (not LazyColumn) so the first row —
+// which holds the entry requester — stays composed even scrolled off; it blocks Up so focus can't escape to
+// the top nav (which navigates on focus → Home).
 @Composable
-private fun TechnicalDetailsOverlay(
+internal fun AboutTechnicalScreen(
     state: AboutAppState,
-    backFocus: FocusRequester,
-    firstFocusModifier: Modifier,
-    onClose: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    BackHandler(onBack = onClose)
-    LaunchedEffect(Unit) { runCatching { backFocus.requestFocus() } }
-    // Scrollable Column (not LazyColumn) so the first row — which holds the detail focus requester used by
-    // the section rail's RIGHT re-entry — stays composed even when scrolled off.
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstFocus.requestFocus() }
+    }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         SectionTitle(text = stringResource(R.string.about_technical_details))
@@ -296,8 +198,8 @@ private fun TechnicalDetailsOverlay(
             title = stringResource(R.string.about_package_name),
             help = stringResource(R.string.about_help_package),
             value = state.packageName,
-            modifier = firstFocusModifier
-                .focusRequester(backFocus)
+            modifier = entryFocusModifier
+                .focusRequester(firstFocus)
                 .focusProperties { up = FocusRequester.Cancel },
         )
         VivicastSettingsRow(title = stringResource(R.string.about_build_type), help = stringResource(R.string.about_help_build_type), value = state.buildType)
@@ -310,7 +212,7 @@ private fun TechnicalDetailsOverlay(
     }
 }
 
-private enum class AboutLegalPage(
+internal enum class AboutLegalPage(
     @get:StringRes val titleRes: Int,
     @get:StringRes val bodyRes: Int,
 ) {
@@ -318,7 +220,7 @@ private enum class AboutLegalPage(
     Terms(R.string.settings_legal_terms_title, R.string.settings_legal_terms_body),
 }
 
-// Inline legal document paragraph: focusable so the D-pad scrolls the LazyColumn through the full text.
+// Inline legal document paragraph: focusable so the D-pad scrolls the Column through the full text.
 @Composable
 private fun FocusableLegalParagraph(text: String, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
@@ -336,4 +238,3 @@ private fun FocusableLegalParagraph(text: String, modifier: Modifier = Modifier)
         BodyText(text = text, maxLines = Int.MAX_VALUE, modifier = Modifier.fillMaxWidth())
     }
 }
-

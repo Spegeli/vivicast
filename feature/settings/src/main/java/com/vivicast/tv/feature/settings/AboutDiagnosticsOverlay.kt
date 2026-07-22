@@ -1,6 +1,5 @@
 package com.vivicast.tv.feature.settings
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
@@ -29,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -58,75 +56,47 @@ import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
 
 /**
- * "Diagnose & Protokolle" sub-page of About. One full-panel overlay with an internal mode:
- *  - rows mode: logging toggle, export, delete (multi-select dialog), view current log.
- *  - viewer mode: a fixed Normale-Logs / Crash-Logs switch (+ Refresh for normal logs) over the log tail.
- * Mirrors [TechnicalDetailsOverlay]: alpha-hidden About list underneath, Back closes / steps back, and
- * the first focusable of the current mode carries [firstFocusModifier] (the section rail's RIGHT anchor).
+ * "Diagnose & Protokolle" — a self-contained About sub-view destination: logging toggle, export, delete
+ * (multi-select dialog), and a "view log" row that navigates to the [AboutDiagnosticsLogScreen] destination
+ * (D1 = a: the log viewer is its own destination, not an internal mode). The delete confirmation stays a
+ * dialog. See SettingsRoute's AboutGraph wiring.
  */
 @Composable
-internal fun AboutDiagnosticsOverlay(
+internal fun AboutDiagnosticsScreen(
     loggingEnabled: Boolean,
     exporting: Boolean,
-    backFocus: FocusRequester,
-    firstFocusModifier: Modifier,
+    // True when re-entering after BACK from the log viewer: focus the "view log" row instead of the toggle.
+    returnFromLog: Boolean,
     onToggleLogging: () -> Unit,
     onExportDiagnostics: () -> Unit,
+    onOpenLogViewer: () -> Unit,
     onDeleteLogs: suspend (Set<DiagnosticsLogKind>) -> Unit,
-    onReadLog: suspend (DiagnosticsLogKind) -> String?,
-    onClose: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    var viewingLog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    var initialized by remember { mutableStateOf(false) }
+    val toggleFocus = remember { FocusRequester() }
     val viewLogRowFocus = remember { FocusRequester() }
-    val firstPillFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
 
-    // Move focus once the new mode has composed: initial entry → the toggle (backFocus); into the viewer →
-    // the first pill; back to rows → the view-log row that opened it.
-    LaunchedEffect(viewingLog) {
+    // Land focus on entry: the toggle normally, the view-log row when coming back from the viewer.
+    LaunchedEffect(Unit) {
         awaitFrame()
-        when {
-            !initialized -> { initialized = true; runCatching { backFocus.requestFocus() } }
-            viewingLog -> runCatching { firstPillFocus.requestFocus() }
-            else -> runCatching { viewLogRowFocus.requestFocus() }
-        }
+        runCatching { (if (returnFromLog) viewLogRowFocus else toggleFocus).requestFocus() }
     }
 
-    // Rows mode: Back closes the whole sub-page (viewer + dialog carry their own Back).
-    BackHandler(enabled = !viewingLog && !showDeleteDialog, onBack = onClose)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // The rows stay composed (just hidden) while viewing, so switching modes never destroys the
-        // focused row mid-transition (which would drop focus to the top nav → Home). The detail requester +
-        // entry focus live on whichever mode is currently visible.
-        DiagnosticsRows(
-            modifier = Modifier.alpha(if (viewingLog) 0f else 1f),
-            loggingEnabled = loggingEnabled,
-            exporting = exporting,
-            firstFocusModifier = if (viewingLog) Modifier else firstFocusModifier.focusRequester(backFocus),
-            viewLogRowFocus = viewLogRowFocus,
-            onToggleLogging = onToggleLogging,
-            onExportDiagnostics = onExportDiagnostics,
-            onOpenDeleteDialog = { showDeleteDialog = true },
-            onViewLog = { viewingLog = true },
-        )
-        if (viewingLog) {
-            DiagnosticsLogViewer(
-                firstFocusModifier = firstFocusModifier,
-                firstPillFocus = firstPillFocus,
-                onReadLog = onReadLog,
-                // Move focus back to the (composed, hidden) View-log row BEFORE removing the viewer, so its
-                // focused element isn't destroyed with focus still on it (which escapes to the top nav → Home).
-                onBack = {
-                    runCatching { viewLogRowFocus.requestFocus() }
-                    viewingLog = false
-                },
-            )
-        }
-    }
+    DiagnosticsRows(
+        modifier = modifier,
+        loggingEnabled = loggingEnabled,
+        exporting = exporting,
+        firstFocusModifier = entryFocusModifier.focusRequester(toggleFocus),
+        viewLogRowFocus = viewLogRowFocus,
+        onToggleLogging = onToggleLogging,
+        onExportDiagnostics = onExportDiagnostics,
+        onOpenDeleteDialog = { showDeleteDialog = true },
+        onViewLog = onOpenLogViewer,
+    )
 
     if (showDeleteDialog) {
         DiagnosticsDeleteDialog(
@@ -165,7 +135,7 @@ private fun DiagnosticsRows(
             title = stringResource(R.string.about_diagnostics_logging),
             help = stringResource(R.string.about_help_logging),
             value = if (loggingEnabled) stringResource(R.string.value_on) else stringResource(R.string.value_off),
-            // First focusable: carries the detail requester + entry focus, blocks Up (top-nav navigates on focus).
+            // First focusable: carries the entry requester + entry focus, blocks Up (top-nav navigates on focus).
             modifier = firstFocusModifier.focusProperties { up = FocusRequester.Cancel },
             onClick = onToggleLogging,
         )
@@ -224,23 +194,32 @@ private fun DiagnosticsInfoCard(title: String, body: String) {
 // Diagnostics info paragraphs run to a few lines at TV width; keep them un-truncated.
 private const val MAX_INFO_LINES = 6
 
+/**
+ * Diagnostics log viewer as its own destination (D1 = a): a fixed Normale-Logs / Crash-Logs switch (+ Refresh
+ * for normal logs) over the log tail. The first pill carries the entry requester (rail RIGHT re-entry) + the
+ * nav-in initial focus, and the log list redirects its Up-exit back to that first pill.
+ */
 @OptIn(ExperimentalComposeUiApi::class) // FocusProperties.exit (Up-exit redirect to the pills)
 @Composable
-private fun DiagnosticsLogViewer(
-    firstFocusModifier: Modifier,
-    firstPillFocus: FocusRequester,
+internal fun AboutDiagnosticsLogScreen(
     onReadLog: suspend (DiagnosticsLogKind) -> String?,
-    onBack: () -> Unit,
+    entryFocusModifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
-    BackHandler(onBack = onBack)
     var kind by remember { mutableStateOf(DiagnosticsLogKind.Events) }
     var content by remember { mutableStateOf<String?>(null) }
+    val firstPillFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val reload: () -> Unit = { scope.launch { content = onReadLog(kind) } }
     LaunchedEffect(kind) { content = onReadLog(kind) }
+    // Land focus on the first pill after the nav swap, else it escapes to the top nav.
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        runCatching { firstPillFocus.requestFocus() }
+    }
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space3),
     ) {
         SectionTitle(text = stringResource(R.string.about_diagnostics_section))
@@ -250,8 +229,8 @@ private fun DiagnosticsLogViewer(
             ActionPill(
                 label = stringResource(R.string.about_diagnostics_kind_events),
                 selected = kind == DiagnosticsLogKind.Events,
-                // First focusable of the viewer: detail requester + entry focus, blocks Up.
-                modifier = firstFocusModifier
+                // First focusable of the viewer: entry requester + entry focus, blocks Up.
+                modifier = entryFocusModifier
                     .focusRequester(firstPillFocus)
                     .focusProperties { up = FocusRequester.Cancel }
                     .width(200.dp),

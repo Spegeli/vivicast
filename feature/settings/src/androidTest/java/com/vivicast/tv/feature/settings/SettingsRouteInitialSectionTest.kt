@@ -192,6 +192,11 @@ private object EmptyEpgSourceRepository : EpgSourceRepository {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<DomainEpgProgram>> = flowOf(emptyList())
+    override fun observeCurrentProgramsForChannels(
+        providerId: String,
+        channelIds: List<String>,
+        nowMillis: Long,
+    ): Flow<List<DomainEpgProgram>> = flowOf(emptyList())
     override fun observeMappingsForChannel(providerId: String, channelId: String): Flow<List<DomainEpgChannelMapping>> =
         flowOf(emptyList())
     override suspend fun setManualChannelMapping(request: ManualEpgChannelMappingRequest): DomainEpgChannelMapping =

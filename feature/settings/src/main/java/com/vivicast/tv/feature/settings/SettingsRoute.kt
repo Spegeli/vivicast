@@ -138,6 +138,14 @@ private const val PROVIDER_FOCUS_KEY = "provider_focus"
 // Nav-result: BACK from the groups screen asks the actions menu to focus its "Gruppen verwalten" row (its
 // origin) instead of the first action. One-shot; the actions destination clears it after re-entry.
 private const val FROM_GROUPS_KEY = "from_groups"
+// Nav-result: an EPG sub-view (editor / manual / global) stashes which overview row to re-focus (a sentinel
+// EPG_FOCUS_* or a source id) on the entry it pops back to. Mirrors PROVIDER_FOCUS_KEY.
+private const val EPG_FOCUS_KEY = "epg_focus"
+// Nav-result: an About sub-view stashes which overview row to re-focus (a sentinel ABOUT_FOCUS_* or a legal
+// page key). Separately, the diagnostics-log viewer stashes a one-shot flag on its parent Diagnostics entry
+// so that screen refocuses its "view log" row (not the toggle) on BACK.
+private const val ABOUT_FOCUS_KEY = "about_focus"
+private const val ABOUT_LOG_RETURN_KEY = "about_log_return"
 
 // Rail item OK: re-selecting the current section collapses its open sub-view; a different section
 // switches. Kept top-level so the branch doesn't count toward SettingsRoute's complexity gate.
@@ -359,13 +367,13 @@ fun SettingsRoute(
         listOf(
             SettingsSection(SecGeneral, sectionGeneral, SecGeneral::class),
             SettingsSection(PlaylistsGraph, sectionPlaylists, PlaylistsGraph::class),
-            SettingsSection(SecEpg, sectionEpg, SecEpg::class),
+            SettingsSection(EpgGraph, sectionEpg, EpgGraph::class),
             SettingsSection(SecAppearance, sectionAppearance, SecAppearance::class),
             SettingsSection(SecPlayback, sectionPlayback, SecPlayback::class),
             SettingsSection(SecParental, sectionParental, SecParental::class),
             SettingsSection(SecCache, sectionCache, SecCache::class),
             SettingsSection(SecBackup, sectionBackup, SecBackup::class),
-            SettingsSection(SecAbout, sectionAbout, SecAbout::class),
+            SettingsSection(AboutGraph, sectionAbout, AboutGraph::class),
         )
     }
     val mainSections = remember(sections) { sections.dropLast(1) }
@@ -401,11 +409,6 @@ fun SettingsRoute(
     // its list back to the top so RIGHT always lands on the first row.
     var revealFirstRowSignal by remember { mutableStateOf(0) }
     var pendingDetailFocus by remember { mutableStateOf(false) }
-    // Bumped when OK is pressed on the already-selected section: signals the detail panel to collapse any
-    // open sub-view (editor / global settings / legal page) back to its overview. Focus stays on the rail
-    // (the collapse touches only the right pane). Playlists sub-views are nav destinations; EPG/About still
-    // consume this signal for their (still-local) overlays.
-    var collapseSubViewSignal by remember { mutableStateOf(0) }
     // True while focus is inside the right detail panel — gates the settings-scoped BACK (detail → rail).
     var detailFocused by remember { mutableStateOf(false) }
     val sectionFocusRequesters = remember(sections) { sections.associate { it.label to FocusRequester() } }
@@ -416,9 +419,8 @@ fun SettingsRoute(
     // Invisible focus holder living in the detail pane (below the NavHost). Park focus here before an
     // inner-NavHost content swap so it can't orphan up to the top nav (whose selection-follows-focus jumps to
     // Home) during the transition — and, unlike parking on the visible rail, the user sees NO intermediate
-    // focus flash. The target destination's own initial-focus effect then reclaims focus. Replaces the
-    // Playlists' per-panel onParkFocusBeforeEditor that the D2 split dropped; EPG's still-local overlays
-    // keep calling their own onParkFocusBeforeEditor.
+    // focus flash. The target destination's own initial-focus effect then reclaims focus. Every section's
+    // sub-views (Playlists / EPG / About) are inner-nav destinations that call parkRail() at the navigate site.
     val focusHolder = remember { FocusRequester() }
     val parkRail: () -> Unit = {
         runCatching { focusHolder.requestFocus() }
@@ -446,10 +448,13 @@ fun SettingsRoute(
         railSectionActivate(
             isCurrent = currentSection.isSame(section),
             onCollapse = {
-                collapseSubViewSignal++ // Epg/About: collapse their still-local overlays
-                // Playlists: pop its inner-nav sub-views (actions/editor/groups) back to the overview, so OK on
-                // the rail section discards the open sub-view. No-op for sections without nav sub-views.
+                // Pop the section's inner-nav sub-views back to its overview, so OK on the rail section discards
+                // the open sub-view. Each is a no-op unless that section's graph is the one currently open
+                // (sections are depth-1 replaces, so at most one has sub-views on the stack). About pops to its
+                // overview even from the nested diagnostics-log (popBackStack to the graph start).
                 runCatching { innerNav.popBackStack(SecPlaylists, inclusive = false) }
+                runCatching { innerNav.popBackStack(SecEpg, inclusive = false) }
+                runCatching { innerNav.popBackStack(SecAbout, inclusive = false) }
             },
             onSwitch = { navigateSection(section); pendingDetailFocus = true },
         )
@@ -824,37 +829,101 @@ fun SettingsRoute(
                                 )
                             }
                         }
-                        composable<SecEpg> { EpgSettingsPanel(
-                            state = settingsUiState.epg,
-                            sources = settingsUiState.epgSources,
-                            providers = settingsUiState.providers,
-                            selectedProviderId = settingsUiState.selectedEpgProviderId,
-                            providerLinks = settingsUiState.providerEpgLinks,
-                            manualMappingChannels = settingsUiState.manualMappingChannels,
-                            manualMappings = settingsUiState.manualMappingsForSelectedChannel,
-                            selectedManualMappingChannelId = settingsUiState.selectedManualMappingChannelId,
-                            onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
-                            onRefreshEpgSource = onRefreshEpgSource,
-                            onSelectProvider = viewModel::onEpgProviderSelected,
-                            onSaveEpgSource = viewModel::saveEpgSource,
-                            onDeleteEpgSource = { id ->
-                                val start = System.currentTimeMillis()
-                                viewModel.deleteEpgSource(id).also {
-                                    if (it.isSuccess) onEpgSourceDeleted(id, System.currentTimeMillis() - start)
+                        navigation<EpgGraph>(startDestination = SecEpg) {
+                            composable<SecEpg> { entry ->
+                                val focusToken by entry.savedStateHandle
+                                    .getStateFlow<String?>(EPG_FOCUS_KEY, null)
+                                    .collectAsStateWithLifecycle()
+                                EpgOverviewScreen(
+                                    sources = settingsUiState.epgSources,
+                                    providers = settingsUiState.providers,
+                                    onRefreshEpgSource = onRefreshEpgSource,
+                                    onOpenGlobalSettings = { parkRail(); innerNav.navigate(EpgGlobalSettings) },
+                                    onOpenAddSource = { parkRail(); innerNav.navigate(EpgSourceEditor()) },
+                                    onOpenSource = { id -> parkRail(); innerNav.navigate(EpgSourceEditor(id)) },
+                                    onOpenManualMapping = { parkRail(); innerNav.navigate(EpgManualMapping) },
+                                    pendingFocusToken = focusToken,
+                                    onFocusHandled = { entry.savedStateHandle[EPG_FOCUS_KEY] = null },
+                                    firstFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<EpgSourceEditor> { entry ->
+                                val editorSourceId = entry.toRoute<EpgSourceEditor>().sourceId
+                                EpgSourceEditorScreen(
+                                    sourceId = editorSourceId,
+                                    sources = settingsUiState.epgSources,
+                                    onSaveEpgSource = viewModel::saveEpgSource,
+                                    onDeleteEpgSource = { id ->
+                                        val start = System.currentTimeMillis()
+                                        viewModel.deleteEpgSource(id).also {
+                                            if (it.isSuccess) onEpgSourceDeleted(id, System.currentTimeMillis() - start)
+                                        }
+                                    },
+                                    onRefreshEpgSource = onRefreshEpgSource,
+                                    onGetEpgSourceUrl = viewModel::getEpgSourceUrl,
+                                    onTestEpgConnection = onTestEpgConnection,
+                                    onSaved = { token ->
+                                        parkRail()
+                                        innerNav.previousBackStackEntry?.savedStateHandle?.set(EPG_FOCUS_KEY, token)
+                                        innerNav.popBackStack()
+                                    },
+                                    onDeleted = { token ->
+                                        parkRail()
+                                        innerNav.getBackStackEntry(SecEpg).savedStateHandle[EPG_FOCUS_KEY] = token
+                                        innerNav.popBackStack(SecEpg, inclusive = false)
+                                    },
+                                    onCancel = {
+                                        parkRail()
+                                        // Add → focus the Add row on return; edit → focus that source card.
+                                        innerNav.previousBackStackEntry?.savedStateHandle
+                                            ?.set(EPG_FOCUS_KEY, editorSourceId ?: EPG_FOCUS_ADD)
+                                        innerNav.popBackStack()
+                                    },
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<EpgManualMapping> {
+                                // BACK → overview, re-focusing the "Manuelle Zuordnung" row (park first so the
+                                // inner NavHost's auto-pop can't orphan focus to the top nav → Home).
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(EPG_FOCUS_KEY, EPG_FOCUS_MANUAL)
+                                    innerNav.popBackStack()
                                 }
-                            },
-                            onSelectManualMappingChannel = viewModel::onManualMappingChannelSelected,
-                            onResetManualMappingChannel = viewModel::onManualMappingReset,
-                            onSetManualMapping = viewModel::setManualChannelMapping,
-                            onClearManualMapping = viewModel::clearManualChannelMapping,
-                            onGetEpgSourceUrl = viewModel::getEpgSourceUrl,
-                            onTestEpgConnection = onTestEpgConnection,
-                            firstFocusModifier = detailFirstFocusModifier,
-                            // Park focus on the (always-present) section button before the overview swaps
-                            // to the inline editor, so focus can't escape to the top nav bar (jumps Home).
-                            onParkFocusBeforeEditor = parkRail,
-                            collapseSubViewSignal = collapseSubViewSignal,
-                        ) }
+                                EpgManualMappingScreen(
+                                    providers = settingsUiState.providers,
+                                    sources = settingsUiState.epgSources,
+                                    selectedProviderId = settingsUiState.selectedEpgProviderId,
+                                    providerLinks = settingsUiState.providerEpgLinks,
+                                    channels = settingsUiState.manualMappingChannels,
+                                    mappings = settingsUiState.manualMappingsForSelectedChannel,
+                                    selectedChannelId = settingsUiState.selectedManualMappingChannelId,
+                                    onSelectProvider = viewModel::onEpgProviderSelected,
+                                    onSelectChannel = viewModel::onManualMappingChannelSelected,
+                                    onSetManualMapping = viewModel::setManualChannelMapping,
+                                    onClearManualMapping = viewModel::clearManualChannelMapping,
+                                    onResetManualMappingChannel = viewModel::onManualMappingReset,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<EpgGlobalSettings> {
+                                // BACK → overview, re-focusing the "Globale Einstellungen" row.
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(EPG_FOCUS_KEY, EPG_FOCUS_GLOBAL)
+                                    innerNav.popBackStack()
+                                }
+                                EpgGlobalSettingsScreen(
+                                    state = settingsUiState.epg,
+                                    onEpgPreferencesChanged = viewModel::onEpgSettingsChanged,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
                         composable<SecAppearance> { AppearanceSettingsPanel(
                             state = settingsUiState.appearance,
                             onAppearanceSettingsChanged = viewModel::onAppearanceSettingsChanged,
@@ -890,20 +959,88 @@ fun SettingsRoute(
                             onImportBackup = onImportBackup,
                             firstFocusModifier = detailFirstFocusModifier,
                         ) }
-                        composable<SecAbout> { AboutSettingsPanel(
-                            state = aboutAppState,
-                            diagnosticsSettingsState = settingsUiState.diagnostics,
-                            onDiagnosticsSettingsChanged = { diagnostics ->
-                                viewModel.onDiagnosticsSettingsChanged(diagnostics)
-                                onDiagnosticsSettingsChanged(diagnostics)
-                            },
-                            onExportDiagnostics = onExportDiagnostics,
-                            onDeleteLogs = onDeleteLogs,
-                            onReadLog = onReadLog,
-                            exporting = diagnosticsExporting,
-                            firstFocusModifier = detailFirstFocusModifier,
-                            collapseSubViewSignal = collapseSubViewSignal,
-                        ) }
+                        navigation<AboutGraph>(startDestination = SecAbout) {
+                            composable<SecAbout> { entry ->
+                                val focusToken by entry.savedStateHandle
+                                    .getStateFlow<String?>(ABOUT_FOCUS_KEY, null)
+                                    .collectAsStateWithLifecycle()
+                                AboutOverviewScreen(
+                                    state = aboutAppState,
+                                    onOpenTechnical = { parkRail(); innerNav.navigate(AboutTechnical) },
+                                    onOpenDiagnostics = { parkRail(); innerNav.navigate(AboutDiagnostics) },
+                                    onOpenLegal = { pageKey -> parkRail(); innerNav.navigate(AboutLegal(pageKey)) },
+                                    pendingFocusToken = focusToken,
+                                    onFocusHandled = { entry.savedStateHandle[ABOUT_FOCUS_KEY] = null },
+                                    firstFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<AboutLegal> { entry ->
+                                val pageKey = entry.toRoute<AboutLegal>().pageKey
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(ABOUT_FOCUS_KEY, pageKey)
+                                    innerNav.popBackStack()
+                                }
+                                AboutLegalScreen(
+                                    pageKey = pageKey,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<AboutTechnical> {
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(ABOUT_FOCUS_KEY, ABOUT_FOCUS_TECHNICAL)
+                                    innerNav.popBackStack()
+                                }
+                                AboutTechnicalScreen(
+                                    state = aboutAppState,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<AboutDiagnostics> { entry ->
+                                // One-shot: set true by the log viewer's BACK so this screen refocuses its
+                                // "view log" row instead of the toggle. Read once on (re-)entry, then cleared.
+                                val returnFromLog = remember { entry.savedStateHandle.get<Boolean>(ABOUT_LOG_RETURN_KEY) ?: false }
+                                LaunchedEffect(Unit) { entry.savedStateHandle[ABOUT_LOG_RETURN_KEY] = false }
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(ABOUT_FOCUS_KEY, ABOUT_FOCUS_DIAGNOSTICS)
+                                    innerNav.popBackStack()
+                                }
+                                AboutDiagnosticsScreen(
+                                    loggingEnabled = settingsUiState.diagnostics.diagnosticsLoggingEnabled,
+                                    exporting = diagnosticsExporting,
+                                    returnFromLog = returnFromLog,
+                                    onToggleLogging = {
+                                        val next = settingsUiState.diagnostics.copy(
+                                            diagnosticsLoggingEnabled = !settingsUiState.diagnostics.diagnosticsLoggingEnabled,
+                                        )
+                                        viewModel.onDiagnosticsSettingsChanged(next)
+                                        onDiagnosticsSettingsChanged(next)
+                                    },
+                                    onExportDiagnostics = onExportDiagnostics,
+                                    onOpenLogViewer = { parkRail(); innerNav.navigate(AboutDiagnosticsLog) },
+                                    onDeleteLogs = onDeleteLogs,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            composable<AboutDiagnosticsLog> {
+                                BackHandler {
+                                    parkRail()
+                                    innerNav.previousBackStackEntry?.savedStateHandle?.set(ABOUT_LOG_RETURN_KEY, true)
+                                    innerNav.popBackStack()
+                                }
+                                AboutDiagnosticsLogScreen(
+                                    onReadLog = onReadLog,
+                                    entryFocusModifier = detailFirstFocusModifier,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
                     }
                     }
                     // Invisible focus holder (see focusHolder) — parked on during inner-nav swaps so focus
