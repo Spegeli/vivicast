@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -58,6 +59,7 @@ import com.vivicast.tv.core.designsystem.VivicastColors
 import com.vivicast.tv.core.designsystem.VivicastScreen
 import com.vivicast.tv.core.designsystem.VivicastSpacing
 import com.vivicast.tv.core.designsystem.VivicastTypography
+import com.vivicast.tv.core.logging.vcLog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vivicast.tv.data.epg.EpgRepository
@@ -88,9 +90,10 @@ fun LiveTvRoute(
     resolveChannelLogoModel: suspend (Channel) -> Any? = { null },
     onOpenPlayer: (Channel) -> Unit = {},
     // P2 — start the embedded video preview for a channel (OK/activate). App-hoisted (plays on the shared
-    // player). livePreviewActive == a channel is streaming; livePreviewSlot renders the App's video surface.
+    // player). livePreviewChannel == the streaming channel (the App's committed one, survives a fullscreen
+    // round-trip); livePreviewSlot renders the App's video surface.
     onCommitPreview: (Channel) -> Unit = {},
-    livePreviewActive: Boolean = false,
+    livePreviewChannel: Channel? = null,
     livePreviewSlot: @Composable BoxScope.() -> Unit = {},
     onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
     onOpenCatchUp: (Channel, EpgProgram) -> Unit = { _, _ -> },
@@ -114,7 +117,7 @@ fun LiveTvRoute(
         resolveChannelLogoModel = resolveChannelLogoModel,
         onOpenPlayer = onOpenPlayer,
         onCommitPreview = onCommitPreview,
-        livePreviewActive = livePreviewActive,
+        livePreviewChannel = livePreviewChannel,
         livePreviewSlot = livePreviewSlot,
         onPlayableChannelsChanged = onPlayableChannelsChanged,
         onOpenCatchUp = onOpenCatchUp,
@@ -140,7 +143,7 @@ private fun RoomLiveTvRoute(
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: (Channel) -> Unit,
     onCommitPreview: (Channel) -> Unit,
-    livePreviewActive: Boolean,
+    livePreviewChannel: Channel?,
     livePreviewSlot: @Composable BoxScope.() -> Unit,
     onPlayableChannelsChanged: (List<Channel>) -> Unit,
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
@@ -182,6 +185,10 @@ private fun RoomLiveTvRoute(
     // requestFocus on load — that would steal focus from the top nav as it passes through Live-TV, trapping
     // navigation on the Live-TV tab). Focus lands here only when D-pad actually enters the content.
     val firstProviderFocusRequester = remember { FocusRequester() }
+    // Hoisted to LiveTvRoute so the Kategorien column can target it with a deterministic `right =` (RIGHT from a
+    // low category → the selected channel row, which is that category's first/top channel = always composed). It's
+    // bound to the selected channel row inside RoomChannelColumn.
+    val channelListSelectedFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(expandedProviderIds) { viewModel.onExpandedProvidersChanged(expandedProviderIds) }
     // A channel auto-reset (its list changed) drops the activated (Sender-Modus) flag + committed identity.
@@ -189,6 +196,7 @@ private fun RoomLiveTvRoute(
         activated = false
         committedChannel = null
     }
+    val isInitialLoading = uiState.isInitialLoading
     val providers = uiState.providers
     val categories = uiState.categories
     val channels = uiState.channels
@@ -213,6 +221,19 @@ private fun RoomLiveTvRoute(
     val showChannelList = focusedArea != LiveFocusArea.Epg
     val showEpg = focusedArea != LiveFocusArea.Provider
 
+    // Audit instrumentation (debug-only, VCd tag, filter "[ltv]"): every focus/column/VM-state change so the
+    // full Live-TV navigation path is reconstructable from logcat alone.
+    LaunchedEffect(focusedArea) {
+        vcLog("ltv") { "focusedArea=$focusedArea  cols=[K=$showKategorien|S=$showChannelList|E=$showEpg]" }
+    }
+    LaunchedEffect(activated) { vcLog("ltv") { "activated=$activated  committed=${committedChannel?.name}" } }
+    LaunchedEffect(selectedProviderId, selectedCategoryId, selectedChannelId, channels.size) {
+        vcLog("ltv") {
+            "vmstate prov=$selectedProviderId cat=$selectedCategoryId chan=$selectedChannelId " +
+                "sel=${selectedChannel?.name} chans=${channels.size} cats=${categories.size} provs=${providers.size}"
+        }
+    }
+
     // Phase 1: preview logo + info follow the selected channel. The programme is the focused EPG row (R1)
     // when in the EPG; while browsing the channel list it's the focused channel's CURRENT programme, taken
     // from the per-channel batch so it updates instantly on scroll (not the slower single-channel query).
@@ -223,14 +244,25 @@ private fun RoomLiveTvRoute(
         currentProgramsByChannel[selectedChannelId] ?: currentProgram
     }
 
+    // Sender-Modus = a channel was OK'd (activated) OR a live preview is streaming (livePreviewChannel — the
+    // App's committed channel, which SURVIVES a fullscreen round-trip). The latter is what fixes Bug 3: after
+    // returning from fullscreen the preview keeps playing, so BACK must re-fullscreen it instead of stepping
+    // back through the columns. (`activated` alone was reset on the return, so it can't carry this.)
+    val senderMode = activated || livePreviewChannel != null
+
     // BACK: in Sender-Modus jump straight to fullscreen from any column (S6); otherwise step the browse focus
     // back toward the category column.
-    BackHandler(enabled = activated || focusedArea != LiveFocusArea.Provider) {
-        // Fullscreen the STREAMING channel (committed), not the merely-focused one — else BACK would
-        // reconnect to a browsed channel (2nd connection). Deep-link activation has no committed preview
-        // yet, so fall back to the selected channel (opens it fresh).
-        val target = committedChannel ?: selectedChannel
-        if (activated && target != null) {
+    BackHandler(enabled = senderMode || focusedArea != LiveFocusArea.Provider) {
+        // Fullscreen the STREAMING channel (the App's committed livePreviewChannel), not the merely-focused
+        // one — else BACK would reconnect to a browsed channel (2nd connection). Fall back to the just-OK'd
+        // local commit (1-frame gap before the App state propagates), then the selected channel (deep-link
+        // activation has no committed preview yet → opens it fresh).
+        val target = livePreviewChannel ?: committedChannel ?: selectedChannel
+        vcLog("ltv") {
+            "BACK activated=$activated live=${livePreviewChannel?.name} focusedArea=$focusedArea " +
+                "sel=${selectedChannel?.name} -> ${if (senderMode && target != null) "FULLSCREEN ${target.name}" else "step-back"}"
+        }
+        if (senderMode && target != null) {
             onOpenPlayer(target)
         } else {
             when (focusedArea) {
@@ -249,6 +281,10 @@ private fun RoomLiveTvRoute(
 
     LaunchedEffect(targetProviderId, targetCategoryId, targetChannelId, targetEpgProgramId, targetActivate) {
         val providerId = targetProviderId ?: return@LaunchedEffect
+        vcLog("ltv") {
+            "TARGET prov=$targetProviderId cat=$targetCategoryId chan=$targetChannelId " +
+                "epg=$targetEpgProgramId activate=$targetActivate"
+        }
         viewModel.onTarget(targetProviderId, targetCategoryId, targetChannelId, targetEpgStartTime)
         if (providerId !in expandedProviderIds) {
             onExpandedProviderIdsChanged(expandedProviderIds + providerId)
@@ -288,6 +324,7 @@ private fun RoomLiveTvRoute(
         val nextIndex = if (key == Key.ChannelUp) index - 1 else index + 1
         if (nextIndex !in channels.indices) return@moveChannel true
         viewModel.onChannelFocused(channels[nextIndex].id)
+        vcLog("ltv") { "ZAP $key idx=$index->$nextIndex ${channels[nextIndex].name}" }
         selectedChannelFocusRequest += 1
         true
     }
@@ -305,7 +342,15 @@ private fun RoomLiveTvRoute(
                 .fillMaxSize()
                 // Entering the content (D-pad DOWN from the top nav) lands focus on the first provider, not
                 // the favorites row — without stealing focus while the nav merely passes through Live-TV.
-                .focusProperties { enter = { firstProviderFocusRequester } },
+                // DIRECTION-AWARE: only the DOWN nav-entry is redirected to the first provider. A horizontal
+                // escalation (a failed RIGHT-from-low-category / LEFT-collapse) must NOT be hijacked here — that
+                // was the root cause of the RIGHT 2-press bug + LEFT-lands-on-provider (see live-tv-states.md
+                // Nav-Audit 2026-07-22). Non-DOWN entries fall through to the column's own `right`/requestFocus.
+                .focusProperties {
+                    enter = { direction ->
+                        if (direction == FocusDirection.Down) firstProviderFocusRequester else FocusRequester.Default
+                    }
+                },
         ) {
             if (showKategorien) {
                 RoomProviderCategoryColumn(
@@ -318,16 +363,21 @@ private fun RoomLiveTvRoute(
                     favoriteCount = uiState.favoriteChannelCount,
                     requestSelectedFocusSignal = selectedCategoryFocusRequest,
                     firstProviderFocusRequester = firstProviderFocusRequester,
+                    channelFocusRequester = channelListSelectedFocusRequester,
+                    hasChannelTarget = channels.isNotEmpty(),
                     onGlobalFavoritesFocused = {
+                        vcLog("ltv") { "focus GlobalFavorites" }
                         viewModel.onGlobalFavoritesSelected()
                         focusedArea = LiveFocusArea.Provider
                     },
                     onProviderFocused = {
+                        vcLog("ltv") { "focus Provider ${it.name}" }
                         viewModel.onProviderFocused(it.id)
                         focusedArea = LiveFocusArea.Provider
                     },
                     onProviderToggle = { provider ->
                         val wasExpanded = provider.id in expandedProviderIds
+                        vcLog("ltv") { "TOGGLE provider ${provider.name} wasExpanded=$wasExpanded -> ${!wasExpanded}" }
                         val nextExpandedProviderIds = if (wasExpanded) {
                             expandedProviderIds - provider.id
                         } else {
@@ -338,6 +388,7 @@ private fun RoomLiveTvRoute(
                         focusedArea = LiveFocusArea.Provider
                     },
                     onCategoryFocused = {
+                        vcLog("ltv") { "focus Category ${it.name}" }
                         viewModel.onCategorySelected(it.id)
                         focusedArea = LiveFocusArea.Provider
                     },
@@ -349,7 +400,8 @@ private fun RoomLiveTvRoute(
                 RoomChannelColumn(
                     channels = channels,
                     selectedChannelId = selectedChannelId,
-                    emptyMessage = emptyChannelMessage(selectedProvider, selectedCategory),
+                    favoriteSelected = selectedCategoryId == FAVORITES_CATEGORY_ID,
+                    emptyMessage = emptyChannelMessage(selectedProvider, selectedCategory, selectedCategoryId == FAVORITES_CATEGORY_ID),
                     resolveChannelLogoModel = resolveChannelLogoModel,
                     logoConfigSignal = logoConfigSignal,
                     nowMillis = nowMillis,
@@ -357,11 +409,15 @@ private fun RoomLiveTvRoute(
                     favoriteChannelIds = favoriteChannelIds,
                     canLoadMore = canLoadMoreChannels,
                     requestSelectedFocusSignal = selectedChannelFocusRequest,
+                    selectedFocusRequester = channelListSelectedFocusRequester,
+                    isInitialLoading = isInitialLoading,
                     onChannelFocused = {
+                        vcLog("ltv") { "focus Channel ${it.name}" }
                         viewModel.onChannelFocused(it.id)
                         focusedArea = LiveFocusArea.ChannelList
                     },
                     onChannelClick = {
+                        vcLog("ltv") { "CLICK Channel ${it.name} -> activate + commit preview" }
                         // Activate + start the embedded video preview (P2) but STAY in [S|E|P] with focus in
                         // the channel list — the user keeps browsing channels with the preview running. Only a
                         // deliberate RIGHT into the EPG (default focus traversal -> EpgProgramRow.onFocused ->
@@ -377,6 +433,7 @@ private fun RoomLiveTvRoute(
                     // LEFT from the channel list re-opens the category column ([S|E|P] -> [K|S|P]). Focus in the
                     // channel list always means K is collapsed, so this is unconditional.
                     onCollapseLeft = {
+                        vcLog("ltv") { "LEFT channelList -> category column" }
                         focusedArea = LiveFocusArea.Provider
                         selectedCategoryFocusRequest += 1
                     },
@@ -389,6 +446,7 @@ private fun RoomLiveTvRoute(
                 val epgFocused = focusedArea == LiveFocusArea.Epg
                 RoomEpgColumn(
                     channel = selectedChannel,
+                    isInitialLoading = isInitialLoading,
                     channelNumber = selectedChannel?.channelNumber,
                     programs = selectedPrograms,
                     nowMillis = nowMillis,
@@ -399,9 +457,13 @@ private fun RoomLiveTvRoute(
                     requestInitialFocusSignal = epgFocusRequest,
                     targetProgramId = targetEpgProgramId,
                     onTargetConsumed = onTargetConsumed,
-                    onEpgFocused = { focusedArea = LiveFocusArea.Epg },
+                    onEpgFocused = {
+                        vcLog("ltv") { "focus Epg" }
+                        focusedArea = LiveFocusArea.Epg
+                    },
                     onProgramFocused = { focusedEpgProgram = it },
                     onCollapseLeft = {
+                        vcLog("ltv") { "LEFT epg -> channelList" }
                         focusedArea = LiveFocusArea.ChannelList
                         selectedChannelFocusRequest += 1
                     },
@@ -419,7 +481,7 @@ private fun RoomLiveTvRoute(
                 provider = channelProvider,
                 resolveChannelLogoModel = resolveChannelLogoModel,
                 logoConfigSignal = logoConfigSignal,
-                livePreviewActive = livePreviewActive,
+                livePreviewActive = livePreviewChannel != null,
                 livePreviewSlot = livePreviewSlot,
                 modifier = Modifier.weight(0.31f),
             )
@@ -438,6 +500,8 @@ private fun RoomProviderCategoryColumn(
     favoriteCount: Int,
     requestSelectedFocusSignal: Int,
     firstProviderFocusRequester: FocusRequester,
+    channelFocusRequester: FocusRequester,
+    hasChannelTarget: Boolean,
     onGlobalFavoritesFocused: () -> Unit,
     onProviderFocused: (Provider) -> Unit,
     onProviderToggle: (Provider) -> Unit,
@@ -445,6 +509,11 @@ private fun RoomProviderCategoryColumn(
     modifier: Modifier = Modifier,
 ) {
     val selectedFocusRequester = remember { FocusRequester() }
+    // Deterministic RIGHT into the channel list: every K row points its `right` at the selected channel row
+    // (that category's first channel = top of the channel list = always composed). Fixes the RIGHT 2-press bug
+    // — without this, RIGHT from a low category found no channel in its geometric beam and escalated to the
+    // content Row (see LiveTvRoute). `Cancel` when the list is empty (nothing to enter).
+    val rightTarget = if (hasChannelTarget) channelFocusRequester else FocusRequester.Cancel
 
     LaunchedEffect(requestSelectedFocusSignal, favoriteSelected, selectedProviderId, selectedCategoryId, categories, expandedProviderIds) {
         if (requestSelectedFocusSignal > 0) selectedFocusRequester.requestFocus()
@@ -462,6 +531,7 @@ private fun RoomProviderCategoryColumn(
                     contentPadding = VivicastSpacing.Space3,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusProperties { right = rightTarget }
                         .then(if (favoriteSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                         .testTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)),
                 ) {
@@ -489,6 +559,7 @@ private fun RoomProviderCategoryColumn(
                         contentPadding = VivicastSpacing.Space3,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .focusProperties { right = rightTarget }
                             .then(if (selectedProviderFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                             .then(if (isFirstProvider) Modifier.focusRequester(firstProviderFocusRequester) else Modifier)
                             .testTag(providerTreeProviderTag(provider.id)),
@@ -528,6 +599,7 @@ private fun RoomProviderCategoryColumn(
                                     contentPadding = VivicastSpacing.Space3,
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .focusProperties { right = rightTarget }
                                         .then(if (selectedCategoryFocusTarget) Modifier.focusRequester(selectedFocusRequester) else Modifier)
                                         .testTag(providerTreeCategoryTag(category.id)),
                                 ) {
@@ -547,11 +619,27 @@ private fun RoomProviderCategoryColumn(
     }
 }
 
+// Neutral loading placeholder shown while the cold DB load is in flight (LiveTvUiState.isInitialLoading),
+// instead of the "Keine Sender" / "Keine Programminformationen" empty-states — so a cold Live-TV entry no
+// longer flashes false-empty text for ~1s before the data lands.
+@Composable
+private fun LiveTvLoadingHint() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(VivicastSpacing.Space4),
+        contentAlignment = Alignment.Center,
+    ) {
+        BodyText(stringResource(R.string.livetv_loading))
+    }
+}
+
 @Composable
 private fun RoomChannelColumn(
     channels: List<Channel>,
     selectedChannelId: String?,
     emptyMessage: String,
+    favoriteSelected: Boolean,
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     logoConfigSignal: Int,
     nowMillis: Long,
@@ -559,6 +647,8 @@ private fun RoomChannelColumn(
     favoriteChannelIds: Set<String>,
     canLoadMore: Boolean,
     requestSelectedFocusSignal: Int,
+    selectedFocusRequester: FocusRequester,
+    isInitialLoading: Boolean,
     onChannelFocused: (Channel) -> Unit,
     onChannelClick: (Channel) -> Unit,
     onChannelLongClick: (Channel) -> Unit,
@@ -567,7 +657,6 @@ private fun RoomChannelColumn(
     moveChannel: (Key) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val selectedFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
     // Focus the selected channel ONLY on an explicit request (collapse-back / zap / player-close return) — NOT
@@ -610,7 +699,16 @@ private fun RoomChannelColumn(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
             if (channels.isEmpty()) {
-                InfoPanel(stringResource(R.string.livetv_no_channels), emptyMessage, badge = stringResource(R.string.common_empty_badge))
+                if (isInitialLoading) {
+                    LiveTvLoadingHint()
+                } else {
+                    val emptyTitle = if (favoriteSelected) {
+                        stringResource(R.string.livetv_no_favorites)
+                    } else {
+                        stringResource(R.string.livetv_no_channels)
+                    }
+                    InfoPanel(emptyTitle, emptyMessage, badge = stringResource(R.string.common_empty_badge))
+                }
             }
             val strNoProgramInline = stringResource(R.string.livetv_no_program_inline)
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2), modifier = Modifier.fillMaxSize()) {
@@ -654,6 +752,7 @@ private fun RoomChannelColumn(
 @Composable
 private fun RoomEpgColumn(
     channel: Channel?,
+    isInitialLoading: Boolean,
     channelNumber: String?,
     programs: List<EpgProgram>,
     nowMillis: Long,
@@ -712,6 +811,7 @@ private fun RoomEpgColumn(
             }
             EpgColumnBody(
                 channel = channel,
+                isInitialLoading = isInitialLoading,
                 programs = programs,
                 nowMillis = nowMillis,
                 focusProgramId = focusProgramId,
@@ -733,6 +833,7 @@ private fun RoomEpgColumn(
 @Composable
 private fun EpgColumnBody(
     channel: Channel?,
+    isInitialLoading: Boolean,
     programs: List<EpgProgram>,
     nowMillis: Long,
     focusProgramId: String?,
@@ -746,6 +847,7 @@ private fun EpgColumnBody(
     onOpenCatchUp: (Channel, EpgProgram) -> Unit,
 ) {
     when {
+        isInitialLoading -> LiveTvLoadingHint()
         channel == null -> {
             InfoPanel(stringResource(R.string.livetv_no_epg_channel), stringResource(R.string.livetv_no_epg_channel_body), badge = stringResource(R.string.livetv_epg_badge))
         }
@@ -980,10 +1082,13 @@ private fun PreviewSurface(logoText: String, logoModel: Any?) {
 }
 
 @Composable
-private fun emptyChannelMessage(provider: Provider?, category: Category?): String =
+private fun emptyChannelMessage(provider: Provider?, category: Category?, favoriteSelected: Boolean): String =
     when {
+        // Favorites is a CROSS-PROVIDER pseudo-category (no Category row in the list → `category` is null here),
+        // so it must be checked via the flag FIRST — otherwise it falls to the misleading "this provider has no
+        // channels" message even though favorites can span several providers.
+        favoriteSelected -> stringResource(R.string.livetv_no_favorites_saved)
         provider == null -> stringResource(R.string.livetv_no_channels_no_provider)
-        category?.id == FAVORITES_CATEGORY_ID -> stringResource(R.string.livetv_no_favorites_saved)
         category == null -> stringResource(R.string.livetv_no_channels_provider)
         else -> stringResource(R.string.livetv_no_channels_category)
     }

@@ -16,6 +16,10 @@ import com.vivicast.tv.domain.model.Provider
  * side effect on that signal.
  */
 internal data class LiveTvUiState(
+    // True until the providers query first emits (the cold DB load). While true the columns show a neutral
+    // loading surface instead of the "Keine Sender" / "Keine Programminformationen" empty-states, so a cold
+    // Live-TV entry (e.g. Home→channel→BACK) no longer flashes empty placeholders for ~1s before data lands.
+    val isInitialLoading: Boolean = true,
     val providers: List<Provider> = emptyList(),
     val selectedProviderId: String? = null,
     val categories: List<Category> = emptyList(),

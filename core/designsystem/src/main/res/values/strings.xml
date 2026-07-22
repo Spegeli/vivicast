@@ -159,6 +159,8 @@
     <string name="livetv_preview">Vorschau</string>
     <string name="livetv_favorites">Favoriten</string>
     <string name="livetv_no_channels">Keine Sender</string>
+    <string name="livetv_no_favorites">Keine Favoriten</string>
+    <string name="livetv_loading">Wird geladen …</string>
     <string name="livetv_no_provider">Kein Sender</string>
     <string name="livetv_add_playlist">Lege in den Einstellungen zuerst eine Wiedergabeliste an.</string>
     <string name="livetv_select_provider">Wähle links einen Provider und Sender aus.</string>

@@ -308,9 +308,11 @@ private fun VivicastApp(
     val activity = context as? Activity
     // P2: the single SurfaceView the embedded Live-TV preview renders into (the App owns it; the shared
     // player's surface is attached to it when a channel is committed + Live-TV is active + not fullscreen).
-    // setZOrderMediaOverlay so the video draws ABOVE the preview panel's background (a plain SurfaceView sits
-    // behind the window and would be occluded by the GlassPanel fill).
-    val livePreviewSurface = remember { SurfaceView(context).apply { setZOrderMediaOverlay(true) } }
+    // setZOrderOnTop so the video draws ON TOP of the preview panel (opaque, only over its 158dp box) — a
+    // media-overlay/plain SurfaceView sits BEHIND the window and needs a transparent hole, which rendered the
+    // whole preview GlassPanel black instead of its green tint. On-top has the same "draws over the fullscreen
+    // overlay" caveat as media-overlay, handled by the identical INVISIBLE-while-fullscreen toggle below.
+    val livePreviewSurface = remember { SurfaceView(context).apply { setZOrderOnTop(true) } }
     // Consumed once per Activity instance: recreate() (from a language change) reuses the same Intent,
     // so this is true right after the recreate and false on every normal launch.
     var reopenLanguageSettings by remember {
@@ -1028,7 +1030,7 @@ private fun VivicastApp(
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = { channel -> openLivePlayer(channel) },
                 onCommitPreview = { channel -> commitLivePreview(channel) },
-                livePreviewActive = committedLiveChannel != null,
+                livePreviewChannel = committedLiveChannel,
                 livePreviewSlot = {
                     AndroidView(factory = { livePreviewSurface }, modifier = Modifier.matchParentSize())
                 },

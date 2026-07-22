@@ -75,6 +75,15 @@
 > bottom. Four experimental fix attempts were made and all reverted; the code is back to the working baseline.
 > Deferred non-blocking polish still open: retire unused strings, update `../vivicast-docs`, the CH+/- hard-zap
 > semantic, and the close-fullscreen return-focus choice.
+>
+> **CURRENT STATE (2026-07-22): the Jetpack-Nav rebuild landed (player-as-destination + PlayerViewModel, commit
+> `9660191`), then Live-TV was fully re-audited on the physical SHIELD (.12) with `[ltv]` `vcLog`
+> instrumentation. 6 findings; bugs 1/2/3/6 are now FIXED + on-device-verified (pending user sign-off) — see
+> "## Nav-Audit 2026-07-22" below. Gates green (detekt/test/assembleDebug). The KNOWN OPEN BUG
+> (RIGHT-from-low-category) is RESOLVED: root cause was the content-Row `enter` override over-firing on
+> horizontal moves; fix = direction-aware `enter` (Down only) + a deterministic `right =` from the K rows to
+> the selected channel. Three minor polish items remain (provider-expand flash, provider-focus-with-favorites,
+> Home DOWN focus). (4) and (5) intentionally unchanged.**
 
 ## Sources
 
@@ -600,7 +609,95 @@ panel while the current one keeps playing. The video/caption channel mismatch is
 - Remaining edge cases (channel with no stream, provider error already shows the InfoPanel; background stop
   via `MainActivity.onStop` already covered; no-EPG channel handled + UP-locked).
 
-## KNOWN OPEN BUG — RIGHT from a low category needs two presses (UNRESOLVED, 2026-07-19)
+## Nav-Audit 2026-07-22 — findings + fix status (IN PROGRESS)
+
+After the Jetpack-Nav rebuild (player-as-destination + PlayerViewModel extraction, commit `9660191`) the whole
+Live-TV navigation was re-audited on the physical SHIELD (.12) with full `[ltv]` `vcLog` instrumentation
+(focusedArea / activated / vmstate / BACK / TARGET / toggle / click / collapse / zap) — 33 screenshots +
+per-step trace timelines. The instrumentation stays in the code (debug-gated).
+
+**Confirmed working (no change):** provider toggle collapse/expand (per-provider category memory + multi-
+provider); RIGHT channel→EPG, LEFT EPG→channel; UP from the top content row → active Live-TV tab (C2 fix holds,
+no Home jump, no self-nav crash); browse-mode BACK step-back chain (EPG→ChannelList→Provider→tab); preview
+commit + seamless fullscreen handoff; return from fullscreen lands on the committed channel with the preview
+still playing; cold-load lands on the correct Home channel; DOWN through categories auto-selects each
+category's first channel (preview follows).
+
+**Bugs — 1/2/3/6 FIXED + on-device-verified on the SHIELD 2026-07-22 (pending user sign-off).** What was
+verified per fix: (1) RIGHT from a low category (Religion) enters the channel list in ONE press, K collapses to
+[S|E|P], no Test-jump; (2) LEFT from a channel lands on the ACTIVE category (Religion), not the first provider;
+regression — DOWN-from-nav still lands on the first provider, RIGHT provider→channel / channel→EPG and LEFT
+EPG→channel all still work; (3) BACK after returning from fullscreen re-fullscreens the still-playing channel
+(no re-OK), targets the committed channel even after browsing away, and the return does NOT auto-bounce;
+(6) a cold Home→channel→BACK shows "Wird geladen …" instead of "Keine Sender"/"Keine Programminformationen",
+and a genuinely-empty category (Favoriten 0) still shows "Keine Sender" instantly (the latch is one-way).
+Gates green (detekt/test/assembleDebug); the `[ltv]` audit instrumentation stays in (debug-gated).
+
+1. **RIGHT from a category (or a lower / non-first provider) → 2-press bug** *(major; = the KNOWN OPEN BUG
+   below).* First RIGHT jumps focus UP to the first provider ("Test") + scrolls the K column to the top; a
+   second RIGHT enters the channel list (selection preserved). Root cause **CONFIRMED via logcat**: RIGHT from
+   a K row with no channel card in its rightward beam escalates to the content `Row`, whose `focusProperties {
+   enter = { firstProviderFocusRequester } }` (C2, for DOWN-from-nav) redirects to the first provider. **Fix:**
+   direction-aware `enter` (`Down` → firstProvider, else no hijack) **plus** a deterministic `focusProperties {
+   right = <selected-channel requester> }` from the K rows into the channel list. The combination is new — the
+   4 reverted 2026-07-19 attempts each tried only one half while the `enter` kept hijacking. Verify on-device
+   per key press via logcat before committing.
+
+2. **LEFT from the channel list → lands on the first provider, not the active category** *(medium).* Same
+   `enter`-override root cause (lands on the identical `firstProviderFocusRequester`). The direction-aware
+   `enter` fix un-hijacks LEFT, so the existing `selectedCategoryFocusRequest` → `selectedFocusRequester`
+   lands focus on the selected category.
+
+3. **After return from fullscreen the preview keeps playing but `activated=false`** *(medium).* BACK then
+   steps back through the columns instead of re-fullscreening the visibly-playing channel; you must OK again.
+   **Decision (user 2026-07-22): restore Sender-Modus on return** — set `activated=true` + `committedChannel`
+   = the returned channel so BACK re-fullscreens. Guard the same BACK press from double-firing into fullscreen
+   (the reason C2 chose `activate=false`); verify on-device that the return does NOT auto-bounce.
+
+6. **Cold-load transient — empty placeholders during the ~1s DB load** *(polish, user wants it fixed).* On
+   Home→channel→BACK into a COLD Live-TV the screen shows `Keine Sender` / `Keine Programminformationen
+   verfügbar` placeholders for ~1.0s (vmstate `provs=0 cats=0 chans=0`) before the data lands and the target
+   channel appears. Lands correctly (no wrong-channel flash). **Fix:** add `isInitialLoading` to `LiveTvUiState`
+   (true until the first providers emission); render a neutral loading surface instead of the genuine
+   empty-state during the cold load.
+
+**Decisions that need NO change:**
+- **(4) Return without a preview already steps back like LEFT** (EPG→ChannelList→Provider→tab) — matches
+  intent, keep.
+- **(5) BACK from the Live-TV tab shows "Zum Beenden erneut zurück" instead of going Home** — **kept on
+  purpose** for consistency with Settings (BACK → gear, 2nd BACK → exit). May revisit later.
+
+**Minor items:**
+- ~100ms full-provider-list flash (66/80 channels) before the category filter applies on provider expand —
+  STILL OPEN (deprioritized; least jarring — shows *more* channels briefly, not empty).
+- Focusing a provider row while the global "Favoriten (0)" pseudo-category is active keeps the empty favorites
+  list — STILL OPEN (debatable behaviour; not raised again).
+
+**Follow-up fixes — user-raised 2026-07-22, all FIXED + on-device-verified:**
+- **A — Favoriten empty-state text.** "Live-TV Favoriten (0)" showed "Keine Sender / Dieser Provider enthält
+  keine importierten Live-TV-Sender" — wrong, favorites are CROSS-PROVIDER. Root cause: `emptyChannelMessage`
+  detected FAVORITES via the (null-for-a-pseudo-category) `Category` object. Fix: detect via a `favoriteSelected`
+  flag → title "Keine Favoriten" + body "Noch keine Live-TV-Favoriten gespeichert." (strings already existed).
+- **B — preview panel black background.** The embedded video made the whole preview `GlassPanel` render black
+  instead of its green tint. Root cause: the preview `SurfaceView` used `setZOrderMediaOverlay(true)` (draws
+  *behind* the window → needs a transparent hole → black around the video). Fix: `setZOrderOnTop(true)` (draws
+  *on top* of the panel, only over its 158dp box) — the identical INVISIBLE-while-fullscreen visibility toggle
+  keeps handling the fullscreen frozen-corner case (verified: no frozen corner, clean fullscreen + return).
+- **C — Home DOWN focus.** DOWN from the top nav landed on the history card geometrically under the tab (the
+  rightmost), not the first. Fix: direction-aware `enter` (Down only) on the Home content → a requester on the
+  FIRST element of the FIRST shown row, via the hasLive → hasMovies → hasSeries cascade (history channel → the
+  row's "go browse" CTA → the empty-state CTA). Rows extracted to `HomeRows` to keep detekt complexity green.
+
+## KNOWN OPEN BUG — RIGHT from a low category needs two presses (RESOLVED 2026-07-22)
+
+> **2026-07-22 — RESOLVED.** Root cause confirmed via `[ltv]` logcat = the content-Row `enter` override
+> over-firing on horizontal moves (see bug 1 in "## Nav-Audit 2026-07-22" above). Fix = direction-aware `enter`
+> (redirect to the first provider ONLY for `FocusDirection.Down` nav-entry; no hijack on Left/Right) + a
+> deterministic `focusProperties { right = <selected-channel requester> }` on the K rows (favorites / provider
+> / category), the requester hoisted to `RoomLiveTvRoute` and bound to the selected channel row. The 5th attempt
+> succeeded because it combined BOTH halves — the 4 failed 2026-07-19 attempts each tried only one while the
+> `enter` kept hijacking. On-device-verified (RIGHT from Religion enters in one press). The historical symptom +
+> the 4 failed approaches below stay on record.
 
 **Symptom:** In `[K|S|P]`, focus on a category that sits **below** the (top-anchored) channel rows — e.g.
 "Nachrichten" while its channels phoenix/tagesschau render at the very top of the channel column — pressing

@@ -73,6 +73,13 @@ internal class LiveTvViewModel(
     private var targetEpgStartTime: Long? = null
     private var lastGuardChannels: List<Channel>? = null
     private var channelResetSignal: Int = 0
+    // initialProvidersLoaded flips on the first providers emission; initialLoadComplete is the one-way "screen
+    // presentable" latch — providers loaded AND the channel query has answered for a selected provider (a real
+    // list or a confirmed-empty category), OR there are no active providers at all. Drives
+    // LiveTvUiState.isInitialLoading: true only during the cold DB load, never on warm category switches (the
+    // latch never flips back, so a genuinely-empty category still shows "Keine Sender" instantly).
+    private var initialProvidersLoaded: Boolean = false
+    private var initialLoadComplete: Boolean = false
 
     private val _uiState = MutableStateFlow(LiveTvUiState())
     val uiState: StateFlow<LiveTvUiState> = _uiState.asStateFlow()
@@ -81,6 +88,7 @@ internal class LiveTvViewModel(
         coroutineScope.launch {
             providerRepository.observeProviders().collect { all ->
                 providersRaw = all
+                initialProvidersLoaded = true
                 val current = selectedProviderIdFlow.value
                 // Only active providers are browsable; re-pick if the selected one is gone or deactivated.
                 if (current == null || all.none { it.id == current && it.isActive }) {
@@ -140,6 +148,10 @@ internal class LiveTvViewModel(
                 }
                 .collect { channels ->
                     observedChannels = channels
+                    // The channel query answered for a selected provider (a real list or a confirmed-empty
+                    // category) → the screen is presentable; drop the cold-load state. Guarded on a non-null
+                    // provider so the initial provider==null flowOf(empty) emission doesn't latch prematurely.
+                    if (selectedProviderIdFlow.value != null) initialLoadComplete = true
                     rebuild()
                 }
         }
@@ -339,7 +351,12 @@ internal class LiveTvViewModel(
         // B — logo config signal: changes when any provider's logoPriority (or the set) changes.
         val logoConfigSignal = providersRaw.joinToString(separator = ",") { it.id + ":" + it.logoPriority }.hashCode()
 
+        // A user with no active providers never runs a channel query → latch on the confirmed-empty active set
+        // (else the loading state would never clear for them).
+        if (initialProvidersLoaded && providersRaw.none { it.isActive }) initialLoadComplete = true
+
         _uiState.value = LiveTvUiState(
+            isInitialLoading = !initialLoadComplete,
             // Deactivated playlists are not browsable (refresh/WatchNext/resume already honor isActive).
             providers = providersRaw.filter { it.isActive },
             selectedProviderId = providerId,

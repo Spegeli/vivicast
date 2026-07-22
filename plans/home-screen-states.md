@@ -18,6 +18,11 @@
 > - _Residual (own plan):_ the add-editor's brief **open latency** (Playlists overview visible while the heavy
 >   `ProviderEditorScreen` composes) → `plans/settings-add-editor-open-latency.md`.
 >
+> **2026-07-22 — Home DOWN-focus fix (nav rebuild follow-up, on-device-verified):** DOWN from the top nav now
+> lands on the FIRST element of the first shown row (first history channel → its CTA → Movies/Series → empty
+> CTA), not the card geometrically under the tab. Full write-up in V4 below; gates green (detekt/test/
+> assembleDebug). This closes the V4 initial-focus item.
+>
 > **Open follow-ups (tracked, not blocking):**
 > - **Channel card aesthetics:** height fixed (was stretching); the logo-tile look is not final — refine later.
 > - **Filme/Serien rows:** verify the poster cards + series-centric resume/advancement once those pages are done.
@@ -245,11 +250,17 @@ correctly bound.
 - **V3 — Loading flash guard.** Home flows (providers + history) resolve async; without a guard Home would
   briefly flash a global Empty State before data loads. Add an "undetermined/loading" state (skeleton rows
   per doc, or blank) so an Empty State only renders **after** first load. (Same class of issue as the splash
-  flash — treat carefully.)
-- **V4 — Initial focus + D-pad traversal** for the new layout (no hero; rows may be cards, a single CTA
-  button, or the global empty state). Rule: focus the first visible interactive element (first row's first
-  card → its CTA if a CTA row → the primary button in the empty state). UP/DOWN across mixed card/CTA rows
-  must work. Redefine in the doc.
+  flash — treat carefully.) DONE: `HomeUiState.loaded` gates the first frame (`!loaded -> Unit`, only the
+  shell backdrop) so the empty state never flashes before the repositories emit.
+- **V4 — Initial focus + D-pad traversal — DONE (2026-07-22, on-device-verified).** DOWN from the top nav
+  lands on the FIRST interactive element of the FIRST shown row (not the card geometrically under the tab).
+  Implemented as a direction-aware `focusProperties { enter }` (redirect only on `FocusDirection.Down`) on the
+  Home content + the empty-state Column, targeting a `firstFocusRequester` attached — via the `hasLive →
+  hasMovies → hasSeries` cascade — to: the first recent-channel card → else the row's "go browse" CTA → else
+  the first Movies/Series card or CTA → else the empty-state's primary CTA (`Wiedergabeliste hinzufügen` /
+  `Einstellungen öffnen`). L/R within a row and UP→nav stay natural (Down-only redirect). The content rows
+  were extracted to a `HomeRows` composable to keep the detekt CyclomaticComplexity under threshold. Fixes the
+  bug where DOWN landed on the rightmost history card.
 - **V5 — Order + cap.** Rows ordered by recency (most-recent first); confirm `observeAllContinueWatching`
   orders by `lastWatchedAt DESC` across providers. Optional per-row cap (recent channels already cap at 12);
   default the movie/series rows to a similar cap.

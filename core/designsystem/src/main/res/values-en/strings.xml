@@ -159,6 +159,8 @@
     <string name="livetv_preview">Preview</string>
     <string name="livetv_favorites">Favorites</string>
     <string name="livetv_no_channels">No channels</string>
+    <string name="livetv_no_favorites">No favorites</string>
+    <string name="livetv_loading">Loading …</string>
     <string name="livetv_no_provider">No channel</string>
     <string name="livetv_add_playlist">Set up a playlist in settings first.</string>
     <string name="livetv_select_provider">Select a provider and channel on the left.</string>

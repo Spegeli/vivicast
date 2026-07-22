@@ -10,26 +10,31 @@
 >   top-nav **enter-focus**: UP out of the Live-TV category column now lands on the **active** tab (not Home,
 >   leftmost) via `focusProperties { enter = selectedFocusRequester }` + `.focusGroup()` on `VivicastTopNavigation`.
 > - **B(detail) — Movies + Series detail as destinations** ✅ DONE (`a13600f` movies, `6934286` series).
-> - **B(player) — Player ORCHESTRATION → activity-scoped `PlayerViewModel`** ✅ DONE (2026-07-22, **not yet
->   committed**) — inserted this session per user decision ("erst PlayerViewModel, dann C2"); NOT in the original
->   A–E phasing. `plans/player-viewmodel-extraction.md`. Orchestration (build+play, auto-save + auto-next loops,
->   zap, committed-preview identity) moved out of the ~2000-line MainActivity into `app/.../player/`; the ExoPlayer
+> - **B(player) — Player ORCHESTRATION → activity-scoped `PlayerViewModel`** ✅ DONE + committed `9660191` —
+>   inserted this session per user decision ("erst PlayerViewModel, dann C2"); NOT in the original A–E phasing.
+>   `plans/player-viewmodel-extraction.md`. Orchestration (build+play, auto-save + auto-next loops, zap,
+>   committed-preview identity) moved out of the ~2000-line MainActivity into `app/.../player/`; the ExoPlayer
 >   **connection stays the AppContainer singleton**; 8 VM unit tests; CLAUDE.md App-hoisted rule amended.
-> - **C1 — Player destination + one-connection handoff** ✅ DONE (2026-07-22, **not yet committed**), TV-verified on
->   SHIELD `.12`. **TWO deviations from the plan:** (1) §3.4 planned "hoist both SurfaceViews to App level" — we did
+> - **C1 — Player destination + one-connection handoff** ✅ DONE + committed `9660191`, TV-verified on SHIELD
+>   `.12`. **TWO deviations from the plan:** (1) §3.4 planned "hoist both SurfaceViews to App level" — we did
 >   **NOT** (an always-composed App-level SurfaceView broke video on the physical TV); the **overlay render is KEPT**,
 >   zero-flash comes from the preview↔fullscreen overlap. (2) §3.5's tab pattern `saveState`+`restoreState` was
 >   **REMOVED** — the top-level Player entangled with it (bounce back to fullscreen; registry inconsistency → later
 >   tab switches no-op'd → "can't leave Live-TV"). `navigateTab` is now plain `popUpTo(shell-start)+launchSingleTop`;
 >   cost = a tab's sub-stack (Movies→Detail) isn't preserved across tab switches (accepted).
-> - **C2 — Live-TV return-flow + nav/focus** ✅ **CORE DONE** (2026-07-22, **not yet committed**), TV-verified.
->   Fixed: bounce loop, wrong-channel-on-return (an **async-load race** in `ensureCategorySelected`/`rebuild`
->   auto-select, NOT a one-pointer issue), return→Home / can't-leave-Live-TV, a Compose self-nav crash. Approach
->   **deviated** from §4 ("focusRestorer + delete `liveTvSearchTarget`"): `liveTvSearchTarget` **KEPT** + `activate`
->   flag; `focusChannelOnReturnSignal`/`pendingLiveTvChannelFocus` **deleted** (+ `pendingReturnToLiveTvFocus` added).
->   **STILL OPEN in C2:** full **L/R column audit** (incl. verifying the live-tv-states RIGHT-from-low-category
->   2-press bug — unverified this session) + the **cold-load transient** (brief empty→target flash; the wrong-channel
->   ANIXE intermediate is gone).
+> - **C2 — Live-TV return-flow + nav/focus + full nav audit** ✅ **DONE**, TV-verified on SHIELD `.12`. Core
+>   (committed `9660191`): bounce loop, wrong-channel-on-return (an **async-load race** in
+>   `ensureCategorySelected`/`rebuild` auto-select), return→Home / can't-leave-Live-TV, a Compose self-nav crash.
+>   Approach **deviated** from §4: `liveTvSearchTarget` **KEPT** + `activate` flag;
+>   `focusChannelOnReturnSignal`/`pendingLiveTvChannelFocus` **deleted** (+ `pendingReturnToLiveTvFocus` added).
+>   Then a **full instrumented Live-TV nav audit** (33 screenshots + `[ltv]` `vcLog` traces) found + FIXED
+>   (uncommitted, TV-verified): the **RIGHT-from-low-category 2-press bug** (direction-aware content-Row `enter`
+>   + deterministic `right =` to the selected channel) + **LEFT-lands-on-provider**; **Sender-Modus restored on
+>   return** (BACK re-fullscreens the still-playing channel, targets the committed one); **cold-load "Wird geladen…"
+>   loading state** (no more "Keine Sender"/"Keine Programminformationen" flash, one-way latch); **Favoriten
+>   empty-state text**; **preview panel black bg** (`setZOrderOnTop`); **Home DOWN → first row element**. The
+>   `[ltv]`/`[player-nav]`/`[topnav]` `vcLog` instrumentation is **kept in** (debug-gated) for future debugging.
+>   Full write-up: `plans/live-tv-states.md` "Nav-Audit 2026-07-22"; Home focus in `plans/home-screen-states.md` V4.
 > - **D — Settings inner NavHost** ✅ DONE (`adeb84c`/`8686931`/`7c054fc` + focus rework — see §5).
 >   **Scope deviation:** only **Playlists** sub-views were promoted to inner-nav destinations; **EPG/About kept
 >   their local overlays** (deliberate; "optional later promotion" still open). Went **beyond** the plan: rail
@@ -43,12 +48,16 @@
 >   Save→new provider card). Retired the old route-bounce/remount approach →
 >   `plans/archive/settings-navigation-deeplinks.md`. Residual open: add-editor **open latency** (overview
 >   visible while the heavy editor composes) → `plans/settings-add-editor-open-latency.md`.
-> - **E — cleanup** (typed deep-link finalization, episode resolver bridge, dead-code sweep, detekt-baseline
->   regen, doc-sync) ⬜ **OPEN**.
+> - **E — cleanup** (typed deep-link finalization, episode resolver bridge, dead-code sweep, ktlint unused-imports,
+>   detekt-baseline regen, doc-sync + close-out) ⬜ **OPEN** — the last remaining nav-migration phase.
 >
-> **Still open: finish C2 (L/R column audit + cold-load transient), then E** (+ optional EPG/About inner-nav
-> promotion). B(player) + C1 + C2-core are done + TV-verified on SHIELD `.12` but **not yet committed** (awaiting the
-> commit). Physical-TV device note: `.12` (SHIELD) is the sanctioned autonomous test device; `.40` is the user's.
+> **A–D + C1 + C2 are all DONE + TV-verified; Live-TV is functionally complete (nav audit fixes shipped).**
+> **The ONLY remaining nav-migration work is Phase E (cleanup/close-out)** + optional EPG/About inner-nav
+> promotion. Commit state: B(player)+C1+C2-core committed as `9660191`; the nav-audit fixes (RIGHT/LEFT focus,
+> Sender-Modus-on-return, cold-load loading, Favoriten text, preview bg, Home focus — 9 files) are **staged/
+> uncommitted, awaiting the commit**. Two Live-TV micro-polish items were **discarded** by the user (provider-
+> expand ~100ms flash; provider-focus-with-favorites). Physical-TV device note: `.12` (SHIELD) is the sanctioned
+> autonomous test device; `.40` is the user's.
 >
 > **Governing principle (user, 2026-07-20): build it the way a greenfield app modeled on AOSP JetStream +
 > current android.com best practice would be built. Parity-first is DROPPED; rework/risk explicitly
