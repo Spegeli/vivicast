@@ -22,8 +22,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -92,6 +94,7 @@ import com.vivicast.tv.core.designsystem.VivicastDialog
 import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
+import com.vivicast.tv.core.logging.vcLog
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackOrigin
 import com.vivicast.tv.core.player.PlaybackRequest
@@ -145,12 +148,15 @@ import com.vivicast.tv.navigation.LiveTv
 import com.vivicast.tv.navigation.MovieDetail
 import com.vivicast.tv.navigation.MoviesGraph
 import com.vivicast.tv.navigation.MoviesList
+import com.vivicast.tv.navigation.Player
 import com.vivicast.tv.navigation.Search
 import com.vivicast.tv.navigation.SeriesDetail
 import com.vivicast.tv.navigation.SeriesGraph
 import com.vivicast.tv.navigation.SeriesList
 import com.vivicast.tv.navigation.Settings
 import com.vivicast.tv.navigation.ShellGraph
+import com.vivicast.tv.player.PlayerViewModel
+import com.vivicast.tv.player.PlayerViewModelFactory
 import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.data.playback.PlaybackStreamRequest
 import com.vivicast.tv.data.playback.PlaybackStreamResult
@@ -250,18 +256,24 @@ private fun VivicastApp(
     deepLinkData: Uri?,
     onDeepLinkConsumed: () -> Unit,
 ) {
-    var playerVisible by remember { mutableStateOf(false) }
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
-    var livePlaybackChannels by remember { mutableStateOf(emptyList<Channel>()) }
-    // P2: the channel currently streaming into the embedded Live-TV preview (App-hoisted single player).
-    // Non-null == the preview is live; drives the preview surface + the seamless preview<->fullscreen handoff.
-    var committedLiveChannel by remember { mutableStateOf<Channel?>(null) }
-    // Bumped when the fullscreen player closes back to a live preview — tells Live-TV to focus the channel
-    // (grabs focus into the content, so it doesn't bounce to the Home nav / stay on the top bar).
-    var focusLiveChannelSignal by remember { mutableStateOf(0) }
+    // C1: the fullscreen player is a nav destination (Player) rendered as a top-level overlay; "player showing"
+    // is DERIVED from the back stack, not a bool. Play navigates to Player(...); closing is navigateUp(). This
+    // keeps the working overlay rendering (no surface hoist) while giving nav-owned BACK + process-death args.
+    val playerVisible = currentDestination?.hasRoute<Player>() == true
+    // The live-preview channel + the zap channel list now live in PlayerViewModel (see `playerViewModel` below);
+    // `committedLiveChannel` is aliased from `playerUiState.committedChannel` so existing reads stay untouched.
+    // C2: the single Live-TV channel target. Search/deep-link sets it with activate=true (jump + EPG focus);
+    // the player-close return sets it with activate=false (select + focus the committed channel's list row). This
+    // replaces the old focus-signal + pending-focus carve-out — the addressed target IS the one-identity landing.
     var liveTvSearchTarget by remember { mutableStateOf<LiveTvSearchTarget?>(null) }
+    // Set on a player-close return to Live-TV. Once the destination settles on LiveTv, grab the top-nav (Live-TV
+    // tab) focus so focus does NOT fall to the Home tab during the async channel-list load — the Home tab's
+    // focus-follows-selection would otherwise navigate the route straight back to Home ("can't stay on Live-TV").
+    // The Live-TV channel target then moves focus onto the committed channel row.
+    var pendingReturnToLiveTvFocus by remember { mutableStateOf(false) }
     var pendingExternalPlaybackRequest by remember { mutableStateOf<PlaybackRequest?>(null) }
     var pendingProtectionUnlock by remember { mutableStateOf<PendingProtectionUnlock?>(null) }
     var pendingStandardRestore by remember { mutableStateOf<PendingStandardRestore?>(null) }
@@ -345,6 +357,20 @@ private fun VivicastApp(
         appContainer.diagnosticsStore.logLogoIndex(folder, count)
     }
     val playerState by appContainer.playerController.state.collectAsState()
+    // Activity-scoped player orchestration holder (B: PlayerViewModel extraction). Owns build+play, the auto-save
+    // + auto-next loops, the zap list and the committed-preview identity; the connection stays the AppContainer
+    // singleton and nav/PIN/external-player/surface stay App-side. See plans/player-viewmodel-extraction.md.
+    val playerViewModel: PlayerViewModel = viewModel(
+        factory = PlayerViewModelFactory(
+            playerController = appContainer.playerController,
+            playbackRequestFactory = appContainer.playbackRequestFactory,
+            playbackProgressRecorder = appContainer.playbackProgressRecorder,
+            mediaRepository = appContainer.mediaRepository,
+        ),
+    )
+    val playerUiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    // Alias so the existing committed-channel reads (preview surface, handoff, focus carve-out) stay untouched.
+    val committedLiveChannel = playerUiState.committedChannel
     // Diagnostics: log playback errors (gated). ExoPlayer's message is generic — enrich with the recent
     // codec/audio error from logcat + a plain-language cause + the active format.
     LaunchedEffect(playerState.error?.playbackId, playerState.error?.retryCount) {
@@ -385,9 +411,7 @@ private fun VivicastApp(
     }
     var pinSecurityState by remember { mutableStateOf(PinSecurityState()) }
     var pinSecurityLoaded by remember { mutableStateOf(false) }
-    val automaticProgressSaveTimes = remember { mutableMapOf<String, Long>() }
     val lifecycleOwner = LocalLifecycleOwner.current
-    var nextAutoNextEpisode by remember { mutableStateOf<Episode?>(null) }
 
     fun requestProtectionUnlock(
         area: ParentalProtectionArea?,
@@ -465,10 +489,15 @@ private fun VivicastApp(
     // A1 bridge: the legacy string-keyed nav funnel now drives the NavController. Callers (top nav, Search,
     // deep links, Home CTAs, resume/language) are unchanged; the typed-route rewire lands per-area in B/C/E.
     fun navigateTab(route: Any) {
+        // No saveState/restoreState: the fullscreen Player is a TOP-LEVEL destination that lands on the stack
+        // above a tab, and the tab pattern's save/restore then entangles it — saving/restoring the Player across
+        // tab switches (bounce back to fullscreen) and leaving the registry inconsistent so a later tab switch
+        // no-ops ("can't leave Live-TV"). A plain popUpTo(shell-start)+launchSingleTop always lands cleanly on the
+        // target tab and pops any Player above. Trade-off: a tab's sub-stack (e.g. Movies→MovieDetail) is not
+        // preserved across tab switches — acceptable, and avoids the Player entanglement entirely.
         navController.navigate(route) {
             launchSingleTop = true
-            restoreState = true
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            popUpTo(navController.graph.findStartDestination().id)
         }
     }
 
@@ -503,10 +532,29 @@ private fun VivicastApp(
     // Focus-follows-selection (top-nav hover switches route). A1 shim — kept behaviour-identical; the clean
     // focus-ownership rebuild that removes the bounce lands in A2.
     fun focusRoute(route: String) {
+        val target = routeObjectForKey(route) ?: return
+        // During a player-close return to Live-TV, ignore transient focus-falls onto OTHER tabs: while the Player
+        // overlay is torn down and before the Live-TV content is focusable, focus briefly lands on the Home tab,
+        // whose focus-follows-selection would navigate the route straight back to Home (the queued Home nav then
+        // wins the race). The pending flag is cleared once the destination settles on LiveTv.
+        if (pendingReturnToLiveTvFocus) {
+            vcLog("topnav") { "focusRoute $route SKIP (return in progress)" }
+            return
+        }
+        // Focus-follows-selection: focusing the tab that is ALREADY the current destination must NOT re-navigate.
+        // A self-navigate (navigateTab to the current route) fired from within the focus/recomposition pass
+        // crashes Compose (Operation$InsertNodeFixup).
+        if (currentDestination?.hierarchy?.any { it.hasRoute(target::class) } == true) {
+            vcLog("topnav") { "focusRoute $route SKIP (already current)" }
+            return
+        }
         if (!pinSecurityLoaded && route.canBeProtected()) return
         val area = pinSecurityState.protectionAreaForRoute(route)
         if (area == null || !pinSecurityState.hasPin || area in unlockedProtectionAreas) {
-            routeObjectForKey(route)?.let { navigateTab(it) }
+            vcLog("topnav") { "focusRoute $route -> navigateTab" }
+            navigateTab(target)
+        } else {
+            vcLog("topnav") { "focusRoute $route BLOCKED (protection)" }
         }
     }
 
@@ -545,79 +593,68 @@ private fun VivicastApp(
         }
     }
 
+    // C1: navigate to the fullscreen Player destination, rebuilding its decomposed primitive args from the
+    // (already-playing) request. Enums are carried as .name; a process-death-restored Player re-resolves the
+    // PlaybackRequest from these. The App has already called playerController.play(request) — the destination
+    // only renders the running player (adopt, never re-play).
+    fun navigateToPlayer(request: PlaybackRequest) {
+        // Already on the Player (auto-next / channel-zap replaces the stream in place): don't stack a 2nd
+        // Player — the controller plays the new request and the running Player UI reflects it.
+        if (currentDestination?.hasRoute<Player>() == true) {
+            vcLog("player-nav") { "navigateToPlayer GUARDED (already on Player)" }
+            return
+        }
+        vcLog("player-nav") { "navigate -> Player (${request.mediaType}, origin=${request.origin})" }
+        navController.navigate(
+            Player(
+                mediaType = request.mediaType.name,
+                providerStableKey = request.providerStableKey,
+                mediaStableKey = request.mediaStableKey,
+                origin = request.origin.name,
+                returnTarget = request.returnTarget.name,
+                startPositionMillis = request.startPositionMillis,
+                epgProgramStableKey = request.epgProgramStableKey,
+            ),
+        )
+    }
+
+    // The VM signals "show the running player fullscreen" (after an internal play/zap/auto-next); nav stays
+    // App-side. navigateToPlayer self-guards against stacking a 2nd Player (zap/auto-next replace in place).
+    LaunchedEffect(playerViewModel) {
+        playerViewModel.navigateToPlayer.collect { request -> navigateToPlayer(request) }
+    }
+
+    // The external-player "play internally" fallback (AskEveryTime dialog) plays an ALREADY-built request; the
+    // connection is the singleton, so the App calls it directly + navigates.
     fun startInternalPlayback(request: PlaybackRequest) {
         scope.launch {
             appContainer.playerController.play(request)
-            playerVisible = true
+            navigateToPlayer(request)
         }
     }
 
-    fun playNextAutoNextEpisode() {
-        val episode = nextAutoNextEpisode ?: return
-        scope.launch {
-            appContainer.openEpisodePlayback(
-                episode = episode,
-                origin = PlaybackOrigin.SeriesDetail,
-            ) {
-                playerVisible = true
-            }
-        }
-    }
+    // Thin App-side delegators over PlayerViewModel: play/commit/zap/stop are pure orchestration owned by the VM;
+    // the VM emits `navigateToPlayer` which the collector below turns into the actual nav. Call sites (Home /
+    // Live-TV wiring, the player overlay) keep these names, so nothing downstream changes.
+    fun playNextAutoNextEpisode() = playerViewModel.playNextAutoNextEpisode()
 
     fun openChannel(
         channel: Channel,
         origin: PlaybackOrigin = PlaybackOrigin.LiveTv,
-    ) {
-        scope.launch {
-            appContainer.openChannelPlayback(
-                channel = channel,
-                origin = origin,
-            ) {
-                playerVisible = true
-            }
-        }
-    }
+    ) = playerViewModel.playChannel(channel, origin)
 
-    fun zapChannel(direction: Int) {
-        if (direction == 0 || livePlaybackChannels.isEmpty()) return
-        val currentRequest = appContainer.playerController.state.value.request
-        if (currentRequest?.mediaType != PlaybackMediaType.Channel) return
+    fun zapChannel(direction: Int) = playerViewModel.zap(direction)
 
-        val currentIndex = livePlaybackChannels.indexOfFirst { it.id == currentRequest.mediaId }
-        val nextIndex = if (currentIndex < 0) {
-            0
-        } else {
-            (currentIndex + direction).floorMod(livePlaybackChannels.size)
-        }
-        openChannel(livePlaybackChannels[nextIndex])
-    }
-
-    // P2 — start the embedded Live-TV preview: play the channel on the shared player WITHOUT showing the
-    // fullscreen overlay. The preview surface (attached below) renders it. One connection (play() stops any
-    // previous stream first).
-    fun commitLivePreview(channel: Channel) {
-        committedLiveChannel = channel
-        scope.launch { appContainer.openChannelPlayback(channel, origin = PlaybackOrigin.LiveTv) { } }
-    }
+    // P2 — start the embedded Live-TV preview: play WITHOUT signalling fullscreen; the App preview surface renders
+    // it. One connection (play() stops any previous stream first).
+    fun commitLivePreview(channel: Channel) = playerViewModel.commitLivePreview(channel)
 
     // Stop the preview + release the connection (leaving Live-TV / clearing the committed channel).
-    fun stopLivePreview() {
-        if (committedLiveChannel != null) {
-            committedLiveChannel = null
-            appContainer.playerController.stop()
-        }
-    }
+    fun stopLivePreview() = playerViewModel.stopLivePreview()
 
-    // Live-TV "watch" (BACK on the committed channel / OK on the current programme): if that channel is
-    // already streaming in the preview, just raise the fullscreen overlay (surface handoff, NO re-connect);
-    // otherwise start it fresh.
-    fun openLivePlayer(channel: Channel) {
-        if (committedLiveChannel?.id == channel.id) {
-            playerVisible = true
-        } else {
-            openChannel(channel, origin = PlaybackOrigin.LiveTv)
-        }
-    }
+    // Live-TV "watch": if that channel is already the committed preview, just signal fullscreen (surface handoff,
+    // NO re-connect); otherwise start it fresh.
+    fun openLivePlayer(channel: Channel) = playerViewModel.openLivePlayer(channel)
 
     fun openMovie(
         movie: Movie,
@@ -627,22 +664,12 @@ private fun VivicastApp(
         requestProtectionUnlock(pinSecurityState.protectionAreaForMovie(movie), context.getString(R.string.main_unlock_movies)) {
             scope.launch {
                 when (preferences.playback.externalPlayer) {
-                    ExternalPlayerPreference.External -> {
-                        appContainer.createMoviePlaybackRequest(movie, resumeProgress, origin)
-                            ?.let(::launchExternalPlayback)
-                    }
-                    ExternalPlayerPreference.AskEveryTime -> {
-                        pendingExternalPlaybackRequest = appContainer.createMoviePlaybackRequest(movie, resumeProgress, origin)
-                    }
-                    ExternalPlayerPreference.Internal -> {
-                        appContainer.openMoviePlayback(
-                            movie = movie,
-                            resumeProgress = resumeProgress,
-                            origin = origin,
-                        ) {
-                            playerVisible = true
-                        }
-                    }
+                    ExternalPlayerPreference.External ->
+                        playerViewModel.buildMovieRequest(movie, resumeProgress, origin)?.let(::launchExternalPlayback)
+                    ExternalPlayerPreference.AskEveryTime ->
+                        pendingExternalPlaybackRequest = playerViewModel.buildMovieRequest(movie, resumeProgress, origin)
+                    ExternalPlayerPreference.Internal ->
+                        playerViewModel.playMovieInternal(movie, resumeProgress, origin)
                 }
             }
         }
@@ -688,21 +715,12 @@ private fun VivicastApp(
         requestProtectionUnlock(pinSecurityState.protectionAreaForEpisode(episode), context.getString(R.string.main_unlock_generic)) {
             scope.launch {
                 when (preferences.playback.externalPlayer) {
-                    ExternalPlayerPreference.External -> {
-                        appContainer.createEpisodePlaybackRequest(episode, origin)
-                            ?.let(::launchExternalPlayback)
-                    }
-                    ExternalPlayerPreference.AskEveryTime -> {
-                        pendingExternalPlaybackRequest = appContainer.createEpisodePlaybackRequest(episode, origin)
-                    }
-                    ExternalPlayerPreference.Internal -> {
-                        appContainer.openEpisodePlayback(
-                            episode = episode,
-                            origin = origin,
-                        ) {
-                            playerVisible = true
-                        }
-                    }
+                    ExternalPlayerPreference.External ->
+                        playerViewModel.buildEpisodeRequest(episode, origin)?.let(::launchExternalPlayback)
+                    ExternalPlayerPreference.AskEveryTime ->
+                        pendingExternalPlaybackRequest = playerViewModel.buildEpisodeRequest(episode, origin)
+                    ExternalPlayerPreference.Internal ->
+                        playerViewModel.playEpisodeInternal(episode, origin)
                 }
             }
         }
@@ -712,17 +730,7 @@ private fun VivicastApp(
         channel: Channel,
         program: EpgProgram,
         origin: PlaybackOrigin = PlaybackOrigin.LiveTv,
-    ) {
-        scope.launch {
-            appContainer.openCatchUpPlayback(
-                channel = channel,
-                program = program,
-                origin = origin,
-            ) {
-                playerVisible = true
-            }
-        }
-    }
+    ) = playerViewModel.playCatchUp(channel, program, origin)
 
     LaunchedEffect(deepLinkData, pinSecurityLoaded) {
         if (!pinSecurityLoaded) return@LaunchedEffect
@@ -943,24 +951,7 @@ private fun VivicastApp(
     // Android-TV system-search protection is enforced at read time (AndroidTvSearchSuggestionProvider
     // reads the live PIN flags, fail-closed), so no protection-triggered index rebuild is needed here.
 
-    LaunchedEffect(appContainer) {
-        appContainer.playerController.state.collectLatest { state ->
-            appContainer.savePlaybackProgress(
-                state = state,
-                automaticProgressSaveTimes = automaticProgressSaveTimes,
-            )
-        }
-    }
-
-    LaunchedEffect(playerState.request?.playbackId, playerState.request?.mediaId, playerState.request?.mediaType) {
-        val request = playerState.request
-        nextAutoNextEpisode = if (request?.mediaType == PlaybackMediaType.Episode) {
-            appContainer.mediaRepository.getEpisode(request.providerId, request.mediaId)
-                ?.let { appContainer.mediaRepository.getNextEpisode(it) }
-        } else {
-            null
-        }
-    }
+    // The automatic progress-save loop + the auto-next-episode derivation now run in PlayerViewModel.init.
 
     val strMovies = stringResource(R.string.nav_movies_label)
     val strSeries = stringResource(R.string.nav_series_label)
@@ -981,12 +972,27 @@ private fun VivicastApp(
         }
         onDispose { }
     }
-    // Leaving Live-TV (to another route, not the fullscreen overlay) stops the preview + releases the stream.
+    // Leaving Live-TV stops the preview + releases the stream — but the fullscreen Player is now a top-level
+    // destination OUTSIDE the LiveTv hierarchy, so the stop must be back-stack-aware (§3.4-4): navigating
+    // LiveTv -> Player must NOT stop its own stream (the Player adopts it). Only a real leave (Home/Movies/…)
+    // stops. Returning Player -> LiveTv keeps it too.
     LaunchedEffect(currentDestination) {
         val onLiveTv = currentDestination?.hierarchy?.any { it.hasRoute<LiveTv>() } == true
-        if (!onLiveTv) stopLivePreview()
+        val onPlayer = currentDestination?.hasRoute<Player>() == true
+        vcLog("player-nav") { "dest change onLiveTv=$onLiveTv onPlayer=$onPlayer -> ${if (!onLiveTv && !onPlayer) "STOP preview" else "keep"}" }
+        if (!onLiveTv && !onPlayer) stopLivePreview()
     }
-
+    // Player-close return: once the destination has actually settled on LiveTv, grab the top-nav (Live-TV tab)
+    // focus so a transient focus-fall onto the Home tab can't focus-follows-selection the route back to Home while
+    // the channel list loads. The Live-TV channel target (liveTvSearchTarget) then moves focus onto the channel.
+    LaunchedEffect(currentDestination, pendingReturnToLiveTvFocus) {
+        val onLiveTv = currentDestination?.hierarchy?.any { it.hasRoute<LiveTv>() } == true
+        if (pendingReturnToLiveTvFocus && onLiveTv) {
+            pendingReturnToLiveTvFocus = false
+            vcLog("player-nav") { "return -> grab Live-TV tab focus (block Home focus-fall)" }
+            runCatching { topNavigationFocusRequester.requestFocus() }
+        }
+    }
     val destinations = listOf(
         AppDestination("Home", ROUTE_HOME) {
             HomeRoute(
@@ -1022,18 +1028,18 @@ private fun VivicastApp(
                 resolveChannelLogoModel = { channel -> appContainer.resolveChannelLogoModel(channel) },
                 onOpenPlayer = { channel -> openLivePlayer(channel) },
                 onCommitPreview = { channel -> commitLivePreview(channel) },
-                focusChannelOnReturnSignal = focusLiveChannelSignal,
                 livePreviewActive = committedLiveChannel != null,
                 livePreviewSlot = {
                     AndroidView(factory = { livePreviewSurface }, modifier = Modifier.matchParentSize())
                 },
-                onPlayableChannelsChanged = { channels -> livePlaybackChannels = channels },
+                onPlayableChannelsChanged = { channels -> playerViewModel.setPlayableChannels(channels) },
                 onOpenCatchUp = { channel, program -> openCatchUp(channel, program, origin = PlaybackOrigin.LiveTv) },
                 targetProviderId = liveTvSearchTarget?.channel?.providerId,
                 targetCategoryId = liveTvSearchTarget?.channel?.categoryId,
                 targetChannelId = liveTvSearchTarget?.channel?.id,
                 targetEpgProgramId = liveTvSearchTarget?.program?.id,
                 targetEpgStartTime = liveTvSearchTarget?.program?.startTime,
+                targetActivate = liveTvSearchTarget?.activate ?: true,
                 onTargetConsumed = { liveTvSearchTarget = null },
             )
         },
@@ -1569,6 +1575,10 @@ private fun VivicastApp(
                             composable<Search> { destinations[4].content() }
                             composable<Settings> { destinations[5].content() }
                         }
+                        // C1: Player is a top-level destination (chrome-suppressed) — a back-stack marker so
+                        // navigate(Player)/navigateUp + process-death args work; the full-screen UI is the
+                        // App-level PlayerRoute overlay below, gated on hasRoute<Player>().
+                        composable<Player> { }
                     }
                 }
             }
@@ -1604,54 +1614,64 @@ private fun VivicastApp(
         PlayerRoute(
             playerController = appContainer.playerController,
             onClose = {
-                playerVisible = false
-                // Closing a live-preview fullscreen returns to Live-TV with focus on the channel (not Home).
-                // Anchor focus on the Live-TV nav tab synchronously first so it can't fall back to the Home
-                // tab (which would yank the route to Home); the Live-TV content then grabs the channel focus.
-                if (committedLiveChannel != null) {
-                    navigateTab(LiveTv)
-                    runCatching { topNavigationFocusRequester.requestFocus() }
-                    focusLiveChannelSignal += 1
+                // Return target depends on media type (nav.md). C2: set an addressed Live-TV channel target
+                // (activate=false) so the committed channel becomes the LIST selection + focus — the one-identity
+                // landing. Set BEFORE navigating (as Search does) so it's ready when LiveTvRoute (re)composes; the
+                // target effect's requestFocus then runs after the Player overlay is gone.
+                val request = appContainer.playerController.state.value.request
+                vcLog("player-nav") { "onClose committed=${committedLiveChannel != null} reqType=${request?.mediaType}" }
+                when {
+                    // From the Live-TV preview (already committed): pop back to Live-TV, focus the committed row.
+                    committedLiveChannel != null -> {
+                        vcLog("player-nav") { "onClose branch A (committed) -> navigateUp + target(activate=false)" }
+                        liveTvSearchTarget = committedLiveChannel?.let { LiveTvSearchTarget(channel = it, activate = false) }
+                        pendingReturnToLiveTvFocus = true
+                        navController.navigateUp()
+                    }
+                    // A channel opened OUTSIDE Live-TV (Home/History/resume) returns to the Live-TV browser AT that
+                    // channel: commit it (preview keeps playing) + set the list target, then switch to LiveTv.
+                    request?.mediaType == PlaybackMediaType.Channel -> {
+                        scope.launch {
+                            val channel = appContainer.mediaRepository.getChannel(request.providerId, request.mediaId)
+                            playerViewModel.setCommittedChannel(channel)
+                            if (channel != null) {
+                                liveTvSearchTarget = LiveTvSearchTarget(channel = channel, activate = false)
+                            }
+                            vcLog("player-nav") { "onClose branch B (Home channel) -> navigateTab(LiveTv), channel=${channel?.id}" }
+                            // navigateTab (now save/restore-free) pops the Player above Home and lands cleanly on
+                            // LiveTv — no bounce, and the tab registry stays consistent so leaving Live-TV works.
+                            pendingReturnToLiveTvFocus = true
+                            navigateTab(LiveTv)
+                        }
+                    }
+                    // VOD (movie / episode): pop back to the origin detail beneath on the stack.
+                    else -> navController.navigateUp()
                 }
             },
-            // Fullscreen opened from a live preview -> closing hands the SAME stream back to the preview
-            // (no reconnect); the preview surface re-attaches. Non-Live-TV playback still stops on close.
-            keepPlayingOnClose = committedLiveChannel != null,
+            // Any CHANNEL close hands the SAME stream back to the Live-TV preview (no reconnect) — keyed on the
+            // media type, not committedLiveChannel, so a channel opened from Home/History also keeps playing and
+            // its request survives for the onClose return-to-Live-TV branch. VOD (movie/episode) still stops.
+            keepPlayingOnClose = playerState.request?.mediaType == PlaybackMediaType.Channel,
             onChannelUp = { zapChannel(1) },
             onChannelDown = { zapChannel(-1) },
             onChooseAnotherChannel = {
-                selectRoute("live-tv")
-                playerVisible = false
+                // Leave the fullscreen player back to the Live-TV browser to pick a different channel; focus lands
+                // on the committed channel's row (C2 target), not falling to Home.
+                liveTvSearchTarget = committedLiveChannel?.let { LiveTvSearchTarget(channel = it, activate = false) }
+                pendingReturnToLiveTvFocus = true
+                navController.navigateUp()
             },
             autoNextEnabled = preferences.playback.autoNextEnabled,
             autoNextCountdownSeconds = preferences.playback.autoNextCountdownSeconds,
             afrEnabled = preferences.playback.afrEnabled,
-            nextEpisodeTitle = nextAutoNextEpisode?.name,
+            nextEpisodeTitle = playerUiState.nextEpisodeTitle,
             onPlayNextEpisode = ::playNextAutoNextEpisode,
             onAutoNextBack = {
-                val request = playerState.request
-                scope.launch {
-                    val episode = request
-                        ?.takeIf { it.mediaType == PlaybackMediaType.Episode }
-                        ?.let { appContainer.mediaRepository.getEpisode(it.providerId, it.mediaId) }
-                    val series = episode?.let { appContainer.mediaRepository.getSeries(it.providerId, it.seriesId) }
-                    if (episode != null && series != null) {
-                        navigateSeriesDetail(series, episode.stableKey)
-                    }
-                    playerVisible = false
-                }
+                // Auto-next "Zurück": pop the Player back to the series detail that launched it (the previously
+                // chosen season/episode context sits beneath on the back stack, per screens/03-player.md).
+                navController.navigateUp()
             },
-            onBeforeStop = { state ->
-                if (state != null) {
-                    scope.launch {
-                        appContainer.savePlaybackProgress(
-                            state = state,
-                            automaticProgressSaveTimes = automaticProgressSaveTimes,
-                            forceSave = true,
-                        )
-                    }
-                }
-            },
+            onBeforeStop = { state -> if (state != null) playerViewModel.saveProgress(state) },
         )
     }
 
@@ -1816,6 +1836,9 @@ private data class AppDestination(
 private data class LiveTvSearchTarget(
     val channel: Channel,
     val program: EpgProgram? = null,
+    // true = Search/deep-link: jump to the channel + activate it (EPG focus, BACK→fullscreen). false =
+    // return-to-browser (player close): select + focus the channel row in the list, no activation (C2).
+    val activate: Boolean = true,
 )
 
 private data class PendingProtectionUnlock(
@@ -1941,9 +1964,6 @@ private fun String.protectionTitle(context: Context): String =
         else -> context.getString(R.string.main_unlock_generic)
     }
 
-
-private fun Int.floorMod(modulus: Int): Int =
-    ((this % modulus) + modulus) % modulus
 
 // Diagnostics for a local-logo-folder scan: logs/index_built (files=N), or logos/folder_unreadable when the
 // folder was set but isn't a readable directory (rebuild returns -1). Sanitized count only — never the path.

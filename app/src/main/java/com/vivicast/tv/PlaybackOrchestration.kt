@@ -69,7 +69,6 @@ import com.vivicast.tv.core.designsystem.VivicastDialogActions
 import com.vivicast.tv.core.designsystem.VivicastDialogWidth
 import com.vivicast.tv.core.designsystem.VivicastTextField
 import com.vivicast.tv.core.player.PlaybackOrigin
-import com.vivicast.tv.core.player.PlaybackRequest
 import com.vivicast.tv.core.player.VivicastPlayerState
 import com.vivicast.tv.core.security.PinSecurity
 import com.vivicast.tv.core.security.PinSecurityState
@@ -109,7 +108,6 @@ import com.vivicast.tv.feature.settings.SettingsRoute
 import com.vivicast.tv.di.AppContainer
 import com.vivicast.tv.domain.model.Channel
 import com.vivicast.tv.domain.model.Episode
-import com.vivicast.tv.domain.model.EpgProgram
 import com.vivicast.tv.domain.model.LogoSource
 import com.vivicast.tv.domain.model.Movie
 import com.vivicast.tv.domain.model.Series
@@ -193,19 +191,6 @@ internal suspend fun AppContainer.resolveEpisodeImageModel(episode: Episode): An
     )?.file ?: sourceUrl
 }
 
-internal suspend fun AppContainer.openChannelPlayback(
-    channel: Channel,
-    origin: PlaybackOrigin,
-    onStarted: () -> Unit,
-) {
-    val request = playbackRequestFactory.channelRequest(
-        channel = channel,
-        origin = origin,
-    ) ?: return
-    playerController.play(request)
-    onStarted()
-}
-
 /**
  * Resolves the last watched channel for the "resume on startup" option: the most recent history row
  * → its still-persisted [Channel] → a preflight liveness check on the resolved stream. Returns the
@@ -221,49 +206,6 @@ internal suspend fun AppContainer.resolveResumableLastChannel(): Channel? {
         origin = PlaybackOrigin.LiveTv,
     ) ?: return null
     return channel.takeIf { streamReachabilityProbe.isReachable(request.streamUrl, request.userAgent) }
-}
-
-internal suspend fun AppContainer.openMoviePlayback(
-    movie: Movie,
-    resumeProgress: Boolean,
-    origin: PlaybackOrigin,
-    onStarted: () -> Unit,
-) {
-    val request = createMoviePlaybackRequest(movie, resumeProgress, origin) ?: return
-    playerController.play(request)
-    onStarted()
-}
-
-internal suspend fun AppContainer.createMoviePlaybackRequest(
-    movie: Movie,
-    resumeProgress: Boolean,
-    origin: PlaybackOrigin,
-): PlaybackRequest? = playbackRequestFactory.movieRequest(movie, resumeProgress, origin)
-
-internal suspend fun AppContainer.openEpisodePlayback(
-    episode: Episode,
-    origin: PlaybackOrigin,
-    onStarted: () -> Unit,
-) {
-    val request = createEpisodePlaybackRequest(episode, origin) ?: return
-    playerController.play(request)
-    onStarted()
-}
-
-internal suspend fun AppContainer.createEpisodePlaybackRequest(
-    episode: Episode,
-    origin: PlaybackOrigin,
-): PlaybackRequest? = playbackRequestFactory.episodeRequest(episode, origin)
-
-internal suspend fun AppContainer.openCatchUpPlayback(
-    channel: Channel,
-    program: EpgProgram,
-    origin: PlaybackOrigin,
-    onStarted: () -> Unit,
-) {
-    val request = playbackRequestFactory.catchUpRequest(channel, program, origin) ?: return
-    playerController.play(request)
-    onStarted()
 }
 
 internal suspend fun AppContainer.savePlaybackProgress(

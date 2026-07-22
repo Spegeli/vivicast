@@ -194,12 +194,18 @@ Follow these for all new/changed app code:
   (default `Dispatchers.IO`).
 - **App-hoisted stays App-hoisted:** ActivityResult (permission requests, external player),
   Keystore/PIN/Security, Context/PackageManager/Clipboard, WorkManager/Scheduler, Navigation,
-  Locale/`recreate`, `playerController.play`, player state loop / WatchNext / throttle map, Backup,
-  Diagnostics export, Global Refresh, Clear History, in-app file picker (`FilePickerDialog` /
-  `StorageAccess` — the TV-safe SAF replacement; M3U + backup import + export folder selection).
+  Locale/`recreate`, WatchNext, the ExoPlayer connection singleton (`AppContainer.playerController`)
+  + the preview SurfaceView, Backup, Diagnostics export, Global Refresh, Clear History, in-app file
+  picker (`FilePickerDialog` / `StorageAccess` — the TV-safe SAF replacement; M3U + backup import +
+  export folder selection). Player **orchestration** is the one carve-out — it moved to an
+  activity-scoped `PlayerViewModel` (see Playback below).
 - **Settings:** follow `docs/ARCHITECTURE-SETTINGS-HOISTING.md`.
-- **Playback:** `PlaybackRequestFactory` / `PlaybackProgressRecorder` in `:data:playback`;
-  `playerController.play` / `timeshiftConfig()` / WatchNext / `clearHistory` stay App-hoisted.
+- **Playback:** `PlaybackRequestFactory` / `PlaybackProgressRecorder` in `:data:playback`. Player
+  **orchestration** (build+`play`, the auto-save + auto-next loops, zap, the committed-preview identity)
+  lives in the activity-scoped `PlayerViewModel` (`:app`); the ExoPlayer **connection**
+  (`AppContainer.playerController`) stays a singleton, and navigation, the PIN gate, the external-player
+  ActivityResult, the preview SurfaceView, WatchNext + `clearHistory` stay App-side. See
+  `plans/player-viewmodel-extraction.md`.
 - **Provider connection test:** `TestProviderConnectionUseCase` in `:data:provider`; the German UI
   message mapping stays App-side.
 - **Designsystem:** `VivicastComponents.kt` no longer exists — components live in `VivicastSurfaces /

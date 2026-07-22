@@ -2,6 +2,7 @@ package com.vivicast.tv.core.designsystem
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,8 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -43,6 +46,7 @@ import androidx.tv.material3.Glow
 import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun VivicastTopNavigation(
     brand: String,
@@ -81,7 +85,22 @@ fun VivicastTopNavigation(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth(),
+        // Entering the top nav from below (D-pad UP out of the content) must land on the ACTIVE tab, not the
+        // geometrically-nearest one (Home, leftmost) — otherwise focus-follows-selection would navigate the route
+        // to Home when leaving Live-TV's category column upward.
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (selectedFocusRequester != null) {
+                    // focusGroup so the enter override actually intercepts: without a group boundary the spatial
+                    // search from below targets the nearest tab (Home) directly instead of "entering" this Row.
+                    Modifier
+                        .focusProperties { enter = { selectedFocusRequester } }
+                        .focusGroup()
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         // Left: brand
         Row(

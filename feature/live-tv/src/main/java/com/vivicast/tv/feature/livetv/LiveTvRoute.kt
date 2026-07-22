@@ -90,8 +90,6 @@ fun LiveTvRoute(
     // P2 — start the embedded video preview for a channel (OK/activate). App-hoisted (plays on the shared
     // player). livePreviewActive == a channel is streaming; livePreviewSlot renders the App's video surface.
     onCommitPreview: (Channel) -> Unit = {},
-    // Bumped when the fullscreen player closes back to the preview — focus the selected/committed channel.
-    focusChannelOnReturnSignal: Int = 0,
     livePreviewActive: Boolean = false,
     livePreviewSlot: @Composable BoxScope.() -> Unit = {},
     onPlayableChannelsChanged: (List<Channel>) -> Unit = {},
@@ -101,6 +99,9 @@ fun LiveTvRoute(
     targetChannelId: String? = null,
     targetEpgProgramId: String? = null,
     targetEpgStartTime: Long? = null,
+    // Search/deep-link (activate=true): jump to the channel + activate it (EPG focus, BACK→fullscreen). A
+    // return-to-browser target (activate=false): select + focus the channel row in the list, no activation.
+    targetActivate: Boolean = true,
     onTargetConsumed: () -> Unit = {},
 ) {
     RoomLiveTvRoute(
@@ -113,7 +114,6 @@ fun LiveTvRoute(
         resolveChannelLogoModel = resolveChannelLogoModel,
         onOpenPlayer = onOpenPlayer,
         onCommitPreview = onCommitPreview,
-        focusChannelOnReturnSignal = focusChannelOnReturnSignal,
         livePreviewActive = livePreviewActive,
         livePreviewSlot = livePreviewSlot,
         onPlayableChannelsChanged = onPlayableChannelsChanged,
@@ -123,6 +123,7 @@ fun LiveTvRoute(
         targetChannelId = targetChannelId,
         targetEpgProgramId = targetEpgProgramId,
         targetEpgStartTime = targetEpgStartTime,
+        targetActivate = targetActivate,
         onTargetConsumed = onTargetConsumed,
     )
 }
@@ -139,7 +140,6 @@ private fun RoomLiveTvRoute(
     resolveChannelLogoModel: suspend (Channel) -> Any?,
     onOpenPlayer: (Channel) -> Unit,
     onCommitPreview: (Channel) -> Unit,
-    focusChannelOnReturnSignal: Int,
     livePreviewActive: Boolean,
     livePreviewSlot: @Composable BoxScope.() -> Unit,
     onPlayableChannelsChanged: (List<Channel>) -> Unit,
@@ -149,6 +149,7 @@ private fun RoomLiveTvRoute(
     targetChannelId: String?,
     targetEpgProgramId: String?,
     targetEpgStartTime: Long?,
+    targetActivate: Boolean,
     onTargetConsumed: () -> Unit,
 ) {
     val viewModel: LiveTvViewModel = viewModel(
@@ -188,15 +189,6 @@ private fun RoomLiveTvRoute(
         activated = false
         committedChannel = null
     }
-    // Returning from the fullscreen player: focus the (still-committed) channel in the list — grabs focus into
-    // the content so it doesn't fall to the Home nav tab.
-    LaunchedEffect(focusChannelOnReturnSignal) {
-        if (focusChannelOnReturnSignal > 0) {
-            focusedArea = LiveFocusArea.ChannelList
-            selectedChannelFocusRequest += 1
-        }
-    }
-
     val providers = uiState.providers
     val categories = uiState.categories
     val channels = uiState.channels
@@ -255,17 +247,25 @@ private fun RoomLiveTvRoute(
         }
     }
 
-    LaunchedEffect(targetProviderId, targetCategoryId, targetChannelId, targetEpgProgramId) {
+    LaunchedEffect(targetProviderId, targetCategoryId, targetChannelId, targetEpgProgramId, targetActivate) {
         val providerId = targetProviderId ?: return@LaunchedEffect
         viewModel.onTarget(targetProviderId, targetCategoryId, targetChannelId, targetEpgStartTime)
         if (providerId !in expandedProviderIds) {
             onExpandedProviderIdsChanged(expandedProviderIds + providerId)
         }
         if (targetChannelId != null) {
-            // Activate + focus the EPG; onEpgFocused collapses to [E|P] once focus lands (avoids a bounce).
-            activated = true
-            focusedArea = LiveFocusArea.Epg
-            epgFocusRequest += 1
+            if (targetActivate) {
+                // Search/deep-link: activate + focus the EPG; onEpgFocused collapses to [E|P] once focus lands.
+                activated = true
+                focusedArea = LiveFocusArea.Epg
+                epgFocusRequest += 1
+            } else {
+                // C2 one-identity landing (player close → Live-TV): the committed channel is now the list
+                // selection too, so just focus its row. No activation → BACK steps back through the columns,
+                // never bounces to fullscreen (the push-2f trap).
+                focusedArea = LiveFocusArea.ChannelList
+                selectedChannelFocusRequest += 1
+            }
         }
         if (targetEpgProgramId == null) onTargetConsumed()
     }
@@ -570,17 +570,24 @@ private fun RoomChannelColumn(
     val selectedFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
-    // Focus the selected channel ONLY on an explicit request (collapse-back / zap) — NOT on every
-    // selectedChannelId change, or auto-select (e.g. focusing a provider clears+re-picks the channel) would
-    // yank focus back into the list. The channel may be scrolled out of view (the column just re-composed at
-    // the top collapsing [E|P] -> [S|E|P]), so scroll it in first, else requestFocus is a no-op (focus would
-    // stay stuck on the EPG).
-    LaunchedEffect(requestSelectedFocusSignal) {
-        if (requestSelectedFocusSignal > 0 && selectedChannelId != null) {
+    // Focus the selected channel ONLY on an explicit request (collapse-back / zap / player-close return) — NOT
+    // on every selectedChannelId change, or auto-select (e.g. focusing a provider clears+re-picks the channel)
+    // would yank focus back into the list. The channel may be scrolled out of view (the column just re-composed
+    // at the top collapsing [E|P] -> [S|E|P]), so scroll it in first, else requestFocus is a no-op.
+    //
+    // Keyed on `channels` too (not just the signal): on a player-close return into a FRESH Live-TV the channel
+    // list loads async (Room query after onTarget), so the row isn't present when the signal first fires. Without
+    // re-running on arrival the requestFocus finds index -1, does nothing, and focus falls to the top nav (Home).
+    // `handledFocusSignal` makes it consume-once: it acts only while a signal is unhandled AND the row exists, so
+    // a later channels change during normal browsing (load-more) does not re-yank focus.
+    var handledFocusSignal by remember { mutableStateOf(0) }
+    LaunchedEffect(requestSelectedFocusSignal, channels) {
+        if (requestSelectedFocusSignal > 0 && requestSelectedFocusSignal != handledFocusSignal && selectedChannelId != null) {
             val index = channels.indexOfFirst { it.id == selectedChannelId }
             if (index >= 0) {
                 listState.scrollToItem(index)
                 runCatching { selectedFocusRequester.requestFocus() }
+                handledFocusSignal = requestSelectedFocusSignal
             }
         }
     }

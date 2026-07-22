@@ -249,6 +249,11 @@ internal class LiveTvViewModel(
     ) {
         if (targetProviderId == null) return
         targetEpgStartTime = targetEpgStartTimeMillis
+        // Expand the target provider FIRST (synchronously). Otherwise the (provider, expanded) combine collector
+        // runs ensureCategorySelected while the target provider is not yet in the (async, preference-backed)
+        // expanded set, which nulls the target category — so the channel list never loads the target's channels
+        // and the selection falls back to the default provider. The App's expansion-pref write then converges.
+        expandedProviderIdsFlow.value = expandedProviderIdsFlow.value + targetProviderId
         selectedProviderIdFlow.value = targetProviderId
         selectedCategoryIdFlow.value = targetCategoryId
         selectedChannelIdFlow.value = targetChannelId
@@ -270,7 +275,11 @@ internal class LiveTvViewModel(
             selectedCategoryIdFlow.value = null
         } else {
             val current = selectedCategoryIdFlow.value
-            if (current == null || categories.none { it.id == current }) {
+            // Only auto-pick the first category once categories are actually LOADED and the current one is
+            // truly gone. Re-picking while `categories` is still empty (async load) would clobber a target
+            // category (set by onTarget before its categories arrive) with firstOrNull() — landing on the
+            // wrong channel/category on a Search / player-close return.
+            if (categories.isNotEmpty() && (current == null || categories.none { it.id == current })) {
                 selectedCategoryIdFlow.value = categories.firstOrNull()?.id
             }
         }
@@ -294,13 +303,15 @@ internal class LiveTvViewModel(
         }
 
         // Auto-select the first channel when the selection is missing/invalid — whether the list changed OR
-        // the selection was just cleared (e.g. onCategorySelected/onProviderFocused set it null). The
-        // `next != current` guard keeps an empty list from re-bumping the reset signal every rebuild.
+        // the selection was just cleared (e.g. onCategorySelected/onProviderFocused set it null). Only once the
+        // channel list is actually LOADED (non-empty): auto-selecting the "first" while `channels` is still
+        // empty (async load) would clobber a target channel (set by onTarget before its channels arrive) to null
+        // and then to the real first on arrival — landing on the wrong channel on a Search / player-close return.
         val currentChannelId = selectedChannelIdFlow.value
         val selectionValid = currentChannelId != null && channels.any { it.id == currentChannelId }
         if (channels != lastGuardChannels || !selectionValid) {
             lastGuardChannels = channels
-            if (!selectionValid) {
+            if (!selectionValid && channels.isNotEmpty()) {
                 val next = channels.firstOrNull()?.id
                 if (next != currentChannelId) {
                     selectedChannelIdFlow.value = next

@@ -5,9 +5,8 @@ import kotlinx.serialization.Serializable
 /**
  * Type-safe Navigation-Compose routes (replaces the old `selectedRoute` string model).
  *
- * Phase A1 scope: the tab shell + the six top-level destinations. Movie/series **detail** destinations and
- * the **Player** destination are added in their own phases (B / C1) — do not pre-declare them here (keeps the
- * graph in step with what is actually wired, and avoids unused-route noise).
+ * Phase A1 scope: the tab shell + the six top-level destinations. Movie/series **detail** destinations (B) and
+ * the **Player** destination (C1) are added in their own phases as they are wired.
  *
  * Movies and Series are modelled as **nested graphs** already now, each with only its `*List` child, so their
  * ViewModels can be scoped to the graph entry (`getBackStackEntry(MoviesGraph)`) from A1 on. Phase B then only
@@ -64,4 +63,28 @@ internal data class SeriesDetail(
     val providerStableKey: String,
     val seriesStableKey: String,
     val episodeStableKey: String? = null,
+)
+
+/**
+ * Player = a full-screen top-level destination (the persistent top nav is suppressed for it, §nav.md). Args are
+ * **decomposed primitives** (no custom NavType) carrying everything needed to rebuild the immutable
+ * `PlaybackRequest` on entry — so a process-death-restored Player re-resolves + re-plays from its args (stream
+ * URLs are just-in-time per ADR-013, never persisted). Enums are carried as their `.name` string
+ * (`PlaybackMediaType` / `PlaybackOrigin` / `PlaybackReturnTarget`) to keep the route a pure-primitive type.
+ *
+ * On a NORMAL launch the App has already built the request + called `playerController.play(...)` (App-hoisted),
+ * then navigates here; the destination only renders the running player — it never calls `play()` on entry
+ * ("adopt, don't re-connect" — a second connection would violate ADR-013's single-playback invariant). Return
+ * is by back-stack pop (the origin detail / Live-TV sits beneath); the Live-TV committed-channel focus is the
+ * one explicit carve-out (§3.4-7).
+ */
+@Serializable
+internal data class Player(
+    val mediaType: String,
+    val providerStableKey: String,
+    val mediaStableKey: String,
+    val origin: String,
+    val returnTarget: String,
+    val startPositionMillis: Long = 0L,
+    val epgProgramStableKey: String? = null,
 )
