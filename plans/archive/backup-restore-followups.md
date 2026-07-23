@@ -1,7 +1,11 @@
 # Backup Restore — Post-Restore-Followups (Audit-Findings)
 
-> Status: **PLAN / Audit-Ergebnis — F1 + F2 zu fixen (Ansatz vor Code besprechen). F3 optional (niedrig).
-> Kommentar-Fix DONE. Zwei Punkte = Kontext/Doku, kein Fix nötig.**
+> Status: **✅ ABGESCHLOSSEN + VERIFIZIERT (2026-07-23).** F1 (geordneter Restore-Refresh, Continuation-
+> Barriere Playlist→EPG) + F2 (WatchNext-Mutex) implementiert, Gates grün (detekt/assembleDebug/test + neue
+> Worker-Tests), F1 **on-device verifiziert** (Emulator: alle PlaylistRefreshWorker SUCCESS → dann
+> EpgRefreshWorker; DB: 43 Kategorien mit State, 3 Favoriten/8 History gebunden, 126 EPG-Mappings/13.885
+> Programme gegen den vollen Katalog). Kommentar-Fix DONE. K1/K2 = Kontext/Doku (kein Fix).
+> **F3 (WatchNext × PIN) GESTRICHEN** — wird mit der künftigen PIN/Parental-Test-Runde angegangen, nicht hier.
 >
 > Kontext: Voll-Audit der Backup-Export/Import-Funktion (2026-07-23) nach Abschluss von
 > `plans/backup-restore-groups-lost.md`. **Vollständigkeit Export/Import = VOLLSTÄNDIG** (alle 10

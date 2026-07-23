@@ -165,7 +165,9 @@ data/
   playback/   ← PlaybackRepository, PlaybackStreamResolver, PlaybackProgressRules,
                 PlaybackRequestFactory, PlaybackProgressRecorder
   provider/   ← ProviderRepository, ProviderConfigurationModels, TestProviderConnectionUseCase
-domain/       ← Vivicast domain models; keep model-focused unless an approved plan requires otherwise
+domain/       ← Vivicast domain models (+ ids/UserDataIds: shared favorite/progress/history row-key builders,
+                used by both the live write path and the backup reconcile); keep model-focused unless an
+                approved plan requires otherwise
 feature/      ← each feature = Route + ViewModel + UiState (+ ViewModelFactory)
   home/       ← HomeRoute, HomeViewModel, HomeUiState
   live-tv/    ← LiveTvRoute, LiveTvViewModel, LiveTvUiState
