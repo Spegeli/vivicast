@@ -457,13 +457,14 @@ private fun VivicastApp(
                     pinSecurityState = PinSecurityState()
                     unlockedProtectionAreas = emptySet()
                     // Restored providers/EPG are config only; re-fetch so the catalog + EPG rebuild and the
-                    // pending favorites/history/progress bind.
-                    appContainer.providerRepository.observeProviders().first()
-                        .filter { it.isActive }
-                        .forEach { appContainer.refreshWorkScheduler.enqueuePlaylistRefresh(it.id) }
-                    appContainer.epgSourceRepository.observeEpgSources().first()
-                        .filter { it.isActive }
-                        .forEach { appContainer.refreshWorkScheduler.enqueueEpgRefresh(it.id) }
+                    // pending favorites/history/progress bind. ORDERED: all playlists (Phase 1) THEN all EPG
+                    // (Phase 2) as one continuation, so every (possibly shared) EPG source maps against the
+                    // fully-rebuilt catalog of ALL its providers. See plans/backup-restore-followups.md (F1).
+                    val activeProviderIds = appContainer.providerRepository.observeProviders().first()
+                        .filter { it.isActive }.map { it.id }
+                    val activeEpgSourceIds = appContainer.epgSourceRepository.observeEpgSources().first()
+                        .filter { it.isActive }.map { it.id }
+                    appContainer.refreshWorkScheduler.enqueueRestoreRefresh(activeProviderIds, activeEpgSourceIds)
                     appContainer.syncWatchNext()
                     if (restore.preview.parentalProtectionWasActive) {
                         showParentalReactivationHint = true

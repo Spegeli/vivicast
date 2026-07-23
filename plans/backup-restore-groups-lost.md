@@ -1,8 +1,10 @@
 # Backup Restore — User-Daten binden nicht an den neu importierten Katalog
 
-> Status: **PHASE 1 IMPLEMENTIERT + GATES GRÜN + ON-DEVICE-END-TO-END VERIFIZIERT (Emulator, echtes
-> verschlüsseltes Backup Export→Import mit Passwort). NICHT committet. Phase 2 (EPG manuelle Mappings) +
-> WatchNext offen.**
+> Status: **✅ ABGESCHLOSSEN + VERIFIZIERT (2026-07-23).** Phase 1 (Favoriten/Progress/History-Reconcile +
+> Gruppen-State + Kategorie-Unique-Fix) on-device verifiziert (Emulator, echtes verschlüsseltes Backup
+> Export→Import, Clean-Slate + Import-auf-Daten). Phase 2 (EPG manuelle Mappings) androidTest-verifiziert.
+> Alle Gates grün. Committet auf Branch `fix/backup-restore-reconcile` (e44ff23 + e21eac4), lokal, nicht
+> gepusht. **WatchNext + Post-Restore-Reihenfolge-Findings → neuer Plan `plans/backup-restore-followups.md`.**
 >
 > **Kritischer Bug beim manuellen Test gefunden + gefixt (den die ersten androidTests verfehlten):** Nach
 > Restore fiel `categories` auf **0** (Original-Symptom „Gruppen weg"). Ursache: `CategoryEntity` hat

@@ -22,8 +22,17 @@ interface RefreshWorkScheduler {
 
     // [restart] = true → ExistingWorkPolicy.REPLACE (cancel + restart an in-flight run with the current
     // settings), for the foreground save + the per-playlist "Aktualisieren" action. Default false = KEEP
-    // (an in-flight run coalesces), for refresh-all / interval / app-start / restore. See D10 R10.
+    // (an in-flight run coalesces), for refresh-all / interval / app-start. See D10 R10.
     fun enqueuePlaylistRefresh(providerId: String, restart: Boolean = false)
+
+    /**
+     * Ordered post-restore refresh: ALL playlists (Phase 1) then ALL EPG sources (Phase 2) as one WorkManager
+     * continuation, so every (possibly shared) EPG source maps against the fully-rebuilt catalog of ALL its
+     * providers — not a partial one. The Phase-1 playlist works carry the restore-chain flag (suppress their
+     * per-provider EPG trigger + never fail the chain). No-op when [providerIds] is empty (no catalog to build).
+     * See plans/backup-restore-followups.md (F1).
+     */
+    fun enqueueRestoreRefresh(providerIds: List<String>, epgSourceIds: List<String>)
 
     /** Cancels this playlist's in-flight/queued one-time refresh (used when the provider is deleted). */
     fun cancelPlaylistRefresh(providerId: String)
@@ -72,6 +81,21 @@ class WorkManagerRefreshWorkScheduler(
             if (restart) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             RefreshWorkRequests.playlistRefresh(providerId),
         )
+    }
+
+    override fun enqueueRestoreRefresh(providerIds: List<String>, epgSourceIds: List<String>) {
+        // No active providers → no catalog will exist → an EPG phase would map nothing. Skip entirely.
+        if (providerIds.isEmpty()) return
+        val playlistWork = providerIds.map { RefreshWorkRequests.playlistRefresh(it, restoreChain = true) }
+        val epgWork = epgSourceIds.map { RefreshWorkRequests.epgRefresh(it) }
+        // REPLACE: a re-import supersedes an in-flight restore chain. Phase 2 (.then) runs once every Phase-1
+        // playlist node has SUCCEEDED — the restore-chain flag guarantees each does (terminal → success).
+        val continuation = workManager.beginUniqueWork(
+            WorkerContracts.RESTORE_REFRESH_WORK,
+            ExistingWorkPolicy.REPLACE,
+            playlistWork,
+        )
+        if (epgWork.isEmpty()) continuation.enqueue() else continuation.then(epgWork).enqueue()
     }
 
     override fun cancelPlaylistRefresh(providerId: String) {
@@ -126,10 +150,11 @@ internal object RefreshWorkRequests {
             .build()
     }
 
-    fun playlistRefresh(providerId: String): OneTimeWorkRequest =
+    fun playlistRefresh(providerId: String, restoreChain: Boolean = false): OneTimeWorkRequest =
         networkOneTimeRequest<PlaylistRefreshWorker>(
             Data.Builder()
                 .putString(WorkerContracts.INPUT_PROVIDER_ID, providerId)
+                .putBoolean(WorkerContracts.INPUT_RESTORE_CHAIN, restoreChain)
                 .build(),
         )
 

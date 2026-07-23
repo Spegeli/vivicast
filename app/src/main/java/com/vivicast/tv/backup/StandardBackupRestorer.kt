@@ -115,9 +115,12 @@ class StandardBackupRestorer(
         deleteOldSecrets(oldProviders, oldEpgSources)
         writeRestoredSecrets(providers, epgSources)
         pinSecurityStateStore.clear()
-        // Re-apply the backed-up app settings (audit #3): general/appearance/playback/history/epg/backup
-        // + expanded Live-TV groups. selectedProviderId + parental control stay reset below — providers
-        // are re-selected and the PIN is re-armed by the user (reactivation hint), whatever the backup held.
+        // Re-apply the backed-up app settings that the backup actually carries: general / appearance /
+        // playback / epg + the expanded Live-TV groups. `updateBackup` writes DEFAULT BackupPreferences (the
+        // backup never carries them — its only field lastExportDir is device-local), i.e. it RESETS them, not
+        // restores. Diagnostics + searchHistory-pref + localLogoFolder are intentionally left as-is. Below,
+        // selectedProviderId is reset (providers are re-selected) and the PIN was cleared above — the user
+        // re-arms it via the reactivation hint, whatever the backup held.
         json.optJSONObject("preferences")?.let { prefs ->
             val restored = userPreferencesFromStandardBackupJson(prefs)
             userPreferencesStore.updateGeneral(restored.general)

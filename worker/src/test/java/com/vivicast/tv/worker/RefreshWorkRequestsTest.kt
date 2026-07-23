@@ -16,6 +16,20 @@ class RefreshWorkRequestsTest {
     }
 
     @Test
+    fun playlistRefreshCarriesRestoreChainFlag() {
+        assertEquals(
+            false,
+            RefreshWorkRequests.playlistRefresh("provider-1").workSpec.input
+                .getBoolean(WorkerContracts.INPUT_RESTORE_CHAIN, false),
+        )
+        assertEquals(
+            true,
+            RefreshWorkRequests.playlistRefresh("provider-1", restoreChain = true).workSpec.input
+                .getBoolean(WorkerContracts.INPUT_RESTORE_CHAIN, false),
+        )
+    }
+
+    @Test
     fun epgRefreshUsesSourceInputAndNetworkConstraint() {
         val request = RefreshWorkRequests.epgRefresh("epg-1")
 

@@ -105,6 +105,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 
@@ -452,8 +454,16 @@ class AppContainer(
         playbackTuningPolicy.update(tuning)
     }
 
+    // WatchNext publishing is a non-atomic delete-all-then-insert on the system TvProvider. Many callers fire
+    // it concurrently (each decorated setProviderStatus during a parallel refresh, plus the restore's explicit
+    // sync), so serialize them — otherwise interleaved delete/insert flickers the launcher row and the final
+    // content becomes order-dependent. See plans/backup-restore-followups.md (F2).
+    private val watchNextSyncMutex = Mutex()
+
     suspend fun syncWatchNext() {
-        watchNextSynchronizer.sync()
+        watchNextSyncMutex.withLock {
+            watchNextSynchronizer.sync()
+        }
     }
 
     val testProviderConnectionUseCase: TestProviderConnectionUseCase by lazy {

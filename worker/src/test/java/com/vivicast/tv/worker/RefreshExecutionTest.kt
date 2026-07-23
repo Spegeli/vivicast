@@ -398,6 +398,60 @@ class RefreshExecutionTest {
         assertTrue(guard.tryEnter("provider-1"))
     }
 
+    @Test
+    fun playlistRefreshEnqueuesEpgOnPlaylistChangeWhenNotRestoreChain() = runBlocking {
+        val scheduler = FakeRefreshWorkScheduler()
+        val runner = workerRunner(
+            scheduler = scheduler,
+            playlistRefresher = FakePlaylistRefresher(
+                PlaylistRefreshOutcome("provider-1", success = true, epgSourceIds = listOf("epg-1", "epg-2")),
+            ),
+        )
+
+        val result = runner.runPlaylistRefresh("provider-1", restoreChain = false)
+
+        assertEquals(RefreshWorkerResult.Success, result)
+        assertEquals(listOf("epg-1", "epg-2"), scheduler.epgEnqueues)
+    }
+
+    @Test
+    fun playlistRefreshSuppressesEpgTriggerInRestoreChain() = runBlocking {
+        val scheduler = FakeRefreshWorkScheduler()
+        val runner = workerRunner(
+            scheduler = scheduler,
+            playlistRefresher = FakePlaylistRefresher(
+                PlaylistRefreshOutcome("provider-1", success = true, epgSourceIds = listOf("epg-1", "epg-2")),
+            ),
+        )
+
+        val result = runner.runPlaylistRefresh("provider-1", restoreChain = true)
+
+        assertEquals(RefreshWorkerResult.Success, result)
+        // The restore continuation owns EPG (Phase 2); the per-provider trigger must NOT fire mid-Phase-1.
+        assertEquals(emptyList<String>(), scheduler.epgEnqueues)
+    }
+
+    private fun workerRunner(
+        scheduler: RefreshWorkScheduler,
+        playlistRefresher: PlaylistRefresher,
+    ): DefaultRefreshWorkerRunner =
+        DefaultRefreshWorkerRunner(
+            orchestrator = MaintenanceRefreshOrchestrator(
+                logoRefresher = object : LogoRefresher { override suspend fun refreshLogos() = LogoRefreshResult() },
+                cacheCleaner = object : CacheCleaner {
+                    override suspend fun cleanup() = MediaCacheCleanupResult(removedFiles = 0, removedBytes = 0, remainingBytes = 0)
+                },
+                diagnostics = NoOpRefreshDiagnostics,
+            ),
+            playlistRefresher = playlistRefresher,
+            epgRefresher = object : EpgRefresher {
+                override suspend fun refresh(target: EpgRefreshTarget) =
+                    EpgRefreshOutcome(target.epgSourceId, success = false, skipped = true)
+            },
+            scheduler = scheduler,
+            refreshEpgOnPlaylistChangeProvider = { true },
+        )
+
     private fun provider(
         id: String = "provider-1",
         type: ProviderType = ProviderType.M3u,
@@ -658,6 +712,25 @@ private class FakeEpgSourceReader(
 
     override suspend fun getActiveSource(epgSourceId: String): ResolvedEpgSource? =
         resolved?.takeIf { it.id == epgSourceId }
+}
+
+private class FakePlaylistRefresher(private val outcome: PlaylistRefreshOutcome) : PlaylistRefresher {
+    override suspend fun refresh(target: PlaylistRefreshTarget): PlaylistRefreshOutcome = outcome
+}
+
+private class FakeRefreshWorkScheduler : RefreshWorkScheduler {
+    val epgEnqueues = mutableListOf<String>()
+
+    override fun setMaintenancePeriodicEnabled(enabled: Boolean, repeatIntervalHours: Long) = Unit
+    override fun enqueuePlaylistRefresh(providerId: String, restart: Boolean) = Unit
+    override fun enqueueRestoreRefresh(providerIds: List<String>, epgSourceIds: List<String>) = Unit
+    override fun cancelPlaylistRefresh(providerId: String) = Unit
+    override fun enqueuePlaylistPeriodic(providerId: String, intervalHours: Int, initialDelayMillis: Long) = Unit
+    override fun cancelPlaylistPeriodic(providerId: String) = Unit
+    override fun enqueueEpgRefresh(epgSourceId: String) { epgEnqueues += epgSourceId }
+    override fun cancelEpgRefresh(epgSourceId: String) = Unit
+    override fun enqueueEpgPeriodic(epgSourceId: String, intervalHours: Int, initialDelayMillis: Long) = Unit
+    override fun cancelEpgPeriodic(epgSourceId: String) = Unit
 }
 
 private object EmptyXtreamClient : XtreamClient {

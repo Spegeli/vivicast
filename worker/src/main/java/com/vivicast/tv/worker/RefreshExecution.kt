@@ -91,7 +91,7 @@ class DefaultRefreshWorkerRunner(
                 onFailure = { RefreshWorkerResult.Retry },
             )
 
-    override suspend fun runPlaylistRefresh(providerId: String?): RefreshWorkerResult {
+    override suspend fun runPlaylistRefresh(providerId: String?, restoreChain: Boolean): RefreshWorkerResult {
         val target = providerId?.takeIf { it.isNotBlank() }?.let(::PlaylistRefreshTarget)
             ?: return RefreshWorkerResult.Failure
         val startedAt = clock()
@@ -108,7 +108,10 @@ class DefaultRefreshWorkerRunner(
                         // EPG sources assigned to this provider (mapping re-runs against the fresh
                         // channels). epgSourceIds is empty when the provider has no assigned source, so
                         // an unassigned source is never refreshed by this trigger.
-                        if (refreshEpgOnPlaylistChangeProvider()) {
+                        // SUPPRESSED inside the restore chain: firing here (per provider, mid-Phase-1) would
+                        // re-map EPG against an incomplete catalog — the whole point of the barrier is that the
+                        // continuation's Phase 2 refreshes EPG once, after ALL playlists. See F1.
+                        if (!restoreChain && refreshEpgOnPlaylistChangeProvider()) {
                             outcome.epgSourceIds.forEach { scheduler.enqueueEpgRefresh(it) }
                         }
                         recordRefresh(
