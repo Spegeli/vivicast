@@ -274,6 +274,12 @@ interface EpgDao {
     @Query("DELETE FROM epg_channel_mappings WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteMappingsForChannels(providerId: String, channelIds: List<String>)
 
+    // Delete-by-PK for the restored-manual-mapping rebind: a backup writes the mapping keyed by
+    // channelStableKey; the EPG import rewrites it to the channel row id (new PK) and drops the stale row.
+    // See plans/backup-restore-groups-lost.md.
+    @Query("DELETE FROM epg_channel_mappings WHERE id = :id")
+    suspend fun deleteMappingById(id: String)
+
     // Unlinking a source from one provider drops that (provider, source) pair's mappings (see
     // deleteProgramsForProviderAndSource for the programme side) so no stale rows linger / resurface on
     // re-link. Scoped to the pair — other providers sharing the source keep their mappings.

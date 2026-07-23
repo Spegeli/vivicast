@@ -191,6 +191,35 @@ class RoomEpgRepository(
         epgDao.upsertProviderEpgSources(listOf(link))
     }
 
+    // Restore writes an EPG manual mapping keyed by channelStableKey (channelId = channelStableKey), but the
+    // live format + the import (programme mapping, auto-mapping suppression) key on the channel ROW id.
+    // Rewrite each restored manual mapping whose channelId is not a live row id but whose stableKey resolves
+    // to a real channel (id -> live epgMappingId, channelId -> row id); leave the rest (channel gone)
+    // untouched. Persisted, so the mapping panel and the next import see the bound row. Phase 2 of
+    // plans/backup-restore-groups-lost.md.
+    private suspend fun rebindRestoredManualMappings(
+        providerId: String,
+        epgSourceId: String,
+        channels: List<ChannelEntity>,
+    ) {
+        val channelIds = channels.mapTo(HashSet(channels.size)) { it.id }
+        val channelsByStableKey = channels.associateBy { it.stableKey }
+        val rebinds = epgDao.getMappingsForProviderAndSource(providerId, epgSourceId)
+            .filter { it.isManual && it.channelId !in channelIds }
+            .mapNotNull { mapping ->
+                val channel = channelsByStableKey[mapping.channelStableKey] ?: return@mapNotNull null
+                mapping to mapping.copy(
+                    id = epgMappingId(providerId, epgSourceId, channel.id),
+                    channelId = channel.id,
+                )
+            }
+        if (rebinds.isEmpty()) return
+        database.withTransaction {
+            rebinds.forEach { (stale, _) -> epgDao.deleteMappingById(stale.id) }
+            epgDao.upsertMappings(rebinds.map { it.second })
+        }
+    }
+
     override suspend fun importXmltv(
         providerId: String,
         epgSourceId: String,
@@ -203,6 +232,9 @@ class RoomEpgRepository(
             ?: error("EPG source not found: $epgSourceId")
         val timeShiftMillis = source.timeShiftMinutes * MILLIS_PER_MINUTE
         val channels = catalogDao.getChannels(providerId)
+        // Bind restored manual mappings (a backup writes channelId = channelStableKey) to the channel row id
+        // BEFORE the mapping read, so programme mapping + auto-mapping suppression key on a real channel.
+        rebindRestoredManualMappings(providerId, epgSourceId, channels)
         val existingMappings = epgDao.getMappingsForProviderAndSource(providerId, epgSourceId)
         val manualMappings = existingMappings.filter { it.isManual }
         val manualMappedChannelIds = manualMappings.mapTo(mutableSetOf()) { it.channelId }

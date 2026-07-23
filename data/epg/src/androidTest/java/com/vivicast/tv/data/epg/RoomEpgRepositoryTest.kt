@@ -465,6 +465,89 @@ class RoomEpgRepositoryTest {
     }
 
     @Test
+    fun restoredManualMappingRebindsToChannelRowIdOnImport() = runBlocking {
+        // A channel whose row id differs from its stableKey (the real catalog shape).
+        database.catalogDao().upsertCategories(
+            listOf(
+                CategoryEntity(
+                    id = "$PROVIDER_ID-live",
+                    providerId = PROVIDER_ID,
+                    type = "LIVE",
+                    remoteId = "news",
+                    name = "News",
+                    sortOrder = 0,
+                    isHidden = false,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            ),
+        )
+        database.catalogDao().upsertChannels(
+            listOf(
+                ChannelEntity(
+                    id = "$PROVIDER_ID:channel:ard",
+                    providerId = PROVIDER_ID,
+                    categoryId = "$PROVIDER_ID-live",
+                    stableKey = "ard-stable",
+                    remoteId = "ard.de",
+                    channelNumber = null,
+                    name = "ARD HD",
+                    logoUrl = null,
+                    epgChannelId = "ard.de",
+                    isCatchupAvailable = false,
+                    catchupDays = 0,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            ),
+        )
+        repository.saveEpgSource(
+            EpgSourceSaveRequest(
+                sourceId = "epg-source-1",
+                name = "Public EPG",
+                sourceConfigKey = "secure:epg-source-1",
+                timeShiftMinutes = 0,
+                isActive = true,
+            ),
+        )
+        repository.linkEpgSourceToProvider(PROVIDER_ID, "epg-source-1", priority = 1)
+
+        // Restore-format manual mapping: channelId = the bare channelStableKey (NOT the row id), which is
+        // exactly what StandardBackupRestorer writes. Without the rebind, programme mapping + auto-suppression
+        // key on the row id and miss it → the auto mapping (ard.de) wins and the manual override (zdf.xml) is lost.
+        database.epgDao().upsertMappings(
+            listOf(
+                EpgChannelMappingEntity(
+                    id = "$PROVIDER_ID:mapping:ard-stable:epg-source-1",
+                    providerId = PROVIDER_ID,
+                    channelId = "ard-stable",
+                    channelStableKey = "ard-stable",
+                    epgSourceId = "epg-source-1",
+                    epgChannelId = "zdf.xml",
+                    isManual = true,
+                    createdAt = 0L,
+                ),
+            ),
+        )
+
+        val result = repository.importXmltv(PROVIDER_ID, "epg-source-1", xmltvFixture())
+
+        // Rebound to the row id: manual override kept (auto mapping suppressed), programmes mapped via it.
+        assertEquals(0, result.mappingsAdded)
+        val mappings = repository.observeMappingsForChannel(PROVIDER_ID, "$PROVIDER_ID:channel:ard").first()
+        assertEquals(listOf(true), mappings.map { it.isManual })
+        assertEquals("zdf.xml", mappings.single().epgChannelId)
+        assertEquals("$PROVIDER_ID:channel:ard", mappings.single().channelId)
+        val programs = repository.observeProgramsForChannel(
+            providerId = PROVIDER_ID,
+            channelId = "$PROVIDER_ID:channel:ard",
+            fromMillis = 0L,
+            toMillis = Long.MAX_VALUE,
+        ).first()
+        assertEquals(listOf("heute journal"), programs.map { it.title })
+    }
+
+    @Test
     fun clearedManualMappingAllowsAutomaticMappingOnNextImport() = runBlocking {
         seedLiveChannel(providerId = PROVIDER_ID, channelId = "channel-ard", remoteId = "ard.de", name = "ARD HD", catchup = false)
         repository.saveEpgSource(

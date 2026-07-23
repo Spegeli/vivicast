@@ -36,10 +36,16 @@
 > `RoomCatalogImportRepositoryTest` (Reconcile fav/history/progress, unmatched bleibt pending, Kategorie-
 > State trotz falschem remoteId, Legacy-Format-Pin).
 >
-> **Phase 2 (TODO, nach Phase-1-Verifikation):** EPG **manuelle** Mappings (`isManual=true`) überleben einen
-> Restore nicht — Restore schreibt `mapping.channelId = channelStableKey` (bare), der EPG-Read/Import matcht
-> per Row-id. Auto-Mappings heilt der EPG-Refresh; die manuellen Overrides brauchen dieselbe Bind-Behandlung
-> (per stableKey → Row-id, entweder im EPG-Import-Pfad oder einem analogen Reconcile). Eigener Cut.
+> **Phase 2 (DONE — androidTest-verifiziert, NICHT on-device, s.u.):** EPG **manuelle** Mappings
+> (`isManual=true`) überlebten Restore nicht — Restore schreibt `mapping.channelId = channelStableKey` (bare),
+> aber `importXmltv` matcht per Row-id (Programme-Mapping `channelById[channelId]` + Auto-Suppression
+> `manualMappedChannelIds`). Fix: `RoomEpgRepository.rebindRestoredManualMappings` läuft am Anfang von
+> `importXmltv` — restaurierte Manual-Mappings (channelId = stale stableKey) werden per `channelStableKey` →
+> Row-id gebunden (id auf Live-`epgMappingId`, alte Zeile per neuem `deleteMappingById` gelöscht), bevor die
+> Mapping-Logik läuft. androidTest `restoredManualMappingRebindsToChannelRowIdOnImport` (Diskriminator: mit
+> Fix „heute journal"/manual, ohne „Tagesschau"/auto). **On-device NICHT testbar**, solange die
+> Manual-Mapping-UI keine Zuweisung erlaubt (kein Weg, ein Restore-Manual-Mapping ohne UI zu erzeugen) — end-
+> to-end nachholen, wenn die UI fertig ist.
 >
 > Backup-Vertrag: `../vivicast-docs/prd/PRD-v1/10-backup-import-requirements.md`.
 
