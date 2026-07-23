@@ -63,7 +63,10 @@ class LiveTvRouteFocusTest {
         }
 
         compose.waitUntil(timeoutMillis = 5_000) { PROVIDER_ID in expandedProviderIds.value }
-        compose.onNodeWithText("Favoriten").assertIsDisplayed()
+        // Assert on the stable tag, not the localized "Favoriten"/"Favorites" text: the androidTest activity
+        // renders in the device system locale (en on the AVD / this TV), so a hardcoded German string never
+        // matched. ("News"/"Sport" below are category data, not resources, so they stay locale-independent.)
+        compose.onNodeWithTag(providerTreeCategoryTag(FAVORITES_CATEGORY_ID)).assertIsDisplayed()
         compose.onAllNodesWithText("News").assertCountEquals(1)
 
         compose.onNodeWithTag(providerTreeProviderTag(PROVIDER_ID)).performSemanticsAction(SemanticsActions.OnClick)
@@ -98,8 +101,10 @@ class LiveTvRouteFocusTest {
         compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).performSemanticsAction(SemanticsActions.OnClick)
 
         compose.waitForIdle()
+        // P2: selecting a channel opens the EPG column for it (its guide becomes visible). Focus stays in the
+        // channel list — the preview runs while the user keeps browsing — so this asserts the column opened, not
+        // EPG focus (only a deliberate RIGHT / a search-target moves focus into the EPG).
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsDisplayed()
-        compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsFocused()
     }
 
     @Test
@@ -181,13 +186,23 @@ class LiveTvRouteFocusTest {
 
     @Test
     fun leftCollapsesEpgToChannelListThenCategoryColumn() {
+        var consumed = false
         compose.setContent {
-            TestLiveTvRoute(expandedProviderIds = setOf(PROVIDER_ID))
+            // Land in the EPG via a search/deep-link target — the reliable way to reach [E|P] with the program
+            // focused. (A plain channel click keeps focus in the channel list under the P2 preview design, so it
+            // can't be used to step INTO the EPG here.)
+            TestLiveTvRoute(
+                expandedProviderIds = setOf(PROVIDER_ID),
+                targetProviderId = PROVIDER_ID,
+                targetCategoryId = NEWS_CATEGORY_ID,
+                targetChannelId = NEWS_CHANNEL_ID,
+                targetEpgProgramId = TEST_PROGRAM.id,
+                targetEpgStartTime = TEST_PROGRAM.startTime,
+                onTargetConsumed = { consumed = true },
+            )
         }
 
-        compose.onNodeWithTag(providerTreeCategoryTag(NEWS_CATEGORY_ID)).performSemanticsAction(SemanticsActions.OnClick)
-        compose.onNodeWithTag(channelRowTag(NEWS_CHANNEL_ID)).performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
+        compose.waitUntil(timeoutMillis = 5_000) { consumed }
         compose.onNodeWithTag(epgProgramRowTag(TEST_PROGRAM.id)).assertIsFocused()
 
         // LEFT out of the EPG re-opens the channel list ([E|P] -> [S|E|P]).
