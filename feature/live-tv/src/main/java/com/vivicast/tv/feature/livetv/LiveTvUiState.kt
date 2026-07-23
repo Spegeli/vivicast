@@ -44,7 +44,22 @@ internal data class LiveTvUiState(
     // produceState key so a live priority-reorder re-resolves logos immediately (no screen re-entry).
     val logoConfigSignal: Int = 0,
     val channelResetSignal: Int = 0,
+    // Set (mirrors Home) only when there is nothing browsable: no playlists at all, or all disabled. Null while
+    // the cold DB load is in flight and whenever at least one active provider exists (normal browse columns).
+    val emptyReason: LiveTvEmptyReason? = null,
 )
+
+/** Why Live-TV shows the global empty state (mirrors Home's HomeEmptyReason). */
+internal enum class LiveTvEmptyReason {
+    /** No playlists at all. */
+    NoPlaylist,
+
+    /** Playlists exist but all are disabled. */
+    AllDisabled,
+
+    /** Active playlists exist, but none imports Live-TV content. */
+    NoLiveContent,
+}
 
 internal const val FAVORITES_CATEGORY_ID = "__FAVORITES__"
 internal const val LIVE_TV_PAGE_SIZE = 80

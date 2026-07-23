@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +46,10 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
 import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -63,11 +68,11 @@ fun VivicastTopNavigation(
     val iconOnlyLabels = setOf(strSearch, strSettings)
 
     @Composable
-    fun NavItem(index: Int, label: String) {
+    fun NavItem(index: Int, label: String, modifier: Modifier = Modifier) {
         VivicastTopNavItem(
             label = label,
             selected = index == selectedIndex,
-            modifier = Modifier
+            modifier = modifier
                 .testTag(topNavItemTag(label))
                 .then(
                     if (index == selectedIndex && selectedFocusRequester != null) {
@@ -102,7 +107,7 @@ fun VivicastTopNavigation(
                 },
             ),
     ) {
-        // Left: brand
+        // Left: brand only.
         Row(
             horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
             verticalAlignment = Alignment.CenterVertically,
@@ -111,28 +116,62 @@ fun VivicastTopNavigation(
             Text(text = brand, style = VivicastTypography.TitleMedium)
         }
 
-        // Center: main nav items
+        // Center: Suche (icon) directly before the main tabs, then Home/Live-TV/Filme/Serien. Search sits just
+        // left of Home with a small gap (end padding) so it doesn't stick to the Home tab. Still index-driven —
+        // Search keeps its original index, so the nav model stays untouched.
         Row(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items.forEachIndexed { index, label ->
+                if (label == strSearch) NavItem(index, label, Modifier.padding(end = VivicastSpacing.Space2))
+            }
+            items.forEachIndexed { index, label ->
                 if (label !in iconOnlyLabels) NavItem(index, label)
             }
         }
 
-        // Right: icon-only items
+        // Right: 24h clock (display-only, never focusable) + Einstellungen — where Suche used to sit.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space1),
+            horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            VivicastTopNavClock()
             items.forEachIndexed { index, label ->
-                if (label in iconOnlyLabels) NavItem(index, label)
+                if (label == strSettings) NavItem(index, label)
             }
         }
     }
 }
+
+// 24h wall clock for the top nav (display-only, never focusable). Self-ticking via produceState so only this
+// Text recomposes each minute — the host stays untouched. [nowMillis] is injectable for tests/preview.
+@Composable
+private fun VivicastTopNavClock(
+    modifier: Modifier = Modifier,
+    nowMillis: () -> Long = { System.currentTimeMillis() },
+) {
+    val time by produceState(initialValue = topNavClockText(nowMillis())) {
+        while (true) {
+            val now = nowMillis()
+            value = topNavClockText(now)
+            delay(millisUntilNextMinute(now))
+        }
+    }
+    Text(
+        text = time,
+        style = VivicastTypography.LabelSmall.copy(color = VivicastColors.TextSecondary),
+        modifier = modifier,
+    )
+}
+
+// 24h HH:mm (always two-digit, locale-independent format). Extracted for a device-free unit test.
+internal fun topNavClockText(nowMillis: Long): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nowMillis))
+
+// Millis until the next full minute, so the clock flips exactly on the minute boundary.
+internal fun millisUntilNextMinute(nowMillis: Long): Long = 60_000L - (nowMillis % 60_000L)
 
 fun topNavItemTag(label: String): String = "top-nav-item-$label"
 

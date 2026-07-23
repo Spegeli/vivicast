@@ -209,6 +209,39 @@ class LiveTvViewModelTest {
         assertEquals("active", vm.uiState.value.selectedProviderId)
         scope.cancel()
     }
+
+    @Test
+    fun noProviders_setsNoPlaylistEmptyReason() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val vm = newViewModel(scope)
+        assertEquals(LiveTvEmptyReason.NoPlaylist, vm.uiState.value.emptyReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun allDisabledProviders_setsAllDisabledEmptyReason() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider(isActive = false))))
+        assertEquals(LiveTvEmptyReason.AllDisabled, vm.uiState.value.emptyReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun activeProvider_hasNoEmptyReason() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())), media = mediaWithChannels())
+        assertNull(vm.uiState.value.emptyReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun activePlaylistNoLive_setsNoLiveContentEmptyReason() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        // Active provider, but no imported live channels (default FakeMediaRepository has empty channels).
+        val vm = newViewModel(scope, providers = FakeProviderRepository(listOf(provider())))
+        assertEquals(LiveTvEmptyReason.NoLiveContent, vm.uiState.value.emptyReason)
+        scope.cancel()
+    }
 }
 
 private fun provider(id: String = PROVIDER, isActive: Boolean = true) = Provider(
@@ -274,6 +307,8 @@ private class FakeMediaRepository(
     override suspend fun getEpisode(providerId: String, episodeId: String): Episode? = null
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
+
+    override fun observeHasLiveContent(): Flow<Boolean> = flowOf(channels.isNotEmpty())
 }
 
 private class FakeEpgRepository(

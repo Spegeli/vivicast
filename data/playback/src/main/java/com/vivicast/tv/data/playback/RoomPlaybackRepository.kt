@@ -9,6 +9,11 @@ import com.vivicast.tv.domain.model.PlaybackProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+// DB cap for channel history: keep only the newest N rows — 2× the Home display (RECENT_CHANNELS_LIMIT = 6),
+// a small buffer so growing/shrinking the Home row later needs no DB change. History feeds only that row, so
+// older rows are pure ballast.
+internal const val CHANNEL_HISTORY_DB_CAP = 12
+
 class RoomPlaybackRepository(
     database: VivicastDatabase,
 ) : PlaybackRepository {
@@ -57,6 +62,7 @@ class RoomPlaybackRepository(
 
     override suspend fun saveChannelHistory(history: ChannelHistory) {
         playbackDao.upsertChannelHistory(history.toEntity())
+        playbackDao.pruneChannelHistory(CHANNEL_HISTORY_DB_CAP)
     }
 
     override suspend fun clearProviderPlayback(providerId: String) {

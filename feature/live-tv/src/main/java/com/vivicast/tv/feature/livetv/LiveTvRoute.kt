@@ -3,6 +3,7 @@ package com.vivicast.tv.feature.livetv
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -106,6 +107,10 @@ fun LiveTvRoute(
     // return-to-browser target (activate=false): select + focus the channel row in the list, no activation.
     targetActivate: Boolean = true,
     onTargetConsumed: () -> Unit = {},
+    // Empty-state (no browsable playlist) actions — mirror Home's. App-hoisted (open Settings / add playlist).
+    onAddPlaylist: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenPlaylists: () -> Unit = {},
 ) {
     RoomLiveTvRoute(
         providerRepository = providerRepository,
@@ -128,6 +133,9 @@ fun LiveTvRoute(
         targetEpgStartTime = targetEpgStartTime,
         targetActivate = targetActivate,
         onTargetConsumed = onTargetConsumed,
+        onAddPlaylist = onAddPlaylist,
+        onOpenSettings = onOpenSettings,
+        onOpenPlaylists = onOpenPlaylists,
     )
 }
 
@@ -154,6 +162,9 @@ private fun RoomLiveTvRoute(
     targetEpgStartTime: Long?,
     targetActivate: Boolean,
     onTargetConsumed: () -> Unit,
+    onAddPlaylist: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenPlaylists: () -> Unit,
 ) {
     val viewModel: LiveTvViewModel = viewModel(
         factory = LiveTvViewModelFactory(
@@ -336,6 +347,16 @@ private fun RoomLiveTvRoute(
                 event.type == KeyEventType.KeyDown && moveChannel(event.key)
             },
     ) {
+        // No browsable playlist → the Home-style hint + buttons (mirrors Home), not the empty browse columns.
+        uiState.emptyReason?.let { reason ->
+            LiveTvEmptyState(
+                reason = reason,
+                onAddPlaylist = onAddPlaylist,
+                onOpenSettings = onOpenSettings,
+                onOpenPlaylists = onOpenPlaylists,
+            )
+            return@VivicastScreen
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2),
             modifier = Modifier
@@ -631,6 +652,59 @@ private fun LiveTvLoadingHint() {
         contentAlignment = Alignment.Center,
     ) {
         BodyText(stringResource(R.string.livetv_loading))
+    }
+}
+
+// Global empty state (no browsable playlist) — the same hint panel + action buttons as Home, so Live-TV
+// mirrors Home when there is no active playlist. Reuses Home's strings. DOWN from the top nav lands on the
+// first button; the focusGroup + `enter` override keep focus in the buttons (not escaping to the preview area).
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun LiveTvEmptyState(
+    reason: LiveTvEmptyReason,
+    onAddPlaylist: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenPlaylists: () -> Unit,
+) {
+    val firstFocusRequester = remember { FocusRequester() }
+    val title = when (reason) {
+        LiveTvEmptyReason.NoPlaylist -> stringResource(R.string.home_no_playlist_title)
+        LiveTvEmptyReason.AllDisabled -> stringResource(R.string.home_disabled_title)
+        LiveTvEmptyReason.NoLiveContent -> stringResource(R.string.livetv_no_live_title)
+    }
+    val body = when (reason) {
+        LiveTvEmptyReason.NoPlaylist -> stringResource(R.string.home_empty_body)
+        LiveTvEmptyReason.AllDisabled -> stringResource(R.string.home_disabled_body)
+        LiveTvEmptyReason.NoLiveContent -> stringResource(R.string.livetv_no_live_body)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(VivicastSpacing.Space6)
+            .focusProperties {
+                enter = { direction ->
+                    if (direction == FocusDirection.Down) firstFocusRequester else FocusRequester.Default
+                }
+            }
+            .focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(VivicastSpacing.Space4, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        InfoPanel(title = title, body = body, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(VivicastSpacing.Space2)) {
+            when (reason) {
+                LiveTvEmptyReason.NoPlaylist -> {
+                    ActionPill(stringResource(R.string.home_add_playlist), onClick = onAddPlaylist, modifier = Modifier.focusRequester(firstFocusRequester))
+                    ActionPill(stringResource(R.string.home_settings), onClick = onOpenSettings)
+                }
+                LiveTvEmptyReason.AllDisabled ->
+                    ActionPill(stringResource(R.string.home_open_settings), onClick = onOpenPlaylists, modifier = Modifier.focusRequester(firstFocusRequester))
+                LiveTvEmptyReason.NoLiveContent -> {
+                    ActionPill(stringResource(R.string.livetv_go_playlists), onClick = onOpenPlaylists, modifier = Modifier.focusRequester(firstFocusRequester))
+                    ActionPill(stringResource(R.string.home_settings), onClick = onOpenSettings)
+                }
+            }
+        }
     }
 }
 

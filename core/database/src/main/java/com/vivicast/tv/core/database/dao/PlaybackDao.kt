@@ -88,6 +88,17 @@ interface PlaybackDao {
     @Upsert
     suspend fun upsertChannelHistory(history: ChannelHistoryEntity)
 
+    // Keep only the newest [cap] channel-history rows (global — matches the global recent-channels query),
+    // pruned after each write so the table can't grow unbounded. The Home "recently watched" row is the only
+    // consumer, so older rows are pure ballast.
+    @Query(
+        """
+        DELETE FROM channel_history
+        WHERE id NOT IN (SELECT id FROM channel_history ORDER BY watchedAt DESC LIMIT :cap)
+        """,
+    )
+    suspend fun pruneChannelHistory(cap: Int)
+
     @Query("DELETE FROM playback_progress WHERE providerId = :providerId")
     suspend fun deleteProgressForProvider(providerId: String)
 

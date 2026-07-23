@@ -968,10 +968,15 @@ private fun ProviderEpgSourcesDialog(
                     )
                 }
                 if (linkedInOrder.size >= 2) {
-                    ActionPill(
-                        label = stringResource(R.string.settings_provider_epg_priority),
-                        onClick = { showPriority = true },
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        ActionPill(
+                            label = stringResource(R.string.settings_provider_epg_priority),
+                            onClick = { showPriority = true },
+                        )
+                    }
                 }
             }
             // Unassigned section — the rest; each row's OFF toggle links (appended last in priority).

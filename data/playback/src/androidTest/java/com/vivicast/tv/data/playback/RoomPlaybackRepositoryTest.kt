@@ -154,6 +154,21 @@ class RoomPlaybackRepositoryTest {
         assertEquals("other", repository.getProgress(OTHER_PROVIDER_ID, MediaType.Movie, "movie")?.id)
     }
 
+    @Test
+    fun channelHistoryIsCappedToNewestRows() = runBlocking {
+        // Write more than the DB cap, each a distinct channel (so @Upsert keeps them as separate rows).
+        val total = CHANNEL_HISTORY_DB_CAP + 3
+        repeat(total) { i ->
+            repository.saveChannelHistory(history(id = "h-$i", channelId = "ch-$i", watchedAt = (i + 1) * 1_000L))
+        }
+
+        val all = repository.observeAllRecentChannels(limit = total).first()
+
+        assertEquals(CHANNEL_HISTORY_DB_CAP, all.size)
+        assertEquals("ch-${total - 1}", all.first().channelId) // newest kept
+        assertNull(all.firstOrNull { it.channelId == "ch-0" }) // oldest pruned
+    }
+
     private fun progress(
         id: String = "progress",
         providerId: String = PROVIDER_ID,

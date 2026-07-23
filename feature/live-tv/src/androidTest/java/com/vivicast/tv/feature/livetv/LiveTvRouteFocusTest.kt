@@ -296,6 +296,8 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun getEpisode(providerId: String, episodeId: String): Episode? = null
     override suspend fun search(query: String, limitPerType: Int): SearchResults =
         SearchResults(emptyList(), emptyList(), emptyList(), emptyList())
+
+    override fun observeHasLiveContent(): Flow<Boolean> = flowOf(TEST_CHANNELS.isNotEmpty())
 }
 
 private class FakeEpgRepository : EpgRepository {

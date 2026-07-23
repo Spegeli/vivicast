@@ -1043,6 +1043,9 @@ private fun VivicastApp(
                 targetEpgStartTime = liveTvSearchTarget?.program?.startTime,
                 targetActivate = liveTvSearchTarget?.activate ?: true,
                 onTargetConsumed = { liveTvSearchTarget = null },
+                onAddPlaylist = { openPlaylistSettings(addNew = true) },
+                onOpenSettings = { pendingSettingsSection = null; focusTopNavPending = true; selectRoute("settings") },
+                onOpenPlaylists = { openPlaylistSettings() },
             )
         },
         AppDestination(strMovies, "movies") {

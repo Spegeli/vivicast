@@ -334,6 +334,9 @@
     <string name="livetv_section_epg">Sender-EPG</string>
     <string name="livetv_no_lists">Keine Listen</string>
     <string name="livetv_add_provider">Lege in den Einstellungen zuerst einen Provider an.</string>
+    <string name="livetv_no_live_title">Kein Live-TV in den Wiedergabelisten</string>
+    <string name="livetv_no_live_body">Es sind Wiedergabelisten aktiv, aber keine importiert Live-TV-Kanäle. Öffne die Wiedergabelisten und aktiviere dort den Live-TV-Import.</string>
+    <string name="livetv_go_playlists">Zu den Wiedergabelisten</string>
     <string name="livetv_no_categories">Keine Kategorien</string>
     <string name="livetv_no_categories_body">Dieser Provider enthält keine importierten Live-TV-Kategorien.</string>
     <string name="livetv_load_more">Mehr laden</string>
@@ -766,7 +769,7 @@
     <string name="settings_provider_epg_sources">EPG Quellen</string>
     <string name="settings_provider_epg_assigned">Zugewiesene Quellen</string>
     <string name="settings_provider_epg_unassigned">Nicht zugewiesene Quellen</string>
-    <string name="settings_provider_epg_priority">Priorität</string>
+    <string name="settings_provider_epg_priority">Priorität ändern</string>
     <string name="settings_provider_logo_priority">Logo-Priorität</string>
     <string name="settings_provider_output_format">Ausgabeformat</string>
     <string name="settings_provider_output_hls">HLS</string>

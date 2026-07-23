@@ -80,6 +80,9 @@ internal class LiveTvViewModel(
     // latch never flips back, so a genuinely-empty category still shows "Keine Sender" instantly).
     private var initialProvidersLoaded: Boolean = false
     private var initialLoadComplete: Boolean = false
+    // Active-provider-aware "any live channel exists" (same signal Home uses). Drives the NoLiveContent empty
+    // state: active playlists exist, but none imports Live-TV.
+    private var hasLiveContent: Boolean = false
 
     private val _uiState = MutableStateFlow(LiveTvUiState())
     val uiState: StateFlow<LiveTvUiState> = _uiState.asStateFlow()
@@ -94,6 +97,13 @@ internal class LiveTvViewModel(
                 if (current == null || all.none { it.id == current && it.isActive }) {
                     selectedProviderIdFlow.value = all.firstOrNull { it.isActive }?.id
                 }
+                rebuild()
+            }
+        }
+
+        coroutineScope.launch {
+            mediaRepository.observeHasLiveContent().collect {
+                hasLiveContent = it
                 rebuild()
             }
         }
@@ -379,6 +389,19 @@ internal class LiveTvViewModel(
             currentProgramsByChannel = currentProgramsByChannel,
             logoConfigSignal = logoConfigSignal,
             channelResetSignal = channelResetSignal,
+            emptyReason = computeEmptyReason(),
         )
+    }
+
+    // Extracted from rebuild() to keep its cyclomatic complexity under the detekt gate. Nothing browsable →
+    // the Home-style empty state; null until providers first load and whenever ≥1 active provider exists.
+    private fun computeEmptyReason(): LiveTvEmptyReason? = when {
+        !initialProvidersLoaded -> null
+        providersRaw.isEmpty() -> LiveTvEmptyReason.NoPlaylist
+        providersRaw.none { it.isActive } -> LiveTvEmptyReason.AllDisabled
+        // Wait for the cold channel load before deciding "no live content" — else it flashes during startup.
+        !initialLoadComplete -> null
+        !hasLiveContent -> LiveTvEmptyReason.NoLiveContent
+        else -> null
     }
 }

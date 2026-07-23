@@ -334,6 +334,9 @@
     <string name="livetv_section_epg">Channel EPG</string>
     <string name="livetv_no_lists">No playlists</string>
     <string name="livetv_add_provider">Set up a provider in settings first.</string>
+    <string name="livetv_no_live_title">No Live TV in your playlists</string>
+    <string name="livetv_no_live_body">You have active playlists, but none imports Live TV channels. Open your playlists and enable the Live TV import there.</string>
+    <string name="livetv_go_playlists">Go to playlists</string>
     <string name="livetv_no_categories">No categories</string>
     <string name="livetv_no_categories_body">This provider has no imported live-TV categories.</string>
     <string name="livetv_load_more">Load more</string>
@@ -766,7 +769,7 @@
     <string name="settings_provider_epg_sources">EPG sources</string>
     <string name="settings_provider_epg_assigned">Assigned sources</string>
     <string name="settings_provider_epg_unassigned">Unassigned sources</string>
-    <string name="settings_provider_epg_priority">Priority</string>
+    <string name="settings_provider_epg_priority">Change Priority</string>
     <string name="settings_provider_logo_priority">Logo priority</string>
     <string name="settings_provider_output_format">Output format</string>
     <string name="settings_provider_output_hls">HLS</string>

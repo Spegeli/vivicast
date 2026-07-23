@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 
-internal const val RECENT_CHANNELS_LIMIT = 12
+internal const val RECENT_CHANNELS_LIMIT = 6
 
 /**
  * Presentation-state holder for the home screen. Combines the provider list with the playback flows
