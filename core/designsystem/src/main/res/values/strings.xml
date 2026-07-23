@@ -404,6 +404,7 @@
     <string name="settings_epg_delete_confirm">EPG Quelle wirklich löschen?</string>
     <string name="settings_delete">Löschen</string>
     <string name="settings_back">Zurück</string>
+    <string name="nav_home_label">Startseite</string>
     <string name="nav_movies_label">Filme</string>
     <string name="nav_series_label">Serien</string>
     <string name="nav_search_label">Suche</string>

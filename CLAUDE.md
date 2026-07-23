@@ -23,7 +23,8 @@ If `../vivicast-docs` is missing, stop and ask the user before making any implem
 - **Secrets:** Android Keystore-backed — never plaintext Room storage
 - **Main navigation:** `Home | Live-TV | Filme | Serien | Suche | Einstellungen`
 - **Default start area:** Home (unless changed by supported settings)
-- **Visible UI language:** German with umlauts. Required terms: `Kanäle`, `Über die App`. Exception: `Home` stays as-is.
+- **Visible UI language:** German with umlauts. Required terms: `Kanäle`, `Über die App`, `Startseite`
+  (the Home tab's German label; English keeps `Home` — via `nav_home_label`). `Live-TV` stays as-is.
 - **Distribution:** open-source on GitHub (`github.com/Spegeli/vivicast`); **sideload / GitHub-release
   APK only — no Google Play**. So Play-restricted permissions (e.g. `MANAGE_EXTERNAL_STORAGE`) are
   acceptable. Release builds are signed via a gitignored `keystore.properties` (CI: env vars), **R8/minify off**.

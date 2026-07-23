@@ -955,6 +955,7 @@ private fun VivicastApp(
 
     // The automatic progress-save loop + the auto-next-episode derivation now run in PlayerViewModel.init.
 
+    val strHome = stringResource(R.string.nav_home_label)
     val strMovies = stringResource(R.string.nav_movies_label)
     val strSeries = stringResource(R.string.nav_series_label)
     val strSearch = stringResource(R.string.nav_search_label)
@@ -996,7 +997,7 @@ private fun VivicastApp(
         }
     }
     val destinations = listOf(
-        AppDestination("Home", ROUTE_HOME) {
+        AppDestination(strHome, ROUTE_HOME) {
             HomeRoute(
                 playbackRepository = appContainer.playbackRepository,
                 mediaRepository = appContainer.mediaRepository,
@@ -1505,9 +1506,18 @@ private fun VivicastApp(
     )
     // Which top-level tab is active — Movies/Series match their nested graph via the destination hierarchy.
     val tabRoutes = listOf<Any>(Home, LiveTv, MoviesGraph, SeriesGraph, Search, Settings)
-    val selectedIndex = tabRoutes
-        .indexOfFirst { route -> currentDestination?.hierarchy?.any { it.hasRoute(route::class) } == true }
-        .coerceAtLeast(0)
+    // Language-change reopen: after recreate() the single NavHost transiently reports Home (its start
+    // destination) for ~1 frame before the saved back stack restores to Settings. `indexOfFirst`/coerceAtLeast
+    // would then resolve to 0 (Home) and the Home tab flashes selected. The reopen ALWAYS lands on Settings, so
+    // pin the highlight there for the window; it reverts once the language row is focused (reopenLanguageSettings
+    // → false), by which point currentDestination is Settings anyway.
+    val selectedIndex = if (reopenLanguageSettings) {
+        tabRoutes.indexOf(Settings)
+    } else {
+        tabRoutes
+            .indexOfFirst { route -> currentDestination?.hierarchy?.any { it.hasRoute(route::class) } == true }
+            .coerceAtLeast(0)
+    }
     // A tab ROOT (leaf) — detail / sub destinations (MovieDetail, …) are NOT roots, so BACK there pops via
     // the NavHost (detail → grid) instead of running the tab-root focus-nav / exit policy.
     val tabRootRoutes = listOf<Any>(Home, LiveTv, MoviesList, SeriesList, Search, Settings)

@@ -65,6 +65,7 @@ fun VivicastTopNavigation(
 ) {
     val strSearch = stringResource(R.string.nav_search_label)
     val strSettings = stringResource(R.string.nav_settings_label)
+    val strHome = stringResource(R.string.nav_home_label)
     val iconOnlyLabels = setOf(strSearch, strSettings)
 
     @Composable
@@ -81,7 +82,7 @@ fun VivicastTopNavigation(
                         Modifier
                     },
                 ),
-            minWidth = topNavItemWidth(label, iconOnlyLabels),
+            minWidth = topNavItemWidth(label, iconOnlyLabels, strHome),
             onSelected = { onSelected(index) },
             onFocused = { onFocused(index) },
             onFocusChanged = onItemFocusChanged,
@@ -175,9 +176,9 @@ internal fun millisUntilNextMinute(nowMillis: Long): Long = 60_000L - (nowMillis
 
 fun topNavItemTag(label: String): String = "top-nav-item-$label"
 
-private fun topNavItemWidth(label: String, iconOnlyLabels: Set<String>): Dp = when {
+private fun topNavItemWidth(label: String, iconOnlyLabels: Set<String>, homeLabel: String): Dp = when {
     label in iconOnlyLabels -> 44.dp
-    label == "Home" -> 96.dp
+    label == homeLabel -> 96.dp
     label == "Live-TV" -> 108.dp
     else -> VivicastCardSizes.TopTabMinWidth
 }
@@ -298,6 +299,7 @@ private fun TopNavIcon(label: String, selected: Boolean, modifier: Modifier = Mo
     val strSettings = stringResource(R.string.nav_settings_label)
     val strMovies = stringResource(R.string.nav_movies_label)
     val strSeries = stringResource(R.string.nav_series_label)
+    val strHome = stringResource(R.string.nav_home_label)
     val iconSize = if (label == strSearch || label == strSettings) 18.dp else 15.dp
     Canvas(modifier = modifier.size(iconSize)) {
         val sw = 1.8f
@@ -305,7 +307,7 @@ private fun TopNavIcon(label: String, selected: Boolean, modifier: Modifier = Mo
         val w = size.width
         val h = size.height
         when (label) {
-            "Home" -> {
+            strHome -> {
                 // Classic house: roof + body + door
                 val roof = Path().apply {
                     moveTo(w * 0.50f, h * 0.10f)

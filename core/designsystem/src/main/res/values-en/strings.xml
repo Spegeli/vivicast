@@ -404,6 +404,7 @@
     <string name="settings_epg_delete_confirm">Really delete EPG source?</string>
     <string name="settings_delete">Delete</string>
     <string name="settings_back">Back</string>
+    <string name="nav_home_label">Home</string>
     <string name="nav_movies_label">Movies</string>
     <string name="nav_series_label">Series</string>
     <string name="nav_search_label">Search</string>
