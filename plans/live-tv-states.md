@@ -733,6 +733,24 @@ whether it fires) and in `onChannelFocused` (log id), run `adb logcat`, press RI
 a genuinely-bound deterministic RIGHT target. Current code is back to the pre-experiment baseline (RIGHT still
 needs two presses); this is the ONE Live-TV item left unfixed.
 
+## Empty-state parity with Home (2026-07-23) — IMPLEMENTED + verified (emulator + physical TV)
+
+Live-TV now mirrors **Home's global empty states** instead of only showing the in-column "Keine Listen"
+InfoPanel. When there is **nothing browsable**, the whole Live-TV area shows a hint panel + action buttons
+(same pattern as Home):
+- **NoPlaylist** (no playlists at all) → `[Wiedergabeliste hinzufügen | Einstellungen]`.
+- **AllDisabled** (playlists exist but all disabled) → `[Einstellungen öffnen]`.
+- **NoLiveContent** (active playlists exist, but none imports Live-TV) → `[Zu den Wiedergabelisten | Einstellungen]`.
+
+Detection: `LiveTvViewModel.computeEmptyReason()` off `providersRaw` (ALL providers, incl. disabled) +
+`mediaRepository.observeHasLiveContent()` (= `catalogDao.observeHasActiveChannels`, active-provider-aware — the
+same signal Home uses), gated behind `initialLoadComplete` so it never flashes during the cold DB load.
+Rendered by `LiveTvEmptyState` in `LiveTvRoute` (reuses Home's strings; adds `livetv_no_live_title` /
+`livetv_no_live_body` / `livetv_go_playlists`). The old in-column `livetv_no_lists` InfoPanel still covers the
+"active provider selected but this category/list is empty" browse case; the global empty state supersedes it
+only when NOTHING is browsable. Callbacks (`onAddPlaylist` / `onOpenSettings` / `onOpenPlaylists`) are
+App-hoisted from `MainActivity` (mirrors Home). Commit `13be51d`; `LiveTvViewModel` unit tests added.
+
 ## Constraints (unchanged)
 
 - No code until explicit GO. No new module, no DI migration. ViewModel + immutable UiState + StateFlow;

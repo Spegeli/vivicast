@@ -4,6 +4,11 @@
 Uhr-Test). **Emulator-verifiziert:** Suche vor Home (mit Abstand), 24h-Uhr rechts, Home→Live-TV-Nav via
 `VCd`-logcat ok. Index-Modell komplett unangetastet — nur Render-Zonen + Uhr.
 
+**Nachtrag (2026-07-23, Commit `7c5f67d`):** Folge-Feinschliff nach diesem Plan — Suche final direkt **vor Home
+mit Abstand** (`Space2`, war am Brand); Home-Tab **DE-Label „Startseite"** (via `nav_home_label`; Icon- +
+Breiten-Matching lokalisiert; `CLAUDE.md`-Ausnahme angepasst); **Sprachwechsel-Home-Flash gefixt** (`selectedIndex`
+während `reopenLanguageSettings` auf Einstellungen gepinnt — Emulator + physischer TV verifiziert).
+
 ## Ziel (aus Nutzer-Aufgabe 4)
 
 1. **Suche** (Icon) in der Top-Navigation **vor Home** platzieren (ganz links).
