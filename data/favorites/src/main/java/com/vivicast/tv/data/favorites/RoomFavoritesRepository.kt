@@ -2,11 +2,11 @@ package com.vivicast.tv.data.favorites
 
 import com.vivicast.tv.core.database.VivicastDatabase
 import com.vivicast.tv.core.database.model.FavoriteEntity
+import com.vivicast.tv.domain.ids.UserDataIds
 import com.vivicast.tv.domain.model.Favorite
 import com.vivicast.tv.domain.model.MediaType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.security.MessageDigest
 
 class RoomFavoritesRepository(
     database: VivicastDatabase,
@@ -45,7 +45,7 @@ class RoomFavoritesRepository(
         val now = clock()
         favoritesDao.upsertFavorite(
             FavoriteEntity(
-                id = favoriteId(providerId, mediaType, mediaId),
+                id = UserDataIds.favoriteId(providerId, mediaType, mediaId),
                 providerId = providerId,
                 mediaType = mediaType.storageValue,
                 mediaId = mediaId,
@@ -104,13 +104,5 @@ private fun String.toMediaType(): MediaType =
         else -> MediaType.Channel
     }
 
-private fun favoriteId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "$providerId:favorite:${mediaType.storageValue.lowercase()}:${stableHash(mediaId)}"
-
 private fun mediaStableKey(mediaId: String): String =
-    mediaId.substringAfterLast(':').ifBlank { stableHash(mediaId) }
-
-private fun stableHash(value: String): String {
-    val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
-    return digest.take(16).joinToString(separator = "") { byte -> "%02x".format(byte) }
-}
+    mediaId.substringAfterLast(':').ifBlank { UserDataIds.stableHash(mediaId) }

@@ -45,6 +45,7 @@ class RoomCatalogImportRepository(
     private val playbackDao = database.playbackDao()
     private val epgDao = database.epgDao()
     private val androidTvSearchDao = database.androidTvSearchDao()
+    private val pendingUserDataReconciler = PendingUserDataReconciler(database)
 
     override suspend fun importM3uLiveChannels(providerId: String, playlist: M3uPlaylist, expectedSourceEpoch: Int): CatalogImportResult =
         importM3uCatalog(providerId, playlist, expectedSourceEpoch)
@@ -121,6 +122,8 @@ class RoomCatalogImportRepository(
             return CatalogImportResult(0, 0, 0, 0, 0, 0, 0)
         }
         m3uStreamReferenceStore.replaceProviderReferences(providerId, classified.streamReferences)
+        // Bind any restored pending user-data (favorites/progress/history) to the now-imported catalog.
+        pendingUserDataReconciler.reconcile(providerId)
         return result
     }
 
@@ -220,6 +223,8 @@ class RoomCatalogImportRepository(
             val zero = ImportCount(added = 0, updated = 0, removed = 0)
             return XtreamCatalogImportResult(zero, zero, zero, zero, zero, zero, zero, zero)
         }
+        // Bind any restored pending user-data (favorites/progress/history) to the now-imported catalog.
+        pendingUserDataReconciler.reconcile(providerId)
         return result
     }
 
@@ -268,7 +273,11 @@ class RoomCatalogImportRepository(
         referencedRemoteIds: Set<String>,
         now: Long,
     ): CategoryImport {
-        val existing = catalogDao.getCategories(providerId, type).associateBy { it.remoteId }
+        // Match by stableKey (not remoteId): a RESTORED category carries the correct stableKey but a wrong
+        // remoteId (the backup stores only stableKey), so remoteId-keying would treat it as new and drop its
+        // user-state (isHidden / manualSortOrder) on the post-restore refresh. stableKey <-> remoteId are 1:1
+        // per type, so normal refreshes are unchanged. See plans/backup-restore-groups-lost.md.
+        val existing = catalogDao.getCategories(providerId, type).associateBy { it.stableKey }
         // New groups default to hidden per the provider's policy (NULL settings = show, the default).
         val hideNewGroups = providerCategorySettingsDao.getSettings(providerId, type)?.hideNewGroups ?: false
         val categoryNames = categories.associate { it.remoteId to it.name }
@@ -280,7 +289,7 @@ class RoomCatalogImportRepository(
             .toSet()
         val entities = allRemoteIds
             .mapIndexed { index, remoteId ->
-                val existingCategory = existing[remoteId]
+                val existingCategory = existing[categoryStableKey(type, remoteId)]
                 CategoryEntity(
                     id = categoryId(providerId, type, remoteId),
                     providerId = providerId,
@@ -304,10 +313,19 @@ class RoomCatalogImportRepository(
             }
         val importedIds = entities.mapTo(mutableSetOf()) { it.id }
         val removedIds = existing.values.filter { it.id !in importedIds }.map { it.id }
-        val added = entities.count { it.remoteId !in existing }
+        val added = entities.count { it.stableKey !in existing }
         val updated = entities.count { entity ->
-            val existingCategory = existing[entity.remoteId]
+            val existingCategory = existing[entity.stableKey]
             existingCategory != null && existingCategory.copy(updatedAt = entity.updatedAt) != entity
+        }
+        // Delete the replaced (stale-id) rows BEFORE the upsert. A RESTORED category shares the
+        // (providerId, stableKey) UNIQUE index with its fresh replacement but has a DIFFERENT primary key
+        // (restore derives the id from the stableKey, the import from the remoteId). @Upsert would then hit
+        // the unique conflict on insert, fall back to an update-by-PK that matches nothing, and silently drop
+        // the fresh row — leaving 0 categories after the post-restore refresh. Clearing the stale id first
+        // removes the conflict so the fresh row (carrying the preserved user-state) inserts cleanly.
+        if (removedIds.isNotEmpty()) {
+            catalogDao.deleteCategories(providerId, type, removedIds)
         }
         if (entities.isNotEmpty()) {
             catalogDao.upsertCategories(entities)

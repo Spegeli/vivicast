@@ -55,6 +55,14 @@ interface PlaybackDao {
     )
     suspend fun getPlaybackProgress(): List<PlaybackProgressEntity>
 
+    // Restored-but-unbound progress/history (backup restore writes them keyed by stableKey with isPending=1);
+    // the post-import reconcile binds them to the freshly-imported catalog. See plans/backup-restore-groups-lost.md.
+    @Query("SELECT * FROM playback_progress WHERE providerId = :providerId AND isPending = 1")
+    suspend fun getPendingProgress(providerId: String): List<PlaybackProgressEntity>
+
+    @Query("SELECT * FROM channel_history WHERE providerId = :providerId AND isPending = 1")
+    suspend fun getPendingChannelHistory(providerId: String): List<ChannelHistoryEntity>
+
     @Query(
         """
         SELECT * FROM channel_history
@@ -119,4 +127,12 @@ interface PlaybackDao {
 
     @Query("DELETE FROM channel_history WHERE providerId = :providerId AND channelId IN (:channelIds)")
     suspend fun deleteHistoryForChannels(providerId: String, channelIds: List<String>)
+
+    // Delete-by-PK for the reconcile: when a pending row's corrected PK differs from its restore-format PK,
+    // the old row is dropped and the corrected one upserted. See plans/backup-restore-groups-lost.md.
+    @Query("DELETE FROM playback_progress WHERE id = :id")
+    suspend fun deleteProgressById(id: String)
+
+    @Query("DELETE FROM channel_history WHERE id = :id")
+    suspend fun deleteChannelHistoryById(id: String)
 }

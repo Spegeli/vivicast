@@ -3,6 +3,7 @@ package com.vivicast.tv.data.playback
 import com.vivicast.tv.core.player.PlaybackMediaType
 import com.vivicast.tv.core.player.PlaybackStatus
 import com.vivicast.tv.core.player.VivicastPlayerState
+import com.vivicast.tv.domain.ids.UserDataIds
 import com.vivicast.tv.domain.model.ChannelHistory
 import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.domain.model.PlaybackProgress
@@ -35,7 +36,7 @@ class PlaybackProgressRecorder(
             if (!automaticProgressSaveTimes.shouldWriteChannelHistory(request.playbackId, now, forceSave, state.status)) return
             playbackRepository.saveChannelHistory(
                 ChannelHistory(
-                    id = channelHistoryId(request.providerId, request.mediaId),
+                    id = UserDataIds.channelHistoryId(request.providerId, request.mediaId),
                     providerId = request.providerId,
                     channelId = request.mediaId,
                     watchedAt = now,
@@ -72,7 +73,7 @@ class PlaybackProgressRecorder(
         val progressPercent = automaticPlaybackProgressPercent(positionMillis, durationMillis)
         playbackRepository.saveProgress(
             PlaybackProgress(
-                id = existing?.id ?: playbackProgressId(request.providerId, mediaType, request.mediaId),
+                id = existing?.id ?: UserDataIds.playbackProgressId(request.providerId, mediaType, request.mediaId),
                 providerId = request.providerId,
                 mediaType = mediaType,
                 mediaId = request.mediaId,
@@ -91,12 +92,6 @@ class PlaybackProgressRecorder(
         automaticProgressSaveTimes[request.playbackId] = now
     }
 }
-
-private fun playbackProgressId(providerId: String, mediaType: MediaType, mediaId: String): String =
-    "$providerId:progress:${mediaType.name.lowercase()}:$mediaId"
-
-private fun channelHistoryId(providerId: String, channelId: String): String =
-    "$providerId:history:channel:$channelId"
 
 // #8: channel history is written at most every AUTOMATIC_PROGRESS_SAVE_INTERVAL_MILLIS, but always on a
 // pause/close (force) so the final position/watchedAt is captured. Kept out of record() for its complexity budget.

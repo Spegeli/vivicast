@@ -89,6 +89,22 @@ interface CatalogDao {
     @Query("SELECT * FROM channels WHERE providerId = :providerId AND id = :channelId")
     suspend fun getChannel(providerId: String, channelId: String): ChannelEntity?
 
+    // Row-id-by-stableKey lookups for the backup post-import reconcile (binds restored pending user-data to
+    // the freshly-imported catalog). UNGATED on purpose — the deep-link getXByStableKeys are gated on
+    // isActive/includeLiveTv, but a restored favorite/progress of a temporarily-disabled provider must still
+    // bind. See plans/backup-restore-groups-lost.md.
+    @Query("SELECT id FROM channels WHERE providerId = :providerId AND stableKey = :stableKey LIMIT 1")
+    suspend fun findChannelIdByStableKey(providerId: String, stableKey: String): String?
+
+    @Query("SELECT id FROM movies WHERE providerId = :providerId AND stableKey = :stableKey LIMIT 1")
+    suspend fun findMovieIdByStableKey(providerId: String, stableKey: String): String?
+
+    @Query("SELECT id FROM series WHERE providerId = :providerId AND stableKey = :stableKey LIMIT 1")
+    suspend fun findSeriesIdByStableKey(providerId: String, stableKey: String): String?
+
+    @Query("SELECT id FROM episodes WHERE providerId = :providerId AND stableKey = :stableKey LIMIT 1")
+    suspend fun findEpisodeIdByStableKey(providerId: String, stableKey: String): String?
+
     @Query(
         """
         SELECT channels.* FROM channels

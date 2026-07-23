@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.vivicast.tv.core.cache.M3uStreamReference
 import com.vivicast.tv.core.cache.M3uStreamReferenceStore
 import com.vivicast.tv.core.database.VivicastDatabase
+import com.vivicast.tv.core.database.model.CategoryEntity
 import com.vivicast.tv.core.database.model.ChannelHistoryEntity
 import com.vivicast.tv.core.database.model.EpgChannelMappingEntity
 import com.vivicast.tv.core.database.model.EpgProgramEntity
@@ -16,6 +17,9 @@ import com.vivicast.tv.core.database.model.EpgSourceEntity
 import com.vivicast.tv.core.database.model.FavoriteEntity
 import com.vivicast.tv.core.database.model.PlaybackProgressEntity
 import com.vivicast.tv.core.database.model.ProviderCategorySettingsEntity
+import com.vivicast.tv.core.database.model.ProviderEntity
+import com.vivicast.tv.domain.ids.UserDataIds
+import com.vivicast.tv.domain.model.MediaType
 import com.vivicast.tv.iptv.m3u.DefaultM3uParser
 import com.vivicast.tv.iptv.xtream.XtreamCategory
 import com.vivicast.tv.iptv.xtream.XtreamEpisode
@@ -50,6 +54,28 @@ class RoomCatalogImportRepositoryTest {
             .build()
         streamReferenceStore = FakeM3uStreamReferenceStore()
         repository = RoomCatalogImportRepository(database, streamReferenceStore, clock = { now })
+        // The import merge skips when the target provider is absent (#11 sourceEpoch guard), so a refresh test
+        // must have the provider present. sourceEpoch defaults to 0, matching the default expectedSourceEpoch.
+        kotlinx.coroutines.runBlocking {
+            database.providerDao().upsertProvider(
+                ProviderEntity(
+                    id = PROVIDER_ID,
+                    stableKey = PROVIDER_ID,
+                    name = "Test Provider",
+                    type = "M3U",
+                    sourceConfigKey = "provider:$PROVIDER_ID:credentials",
+                    isActive = true,
+                    status = "ACTIVE",
+                    includeLiveTv = true,
+                    includeMovies = true,
+                    includeSeries = true,
+                    refreshIntervalHours = 12,
+                    logoPriority = "provider",
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+        }
     }
 
     @After
@@ -407,6 +433,161 @@ class RoomCatalogImportRepositoryTest {
         )
         val newGroup = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").first { it.remoteId == "live-doku" }
         assertTrue(newGroup.isHidden)
+    }
+
+    @Test
+    fun userDataIdsMatchLegacyByteFormat() {
+        // Byte-for-byte guard: these ids became existing DB / resume keys before the shared UserDataIds
+        // extraction, so the shapes must not drift on upgrade. stableHash = first 16 bytes of SHA-256, hex —
+        // pinned with the standard SHA-256("abc") test vector.
+        assertEquals("ba7816bf8f01cfea414140de5dae2223", UserDataIds.stableHash("abc"))
+        assertEquals(
+            "prov:favorite:channel:ba7816bf8f01cfea414140de5dae2223",
+            UserDataIds.favoriteId("prov", MediaType.Channel, "abc"),
+        )
+        assertEquals("prov:progress:movie:prov:movie:x", UserDataIds.playbackProgressId("prov", MediaType.Movie, "prov:movie:x"))
+        assertEquals("prov:history:channel:prov:channel:x", UserDataIds.channelHistoryId("prov", "prov:channel:x"))
+    }
+
+    @Test
+    fun reconcileBindsRestoredPendingChannelFavoriteAndHistoryOnImport() = kotlinx.coroutines.runBlocking {
+        // First import creates the catalog; capture a real channel (its row id + stableKey).
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        val channel = database.catalogDao().getChannels(PROVIDER_ID).first()
+
+        // Simulate a backup restore: pending rows keyed by stableKey, mediaId/channelId = bare stableKey
+        // (NOT the row id), restore-format PKs. These currently resolve to nothing until the reconcile binds them.
+        database.favoritesDao().upsertFavorite(
+            FavoriteEntity(
+                id = "$PROVIDER_ID:favorite:channel:${channel.stableKey}",
+                providerId = PROVIDER_ID,
+                mediaType = "CHANNEL",
+                mediaId = channel.stableKey,
+                mediaStableKey = channel.stableKey,
+                isPending = true,
+                sortOrder = 1,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        database.playbackDao().upsertChannelHistory(
+            ChannelHistoryEntity(
+                id = "$PROVIDER_ID:history:${channel.stableKey}",
+                providerId = PROVIDER_ID,
+                channelId = channel.stableKey,
+                channelStableKey = channel.stableKey,
+                isPending = true,
+                watchedAt = now,
+                durationWatchedMillis = 30_000L,
+                updatedAt = now,
+            ),
+        )
+
+        // Re-import (any refresh) triggers the post-import reconcile.
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        val favorite = database.favoritesDao().getFavorites().single { it.providerId == PROVIDER_ID }
+        assertEquals(channel.id, favorite.mediaId)
+        assertFalse(favorite.isPending)
+        assertEquals(UserDataIds.favoriteId(PROVIDER_ID, MediaType.Channel, channel.id), favorite.id)
+        assertNotNull(database.catalogDao().getChannel(PROVIDER_ID, favorite.mediaId))
+
+        val history = database.playbackDao().getChannelHistory().single { it.providerId == PROVIDER_ID }
+        assertEquals(channel.id, history.channelId)
+        assertFalse(history.isPending)
+        assertEquals(UserDataIds.channelHistoryId(PROVIDER_ID, channel.id), history.id)
+    }
+
+    @Test
+    fun reconcileBindsRestoredPendingMovieProgressOnImport() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        val movie = database.catalogDao().getMovies(PROVIDER_ID).first()
+
+        database.playbackDao().upsertProgress(
+            PlaybackProgressEntity(
+                id = "$PROVIDER_ID:progress:movie:${movie.stableKey}",
+                providerId = PROVIDER_ID,
+                mediaType = "MOVIE",
+                mediaId = movie.stableKey,
+                mediaStableKey = movie.stableKey,
+                isPending = true,
+                positionMillis = 5_000L,
+                durationMillis = 60_000L,
+                progressPercent = 8,
+                isCompleted = false,
+                lastWatchedAt = now,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        val progress = database.playbackDao().getPlaybackProgress().single { it.providerId == PROVIDER_ID }
+        assertEquals(movie.id, progress.mediaId)
+        assertFalse(progress.isPending)
+        assertEquals(UserDataIds.playbackProgressId(PROVIDER_ID, MediaType.Movie, movie.id), progress.id)
+        assertEquals(5_000L, progress.positionMillis) // watch data preserved
+    }
+
+    @Test
+    fun reconcileLeavesUnresolvablePendingUserDataPending() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        database.favoritesDao().upsertFavorite(
+            FavoriteEntity(
+                id = "$PROVIDER_ID:favorite:channel:missing",
+                providerId = PROVIDER_ID,
+                mediaType = "CHANNEL",
+                mediaId = "missing-stable-key",
+                mediaStableKey = "missing-stable-key",
+                isPending = true,
+                sortOrder = 1,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        val favorite = database.favoritesDao().getFavorites().single { it.providerId == PROVIDER_ID }
+        assertTrue(favorite.isPending) // no catalog match -> stays pending (not dropped, not falsely bound)
+        assertEquals("missing-stable-key", favorite.mediaId)
+    }
+
+    @Test
+    fun restoredCategoryUserStateSurvivesReimportDespiteWrongIdAndRemoteId() = kotlinx.coroutines.runBlocking {
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+        val original = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").first { it.remoteId == "live-news" }
+
+        // Faithfully simulate a backup restore: the row is re-created with a RESTORE-FORMAT id (derived from
+        // the stableKey, NOT the remoteId) AND a fabricated remoteId (= stableKey), keeping the correct
+        // stableKey + user-state. This is the exact shape that made the post-restore refresh drop ALL
+        // categories — the fresh row shares the (providerId, stableKey) UNIQUE index but has a different PK,
+        // so @Upsert dropped it unless the stale row is deleted first. (On-device Test-1 regression.)
+        database.catalogDao().deleteCategories(PROVIDER_ID, "LIVE", listOf(original.id))
+        database.catalogDao().upsertCategories(
+            listOf(
+                original.copy(
+                    id = "$PROVIDER_ID:category:live:${original.stableKey}",
+                    remoteId = original.stableKey,
+                    isHidden = true,
+                    manualSortOrder = 77,
+                ),
+            ),
+        )
+
+        now = 2_000L
+        repository.importXtreamCatalog(PROVIDER_ID, firstXtreamCatalog())
+
+        val reconciled = database.catalogDao().getCategories(PROVIDER_ID, "LIVE").filter { it.stableKey == original.stableKey }
+        assertEquals(1, reconciled.size)
+        assertTrue(reconciled.single().isHidden)
+        assertEquals(77, reconciled.single().manualSortOrder)
+        assertEquals("live-news", reconciled.single().remoteId) // fresh import restored the correct remoteId
+        assertEquals(original.id, reconciled.single().id) // and the correct (remoteId-derived) PK
     }
 
     private fun firstPlaylist() = parser.parse(

@@ -42,6 +42,11 @@ interface FavoritesDao {
     )
     suspend fun getFavorites(): List<FavoriteEntity>
 
+    // Restored-but-unbound favorites (backup restore writes them keyed by stableKey with isPending=1); the
+    // post-import reconcile binds them to the freshly-imported catalog row. See plans/backup-restore-groups-lost.md.
+    @Query("SELECT * FROM favorites WHERE providerId = :providerId AND isPending = 1")
+    suspend fun getPendingFavorites(providerId: String): List<FavoriteEntity>
+
     // #9: next insertion-order sort key for a (provider, mediaType) group. 0 when the group is empty → the
     // first favorite gets 1. Keeps observeFavorites' `sortOrder ASC` in real insertion order (oldest first).
     @Query("SELECT COALESCE(MAX(sortOrder), 0) FROM favorites WHERE providerId = :providerId AND mediaType = :mediaType")
